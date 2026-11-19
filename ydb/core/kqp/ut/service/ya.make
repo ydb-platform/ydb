@@ -22,7 +22,8 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/core/tx/columnshard/hooks/testing
-    yql/essentials/sql/pg_dummy
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
     ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/types/operation

@@ -164,13 +164,15 @@ public:
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        TVector<TString> data{request.GetDataColumns().begin(), request.GetDataColumns().end()};
+        const auto dataColumns = MakeUploadDataColumns(table, embedding, request.GetDataColumns(),
+            request.GetIndexType(), request.GetSourcePrimaryKeyColumns());
+        TVector<TString> data{dataColumns.begin(), dataColumns.end()};
         for (auto & col: request.GetSourcePrimaryKeyColumns()) {
             data.push_back(col);
         }
         ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, toBuild, EmbeddingPos, DataPos);
         // tags: __ydb_foreign [embedding] data... sourcePK...
-        // DataPos always includes the embedding column
+        // Intermediate outputs and HNSW postings retain embeddings.
         DataColumnCount = ScanTags.size() - request.GetSourcePrimaryKeyColumns().size() - DataPos;
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
         if (request.HasKeyRange()) {
@@ -192,7 +194,7 @@ public:
         }
         {
             auto outputTypes = MakeOutputTypes(table, UploadState, embedding,
-                {data.begin(), data.begin()+request.GetDataColumns().size()}, request.GetSourcePrimaryKeyColumns(), OutForeign);
+                dataColumns, request.GetSourcePrimaryKeyColumns(), OutForeign);
             OutputBuf = Uploader.AddDestination(request.GetOutputName(), outputTypes);
         }
         {
@@ -753,8 +755,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
             badRequest("Wrong upload");
         }
 
-        if (request.GetK() < 2) {
-            badRequest("Should be requested partition on at least two rows");
+        if (request.GetK() == 0) {
+            badRequest("Should be requested at least one cluster");
         }
 
         if (!request.GetLevelName()) {

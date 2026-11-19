@@ -1,5 +1,4 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 
@@ -203,33 +202,6 @@ Y_UNIT_TEST_SUITE(TScheme) {
         TSchemeModifier(restored).Apply(*delta.Flush());
 
         model.Check(restored);
-    }
-
-    Y_UNIT_TEST(LegacyPgAlterReplayRejected)
-    {
-        const TModel model;
-        for (bool withTypeInfo : {false, true}) {
-            auto changes = model.Build().Flush();
-            auto* column = changes->AddDelta();
-            column->SetDeltaType(TAlterRecord::AddColumn);
-            column->SetTableId(TModel::TableId);
-            column->SetColumnId(3);
-            column->SetColumnName("pg");
-            column->SetColumnType(0x3000);
-            if (withTypeInfo) {
-                UNIT_ASSERT(column->MutableColumnTypeInfo()->ParseFromString(TString("\x08\x17", 2)));
-            }
-            auto* drop = changes->AddDelta();
-            drop->SetDeltaType(TAlterRecord::DropColumn);
-            drop->SetTableId(TModel::TableId);
-            drop->SetColumnId(3);
-
-            TSchemeChanges replay;
-            UNIT_ASSERT(replay.ParseFromString(changes->SerializeAsString()));
-            TScheme restored;
-            UNIT_ASSERT_EXCEPTION(TSchemeModifier(restored).Apply(replay), yexception);
-            model.Check(restored);
-        }
     }
 
     Y_UNIT_TEST(Policy)

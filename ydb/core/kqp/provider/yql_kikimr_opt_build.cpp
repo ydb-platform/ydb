@@ -10,6 +10,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -343,6 +344,11 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
     TExprBase providerArg(node.Ref().Child(1));
     if (auto maybeDataSource = providerArg.Maybe<TCoDataSource>()) {
         TStringBuf dataSourceCategory = maybeDataSource.Cast().Category();
+        if (dataSourceCategory == NYql::PgProviderName) {
+            // All pg reads should be replaced on TPgTableContent
+            return false;
+        }
+
         auto dataSourceProviderIt = types.DataSourceMap.find(dataSourceCategory);
         if (dataSourceProviderIt != types.DataSourceMap.end()) {
             if (auto* dqIntegration = dataSourceProviderIt->second->GetDqIntegration()) {
@@ -360,6 +366,16 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
                     return true;
                 }
             }
+        }
+    }
+    return false;
+}
+
+bool IsPgRead(const TExprBase& node, TTypeAnnotationContext& types) {
+    if (auto maybePgRead = node.Maybe<TPgTableContent>()) {
+        auto dataSourceProviderIt = types.DataSourceMap.find(NYql::PgProviderName);
+        if (dataSourceProviderIt != types.DataSourceMap.end()) {
+            return true;
         }
     }
     return false;
@@ -435,6 +451,11 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
     }
 
     if (IsDqRead(node, ctx, types, true, &txRes.HasErrors)) {
+        txRes.Ops.insert(node.Raw());
+        return true;
+    }
+
+    if (IsPgRead(node, types)) {
         txRes.Ops.insert(node.Raw());
         return true;
     }
@@ -1187,7 +1208,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         if (hasData) {
             ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX,
                 "KILL SESSION cannot be combined with data queries in a single compiled query. "
-                "Use separate queries or per-statement execution."));
+                "Use separate queries."));
             return nullptr;
         }
         return MakeSchemeTx(commit, ctx);

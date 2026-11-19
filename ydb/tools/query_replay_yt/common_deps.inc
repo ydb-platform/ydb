@@ -46,6 +46,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
+    ydb/library/yql/udfs/digest
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
@@ -61,8 +62,9 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/ydb
     yql/essentials/core/services/mounts
     yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg_dummy
+    yql/essentials/sql/pg
     yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
@@ -71,7 +73,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/hyperscan
     yql/essentials/udfs/common/ip_base
-    yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/pire

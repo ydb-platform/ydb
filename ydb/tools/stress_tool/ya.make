@@ -23,7 +23,8 @@ IF (OS_LINUX OR OS_DARWIN)
             ydb/core/load_test/interconnect
             ydb/library/actors/dnsresolver
             yql/essentials/minikql/comp_nodes/llvm16
-            yql/essentials/sql/pg_dummy
+            yql/essentials/parser/pg_wrapper
+            yql/essentials/sql/pg
             yt/yql/providers/yt/comp_nodes/dq/llvm16
             yt/yql/providers/yt/comp_nodes/llvm16
         )

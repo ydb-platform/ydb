@@ -2299,6 +2299,55 @@ value {
         checkFailsIfFileIsEmpty("/BackupPrefix/001/metadata.json.enc");
     }
 
+    Y_UNIT_TEST_FLAG(ExportImportPg, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "pgint4" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(55555u)}, {TCell::Make(55555u)});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+    }
+
     Y_UNIT_TEST_FLAG(ShouldRestoreTableWithMultiColumnStatistics, EnableDataShardDirectPartImport) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -2467,7 +2516,7 @@ value {
 
     Y_UNIT_TEST_FLAG(ExportImportUuid, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
@@ -6797,13 +6846,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
     }
 
-    Y_UNIT_TEST_FLAG(TablePermissions, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_FLAGS(TablePermissions, EnableDataShardDirectPartImport, InterruptInheritance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
-        const auto permissions = R"(
+        const auto permissions = Sprintf(R"(
             actions {
               change_owner: "eve"
             }
@@ -6825,7 +6874,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 permission_names: "ydb.generic.read"
               }
             }
-        )";
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "");
 
         const auto data = GenerateTestData(R"(
             columns {
@@ -6864,6 +6914,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasRight("+W:alice"),
             NLs::HasRight("+R:bob")
         });
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), InterruptInheritance);
     }
 
     Y_UNIT_TEST_FLAG(UnexpectedPermission, EnableDataShardDirectPartImport) {
@@ -10311,14 +10365,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST(ShouldRestoreSystemViewPermissions) {
+    Y_UNIT_TEST_FLAG(ShouldRestoreSystemViewPermissions, InterruptInheritance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
 
         ui64 txId = 100;
 
-        const auto permissions = R"(
+        const auto permissions = Sprintf(R"(
             actions {
                 change_owner: "user1@builtin"
             }
@@ -10334,7 +10388,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     permission_names: "ydb.generic.list"
                 }
             }
-        )";
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "");
 
         const auto data = GenerateTestData(
             {
@@ -10353,6 +10408,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
+
+        NACLib::TDiffACL diffACL;
+        diffACL.SetInterruptInheritance(!InterruptInheritance);
+        TestModifyACL(runtime, ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "");
+        env.TestWaitNotification(runtime, txId);
 
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
@@ -10374,6 +10434,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasRight("+R:user2@builtin"),
             NLs::HasRight("+L:user2@builtin"),
         });
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
+        const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), InterruptInheritance);
     }
 
     Y_UNIT_TEST(ShouldFailOnSystemViewWrongPath) {

@@ -77,7 +77,7 @@ Y_UNIT_TEST(StackOverflowSubquery) {
     google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;
     settings.Arena = &arena;
-    settings.MaxParseTreeDepth = 4 * 1024;
+    settings.MaxParseTreeDepth = 1 * 1024;
 
     NYql::TIssues issues;
     const auto* m = SqlAST(query, settings, issues);

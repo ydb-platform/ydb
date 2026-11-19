@@ -1394,6 +1394,16 @@ struct TSequenceSettings {
     TMaybe<i64> RestartValue;
 };
 
+struct TCreateSequenceSettings {
+    TString Name;
+    bool Temporary = false;
+    TSequenceSettings SequenceSettings;
+};
+
+struct TDropSequenceSettings {
+    TString Name;
+};
+
 struct TAlterSequenceSettings {
     TString Name;
     TSequenceSettings SequenceSettings;
@@ -1511,6 +1521,7 @@ struct TReplicationSettings : public TReplicationSettingsBase {
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
+    TMaybe<TString> Bootstrap;
     TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
 
     TRowConsistency& EnsureRowConsistency() {
@@ -1880,6 +1891,10 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> CreateSequence(const TString& cluster,
+        const TCreateSequenceSettings& settings, bool existingOk) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropSequence(const TString& cluster,
+        const TDropSequenceSettings& settings, bool missingOk) = 0;
     virtual NThreading::TFuture<TGenericResult> AlterSequence(const TString& cluster,
         const TAlterSequenceSettings& settings, bool missingOk) = 0;
 

@@ -13,6 +13,7 @@ private:
     struct TCellInfo {
         NScheme::TTypeInfo Type;
         NUdf::TUnboxedValuePod Value;
+        TString PgBinaryValue;
 
         NYql::NDecimal::TInt128 DecimalBuf;
     };

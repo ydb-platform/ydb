@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <yt/yt/client/table_client/config.h>
 #include <yt/yt/client/table_client/name_table.h>
@@ -502,7 +503,7 @@ class TYtBuffer: public IBuffer {
         int id,
         bool useTypeV3,
         TString& buffer,
-        TString&)
+        TString& error)
     {
         if (cell.IsNull()) {
             return MakeUnversionedNullValue(id);
@@ -532,6 +533,16 @@ class TYtBuffer: public IBuffer {
             return MakeUnversionedDoubleValue(cell.AsValue<double>(), id);
         case NScheme::NTypeIds::Float:
             return MakeUnversionedDoubleValue(cell.AsValue<float>(), id);
+        case NScheme::NTypeIds::Pg:
+            if (auto pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetPgTypeDesc());
+                pgResult.Error)
+            {
+                error.swap(*pgResult.Error);
+                return {};
+            } else {
+                buffer.swap(pgResult.Str);
+                return MakeUnversionedStringValue(buffer, id);
+            }
         default:
             if (useTypeV3) {
                 switch (type.GetTypeId()) {

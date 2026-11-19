@@ -20,9 +20,9 @@ TColumnLoader::TColumnLoader(const NSerialization::TSerializerContainer& seriali
     , ResultField(resultField)
     , DefaultValue(defaultValue)
     , ColumnId(columnId) {
-    AFL_VERIFY(!!AccessorConstructor);
-    AFL_VERIFY(ResultField);
-    AFL_VERIFY(Serializer);
+    YDB_LOG_VERIFY(!!AccessorConstructor);
+    YDB_LOG_VERIFY(ResultField);
+    YDB_LOG_VERIFY(Serializer);
 }
 
 const std::shared_ptr<arrow::Field>& TColumnLoader::GetField() const {

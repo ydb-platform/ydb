@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
+#include <ydb/core/kqp/common/result_set_format/settings/settings.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -247,12 +247,12 @@ public:
         BuiltResultIndexes.insert(resultIndex);
     }
 
-    static void ValidateParameterType(const google::protobuf::Message& type);
     void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type, NMiniKQL::TTypeEnvironment& txTypeEnv);
     void PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
         NMiniKQL::TTypeEnvironment& txTypeEnv);
     void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
 
+    static void ValidateNoPgParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);
     void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);
 
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);

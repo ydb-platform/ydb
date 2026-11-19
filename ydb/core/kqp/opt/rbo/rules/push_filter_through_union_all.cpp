@@ -39,7 +39,7 @@ TIntrusivePtr<IOperator> TPushFilterThroughUnionAllRule::SimpleMatchAndApply(con
         return input;
     }
 
-    const auto pushedFilterExpr = MakeConjunction(pushedFilters);
+    const auto pushedFilterExpr = MakeConjunction(pushedFilters, props.PgSyntax);
     TVector<TIntrusivePtr<IOperator>> newInputs;
     newInputs.reserve(unionAll->GetInputs().size());
     for (size_t index = 0; index < unionAll->GetInputs().size(); ++index) {
@@ -55,7 +55,7 @@ TIntrusivePtr<IOperator> TPushFilterThroughUnionAllRule::SimpleMatchAndApply(con
         return unionAll;
     }
 
-    return MakeIntrusive<TOpFilter>(unionAll, filter->Pos, MakeConjunction(remainingFilters));
+    return MakeIntrusive<TOpFilter>(unionAll, filter->Pos, MakeConjunction(remainingFilters, props.PgSyntax));
 }
 
 } // namespace NKqp

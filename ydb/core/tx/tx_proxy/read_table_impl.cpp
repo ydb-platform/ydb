@@ -610,6 +610,7 @@ private:
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
         }
 
+        const bool disablePgCompatibility = AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
         TVector<NScheme::TTypeInfo> keyTypes(res.Columns.size());
         TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
         TVector<TConversionTypeInfo> keyConversionTypesInfos(res.Columns.size());
@@ -636,6 +637,17 @@ private:
 
                 if (isVirtualGenerated) {
                     continue;
+                }
+
+                if (disablePgCompatibility && (selected || col.KeyOrder != -1) && col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    if (UserToken && res.SecurityObject && !res.SecurityObject->CheckAccess(NACLib::SelectRow, *UserToken)) {
+                        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED));
+                        return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,
+                            NKikimrIssues::TStatusIds::ACCESS_DENIED, ctx);
+                    }
+                    IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "PostgreSQL compatibility is disabled"));
+                    return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError,
+                        NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
                 }
 
                 if (col.KeyOrder != -1) {
@@ -1901,12 +1913,19 @@ private:
                     auto* meta = res.add_columns();
                     meta->set_name(col.Name);
 
-                    auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
-                    auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
-                    if (id == NYql::NProto::Decimal) {
-                        NScheme::ProtoFromDecimalType(col.PType.GetDecimalType(), *xType->mutable_decimal_type());
+                    if (col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                        auto typeDesc = col.PType.GetPgTypeDesc();
+                        auto* pg = meta->mutable_type()->mutable_pg_type();
+                        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+                        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
                     } else {
-                        xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                        auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
+                        auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
+                        if (id == NYql::NProto::Decimal) {
+                            NScheme::ProtoFromDecimalType(col.PType.GetDecimalType(), *xType->mutable_decimal_type());
+                        } else {
+                            xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                        }
                     }
                 }
                 bool ok = res.SerializeToString(&data);

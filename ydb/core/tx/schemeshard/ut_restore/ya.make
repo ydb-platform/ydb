@@ -26,7 +26,8 @@ PEERDIR(
     ydb/library/aws_init
     ydb/library/testlib/backup_test_enums
     ydb/library/testlib/parquet_helpers
-    yql/essentials/sql/pg_dummy
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
     ydb/core/testlib/audit_helpers
 )
 

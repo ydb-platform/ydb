@@ -212,7 +212,7 @@ public:
                     for (ui32 column : columns) {
                         const auto &columnInfo = tableInfo->Columns.find(column)->second;
                         str << "<th>" 
-                            << column << ":" << NScheme::TypeName(columnInfo.PType)
+                            << column << ":" << NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod) 
                             << " " << columnInfo.Name
                         << "</th>";
                     }
@@ -360,6 +360,11 @@ public:
                                         }
                                         case NScheme::NTypeIds::Decimal: {
                                             tuple.Types[i].GetDecimalType().CellValueToStream(tuple.Columns[i].AsValue<std::pair<ui64, i64>>(), row);
+                                            break;
+                                        }
+                                        case NScheme::NTypeIds::Pg: {
+                                            auto convert = NPg::PgNativeTextFromNativeBinary(tuple.Columns[i].AsBuf(), tuple.Types[i].GetPgTypeDesc());
+                                            row << EncodeHtmlPcdata(!convert.Error ? convert.Str : *convert.Error);
                                             break;
                                         }
                                         default:

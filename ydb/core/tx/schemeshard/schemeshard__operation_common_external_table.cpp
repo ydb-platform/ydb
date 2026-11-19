@@ -107,6 +107,11 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
             return std::make_pair(nullptr, errStr);
         }
 
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility() && typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+            errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.c_str());
+            return std::make_pair(nullptr, errStr);
+        }
+
         ui32 colId = col.HasId() ? col.GetId() : nextColumnId;
         if (externalTableInfo->Columns.contains(colId)) {
             errStr = Sprintf("Duplicate column id: %" PRIu32, colId);
@@ -116,7 +121,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         nextColumnId = colId + 1 > nextColumnId ? colId + 1 : nextColumnId;
 
         TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
-        column = TTableInfo::TColumn(colName, colId, typeInfo, {}, col.GetNotNull());
+        column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
 
         auto& schemaColumn= *schema.add_column();
         schemaColumn.set_name(colName);

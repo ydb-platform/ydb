@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -27,7 +27,6 @@ struct TKqpPartitionedExecuterSettings {
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     const TIntrusivePtr<TUserRequestContext>& UserRequestContext;
-    ui32 StatementResultIndex;
     std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
     const TGUCSettings::TPtr& GUCSettings;
     const TShardIdToTableInfoPtr& ShardIdToTableInfo;

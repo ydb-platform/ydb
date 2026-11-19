@@ -44,7 +44,7 @@ public:
         return TPosition(token.LinePos + 1, token.Line, QueryFile_);
     }
 
-    void ProcessToken(TParsedToken&& token) {
+    void ProcessToken(const TParsedToken& token) {
         if (token.Name == "EOF") {
             return;
         }
@@ -79,10 +79,16 @@ private:
 
 } // namespace
 
-bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName,
+bool CollectSqlHints(const TParsedTokenList& tokens, const TString& queryName,
                      const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware) {
+    Y_UNUSED(queryName);
+    Y_UNUSED(issues);
+    Y_UNUSED(maxErrors);
     TTokenProcessor tp(queryFile, hints, utf8Aware);
-    return lexer.Tokenize(query, queryName, [&tp](TParsedToken&& token) { tp.ProcessToken(std::move(token)); }, issues, maxErrors);
+    for (const auto& token : tokens) {
+        tp.ProcessToken(token);
+    }
+    return true;
 }
 
 } // namespace NSQLTranslation

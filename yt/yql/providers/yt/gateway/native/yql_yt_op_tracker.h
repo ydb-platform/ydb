@@ -23,6 +23,11 @@ namespace NYql {
 
 namespace NNative {
 
+THashMap<TString, i64> GetProgressDataStatistics(
+    const NYT::TJobStatistics& operationStatistic,
+    const NYT::TOperationAttributes& attributes,
+    bool final);
+
 class TOperationTracker: public IOperationTracker {
 public:
     TOperationTracker();
@@ -32,7 +37,8 @@ public:
 
     NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
         const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter,
-        const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted, bool isExternalProgress) override;
+        const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted,
+        bool isExternalProgress, bool enableProgressDataStatistics) override;
 private:
     static void* Tracker(void* param);
 

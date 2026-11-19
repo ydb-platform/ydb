@@ -1,18 +1,20 @@
 YQL_LIBRARY()
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
     ydb/library/actors/core
     ydb/library/actors/interconnect
-    yql/essentials/utils/log
+    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/actors/task_runner
     ydb/library/yql/dq/common
-    yql/essentials/providers/common/metrics
-    ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
+    ydb/library/yql/providers/dq/task_runner
+    yql/essentials/minikql
+    yql/essentials/utils/log
 )
 
 SRCS(
     events.cpp
-    worker_info.cpp
     counters.cpp
 )
 

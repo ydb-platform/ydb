@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/result_set_format/kqp_result_set_builders.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
@@ -28,16 +28,19 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NUdf;
 
-void TQueryData::ValidateParameterType(const google::protobuf::Message& type) {
-    NProtoBuf::WalkReflection(type, [](const NProtoBuf::Message& message, const NProtoBuf::FieldDescriptor* field) {
-        const bool hasPg = (field->containing_type() == Ydb::Type::descriptor() &&
-            field->number() == Ydb::Type::kPgTypeFieldNumber && message.GetReflection()->HasField(message, field)) ||
-            (field->containing_type() == NKikimrMiniKQL::TType::descriptor() &&
-            field->number() == NKikimrMiniKQL::TType::kKindFieldNumber &&
-            message.GetReflection()->GetEnumValue(message, field) == NKikimrMiniKQL::Pg);
-        Y_ENSURE(!hasPg, "PostgreSQL types are not supported");
-        return true;
-    });
+void TQueryData::ValidateNoPgParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
+    for (const auto& [name, param] : params) {
+        if (param.type().has_type_id()) {
+            continue;
+        }
+        NProtoBuf::WalkReflection(param.type(), [&name](const NProtoBuf::Message& message, const NProtoBuf::FieldDescriptor* field) {
+            Y_ENSURE(field->containing_type() != Ydb::Type::descriptor() ||
+                field->number() != Ydb::Type::kPgTypeFieldNumber ||
+                !message.GetReflection()->HasField(message, field),
+                "PostgreSQL compatibility is disabled: parameter " << name << " has a PostgreSQL type");
+            return true;
+        });
+    }
 }
 
 TTypedUnboxedValue TKqpExecuterTxResult::GetUV(
@@ -326,7 +329,6 @@ bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type,
 }
 
 bool TQueryData::AddTypedValueParam(const TString& name, const Ydb::TypedValue& param) {
-    ValidateParameterType(param.type());
     auto guard = TypeEnv().BindAllocator();
     const TBindTerminator bind(this);
     auto [typeFromProto, value] = ImportValueFromProto(
@@ -335,7 +337,6 @@ bool TQueryData::AddTypedValueParam(const TString& name, const Ydb::TypedValue& 
 }
 
 bool TQueryData::AddMkqlParam(const TString& name, const NKikimrMiniKQL::TType& t, const NKikimrMiniKQL::TValue& v) {
-    ValidateParameterType(t);
     auto guard = TypeEnv().BindAllocator();
     auto [typeFromProto, value] = ImportValueFromProto(t, v, TypeEnv(), AllocState->HolderFactory);
     return AddUVParam(name, typeFromProto, value);

@@ -1,11 +1,5 @@
-#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-
-#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -14,103 +8,6 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpParams) {
-    Y_UNIT_TEST(RawPgParametersRejected) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        const auto txControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
-        auto makeParams = [&db](const TString& text) {
-            auto params = db.GetParamsBuilder().Build();
-            auto& value = (*TProtoAccessor::GetProtoMapPtr(params))["$value"];
-            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(text, &value), text);
-            return params;
-        };
-        auto checkNative = [&] {
-            auto params = makeParams(R"(type { type_id: UINT32 } value { uint32_value: 42 })");
-            auto result = session.ExecuteDataQuery("SELECT $value;", txControl, params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson("[[42u]]", FormatResultSetYson(result.GetResultSet(0)));
-        };
-        checkNative();
-
-        auto prepared = session.PrepareDataQuery("SELECT 1;").ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(prepared.GetStatus(), EStatus::SUCCESS, prepared.GetIssues().ToString());
-        auto query = prepared.GetQuery();
-        auto warmup = query.Execute(txControl).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(warmup.GetStatus(), EStatus::SUCCESS, warmup.GetIssues().ToString());
-
-        const TVector<TString> pgValues = {
-            R"(type { pg_type { oid: 23 } } value { null_flag_value: NULL_VALUE })",
-            R"(type { pg_type { oid: 23 } } value { text_value: "42" })",
-            R"(type { pg_type { oid: 23 } } value { bytes_value: "\000\000\000\052" })",
-            R"(type { optional_type { item { pg_type { oid: 23 } } } } value { null_flag_value: NULL_VALUE })",
-            R"(type { list_type { item { pg_type { oid: 23 } } } } value {})",
-            R"(type { tuple_type { elements { pg_type { oid: 23 } } } } value { items { null_flag_value: NULL_VALUE } })",
-            R"(type { struct_type { members { name: "pg" type { pg_type { oid: 23 } } } } }
-                value { items { null_flag_value: NULL_VALUE } })",
-            R"(type { dict_type { key { type_id: UINT32 } payload { pg_type { oid: 23 } } } } value {})",
-            R"(type { variant_type { tuple_items { elements { pg_type { oid: 23 } } } } }
-                value { variant_index: 0 nested_value { null_flag_value: NULL_VALUE } })",
-            R"(type { pg_type {} } value { null_flag_value: NULL_VALUE })",
-        };
-        for (const auto& value : pgValues) {
-            auto params = makeParams(value);
-            auto usedResult = session.ExecuteDataQuery("SELECT $value;", txControl, params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(usedResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << usedResult.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(usedResult.GetIssues().ToString(), "PostgreSQL types are not supported");
-
-            auto pgResult = kikimr.GetQueryClient().ExecuteQuery(
-                "SELECT $value;", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(pgResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << pgResult.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(pgResult.GetIssues().ToString(), "PostgreSQL types are not supported");
-
-            auto result = session.ExecuteDataQuery("SELECT 1;", txControl, params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, value << ": " << result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL types are not supported");
-
-            auto cachedResult = query.Execute(txControl, params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(cachedResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << cachedResult.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(cachedResult.GetIssues().ToString(), "PostgreSQL types are not supported");
-        }
-        checkNative();
-
-        auto structParams = makeParams(R"(
-            type { struct_type {
-                members { name: "z" type { type_id: UINT32 } }
-                members { name: "a" type { type_id: UINT32 } }
-            } }
-            value { items { uint32_value: 7 } items { uint32_value: 42 } }
-        )");
-        auto result = session.ExecuteDataQuery(
-            "SELECT $value.a, $value.z;", txControl, structParams).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson("[[42u;7u]]", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST(RawMkqlPgParameterRejected) {
-        auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
-        TQueryData data(registry.Get(), CreateDefaultTimeProvider(), CreateDefaultRandomProvider());
-        NKikimrMiniKQL::TType type;
-        type.SetKind(NKikimrMiniKQL::Pg);
-        NKikimrMiniKQL::TValue value;
-        value.SetNullFlagValue(google::protobuf::NULL_VALUE);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(data.AddMkqlParam("pg", type, value), yexception,
-            "PostgreSQL types are not supported");
-
-        NKikimrMiniKQL::TType optionalType;
-        optionalType.SetKind(NKikimrMiniKQL::Optional);
-        optionalType.MutableOptional()->MutableItem()->CopyFrom(type);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(data.AddMkqlParam("pg", optionalType, {}), yexception,
-            "PostgreSQL types are not supported");
-
-        type.SetKind(NKikimrMiniKQL::Data);
-        type.MutableData()->SetScheme(NYql::NUdf::TDataType<ui32>::Id);
-        value.Clear();
-        value.SetUint32(42);
-        UNIT_ASSERT(data.AddMkqlParam("native", type, value));
-        UNIT_ASSERT_VALUES_EQUAL(data.GetParameterUnboxedValue("native").second.Get<ui32>(), 42);
-    }
-
     Y_UNIT_TEST(RowsList) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -456,11 +353,11 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CheckCacheByAst) {
-        auto query1 = Q1_(R"(
+    Y_UNIT_TEST(CheckCacheByText) {
+        const TString query1 = Q1_(R"(
             SELECT * FROM `/Root/Test` WHERE Group = 1 AND Name = "2";
         )");
-        auto query2 = Q1_(R"(
+        const TString query2 = Q1_(R"(
             select * from `/Root/Test` where Group = 1 AND Name = "2";
         )");
 
@@ -468,59 +365,17 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         execSettings.KeepInQueryCache(true);
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        {
-            // Check disable setting
-            auto setting = NKikimrKqp::TKqpSetting();
-            auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
-            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-
-            result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-        }
-
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-
-        {
-            // Check 2 exec queries
-            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-
-            result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
-        }
-        {
-            // Check Prepare and Exec queries
-            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-
-            auto prepareResult = session.PrepareDataQuery(query1).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
-
-            auto execResult = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
-            auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        for (const auto& query : {query1, query2}) {
+            for (bool fromCache : {false, true}) {
+                auto result = session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+            }
         }
     }
 
@@ -880,7 +735,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
 
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);

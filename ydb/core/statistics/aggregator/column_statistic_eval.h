@@ -11,6 +11,7 @@ class TSelectBuilder;
 
 class TSimpleColumnStatisticEval {
     NScheme::TTypeInfo Type;
+    TString PgTypeMod;
 
     std::optional<ui32> CountDistinctSeq;
     std::optional<ui32> MinSeq;
@@ -22,7 +23,7 @@ class TSimpleColumnStatisticEval {
 public:
     using TPtr = std::unique_ptr<TSimpleColumnStatisticEval>;
 
-    TSimpleColumnStatisticEval(NScheme::TTypeInfo type);
+    TSimpleColumnStatisticEval(NScheme::TTypeInfo type, TString pgTypeMod);
     ~TSimpleColumnStatisticEval();
 
     EStatType GetType() const;

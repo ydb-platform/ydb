@@ -304,11 +304,17 @@ namespace {
             const auto type = columnType->Cast<TTypeExprType>()->GetType();
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            const auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-            const auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-            const auto dataType = actualType->Cast<TDataExprType>();
-            columnMeta.Type = dataType->GetName();
-            columnMeta.NotNull = notNull;
+            if (ETypeAnnotationKind::Pg == type->GetKind()) {
+                const auto pgType = type->Cast<TPgExprType>();
+                columnMeta.Type = TString("pg") += pgType->GetName();
+                columnMeta.NotNull = false;
+            } else {
+                const auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
+                const auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
+                const auto dataType = actualType->Cast<TDataExprType>();
+                columnMeta.Type = dataType->GetName();
+                columnMeta.NotNull = notNull;
+            }
 
             if (columnTuple.Size() > 3) {
                 auto families = columnTuple.Item(3).Cast<TCoAtomList>();
@@ -423,6 +429,22 @@ namespace {
             }
         }
         return result;
+    }
+
+    TCreateSequenceSettings ParseCreateSequenceSettings(TKiCreateSequence createSequence) {
+        TCreateSequenceSettings createSequenceSettings;
+        createSequenceSettings.Name = TString(createSequence.Sequence());
+        createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
+        createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
+        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());
+
+        return createSequenceSettings;
+    }
+
+    TDropSequenceSettings ParseDropSequenceSettings(TKiDropSequence dropSequence) {
+        return TDropSequenceSettings{
+            .Name = TString(dropSequence.Sequence())
+        };
     }
 
     TAlterSequenceSettings ParseAlterSequenceSettings(TKiAlterSequence alterSequence) {
@@ -1210,6 +1232,15 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "bootstrap") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                const auto mode = to_lower(value);
+                if (mode != "scan" && mode != "import" && mode != "switchover") {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown bootstrap mode: " << value));
+                    return false;
+                }
+                dstSettings.Bootstrap = mode;
             }
         }
 
@@ -2095,7 +2126,8 @@ public:
                         auto typeNode = columnTuple.Item(1);
                         auto columnType = typeNode.Ref().GetTypeAnn();
                         auto type = columnType->Cast<TTypeExprType>()->GetType();
-                        auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
+                        auto notNull = type->GetKind() != ETypeAnnotationKind::Optional
+                            && type->GetKind() != ETypeAnnotationKind::Pg; // pg types always optional
                         auto actualType = type->GetKind() == ETypeAnnotationKind::Optional
                             ? type->Cast<TOptionalExprType>()->GetItemType()
                             : type;
@@ -2667,7 +2699,9 @@ public:
                             auto flagList = columnTuple.Item(1).Cast<TCoAtomList>();
                             for (auto flag : flagList) {
                                 TString flagName(flag.Value());
-                                if (flagName == "ifNotExists") {
+                                if (flagName == "pg") {
+                                    alterTableFlags |= NKqpProto::TKqpSchemeOperation::FLAG_PG_MODE;
+                                } else if (flagName == "ifNotExists") {
                                     alterTableFlags |= NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS;
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
@@ -3516,6 +3550,47 @@ public:
                 });
         }
 
+        if (auto maybeCreateSequence = TMaybeNode<TKiCreateSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeCreateSequence.Cast().DataSink().Cluster());
+            TCreateSequenceSettings createSequenceSettings = ParseCreateSequenceSettings(maybeCreateSequence.Cast());
+            bool existingOk = (maybeCreateSequence.ExistingOk().Cast().Value() == "1");
+
+            auto future = Gateway->CreateSequence(cluster, createSequenceSettings, existingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE SEQUENCE");
+        }
+
+        if (auto maybeDropSequence = TMaybeNode<TKiDropSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeDropSequence.Cast().DataSink().Cluster());
+            TDropSequenceSettings dropSequenceSettings = ParseDropSequenceSettings(maybeDropSequence.Cast());
+
+            bool missingOk = (maybeDropSequence.MissingOk().Cast().Value() == "1");
+
+            auto future = Gateway->DropSequence(cluster, dropSequenceSettings, missingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP SEQUENCE");
+        }
+
         if (auto maybeAlterSequence = TMaybeNode<TKiAlterSequence>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -4053,6 +4128,29 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing DROP GROUP");
+        }
+
+        if (auto maybePgDropObject = TMaybeNode<TPgDropObject>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto pgDrop = maybePgDropObject.Cast();
+
+            auto cluster = TString(pgDrop.DataSink().Cluster());
+            const auto type = TString(pgDrop.TypeId().Value());
+            const auto objectName = TString(pgDrop.ObjectId().Value());
+
+            if (type == "pgIndex") {
+                // TODO: KIKIMR-19695
+                ctx.AddError(TIssue(ctx.GetPosition(pgDrop.Pos()),
+                                    TStringBuilder() << "DROP INDEX for Postgres indexes is not implemented yet"));
+                return SyncError();
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(pgDrop.TypeId().Pos()),
+                                    TStringBuilder() << "Unknown PgDrop operation: " << type));
+                return SyncError();
+            }
         }
 
         if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {

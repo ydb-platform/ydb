@@ -376,8 +376,7 @@ Variant {
             "pg_type {\n"
             "  oid: 16\n"
             "}\n";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TestConvertTypeToYdb(input, expected), yexception, "PostgreSQL types are not supported");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TestConvertTypeFromYdb(expected, input), yexception, "PostgreSQL types are not supported");
+        TestConvertTypeToYdb(input, expected);
     }
 } // ConvertMiniKQLTypeToYdbTypeTest
 
@@ -1042,9 +1041,7 @@ variant_index: 3435973836
             "Text: \"123\"\n";
         const TString expectedValue =
             "text_value: \"123\"\n";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TestConvertValueToYdb(inputType, inputValue, expectedValue), yexception, "PostgreSQL types are not supported");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TestConvertValueFromYdb("pg_type { oid: 16 }", expectedValue, inputValue),
-            yexception, "PostgreSQL types are not supported");
+        TestConvertValueToYdb(inputType, inputValue, expectedValue);
     }
 
 } // ConvertYdbValueToMiniKQLValueTest
@@ -1411,16 +1408,82 @@ Y_UNIT_TEST_SUITE(CellsFromTupleTest) {
         );
     }
 
-
-    Y_UNIT_TEST(CellsFromTupleRejectsPgType) {
-        const auto error = DoTestCellsFromTuple(
-            {{NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", true}},
+    Y_UNIT_TEST(CellsFromTupleSuccessPg) {
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", false},
+            },
             R"(
-                type { tuple_type { elements { pg_type { type_name: 'pgint4' } } } }
-                value { items { text_value: '-42' } }
-            )", true, true);
-        UNIT_ASSERT_STRING_CONTAINS(error, "type parsing error: Unexpected type");
-        UNIT_ASSERT_STRING_CONTAINS(error, "pg_type");
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgint4' } }
+                }
+            }
+            value {
+                items { text_value: '-42' }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgtext")), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgtext' } }
+                }
+            }
+            value {
+                items { text_value: 'AAAA' }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", false},
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgtext")), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgint4' } }
+                    elements { pg_type: { type_name: 'pgtext' } }
+                }
+            }
+            value {
+                items { text_value: '-42' }
+                items { text_value: '-42' }
+            }
+            )",
+            true,
+            true)
+        );
+
+        // not nullable pg
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", true},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgint4' } }
+                }
+            }
+            value {
+                items { text_value: '-42' }
+            }
+            )",
+            true,
+            true)
+        );
     }
 
     Y_UNIT_TEST(CellsFromTupleFails) {
@@ -1572,6 +1635,49 @@ Y_UNIT_TEST_SUITE(CellsFromTupleTest) {
         );
     }
 
+    Y_UNIT_TEST(CellsFromTupleFailsPg) {
+        {
+            auto err = DoTestCellsFromTuple(
+                {
+                    {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", false},
+                },
+                R"(
+                type {
+                    tuple_type {
+                        elements { pg_type: { type_name: 'pgint4' } }
+                    }
+                }
+                value {
+                    items { text_value: 'AAA' }
+                }
+                )",
+                true,
+                true);
+            UNIT_ASSERT_STRING_CONTAINS(err, "Invalid text value for pgint4: Error while converting text to binary:");
+            UNIT_ASSERT_STRING_CONTAINS(err, "invalid input syntax for type integer: \"AAA\"\n in tuple at position 0");
+        }
+
+        {
+            auto err = DoTestCellsFromTuple(
+                {
+                    {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint2")), "", false},
+                },
+                R"(
+                type {
+                    tuple_type {
+                        elements { pg_type: { type_name: 'pgint2' } }
+                    }
+                }
+                value {
+                    items { text_value: '-420000000' }
+                }
+                )",
+                true,
+                true);
+            UNIT_ASSERT_STRING_CONTAINS(err, "Invalid text value for pgint2: Error while converting text to binary:");
+            UNIT_ASSERT_STRING_CONTAINS(err, "value \"-420000000\" is out of range for type smallint\n in tuple at position 0");
+        }
+    }
 
 } // CellsFromTupleTest
 

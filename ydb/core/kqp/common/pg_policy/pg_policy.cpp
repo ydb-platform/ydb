@@ -1,7 +1,7 @@
 #include "pg_policy.h"
 
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -39,7 +39,7 @@ public:
         if (unsupported) {
             output = input;
             ctx.AddError(NYql::YqlIssue(ctx.GetPosition(input->Pos()), NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-                "PostgreSQL types are not supported"));
+                "PostgreSQL compatibility is disabled"));
             return TStatus::Error;
         }
         return status;
@@ -67,14 +67,20 @@ private:
 
 } // namespace
 
-NYql::TTypeAnnCallableFactory CreateKqpTypeAnnCallableFactory(NYql::TTypeAnnotationContext& types) {
+NYql::TTypeAnnCallableFactory CreateKqpTypeAnnCallableFactory(NYql::TTypeAnnotationContext& types, bool disablePgCompatibility) {
+    if (!disablePgCompatibility) {
+        return {};
+    }
     return [&types]() -> TAutoPtr<NYql::IGraphTransformer> {
         return new TKqpTypeAnnCallableTransformer(types);
     };
 }
 
-bool InstantAnnotateKqpTypes(NYql::TExprNode::TPtr& root, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& types) {
-    auto transformer = NYql::TTransformationPipeline(&types, CreateKqpTypeAnnCallableFactory(types))
+bool InstantAnnotateKqpTypes(NYql::TExprNode::TPtr& root, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& types, bool disablePgCompatibility) {
+    if (!disablePgCompatibility) {
+        return NYql::InstantAnnotateTypes(root, ctx, false, types);
+    }
+    auto transformer = NYql::TTransformationPipeline(&types, CreateKqpTypeAnnCallableFactory(types, disablePgCompatibility))
         .AddPreTypeAnnotation()
         .Add(NYql::CreateFunctorTransformer([](const NYql::TExprNode::TPtr& input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) {
             output = input;

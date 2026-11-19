@@ -17,6 +17,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/flat_scan_events.h>
@@ -29,7 +31,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
-
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -1032,6 +1033,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
+                .SetEnableTablePgTypes(true)
+                .SetDisablePgCompatibility(false)
                 .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true);
 
@@ -2672,6 +2675,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"datetime64_value", "Datetime64", false, false},
                 {"timestamp64_value", "Timestamp64", false, false},
                 {"interval64_value", "Interval64", false, false},
+                {"pgint2_value", "pgint2", false, false},
+                {"pgint4_value", "pgint4", false, false},
+                {"pgint8_value", "pgint8", false, false},
+                {"pgfloat4_value", "pgfloat4", false, false},
+                {"pgfloat8_value", "pgfloat8", false, false},
+                {"pgbytea_value", "pgbytea", false, false},
+                {"pgtext_value", "pgtext", false, false},
+                {"pgtimestamp_value", "pgtimestamp", false, false},
+                {"pgdate_value", "pgdate", false, false},
             });
         TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
             R"(UPSERT INTO `/Root/Table` (key, int32_value) VALUES (1, -100500);)",
@@ -2698,6 +2710,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"(UPSERT INTO `/Root/Table` (key, datetime64_value) VALUES (21, CAST(1597235696 AS Datetime64));)",
             R"(UPSERT INTO `/Root/Table` (key, timestamp64_value) VALUES (22, CAST(1597235696123456 AS Timestamp64));)",
             R"(UPSERT INTO `/Root/Table` (key, interval64_value) VALUES (23, CAST(-300500 AS Interval64));)",
+            R"(UPSERT INTO `/Root/Table` (key, pgint2_value) VALUES (24, -42ps);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgint4_value) VALUES (25, -420p);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgint8_value) VALUES (26, -4200pb);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgfloat4_value) VALUES (27, 3.1415pf4);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgfloat8_value) VALUES (28, 2.718pf8);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgbytea_value) VALUES (29, 'lorem "ipsum"'pb);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgtext_value) VALUES (30, 'lorem "ipsum"'p);)",
+            R"(UPSERT INTO `/Root/Table` (key, pgtimestamp_value) VALUES (31, pgtimestamp('2020-01-01T23:30:10Z'));)",
+            R"(UPSERT INTO `/Root/Table` (key, pgdate_value) VALUES (32, pgdate('2020-03-01T20:30:10Z'));)",
         }, {
             R"({"key":[1],"update":{"int32_value":-100500}})",
             R"({"key":[2],"update":{"uint32_value":100500}})",
@@ -2723,6 +2744,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[21],"update":{"datetime64_value":1597235696}})",
             R"({"key":[22],"update":{"timestamp64_value":1597235696123456}})",
             R"({"key":[23],"update":{"interval64_value":-300500}})",
+            R"({"key":[24],"update":{"pgint2_value":"-42"}})",
+            R"({"key":[25],"update":{"pgint4_value":"-420"}})",
+            R"({"key":[26],"update":{"pgint8_value":"-4200"}})",
+            R"({"key":[27],"update":{"pgfloat4_value":"3.1415"}})",
+            R"({"key":[28],"update":{"pgfloat8_value":"2.718"}})",
+            R"({"key":[29],"update":{"pgbytea_value":"\\x6c6f72656d2022697073756d22"}})",
+            R"({"key":[30],"update":{"pgtext_value":"lorem \"ipsum\""}})",
+            R"({"key":[31],"update":{"pgtimestamp_value":"2020-01-01 23:30:10"}})",
+            R"({"key":[32],"update":{"pgdate_value":"2020-03-01"}})",
         });
     }
 
@@ -6252,6 +6282,229 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"resolved":"***"})",
             R"({"resolved":"***"})",
         });
+    }
+
+    Y_UNIT_TEST(AggregatedHeartbeats) {
+        using TEvWriteHeartbeat = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat;
+        using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
+
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        const ui64 aggregatorTabletId = 1;
+        auto setAggregatedMode = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.CdcStreamInfo) {
+                    auto info = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TCdcStreamInfo>(*entry.CdcStreamInfo);
+                    info->Description.SetHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated);
+                    info->Description.SetAggregatorTabletId(aggregatorTabletId);
+                    entry.CdcStreamInfo = info;
+                }
+            }
+        });
+
+        auto setAggregatedSender = runtime.AddObserver<TEvChangeExchange::TEvAddSender>([&](auto& ev) {
+            if (auto* sender = std::get_if<TEvChangeExchange::TCdcStreamSender>(&ev->Get()->Params)) {
+                sender->Stream.HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
+            }
+        });
+
+        runtime.RegisterService(NCdcAggregator::MakeCdcAggregatorServiceId(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
+        TBlockEvents<TEvWriteHeartbeat> heartbeats(runtime);
+        auto answerHeartbeats = [&]() {
+            TVector<TRowVersion> versions;
+            while (!heartbeats.empty()) {
+                auto ev = std::move(heartbeats.front());
+                heartbeats.pop_front();
+
+                auto result = MakeHolder<TEvWriteHeartbeatResult>();
+                result->Status = TEvWriteHeartbeatResult::EStatus::Written;
+                result->WrittenVersion = ev->Get()->Heartbeat.Version;
+                versions.push_back(result->WrittenVersion);
+                runtime.Send(new IEventHandle(ev->Sender, edgeActor, result.Release(), 0, ev->Cookie), 0, true);
+            }
+            return versions;
+        };
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "heartbeat");
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->RecipientTabletId, aggregatorTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->SourceDataShardId, GetTableShards(server, edgeActor, "/Root/Table").at(0));
+
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);)");
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+        });
+
+        SimulateSleep(server, TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats.size(), 1);
+        answerHeartbeats();
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "next heartbeat");
+        answerHeartbeats();
+
+        TRowVersion dataVersion = TRowVersion::Min();
+        auto observeData = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+            for (const auto& record : ev->Get()->Records) {
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
+                    dataVersion = TRowVersion(record->GetStep(), record->GetTxId());
+                }
+            }
+        });
+
+        TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteResponse> writeResponses(runtime);
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);)");
+        WaitFor(runtime, [&]{ return !writeResponses.empty(); }, "write response");
+        UNIT_ASSERT(dataVersion != TRowVersion::Min());
+
+        for (int i = 0; i < 5; ++i) {
+            SimulateSleep(server, TDuration::Seconds(3));
+            for (const auto& version : answerHeartbeats()) {
+                UNIT_ASSERT_C(version < dataVersion, "Heartbeat " << version << " is written before data " << dataVersion);
+            }
+        }
+
+        writeResponses.Stop().Unblock();
+
+        bool writtenAfterData = false;
+        for (int i = 0; i < 5 && !writtenAfterData; ++i) {
+            SimulateSleep(server, TDuration::Seconds(3));
+            for (const auto& version : answerHeartbeats()) {
+                writtenAfterData |= version >= dataVersion;
+            }
+        }
+        UNIT_ASSERT_C(writtenAfterData, "No heartbeat after data " << dataVersion);
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+        });
+    }
+
+    Y_UNIT_TEST(AggregatedHeartbeatRetriesAndDrop) {
+        using TEvWriteHeartbeat = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat;
+        using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
+
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        auto setAggregatedMode = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.CdcStreamInfo) {
+                    auto info = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TCdcStreamInfo>(*entry.CdcStreamInfo);
+                    info->Description.SetHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated);
+                    info->Description.SetAggregatorTabletId(1);
+                    entry.CdcStreamInfo = info;
+                }
+            }
+        });
+        auto setAggregatedSender = runtime.AddObserver<TEvChangeExchange::TEvAddSender>([&](auto& ev) {
+            if (auto* sender = std::get_if<TEvChangeExchange::TCdcStreamSender>(&ev->Get()->Params)) {
+                sender->Stream.HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
+            }
+        });
+
+        runtime.RegisterService(NCdcAggregator::MakeCdcAggregatorServiceId(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
+        TBlockEvents<TEvWriteHeartbeat> heartbeats(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "heartbeat");
+
+        const auto senderId = heartbeats.front()->Sender;
+        const auto version = heartbeats.front()->Get()->Heartbeat.Version;
+        const auto data = heartbeats.front()->Get()->Heartbeat.Data;
+        THolder<IEventHandle> retryEvent;
+        TTestActorRuntimeBase::TScheduledEventFilter previousFilter;
+        previousFilter = runtime.SetScheduledEventFilter([&](auto& actorRuntime, auto& event, auto delay, auto& deadline) {
+            if (event->Sender == senderId) {
+                UNIT_ASSERT(!retryEvent);
+                retryEvent.Reset(event.Release());
+                return true;
+            }
+            return previousFilter(actorRuntime, event, delay, deadline);
+        });
+
+        auto answerHeartbeat = [&](IEventBase* reply) {
+            auto heartbeat = std::move(heartbeats.front());
+            heartbeats.pop_front();
+            runtime.Send(new IEventHandle(senderId, edgeActor, reply, 0, heartbeat->Cookie), 0, true);
+        };
+        auto retryHeartbeat = [&](IEventBase* reply) {
+            answerHeartbeat(reply);
+            WaitFor(runtime, [&]{ return bool(retryEvent); }, "scheduled retry");
+            UNIT_ASSERT(heartbeats.empty());
+            runtime.Send(retryEvent.Release(), 0, true);
+            WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "retried heartbeat");
+            UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->Heartbeat.Version, version);
+            UNIT_ASSERT_VALUES_EQUAL(heartbeats.front()->Get()->Heartbeat.Data, data);
+        };
+
+        for (const auto status : {TEvWriteHeartbeatResult::EStatus::Retry, TEvWriteHeartbeatResult::EStatus::Written}) {
+            auto result = MakeHolder<TEvWriteHeartbeatResult>();
+            result->Status = status;
+            result->WrittenVersion = TRowVersion::Min();
+            retryHeartbeat(result.Release());
+        }
+        retryHeartbeat(new TEvents::TEvUndelivered(TEvWriteHeartbeat::EventType, TEvents::TEvUndelivered::ReasonActorUnknown));
+
+        for (const bool resolveTopic : {false, true}) {
+            answerHeartbeat(new TEvWriteHeartbeatResult());
+            WaitFor(runtime, [&]{ return bool(retryEvent); }, "retry before schema resolve");
+
+            TBlockEvents<TEvTxProxySchemeCache::TEvNavigateKeySetResult> navigates(runtime, [&](const auto& ev) {
+                return ev->GetRecipientRewrite() == senderId;
+            });
+            runtime.Send(new IEventHandle(senderId, edgeActor, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(0)), 0, true);
+            WaitFor(runtime, [&]{ return !navigates.empty(); }, "stream schema resolve");
+            if (resolveTopic) {
+                navigates.Unblock(1);
+                WaitFor(runtime, [&]{ return !navigates.empty(); }, "topic schema resolve");
+            }
+
+            const auto pendingNavigates = navigates.size();
+            runtime.Send(retryEvent.Release(), 0, true);
+            WaitFor(runtime, [&]{ return !heartbeats.empty() || navigates.size() > pendingNavigates; }, "heartbeat retry during schema resolve");
+            UNIT_ASSERT_C(!heartbeats.empty(), "Heartbeat retry was consumed during " << (resolveTopic ? "topic" : "stream") << " schema resolve");
+
+            navigates.Stop().Unblock();
+            SimulateSleep(server, TDuration::MilliSeconds(1));
+        }
+
+        auto rejected = MakeHolder<TEvWriteHeartbeatResult>();
+        rejected->Status = TEvWriteHeartbeatResult::EStatus::Rejected;
+        answerHeartbeat(rejected.Release());
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "heartbeat after rejection");
+        UNIT_ASSERT(heartbeats.front()->Get()->Heartbeat.Version > version);
+
+        answerHeartbeat(new TEvWriteHeartbeatResult());
+        WaitFor(runtime, [&]{ return bool(retryEvent); }, "retry before drop");
+        runtime.SetScheduledEventFilter(previousFilter);
+        WaitTxNotification(server, edgeActor, AsyncAlterDropStream(server, "/Root", "Table", "Stream"));
+        UNIT_ASSERT(heartbeats.empty());
+
+        runtime.Send(retryEvent.Release(), 0, true);
+        SimulateSleep(server, TDuration::MilliSeconds(1));
+        UNIT_ASSERT_C(heartbeats.empty(), "Scheduled heartbeat was sent after dropping the stream");
     }
 
     Y_UNIT_TEST(ResolvedTimestampsMultiplePartitions) {

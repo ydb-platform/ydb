@@ -2,6 +2,7 @@
 #include "change_record.h"
 #include "type_serialization.h"
 
+#include <ydb/core/change_exchange/visitor.h>
 #include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -194,6 +195,8 @@ protected:
             return StringToJson(NBinaryJson::SerializeToJson(cell.AsBuf()));
         case NScheme::NTypeIds::Yson:
             return YsonToJson(cell.AsBuf());
+        case NScheme::NTypeIds::Pg:
+            return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
         case NScheme::NTypeIds::Uuid:
             return UuidToJson(cell);
         default:
@@ -482,7 +485,7 @@ protected:
         }
 
         for (const auto& [tag, column] : schema->Columns) {
-            table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type);
+            table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
             if (const auto family = schema->Families.find(column.Family); family != schema->Families.end()) {
                 table["columns"][column.Name]["family"] = family->second.GetName();
             } else {
@@ -834,6 +837,31 @@ IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSeriali
 
 IChangeRecordSerializer* CreateChangeRecordDebugSerializer() {
     return new TYdbJsonSerializer(TChangeRecordSerializerOpts::DebugOpts());
+}
+
+namespace {
+
+class TSerializeVisitor: public NChangeExchange::TBaseVisitor {
+    IChangeRecordSerializer& Serializer;
+    NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& Cmd;
+
+public:
+    explicit TSerializeVisitor(IChangeRecordSerializer& serializer, NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd)
+        : Serializer(serializer)
+        , Cmd(cmd)
+    {
+    }
+
+    void Visit(const TChangeRecord& record) override {
+        Serializer.Serialize(Cmd, record);
+    }
+};
+
+} // anonymous
+
+void IChangeRecordSerializer::Serialize(TCmdWrite& cmd, const NChangeExchange::IChangeRecord& record) {
+    TSerializeVisitor visitor(*this, cmd);
+    record.Accept(visitor);
 }
 
 TString TChangeRecord::GetPartitionKey() const {

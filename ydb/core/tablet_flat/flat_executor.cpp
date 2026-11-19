@@ -4968,7 +4968,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                             TABLER() {
                                 TABLED() {str << col.Name;}
                                 TABLED() {str << col.Id;}
-                                TABLED() {str << NScheme::TypeName(col.PType);}
+                                TABLED() {str << NScheme::TypeName(col.PType, col.PTypeMod);}
                                 TABLED() {str << (isKey ? ToString(col.KeyOrder) : "");}
                             }
                         }

@@ -394,7 +394,7 @@ class TLocalTableWriter
             for (const auto& [_, column] : entry.Columns) {
                 const auto expected = expectedColumns.find(column.Name);
                 if (expected == expectedColumns.end()
-                    || expected->second != NScheme::TypeName(column.PType))
+                    || expected->second != NScheme::TypeName(column.PType, column.PTypeMod))
                 {
                     return LogWarnAndRetry("Refreshed table schema does not match CDC schema record");
                 }

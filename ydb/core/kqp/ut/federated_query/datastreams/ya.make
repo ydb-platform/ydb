@@ -51,12 +51,13 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/interactive/common
     ydb/services/metadata/abstract
     ydb/services/workload_manager/ut/common
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
     yql/essentials/udfs/common/stat
     yql/essentials/udfs/common/yson2
 )
 
-ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish")
+ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish,enable_relative_paths")
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)

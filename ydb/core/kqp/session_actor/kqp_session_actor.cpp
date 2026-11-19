@@ -17,7 +17,6 @@
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway.h>
 #include <ydb/core/kqp/common/simple/mvcc_version.h>
-#include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
@@ -611,12 +610,12 @@ public:
                 return AddOffsetsToTransaction();
         }
 
-        try {
-            for (const auto& [name, param] : QueryState->GetYdbParameters()) {
-                TQueryData::ValidateParameterType(param.type());
+        if (QueryState->GetDisablePgCompatibility()) {
+            try {
+                TQueryData::ValidateNoPgParameters(QueryState->GetYdbParameters());
+            } catch (const yexception& e) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << e.what();
             }
-        } catch (const yexception& ex) {
-            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
 
         QueryState->UpdateTempTablesState(TempTablesState);
@@ -1063,45 +1062,6 @@ public:
         }
 
         OnSuccessCompileRequest();
-    }
-
-    void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
-        QueryState->SaveAndCheckParseResult(std::move(*ev->Get()));
-        CompileStatement();
-    }
-
-    void CompileStatement() {
-        auto txCtx = GetTxContextForCompilation();
-
-        // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx, QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
-            LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
-
-            QueryState->CompileResult->IncUsage();
-            // even if we have successfully compilation result, it doesn't mean anything
-            // in terms of current schema version of the table if response of compilation is from the cache.
-            // because of that, we are forcing to run schema version check
-            if (QueryState->NeedCheckTableVersions()) {
-                auto ev = QueryState->BuildNavigateKeySet();
-                Send(MakeSchemeCacheID(), ev.release(), 0, 0, QueryState->KqpSessionSpan.GetTraceId());
-                return;
-            }
-
-            OnSuccessCompileRequest();
-            return;
-        }
-
-        // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
-        // for extra sanity we make extra hop to the compile service, which might handle the issue better
-
-        auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx);
-        YDB_LOG_DEBUG("Sending CompileQuery request (statement)",
-            {"marker", "KQPSA"},
-            {"logPrefix", LogPrefix()},
-            {"traceId", TraceId()});
-
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
-            QueryState->KqpSessionSpan.GetTraceId());
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev) {
@@ -1560,7 +1520,7 @@ public:
             QueryState->ImplicitTxId = QueryState->TxId;
         }
         Ydb::Table::TransactionControl control;
-        control.set_commit_tx(QueryState->ProcessingLastStatement() && QueryState->ProcessingLastStatementPart());
+        control.set_commit_tx(QueryState->ProcessingLastStatementPart());
         control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         return control;
     }
@@ -1930,7 +1890,7 @@ public:
             request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();
             if (Y_LIKELY(queryState->PreparedQuery)) {
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
-                request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
+                request.AllowTrailingResults = (resultSetsCount == 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
                 request.DisablePessimisticLocks =
                     queryState->PreparedQuery->GetPhysicalQuery().GetDisablePessimisticLocks();
@@ -2080,7 +2040,7 @@ public:
         }
 
         if (QueryState->IsSplitted()) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for perstatement query execution");
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for split queries");
             return false;
         }
 
@@ -2528,14 +2488,6 @@ public:
         ++QueryState->CurrentTx;
     }
 
-    static ui32 GetResultsCount(const IKqpGateway::TExecPhysicalRequest& req) {
-        ui32 results = 0;
-        for (const auto& transaction : req.Transactions) {
-            results += transaction.Body->ResultsSize();
-        }
-        return results;
-    }
-
     TIntrusivePtr<NACLib::TUserContext> CreateUserContext() {
         NACLib::TUserContextBuilder builder;
 
@@ -2555,7 +2507,6 @@ public:
         bool allowSaveState = false;
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
-            QueryState->StatementResultSize = GetResultsCount(request);
 
             if (const auto& preparedQuery = QueryState->PreparedQuery) {
                 allowSaveState = !isRollback && QueryState->CurrentTx + 1 == preparedQuery->GetPhysicalQuery().TransactionsSize();
@@ -2646,7 +2597,7 @@ public:
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig, CreateUserContext()),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
+            FederatedQuerySetup,
             nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
             llvmSettings, Settings.QueryService, ChannelService,
             (QueryState && QueryState->PreparedQuery)
@@ -2679,7 +2630,6 @@ public:
 
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
-            QueryState->StatementResultSize = GetResultsCount(request);
         }
 
         request.LocksOp = ELocksOp::Commit;
@@ -2718,9 +2668,6 @@ public:
             .UserRequestContext = QueryState
                 ? QueryState->UserRequestContext
                 : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            .StatementResultIndex = QueryState
-                ? QueryState->StatementResultIndex
-                : 0,
             .FederatedQuerySetup = FederatedQuerySetup,
             .GUCSettings = GUCSettings,
             .ShardIdToTableInfo = txCtx->ShardIdToTableInfo,
@@ -3662,12 +3609,12 @@ public:
         QueryResponse = std::move(resEv);
 
 
-        ProcessNextStatement();
+        ProcessNextStatementPart();
     }
 
-    void ProcessNextStatement() {
+    void ProcessNextStatementPart() {
         if (AdministrativeTerminationReason) {
-            if (!QueryState->ProcessingLastStatementPart() || !QueryState->ProcessingLastStatement()) {
+            if (!QueryState->ProcessingLastStatementPart()) {
                 ReplyQueryError(Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
             } else {
                 // Keep the result of a completed operation, including a committed write.
@@ -3679,12 +3626,7 @@ public:
             return;
         }
 
-        if (QueryState->ProcessingLastStatement()) {
-            Cleanup();
-            return;
-        }
-        QueryState->PrepareNextStatement();
-        CompileStatement();
+        Cleanup();
     }
 
     void ReplyQueryCompileError() {
@@ -4423,7 +4365,6 @@ public:
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
-                hFunc(TEvKqp::TEvParseResponse, Handle);
                 hFunc(TEvKqp::TEvSplitResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 

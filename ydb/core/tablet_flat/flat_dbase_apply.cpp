@@ -452,8 +452,15 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
     auto itName = table->ColumnNames.find(name);
 
     NScheme::TTypeInfo typeInfo;
+    TString pgTypeMod;
     Y_ENSURE((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
     switch ((NScheme::TTypeId)type) {
+    case NScheme::NTypeIds::Pg: {
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
+        typeInfo = typeInfoMod.TypeInfo;
+        pgTypeMod = typeInfoMod.TypeMod;
+        break;
+    }
     case NScheme::NTypeIds::Decimal: {
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
         typeInfo = typeInfoMod.TypeInfo;
@@ -480,10 +487,10 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         Y_ENSURE(itName->second == id, describeFailure());
         // Sanity check that this column exists and types match
         Y_ENSURE(it != table->Columns.end() && it->second.Name == name);
-        Y_ENSURE(it->second.PType == typeInfo,
+        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
-            << "' expected type " << NScheme::TypeName(typeInfo)
-            << ", existing type " << NScheme::TypeName(it->second.PType));
+            << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
+            << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
 
         bool changes = false;
         // We check if some properties have changed in the new scheme and update them if needed
@@ -501,17 +508,17 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
 
     // We assume column is renamed when the same id already exists
     if (it != table->Columns.end()) {
-        Y_ENSURE(it->second.PType == typeInfo,
+        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
-            << " with type " << NScheme::TypeName(typeInfo)
-            << ", existing type " << NScheme::TypeName(it->second.PType));
+            << " with type " << NScheme::TypeName(typeInfo, pgTypeMod)
+            << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
         table->ColumnNames.erase(it->second.Name);
         it->second.Name = name;
         table->ColumnNames.emplace(name, id);
         return true;
     }
 
-    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, {}, notNull, isSensitive, setNotNullInProgress));
+    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull, isSensitive, setNotNullInProgress));
     Y_ENSURE(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);

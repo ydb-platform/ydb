@@ -19,7 +19,7 @@ protected:
 
 public:
     bool Apply(IDataReader& indexedDataRead) {
-        AFL_VERIFY(!AppliedFlag);
+        YDB_LOG_VERIFY(!AppliedFlag);
         AppliedFlag = true;
         return DoApply(indexedDataRead);
     }

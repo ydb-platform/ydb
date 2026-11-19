@@ -193,6 +193,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetUseRealInterconnect(settings.UseRealInterconnect);
+    ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
@@ -1484,7 +1485,7 @@ std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     return stages;
 }
 
-void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
+void CreateSampleTablesWithIndex(TSession& session, bool populateTables, bool withPgTypes) {
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/SecondaryKeys` (
@@ -1514,6 +1515,21 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
 
     )").GetValueSync();
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    if (withPgTypes) {
+        auto res = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/SecondaryPgTypeKeys` (
+                Key pgint4,
+                Fk pgint4,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
 
     if (!populateTables)
         return;
@@ -1553,6 +1569,19 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
             ("Primary1", "Secondary1", "Value1");
 
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+    if (withPgTypes) {
+        auto result = session.ExecuteDataQuery(R"(
+
+            REPLACE INTO `/Root/SecondaryPgTypeKeys` (Key, Fk, Value) VALUES
+                (1pi,  1pi,  "Payload1"),
+                (2pi,  2pi,  "Payload2"),
+                (5pi,  5pi,  "Payload5"),
+                (NULL, 6pi,  "Payload6"),
+                (7pi,  NULL, "Payload7");
+
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+    }
 
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }

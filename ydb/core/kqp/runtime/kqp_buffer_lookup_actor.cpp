@@ -207,7 +207,7 @@ public:
                         keyColumn.GetName(),
                         keyColumn.GetId(),
                         typeInfo,
-                        TString{},
+                        keyColumn.GetTypeInfo().GetPgTypeMod(),
                         keyOrder++
                     }
                 );
@@ -225,7 +225,7 @@ public:
                         keyColumn.GetName(),
                         keyColumn.GetId(),
                         typeInfo,
-                        TString{},
+                        keyColumn.GetTypeInfo().GetPgTypeMod(),
                         static_cast<i32>(index)
                     }
                 );
@@ -242,7 +242,7 @@ public:
                         keyColumn.GetName(),
                         keyColumn.GetId(),
                         typeInfo,
-                        TString{},
+                        keyColumn.GetTypeInfo().GetPgTypeMod(),
                     }
                 );
             }
@@ -253,7 +253,7 @@ public:
                         lookupColumn.GetName(),
                         lookupColumn.GetId(),
                         typeInfo,
-                        TString{},
+                        lookupColumn.GetTypeInfo().GetPgTypeMod(),
                     }
                 );
             }

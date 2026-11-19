@@ -21,13 +21,14 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>

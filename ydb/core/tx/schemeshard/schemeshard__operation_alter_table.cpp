@@ -327,6 +327,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+        .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+        .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
@@ -534,7 +536,23 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        const auto parentIndex = context.SS->Indexes.find(path->ParentPathId);
+        const bool hasReadyUniqueIndex = parentIndex != context.SS->Indexes.end()
+            && parentIndex->second->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+            && parentIndex->second->State == NKikimrSchemeOp::EIndexStateReady;
+        const auto& alterPartitionConfig = table->AlterData->PartitionConfigCompatible();
+        const bool disablesShadowData = alterPartitionConfig.HasShadowData()
+            && !alterPartitionConfig.GetShadowData();
         table->FinishAlter();
+
+        if (disablesShadowData && hasReadyUniqueIndex) {
+            // Republish the index's Children listing with the implementation table's new schema version.
+            auto indexPath = context.SS->PathsById.at(path->ParentPathId);
+            ++indexPath->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, indexPath);
+            context.SS->ClearDescribePathCaches(indexPath);
+            context.OnComplete.PublishToSchemeBoard(OperationId, indexPath->PathId);
+        }
 
         path->SetAsyncReplica(table->IsAsyncReplica());
 
@@ -697,7 +715,10 @@ public:
                     .NotBackupTable();
             }
 
-            if (!context.IsAllowedPrivateTables) {
+            const bool isInternalShadowDataRepair = Transaction.GetInternal()
+                && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData
+                && AllowShadowData;
+            if (!context.IsAllowedPrivateTables && !isInternalShadowDataRepair) {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
             }
 

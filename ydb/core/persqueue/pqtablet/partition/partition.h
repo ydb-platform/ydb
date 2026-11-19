@@ -352,7 +352,10 @@ private:
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 
-    TInstant GetWriteTimeEstimate(ui64 offset) const;
+    // firstUnreadMessage: true if offset is the first UNREAD message (step 1
+    // key back to that message itself); false if offset is the next-to-commit
+    // offset (step 2 keys back to the last committed message).
+    TInstant GetWriteTimeEstimate(ui64 offset, bool firstUnreadMessage = false) const;
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
@@ -1162,6 +1165,7 @@ private:
     // Writing blob with topic quota variables.
     // BlobQuotaSize / MessagesQuotaSize belong to TopicQuotaRequestCookie, not to the KV write
     // cycle. The next quota request may already be in flight when HandleWriteResponse runs.
+    // With EnablePQWriteQuotaAccountingFix off (default), HandleWriteResponse zeroes them (legacy).
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;

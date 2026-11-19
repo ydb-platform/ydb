@@ -721,6 +721,17 @@ public:
             }
         }
 
+        if (TxType == TTxState::TxRestore && path->IsTable() && AppData()->FeatureFlags.GetDisablePgCompatibility()) {
+            const auto& table = context.SS->Tables.at(path->PathId);
+            for (const auto& [_, column] : table->Columns) {
+                if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");
+                    return result;
+                }
+            }
+        }
+
         if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
             TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
             for (const auto& [_, column] : table->Columns) {

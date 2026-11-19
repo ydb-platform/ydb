@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -309,6 +309,10 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TString>&& column
         }
         phyColumn.SetNotNull(column->NotNull);
         switch (column->TypeInfo.GetTypeId()) {
+        case NScheme::NTypeIds::Pg: {
+            phyColumn.MutableTypeParam()->SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetPgTypeDesc()));
+            break;
+        }
         case NScheme::NTypeIds::Decimal: {
             ProtoFromDecimalType(column->TypeInfo.GetDecimalType(), *phyColumn.MutableTypeParam()->MutableDecimal());
             break;
@@ -381,6 +385,17 @@ void FillNothingData(const TDataExprType& dataType, Ydb::TypedValue& value) {
     value.mutable_value()->set_null_flag_value(::google::protobuf::NullValue::NULL_VALUE);
 }
 
+void FillNothingPg(const TPgExprType& pgType, Ydb::TypedValue& value) {
+    auto& protoType = *value.mutable_type();
+    auto actualPgType = pgType.Cast<TPgExprType>();
+    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+
+    protoType.mutable_pg_type()->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+    protoType.mutable_pg_type()->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+
+    value.mutable_value()->set_null_flag_value(::google::protobuf::NullValue::NULL_VALUE);
+}
+
 void FillNothing(TCoNothing expr, Ydb::TypedValue& value) {
     auto typeann = expr.Raw()->GetTypeAnn();
     switch (typeann->GetKind()) {
@@ -390,6 +405,10 @@ void FillNothing(TCoNothing expr, Ydb::TypedValue& value) {
                 typeann->GetKind() == ETypeAnnotationKind::Data,
                 "Unexpected type in Nothing.Optional: " << typeann->GetKind());
             FillNothingData(*typeann->Cast<TDataExprType>(), value);
+            return;
+        }
+        case ETypeAnnotationKind::Pg: {
+            FillNothingPg(*typeann->Cast<TPgExprType>(), value);
             return;
         }
         default:
@@ -420,6 +439,8 @@ void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKey
             paramElementProto.SetElementIndex(FromString<ui32>(key.Cast<TCoNth>().Index().Value()));
         } else if (auto maybeLiteral = key.Maybe<TCoDataCtor>()) {
             FillLiteralProto(maybeLiteral.Cast(), *protoValue.MutableLiteralValue());
+        } else if (auto maybePgLiteral = key.Maybe<TCoPgConst>()) {
+            FillLiteralProto(maybePgLiteral.Cast(), *protoValue.MutableLiteralValue());
         } else if (auto maybeNull = key.Maybe<TCoNothing>()) {
             FillNothing(maybeNull.Cast(), *protoValue.MutableLiteralValue());
         } else {

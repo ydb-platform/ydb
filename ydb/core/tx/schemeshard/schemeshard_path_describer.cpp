@@ -98,7 +98,7 @@ static void FillColumns(
 
         auto* colDescr = out.Add();
         colDescr->SetName(cinfo.Name);
-        colDescr->SetType(NScheme::TypeName(cinfo.PType));
+        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         colDescr->SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {
@@ -255,6 +255,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -1164,7 +1165,7 @@ void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pat
 
         auto colDescr = entry->AddColumns();
         colDescr->SetName(cinfo.Name);
-        colDescr->SetType(NScheme::TypeName(cinfo.PType));
+        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         colDescr->SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {

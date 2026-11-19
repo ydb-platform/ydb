@@ -15,8 +15,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/testlib
-    yql/essentials/sql/pg_dummy
+    ydb/core/testlib/pg
     ydb/core/kqp/compute_actor
     ydb/core/formats
     ydb/core/tx

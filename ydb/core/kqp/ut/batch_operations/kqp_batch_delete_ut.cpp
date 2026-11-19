@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             auto db = kikimr.GetTableClient();
             auto session = db.GetSession().GetValueSync().GetSession();
 
-            CreateSampleTablesWithIndex(session, true);
+            CreateSampleTablesWithIndex(session, true, false);
         }
 
         auto db = kikimr.GetQueryClient();

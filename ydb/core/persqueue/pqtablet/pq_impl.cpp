@@ -2690,11 +2690,22 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     if (IsTopicMutateDisabled(ctx)
-        && (req.CmdWriteSize() > 0 || req.HasCmdSetClientOffset() || req.HasCmdEmitHeartbeat()))
+        && (req.CmdWriteSize() > 0 || req.HasCmdEmitHeartbeat()))
     {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Topic mutations are temporarily disabled");
         return;
+    }
+
+    if (IsTopicMutateDisabled(ctx)
+        && req.HasCmdSetClientOffset())
+    {
+        const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
+        if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                       "Topic mutations are temporarily disabled");
+            return;
+        }
     }
 
     if (req.HasWriteId()) {

@@ -25,7 +25,7 @@ bool TInlineSimpleInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>
 }
 
 TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    if (input->Kind != EOperator::Filter) {
+    if (input->Kind != EOperator::Filter || props.PgSyntax) {
         return input;
     }
 
@@ -169,7 +169,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     }
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    return MakeIntrusive<TOpFilter>(join, filter->Pos, MakeConjunction(conjuncts));
+    return MakeIntrusive<TOpFilter>(join, filter->Pos, MakeConjunction(conjuncts, props.PgSyntax));
 }
 }
 }

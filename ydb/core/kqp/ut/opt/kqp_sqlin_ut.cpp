@@ -573,6 +573,107 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
+    Y_UNIT_TEST(DisablePgCompatibilityAtRuntime) {
+        TKikimrSettings settings;
+        settings.SetDisablePgCompatibility(false);
+        TKikimrRunner kikimr(settings);
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        auto table = kikimr.GetTableClient();
+        auto session = table.CreateSession().GetValueSync().GetSession();
+
+        const auto txControl = TTxControl::BeginTx().CommitTx();
+        const auto execSettings = TExecDataQuerySettings()
+            .KeepInQueryCache(true)
+            .CollectQueryStats(ECollectQueryStatsMode::Basic);
+        const TString pgQuery = Q1_("SELECT FromPg(Pg::abs(CAST(-42 AS PgInt4))) ?? 0 AS value;");
+        const TString nativeQuery = Q1_("SELECT 43 AS value;");
+        auto execute = [&](const TString& query) {
+            return session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
+        };
+        auto checkResult = [](const TDataQueryResult& result, const TString& expected, bool fromCache) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            const auto stats = result.GetStats();
+            UNIT_ASSERT(stats);
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::TProtoAccessor::GetProto(*stats).compilation().from_cache(), fromCache);
+        };
+        auto checkPgRejected = [](const TDataQueryResult& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        };
+        auto setDisablePgCompatibility = [&](bool disable) {
+            NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+            flags.SetDisablePgCompatibility(disable);
+            appData.UpdateRuntimeFlags(flags);
+        };
+
+        checkResult(execute(pgQuery), "[[42]]", false);
+        checkResult(execute(pgQuery), "[[42]]", true);
+        checkResult(execute(nativeQuery), "[[43]]", false);
+        checkResult(execute(nativeQuery), "[[43]]", true);
+
+        auto pgPreparedResult = session.PrepareDataQuery(pgQuery).ExtractValueSync();
+        UNIT_ASSERT_C(pgPreparedResult.IsSuccess(), pgPreparedResult.GetIssues().ToString());
+        auto pgPrepared = pgPreparedResult.GetQuery();
+        auto nativePreparedResult = session.PrepareDataQuery("SELECT 44 AS value;").ExtractValueSync();
+        UNIT_ASSERT_C(nativePreparedResult.IsSuccess(), nativePreparedResult.GetIssues().ToString());
+        auto nativePrepared = nativePreparedResult.GetQuery();
+        const auto unusedPgParams = TParamsBuilder()
+            .AddParam("$unused").EmptyList(TTypeBuilder().Pg(TPgType("pgint4")).Build()).Build().Build();
+        checkResult(nativePrepared.Execute(txControl, unusedPgParams, execSettings).ExtractValueSync(), "[[44]]", true);
+
+        setDisablePgCompatibility(true);
+        checkPgRejected(execute(pgQuery));
+        checkPgRejected(pgPrepared.Execute(txControl, execSettings).ExtractValueSync());
+        checkPgRejected(nativePrepared.Execute(txControl, unusedPgParams, execSettings).ExtractValueSync());
+        checkResult(execute(nativeQuery), "[[43]]", false);
+        checkResult(execute(nativeQuery), "[[43]]", true);
+        checkResult(nativePrepared.Execute(txControl, execSettings).ExtractValueSync(), "[[44]]", false);
+        checkResult(nativePrepared.Execute(txControl, execSettings).ExtractValueSync(), "[[44]]", true);
+
+        setDisablePgCompatibility(false);
+        checkResult(execute(pgQuery), "[[42]]", true);
+        checkResult(execute(nativeQuery), "[[43]]", true);
+        checkResult(pgPrepared.Execute(txControl, execSettings).ExtractValueSync(), "[[42]]", true);
+        checkResult(nativePrepared.Execute(txControl, unusedPgParams, execSettings).ExtractValueSync(), "[[44]]", true);
+    }
+
+    Y_UNIT_TEST(SecondaryIndex_PgKey) {
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session, true, true);
+
+        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
+            const TString query = Q1_(Sprintf(R"(
+                    %s
+                    DECLARE $in AS List<pgint4>;
+                    SELECT Value FROM `/Root/SecondaryPgTypeKeys` VIEW Index WHERE Fk IN $in
+                    ORDER BY Value
+                )", FormatPragma(disableOpt)));
+
+            auto params = TParamsBuilder().AddParam("$in").BeginList()
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4")))
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "2", TPgType("pgint4")))
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "42", TPgType("pgint4")))
+                    .AddListItem().Pg(TPgValue(TPgValue::VK_NULL, "", TPgType("pgint4")))
+                    .EndList().Build().Build();
+
+            auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
+            assertFn(result);
+        };
+
+        test(DisableOpt, [](const TDataQueryResult& result) {
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys", 2);
+        });
+
+        test(EnableOpt, [](const TDataQueryResult& result) {
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryPgTypeKeys", 2);
+        });
+    }
 
     Y_UNIT_TEST(SecondaryIndex_SimpleKey) {
         TKikimrRunner kikimr = GetKikimrRunner();

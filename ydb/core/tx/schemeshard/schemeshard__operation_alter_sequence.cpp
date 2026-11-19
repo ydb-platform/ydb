@@ -212,7 +212,7 @@ public:
 
 std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription(
         const NKikimrSchemeOp::TSequenceDescription& sequence, const NKikimrSchemeOp::TSequenceDescription& alter,
-        const NScheme::TTypeRegistry& typeRegistry,
+        const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled,
         TString& errStr) {
 
     NKikimrSchemeOp::TSequenceDescription result = sequence;
@@ -225,7 +225,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
         dataType = alter.GetDataType();
     }
 
-    auto validationResult = ValidateSequenceType(sequence.GetName(), dataType, typeRegistry, errStr);
+    auto validationResult = ValidateSequenceType(sequence.GetName(), dataType, typeRegistry, pgTypesEnabled, errStr);
     if (!validationResult) {
         return std::nullopt;
     }
@@ -472,7 +472,7 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = GetAlterSequenceDescription(
-                sequenceInfo->Description, sequenceAlter, *typeRegistry, errStr);
+                sequenceInfo->Description, sequenceAlter, *typeRegistry, AppData()->FeatureFlags.GetEnableTablePgTypes(), errStr);
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);

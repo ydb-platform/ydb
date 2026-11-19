@@ -1,5 +1,5 @@
 #include "kqp_compile_service.h"
-#include "kqp_warmup_compile_actor.h"
+#include <ydb/core/kqp/common/warmup/warmup.h>
 
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
@@ -10,7 +10,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
-#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
@@ -25,6 +24,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/digest/md5/md5.h>
 
+#include <util/random/random.h>
 #include <util/string/escape.h>
 
 #include <ydb/core/base/cputime.h>
@@ -42,6 +42,24 @@ const TString YqlName = "CompileActor";
 
 inline TString GetQueryTextForLog(const TString& queryText) {
     return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+// Picks the optimizer for one compilation. NewRBORolloutRatio applies only when EnableNewRBO is set.
+bool ShouldUseNewRBO(const NKikimrConfig::TTableServiceConfig& config, const TKqpQueryId& queryId) {
+    // ANALYZE scans use UDAF factories unsupported by new RBO.
+    if (!config.GetEnableNewRBO() || queryId.Settings.IsAnalyze) {
+        return false;
+    }
+
+    const double ratio = config.GetNewRBORolloutRatio();
+    if (ratio >= 1.0) {
+        return true;
+    }
+    // A NaN ratio fails both this check and the draw below, so it selects the YQL optimizer.
+    if (ratio <= 0.0) {
+        return false;
+    }
+    return RandomNumber<double>() < ratio;
 }
 
 } // namespace
@@ -71,8 +89,7 @@ public:
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
-        bool perStatementResult,
-        ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
+        ECompileActorAction compileAction,
         std::shared_ptr<NYql::TExprContext> splitCtx,
         NYql::TExprNode::TPtr splitExpr,
         bool usePessimisticLocks)
@@ -84,7 +101,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , Uid(uid)
         , QueryId(queryId)
-        , QueryRef(QueryId.Text, QueryId.QueryParameterTypes, queryAst)
+        , QueryRef(QueryId.Text, QueryId.QueryParameterTypes)
         , UserToken(userToken)
         , ClientAddress(clientAddress)
         , DbCounters(dbCounters)
@@ -100,13 +117,12 @@ public:
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
-        , QueryAst(std::move(queryAst))
-        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
+        // Drawn once per actor: fallback retries rebuild the config from this value.
+        , EnableNewRBO(ShouldUseNewRBO(tableServiceConfig, queryId))
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
         // The compile actor works concurrently with the compile service that started it.
         MarkSpawn(CompileActorSpan);
     }
@@ -160,9 +176,6 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         switch(CompileAction) {
-            case ECompileActorAction::PARSE:
-                StartParsing(ctx);
-                break;
             case ECompileActorAction::COMPILE:
                 StartCompilation(ctx);
                 break;
@@ -231,28 +244,6 @@ private:
 
 
 private:
-    TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
-        TString cluster = QueryId.Cluster;
-        TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
-        settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
-            .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
-            .SetApplicationName(ApplicationName)
-            .SetQueryParameters(QueryId.QueryParameterTypes)
-            .SetFromConfig(*Config);
-
-        auto span = CompileActorSpan.CreateChild(TCompileTraceLevels::Phase, "Parse query");
-        auto statements = ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
-        const bool success = !statements.empty() && std::all_of(statements.begin(), statements.end(), [](const auto& statement) {
-            return statement.Ast && statement.Ast->IsOk() && statement.Ast->Root;
-        });
-        if (success) {
-            span.EndOk();
-        } else {
-            span.EndError("Parsing failed");
-        }
-        return statements;
-    }
-
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {
         Y_UNUSED(ctx);
         YDB_LOG_DEBUG("Send split result",
@@ -317,11 +308,6 @@ private:
 
         auto splitResult = std::move(AsyncSplitResult->GetResult());
         ReplySplitResult(ctx, std::move(splitResult));
-    }
-
-    void StartParsing(const TActorContext &ctx) {
-        Become(&TKqpCompileActor::CompileState);
-        ReplyParseResult(ctx, GetAstStatements(ctx));
     }
 
     void StartCompilation(const TActorContext &ctx) {
@@ -441,6 +427,7 @@ private:
         Gateway->SetClientAddress(ClientAddress);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+        Config->FeatureFlags.SetDisablePgCompatibility(QueryId.DisablePgCompatibility);
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
@@ -462,6 +449,7 @@ private:
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
+                prepareSettings.UsePgParser = false;
                 prepareSettings.SyntaxVersion = 1;
                 break;
 
@@ -575,9 +563,9 @@ private:
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {
         auto meta = CollectMeta();
         if (!KqpCompileResult) {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(QueryId), meta);
         } else {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(KqpCompileResult->Query), std::move(KqpCompileResult->QueryAst), meta);
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(KqpCompileResult->Query), meta);
         }
         KqpCompileResult->UsedNewRbo = EnableNewRBO;
 
@@ -599,50 +587,6 @@ private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         InternalError(TStringBuilder() << "TKqpCompileActor, unexpected event: " << eventType
             << ", at state:" << state);
-    }
-
-    void ReplyParseResult(const TActorContext &ctx, TVector<TQueryAst>&& astStatements) {
-        Y_UNUSED(ctx);
-
-        if (astStatements.empty()) {
-            NYql::TIssue issue(NYql::TPosition(), "Parsing result of query is empty");
-            ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
-            return;
-        }
-
-        for (size_t statementId = 0; statementId < astStatements.size(); ++statementId) {
-            if (!astStatements[statementId].Ast || !astStatements[statementId].Ast->IsOk() || !astStatements[statementId].Ast->Root) {
-                YDB_LOG_ERROR("Get parsing result with error statement",
-                    {"self", SelfId()},
-                    {"owner", Owner},
-                    {"id", statementId});
-
-                auto status = GetYdbStatus(astStatements[statementId].Ast->Issues);
-
-                NYql::TIssue issue(NYql::TPosition(), "Error while parsing query.");
-                for (const auto& i : astStatements[statementId].Ast->Issues) {
-                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-                }
-
-                ReplyError(status, {issue});
-                return;
-            }
-        }
-
-        YDB_LOG_DEBUG("Send parsing result statements",
-            {"self", SelfId()},
-            {"owner", Owner},
-            {"size", astStatements.size()});
-
-        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
-        // End the spans before the receiver can consume the result.
-        FinishCompileTrace(Ydb::StatusIds::SUCCESS);
-        EndQueryTraceSpan(CompileActorSpan, Ydb::StatusIds::SUCCESS);
-        Send(Owner, responseEv.Release(), 0, 0, CompileActorSpan.GetTraceId());
-
-        Counters->ReportCompileFinish(DbCounters);
-
-        PassAway();
     }
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
@@ -675,7 +619,7 @@ private:
 
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
-                Uid, status, CollectIssues(kqpResult.Issues()), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
+                Uid, status, CollectIssues(kqpResult.Issues()), ETableReadType::Other, CompileCpuTime, std::move(QueryId), meta, true);
             Reply();
             return;
         }
@@ -710,7 +654,7 @@ private:
 
         auto queryType = QueryId.Settings.QueryType;
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), meta);
         KqpCompileResult->UsedNewRbo = EnableNewRBO;
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
@@ -867,9 +811,7 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
 
-    bool PerStatementResult;
     ECompileActorAction CompileAction;
-    TMaybe<TQueryAst> QueryAst;
     bool EnableNewRBO;
     TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
@@ -885,8 +827,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings,
     const TMaybe<TString>& applicationName, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
-    ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
-    bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
+    ECompileActorAction compileAction, bool collectFullDiagnostics,
+    std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
     bool usePessimisticLocks)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, pathNormalizer, queryServiceConfig,
@@ -894,7 +836,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 uid, query, userToken, clientAddress, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
-                                perStatementResult, compileAction, std::move(queryAst),
+                                compileAction,
                                 std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
 }
 

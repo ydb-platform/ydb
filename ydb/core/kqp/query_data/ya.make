@@ -12,9 +12,11 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/kqp/common/result_set_format
+    ydb/core/kqp/common/result_set_format/settings
     ydb/core/kqp/common/simple
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/predictor
+    ydb/core/scheme/mkql
     ydb/library/actors/core
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/proto

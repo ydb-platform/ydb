@@ -31,8 +31,9 @@ struct TSimpleColumnStatisticEval::TIntermediateState {
     {}
 };
 
-TSimpleColumnStatisticEval::TSimpleColumnStatisticEval(NScheme::TTypeInfo type)
+TSimpleColumnStatisticEval::TSimpleColumnStatisticEval(NScheme::TTypeInfo type, TString pgTypeMod)
     : Type(std::move(type))
+    , PgTypeMod(std::move(pgTypeMod))
 {}
 
 TSimpleColumnStatisticEval::~TSimpleColumnStatisticEval() = default;
@@ -135,7 +136,7 @@ NKikimrStat::TSimpleColumnStatistics TSimpleColumnStatisticEval::Extract(
 
     result.SetTypeId(Type.GetTypeId());
     if (NScheme::NTypeIds::IsParametrizedType(Type.GetTypeId())) {
-        NScheme::ProtoFromTypeInfo(Type, {}, *result.MutableTypeInfo());
+        NScheme::ProtoFromTypeInfo(Type, PgTypeMod, *result.MutableTypeInfo());
     }
 
     if (IntermediateState) {

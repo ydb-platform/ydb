@@ -693,7 +693,7 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
 
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry &reg) {
     Y_UNUSED(reg);
-    TString typeName = NScheme::TypeName(typeInfo);
+    TString typeName = NScheme::TypeName(typeInfo, "");
     typeName += " : ";
     DbgPrintValue(typeName, r, typeInfo);
     return typeName;
@@ -743,6 +743,14 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Decimal:
             res += typeInfo.GetDecimalType().CellValueToString(r.AsValue<std::pair<ui64, i64>>());
             break;
+        case NScheme::NTypeIds::Pg: {
+            auto convert = NPg::PgNativeTextFromNativeBinary(r.AsBuf(), typeInfo.GetPgTypeDesc());
+            if (!convert.Error)
+                res += convert.Str;
+            else
+                res += *convert.Error;
+            break;
+        }
         default:
             res += EscapeC(r.Data(), r.Size());
         }

@@ -399,6 +399,11 @@ private:
                 typeConstraint = column->TypeConstraint;
 
                 switch (column->Type.GetTypeId()) {
+                case NScheme::NTypeIds::Pg: {
+                    // no need to support pg types in the deprecated minikql engine
+                    YQL_ENSURE(false, "pg types are not supported");
+                    break;
+                }
                 case NScheme::NTypeIds::Decimal: {
                     columnDataType = ctx.MakeType<TDataExprParamsType>(
                         EDataSlot::Decimal,

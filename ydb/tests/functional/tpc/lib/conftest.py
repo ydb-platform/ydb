@@ -25,6 +25,7 @@ class FunctionalTestBase:
         flags = [
             "enable_resource_pools",
             "enable_resource_pools_counters",
+            "enable_table_pg_types",
             "enable_forced_compactions",
         ]
         if extra_feature_flags:
@@ -32,6 +33,7 @@ class FunctionalTestBase:
         config_generator = KikimrConfigGenerator(
             domain_name='local',
             extra_feature_flags=flags,
+            disabled_feature_flags=["disable_pg_compatibility"],
             use_in_memory_pdisks=True,
             column_shard_config={
                 "alter_object_enabled": True,

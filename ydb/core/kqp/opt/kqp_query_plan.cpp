@@ -5,7 +5,7 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/library/json_index/json_index.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
@@ -144,6 +144,8 @@ TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
     TMaybe<TString> literal = Nothing();
     if (auto maybeData = scalar.Maybe<TCoDataCtor>()) {
         literal = TString(maybeData.Cast().Literal());
+    } else if (auto maybeData = scalar.Maybe<TCoPgConst>()) {
+        literal = TString(maybeData.Cast().Value());
     }
 
     if (literal) {
@@ -719,6 +721,9 @@ private:
             default:
                 return str;
             }
+        }
+        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Pg) {
+            return value.GetPgText();
         }
         Y_ENSURE(false, TStringBuilder() << "unexpected NKikimrMiniKQL::ETypeKind: " << ETypeKind_Name(value.GetType().GetKind()));
     }
@@ -2287,6 +2292,8 @@ private:
                 res = NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
             } else if (auto literal = key.Maybe<TCoDataCtor>()) {
                 res = literal.Cast().Literal().StringValue();
+            } else if (auto literal = key.Maybe<TCoPgConst>()) {
+                res = literal.Cast().Value().StringValue();
             } else if (auto literal = key.Maybe<TCoNothing>()) {
                 res = TString("null");
             }

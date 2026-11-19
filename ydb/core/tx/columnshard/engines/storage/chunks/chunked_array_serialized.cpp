@@ -8,10 +8,10 @@ TChunkedArraySerialized::TChunkedArraySerialized(
     , SerializedData(std::move(blobAndMeta.Blob))
     , Meta(std::move(blobAndMeta.Meta))
 {
-    AFL_VERIFY(SerializedData);
-    AFL_VERIFY(Array);
-    AFL_VERIFY(Array->GetRecordsCount());
-    AFL_VERIFY(Meta);
+    YDB_LOG_VERIFY(SerializedData);
+    YDB_LOG_VERIFY(Array);
+    YDB_LOG_VERIFY(Array->GetRecordsCount());
+    YDB_LOG_VERIFY(Meta);
 }
 
 }   // namespace NKikimr::NOlap::NChunks

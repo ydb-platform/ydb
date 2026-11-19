@@ -168,6 +168,7 @@ public:
         TString ColName;
         ui32 PositionInStruct;
         NScheme::TTypeInfo Type;
+        i32 Typmod;
         bool NotNull = false;
         bool SetNotNullInProgress = false;
     };
@@ -385,7 +386,7 @@ private:
         return TConclusionStatus::Success();
     }
 
-    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable) {
+    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable, bool disablePgCompatibility) {
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(ResolveNamesResult);
         AFL_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
@@ -476,6 +477,7 @@ private:
             if (!cp) {
                 return TConclusionStatus::Fail(Sprintf("Unknown column: %s", name.c_str()));
             }
+            i32 pgTypeMod = -1;
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
@@ -488,9 +490,12 @@ private:
                     << "Column " << name << " is a virtual generated column and its value cannot be set explicitly");
             }
 
-            TString columnTypeName = NScheme::TypeName(ci.PType);
-
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
+            if (disablePgCompatibility && (typeInProto.has_pg_type() || ci.PType.GetTypeId() == NScheme::NTypeIds::Pg)) {
+                return TConclusionStatus::Fail("PostgreSQL compatibility is disabled");
+            }
+
+            TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
@@ -501,7 +506,7 @@ private:
 
             const NScheme::TTypeInfo& typeInRequest = inTypeInfoMod.TypeInfo;
 
-            TString inTypeName = NScheme::TypeName(typeInRequest);
+            TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
 
             if (typeInProto.has_type_id()) {
                 bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
@@ -522,6 +527,25 @@ private:
                 return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
                     inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
                 }
+            } else if (typeInProto.has_pg_type()) {
+                bool ok = SameDstType(typeInRequest, ci.PType, false);
+                if (!ok) {
+                return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
+                }
+                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
+                    if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
+                        return TConclusionStatus::Fail(Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str()));
+                    }
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
+                    if (result.Error) {
+                        return TConclusionStatus::Fail(Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                            inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str()));
+                    }
+                    pgTypeMod = result.Typmod;
+                }
             }
 
             bool notNull = entry.NotNullColumns.contains(ci.Name);
@@ -540,11 +564,11 @@ private:
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull, ci.SetNotNullInProgress};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull, ci.SetNotNullInProgress});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }
@@ -765,10 +789,15 @@ private:
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
         }
 
+        const bool disablePgCompatibility = DerivedActivityType == NKikimrServices::TActivity::GRPC_REQ
+            && AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         {
-            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable);
+            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable, disablePgCompatibility);
             if (conclusion.IsFail()) {
+                if (disablePgCompatibility && !CheckAccess(errorMessage)) {
+                    return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, errorMessage, ctx);
+                }
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, conclusion.GetErrorMessage(), ctx);
             }
         }
@@ -1517,7 +1546,7 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
         }
         cells.push_back({});
         if (!CellFromProtoVal(
-                fd.Type, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool, allowInfDouble)) {
+                fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool, allowInfDouble)) {
             return false;
         }
 

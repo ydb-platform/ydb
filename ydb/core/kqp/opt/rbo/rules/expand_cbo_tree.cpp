@@ -32,12 +32,12 @@ TIntrusivePtr<TOpCBOTree> AddJoinToCBOTree(TIntrusivePtr<TOpCBOTree> & cboTree, 
     return MakeIntrusive<TOpCBOTree>(join, treeNodes, join->Pos);
 }
 
-TIntrusivePtr<TOpFilter> FuseFilters(const TIntrusivePtr<TOpFilter>& top, const TIntrusivePtr<TOpFilter>& bottom) {
+TIntrusivePtr<TOpFilter> FuseFilters(const TIntrusivePtr<TOpFilter>& top, const TIntrusivePtr<TOpFilter>& bottom, bool pgSyntax) {
     TVector<TExpression> conjuncts = top->GetFilterExpression().SplitConjunct();
     TVector<TExpression> bottomConjuncts = bottom->GetFilterExpression().SplitConjunct();
     conjuncts.insert(conjuncts.begin(), bottomConjuncts.begin(), bottomConjuncts.end());
 
-    return MakeIntrusive<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunction(conjuncts));
+    return MakeIntrusive<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunction(conjuncts, pgSyntax));
 }
 
 } // namespace
@@ -135,7 +135,7 @@ TIntrusivePtr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const TIntrusiv
         }
 
         if (maybeFilter && maybeAnotherFilter) {
-            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter);
+            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter, props.PgSyntax);
         } else if (maybeAnotherFilter) {
             maybeFilter = maybeAnotherFilter;
         }

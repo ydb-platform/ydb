@@ -139,8 +139,8 @@ void CheckSysViewDescription(const TSysViewDescription& canonicalSysViewDescript
             UNIT_ASSERT_C(canonicalColumn.Name == actualColumn.Name,
                 TStringBuilder() << "Column '" << canonicalColumn.Name << "' was renamed in " << errorSuffix);
 
-            const auto canonicalTypeName = NScheme::TypeName(canonicalColumn.PType);
-            const auto actualTypeName = NScheme::TypeName(actualColumn.PType);
+            const auto canonicalTypeName = NScheme::TypeName(canonicalColumn.PType, canonicalColumn.PTypeMod);
+            const auto actualTypeName = NScheme::TypeName(actualColumn.PType, actualColumn.PTypeMod);
             UNIT_ASSERT_C(canonicalTypeName == actualTypeName,
                 TStringBuilder() << "Column '" << canonicalColumn.Name << "' changed type in " << errorSuffix);
 

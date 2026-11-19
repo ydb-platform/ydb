@@ -60,8 +60,8 @@ private:
 
     public:
         void AddPathId(const TUnifiedPathId& pathId) {
-            AFL_VERIFY(InternalToSchemeShardLocal[pathId.InternalPathId].emplace(pathId.SchemeShardLocalPathId).second);
-            AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
+            YDB_LOG_VERIFY(InternalToSchemeShardLocal[pathId.InternalPathId].emplace(pathId.SchemeShardLocalPathId).second);
+            YDB_LOG_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
         }
 
         void DeletePathId(const TUnifiedPathId& pathId) {
@@ -89,7 +89,7 @@ private:
             THashSet<TSchemeShardLocalPathId> result;
             for (const auto& [internalPathId, schemeShardLocalPathIds] : InternalToSchemeShardLocal) {
                 for (const auto& schemeShardLocalPathId : schemeShardLocalPathIds) {
-                    AFL_VERIFY(result.insert(schemeShardLocalPathId).second);
+                    YDB_LOG_VERIFY(result.insert(schemeShardLocalPathId).second);
                 }
             }
             return result;
@@ -109,7 +109,7 @@ private:
             if (const auto* p = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
                 return { *p };
             }
-            AFL_VERIFY(!withTabletPathId);
+            YDB_LOG_VERIFY(!withTabletPathId);
             return std::nullopt;
         }
     };
@@ -135,7 +135,7 @@ private:
             if (!OwnerTabletId) {
                 OwnerTabletId = tabletId;
             } else {
-                AFL_VERIFY(*OwnerTabletId == tabletId);
+                YDB_LOG_VERIFY(*OwnerTabletId == tabletId);
             }
         }
 
@@ -148,9 +148,11 @@ private:
         }
 
         void Check() const {
-            AFL_VERIFY(OwnerTabletId);
-            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner)("blob_id", BlobId.ToStringNew())(
-                "shared", JoinSeq(",", SharedTabletIdsFromShared))("owned", JoinSeq(",", SharedTabletIdsFromOwner));
+            YDB_LOG_VERIFY(OwnerTabletId);
+            YDB_LOG_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner,
+                {"blobId", BlobId.ToStringNew()},
+                {"shared", JoinSeq(",", SharedTabletIdsFromShared)},
+                {"owned", JoinSeq(",", SharedTabletIdsFromOwner)});
         }
 
         void DebugString(const TString& delta, TStringBuilder& sb) const {
@@ -299,7 +301,7 @@ protected:
 
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& sessionId) override {
         TGuard<TMutex> g(Mutex);
-        AFL_VERIFY(SharingIds.erase(sessionId));
+        YDB_LOG_VERIFY(SharingIds.erase(sessionId));
     }
 
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& sessionId) override {
@@ -345,7 +347,7 @@ public:
 
     const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
         TGuard<TMutex> g(Mutex);
-        AFL_VERIFY(ShardActuals.size() == 1);
+        YDB_LOG_VERIFY(ShardActuals.size() == 1);
         return ShardActuals.begin()->second;
     }
 
@@ -389,12 +391,14 @@ public:
 
     void RegisterLock(const TString& name, const std::shared_ptr<NOlap::NDataLocks::ILock>& lock) {
         TGuard<TMutex> g(Mutex);
-        AFL_VERIFY(ExternalLocks.emplace(name, lock).second)("name", name);
+        YDB_LOG_VERIFY(ExternalLocks.emplace(name, lock).second,
+            {"name", name});
     }
 
     void UnregisterLock(const TString& name) {
         TGuard<TMutex> g(Mutex);
-        AFL_VERIFY(ExternalLocks.erase(name))("name", name);
+        YDB_LOG_VERIFY(ExternalLocks.erase(name),
+            {"name", name});
     }
 
     bool HasPKSortingOnly() const;
@@ -438,13 +442,13 @@ public:
     virtual void OnAddPathId(const ui64 tabletId, const TUnifiedPathId& pathId) override {
         TGuard<TMutex> g(ActiveTabletsMutex);
         auto* tablet = ActiveTablets.FindPtr(tabletId);
-        AFL_VERIFY(tablet);
+        YDB_LOG_VERIFY(tablet);
         (*tablet)->AddPathId(pathId);
     }
 
     virtual void OnDeletePathId(const ui64 tabletId, const TUnifiedPathId& pathId) override {
         auto* tablet = ActiveTablets.FindPtr(tabletId);
-        AFL_VERIFY(tablet);
+        YDB_LOG_VERIFY(tablet);
         (*tablet)->DeletePathId(pathId);
     }
 

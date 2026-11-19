@@ -608,6 +608,8 @@ public:
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+            .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+            .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
             .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),

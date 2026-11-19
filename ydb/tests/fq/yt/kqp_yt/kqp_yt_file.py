@@ -187,10 +187,7 @@ def run_file_kqp_no_cache(suite, case, cfg):
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     in_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)[0]
 
-    query_data_path = DATA_PATH
-    if (suite, case) == ('blocks', 'complex_scalars'):
-        query_data_path = yql_source_path('ydb/tests/fq/yt/kqp_yt/cfg/sql')
-    sql_query = get_sql_query('yt', suite, case, config, data_path=query_data_path)
+    sql_query = get_sql_query('yt', suite, case, config, data_path=DATA_PATH)
     sql_query = replace_vars(sql_query, "yqlrun_var")
 
     check_provider('yt', config)

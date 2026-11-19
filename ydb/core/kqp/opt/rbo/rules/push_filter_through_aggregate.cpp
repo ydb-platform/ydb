@@ -60,11 +60,11 @@ TIntrusivePtr<IOperator> TPushFilterThroughAggregateRule::SimpleMatchAndApply(co
     }
 
     filter->SetInput(aggregate->GetInput());
-    filter->SetFilterExpression(MakeConjunction(pushedFilters));
+    filter->SetFilterExpression(MakeConjunction(pushedFilters, props.PgSyntax));
     aggregate->SetInput(filter);
 
     if (remainingFilters.size()) {
-        auto remainingFilterExpr = MakeConjunction(remainingFilters);
+        auto remainingFilterExpr = MakeConjunction(remainingFilters, props.PgSyntax);
         return MakeIntrusive<TOpFilter>(aggregate, aggregate->Pos, remainingFilterExpr);
     } else {
         return aggregate;

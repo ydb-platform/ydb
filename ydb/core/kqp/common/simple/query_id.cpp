@@ -54,6 +54,7 @@ bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
         UserSid == other.UserSid &&
         Text == other.Text &&
         Settings == other.Settings &&
+        DisablePgCompatibility == other.DisablePgCompatibility &&
         !QueryParameterTypes == !other.QueryParameterTypes &&
         GUCSettings == other.GUCSettings)) {
         return false;

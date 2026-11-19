@@ -11,6 +11,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/minikql/dom/json.h>
@@ -22,6 +23,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 
@@ -101,7 +103,7 @@ public:
         Y_ABORT_UNLESS(resolveNamesResult);
 
         const auto& entry = resolveNamesResult->ResultSet.front();
-        const auto requestedResultColumnNames = GetRequestedResultColumns(*GetProto());
+        const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
 
         THashSet<TString> keyColumnNamesInSchema;
         THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*> nameToColumn;
@@ -118,6 +120,7 @@ public:
         if (!PrepareRequestedKeyColumns(keyColumnNamesInSchema,
                                         nameToColumn,
                                         entry.NotNullColumns,
+                                        disablePgCompatibility,
                                         errorMessage))
         {
             return false;
@@ -129,12 +132,20 @@ public:
             return false;
         }
 
+        if (disablePgCompatibility && AnyOf(RequestedColumnsMeta, [](const auto& column) {
+            return column.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+        })) {
+            errorMessage = "PostgreSQL compatibility is disabled";
+            return false;
+        }
+
         return true;
     }
 
     bool PrepareRequestedKeyColumns(const THashSet<TString>& keyColumnNamesInSchema,
                                     const THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*>& nameToColumn,
                                     const THashSet<TString>& notNullColumns,
+                                    bool disablePgCompatibility,
                                     TString& errorMessage)
     {
         auto keyColumnsLeft = keyColumnNamesInSchema;
@@ -151,7 +162,12 @@ public:
             }
             const auto& colInfo = *colInfoPtr;
 
-            TString columnTypeName = NScheme::TypeName(colInfo.PType);
+            if (disablePgCompatibility && (typeInProto.has_pg_type() || colInfo.PType.GetTypeId() == NScheme::NTypeIds::Pg)) {
+                errorMessage = "PostgreSQL compatibility is disabled";
+                return false;
+            }
+
+            TString columnTypeName = NScheme::TypeName(colInfo.PType, colInfo.PTypeMod);
 
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
@@ -162,7 +178,7 @@ public:
             }
             const NScheme::TTypeInfo& inTypeInfo = inTypeInfoMod.TypeInfo;
 
-            TString inTypeName = NScheme::TypeName(inTypeInfo);
+            TString inTypeName = NScheme::TypeName(inTypeInfo, inTypeInfo.GetPgTypeMod(colInfo.PTypeMod));
 
             if (inTypeInfo != colInfo.PType) {
                 errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
@@ -170,11 +186,30 @@ public:
                 return false;
             }
 
+            i32 pgTypeMod = -1;
+            if (typeInProto.has_pg_type()) {
+                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(inTypeInfo.GetPgTypeDesc())) {
+                    if (inTypeInfoMod.TypeMod != colInfo.PTypeMod) {
+                        errorMessage = Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), colInfo.PTypeMod.c_str());
+                        return false;
+                    }
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, inTypeInfo.GetPgTypeDesc());
+                    if (result.Error) {
+                        errorMessage = Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                           inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str());
+                        return false;
+                    }
+                    pgTypeMod = result.Typmod;
+                }
+            }
+
             KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), colInfo.KeyOrder + 1));
             KeyColumnTypes[colInfo.KeyOrder] = colInfo.PType;
 
             bool notNull = notNullColumns.contains(colInfo.Name);
-            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, notNull};
+            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, pgTypeMod, notNull};
             keyColumnsLeft.erase(colInfo.Name);
         }
 
@@ -585,9 +620,17 @@ public:
         }
         resultSet->mutable_rows()->Reserve(rowsCount);
 
+        const auto getPgTypeFromColMeta = [](const auto &colMeta) {
+            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetPgTypeDesc()),
+                                 colMeta.PTypeMod);
+        };
+
         const auto getTypeFromColMeta = [&](const auto &colMeta) {
             const NScheme::TTypeInfo& typeInfo = colMeta.Type;
             switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Pg: {
+                return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
+            }
             case NScheme::NTypeIds::Decimal: {
                 return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
                         typeInfo.GetDecimalType().GetPrecision(),
@@ -608,7 +651,7 @@ public:
             requestedColumnTypes.emplace_back(colMeta.Type);
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet->Addcolumns();
-            if (colMeta.IsNotNullColumn) {
+            if (colMeta.IsNotNullColumn || colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) { // pg type in nullable itself
                 *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
             } else {
                 *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);

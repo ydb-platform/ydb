@@ -19,8 +19,7 @@ PEERDIR(
     ydb/core/kqp/node_service
     ydb/core/protos
     ydb/core/scheme
-    ydb/core/testlib
-    yql/essentials/sql/pg_dummy
+    ydb/core/testlib/pg
     ydb/core/statistics/ut_common
     ydb/core/tx/conveyor_composite/usage
     ydb/public/sdk/cpp/src/client/params

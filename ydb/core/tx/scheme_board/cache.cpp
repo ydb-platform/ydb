@@ -1331,7 +1331,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                             .WriteKey("Id").WriteULongLong(column.Id)
                             .WriteKey("Name").WriteString(column.Name)
                             .WriteKey("Type").WriteULongLong(column.PType.GetTypeId())
-                            .WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType))
+                            .WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType, column.PTypeMod))
                             .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
                         .EndObject();
                 }

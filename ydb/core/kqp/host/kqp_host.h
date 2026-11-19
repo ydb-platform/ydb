@@ -31,6 +31,7 @@ public:
 
     struct TExecSettings {
         TMaybe<bool> DocumentApiRestricted;
+        TMaybe<bool> UsePgParser;
         TMaybe<TSqlVersion> SyntaxVersion;
         i32 RuntimeParameterSizeLimit = 0;
         bool RuntimeParameterSizeLimitSatisfied = false;
@@ -39,6 +40,7 @@ public:
         TString ToString() const {
             return TStringBuilder() << "TExecSettings{"
                 << " DocumentApiRestricted: " << DocumentApiRestricted
+                << " UsePgParser: " << UsePgParser
                 << " SyntaxVersion: " << SyntaxVersion
                 << " RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit
                 << " RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
@@ -55,6 +57,7 @@ public:
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"
                 << " DocumentApiRestricted: " << DocumentApiRestricted
+                << " UsePgParser: " << UsePgParser
                 << " SyntaxVersion: " << SyntaxVersion
                 << " IsInternalCall: " << IsInternalCall
                 << " ConcurrentResults: " << ConcurrentResults
@@ -68,6 +71,7 @@ public:
         NYql::TKikimrQueryDeadlines Deadlines;
         NYql::EKikimrStatsMode StatsMode = NYql::EKikimrStatsMode::None;
         std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RpcCtx;
+        TMaybe<bool> UsePgParser;
         TMaybe<TSqlVersion> SyntaxVersion;
     };
 

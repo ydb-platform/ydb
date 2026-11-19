@@ -16,6 +16,7 @@ public:
         NTable::TTag Tag;
         NScheme::TTypeInfo Type;
         TString TypeMod;
+        TPgType* PgType = nullptr;
     };
 
     // used only at then building of a computation graph, to inject taskId in runtime nodes

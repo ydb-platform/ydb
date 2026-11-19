@@ -19,6 +19,9 @@ namespace {
         "Concat", "Just", "Optional", "SafeCast", "AsList", "Size", "IfPresent",
         "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
 
+    THashSet<TString> PgConstantFoldingWhiteList = {
+        "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
+
     bool HasFlag(const TMaybeNode<TCoAtomList>& flags, TStringBuf flag) {
         if (!flags) {
             return false;
@@ -83,6 +86,7 @@ namespace {
     };
 
     bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams = false);
+    bool IsConstantExprPg(const TExprNode::TPtr& input);
     bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input);
 
     bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams) {
@@ -107,6 +111,30 @@ namespace {
                     return false;
                 }
                 else if (callableInput->GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool IsConstantExprPg(const TExprNode::TPtr& input) {
+        if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
+            if (input->IsCallable("PgConst")) {
+                return true;
+            }
+        }
+        if (TMaybeNode<TCoAtom>(input)) {
+            return true;
+        }
+        if (input->IsCallable(PgConstantFoldingWhiteList) || input->IsList()) {
+            for (size_t i = 0; i < input->ChildrenSize(); i++) {
+                auto callableInput = input->Child(i);
+                if (callableInput->IsLambda() && !IsConstantExprPg(callableInput->Child(1))) {
+                    return false;
+                }
+                if (!callableInput->IsCallable("PgType") && !IsConstantExprPg(callableInput)) {
                     return false;
                 }
             }
@@ -1327,6 +1355,9 @@ bool IsLiteralDataExpr(TExprBase node) {
     if (auto maybeJust = node.Maybe<TCoJust>()) {
         return IsLiteralDataExpr(maybeJust.Cast().Input());
     }
+    if (node.Maybe<TCoPgConst>()) {
+        return true;
+    }
     return false;
 }
 
@@ -1342,7 +1373,7 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
         return false;
     }
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
-        return false;
+        return IsConstantExprPg(input);
     }
     if (foldUdfs && (input->IsCallable("Map") || input->IsCallable("FlatMap"))) {
         return IsSuitableToFoldFlatMap(input);
@@ -1373,6 +1404,9 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
     }
     if (!input->GetTypeAnn()) {
         return false;
+    }
+    if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
+        return IsConstantExprPg(input);
     }
     if (!NYql::IsDataOrOptionalOfData(input->GetTypeAnn())) {
         return false;

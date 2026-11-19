@@ -54,11 +54,13 @@ TString ConvertShortYdbPermissionNameToFullYdbPermissionName(const TString& name
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl);
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl);
 
-bool CellFromProtoVal(const NScheme::TTypeInfo& type, const Ydb::Value* vp, bool allowCastFromString,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp, bool allowCastFromString,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool, bool allowInfDouble = false);
 
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
 
+// Converts a complete ACL state. For a present input, an omitted
+// interrupt_inheritance field is interpreted as false.
 bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
     const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
     TString& error);

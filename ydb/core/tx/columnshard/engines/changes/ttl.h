@@ -115,7 +115,7 @@ public:
     }
 
     void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
-        AFL_VERIFY(!info->HasRemoveSnapshot());
+        YDB_LOG_VERIFY(!info->HasRemoveSnapshot());
         PortionsToEvict.emplace_back(info, std::move(features));
         PortionsToAccess.emplace_back(info);
     }

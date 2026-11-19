@@ -132,6 +132,15 @@ public:
         PresetId = preset->GetId();
         PresetName = preset->GetName();
 
+        // A preset persisted by an older version may still contain PG columns.
+        for (const auto& [_, column] : GetSchema().GetColumns().GetColumns()) {
+            if (column.GetType().GetTypeId() == NScheme::NTypeIds::Pg) {
+                errors.AddError(TStringBuilder() << "Type '" << column.GetTypeName()
+                    << "' specified for column '" << column.GetName() << "' is not supported for column tables");
+                return false;
+            }
+        }
+
         if (description.HasSchema()) {
             if (!GetSchema().ValidateForStore(description.GetSchema(), errors)) {
                 return false;
@@ -795,7 +804,9 @@ public:
 
         for (const auto& tier : tableInfo->GetUsedTiers()) {
             auto tierPath = TPath::Resolve(tier, context.SS);
-            AFL_VERIFY(tierPath.IsResolved())("path", tier);
+            YDB_LOG_VERIFY(tierPath.IsResolved(),
+                {"path", tier}
+            );
             context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
         }
 

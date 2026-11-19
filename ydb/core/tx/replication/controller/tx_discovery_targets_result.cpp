@@ -84,7 +84,8 @@ public:
                     {"tid", tid},
                     {"kind", target.Kind},
                     {"srcPath", target.Config->GetSrcPath()},
-                    {"dstPath", target.Config->GetDstPath()});
+                    {"dstPath", target.Config->GetDstPath()},
+                    {"bootstrap", Replication->GetConfig().GetBootstrap()});
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);

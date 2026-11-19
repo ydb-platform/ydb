@@ -16,6 +16,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -390,6 +391,7 @@ public:
             };
 
             TQueue<TBlockBatch> BlockBatches;
+            TVector<std::optional<NYql::TColumnConverter>> CachedPgConverters;
         };
 
         std::unique_ptr<IDataBatchReader> BatchReader;

@@ -181,8 +181,12 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             }
             break;
         }
-        case NKikimrMiniKQL::ETypeKind::Pg:
-            ythrow yexception() << "PostgreSQL types are not supported";
+        case NKikimrMiniKQL::ETypeKind::Pg: {
+            const NKikimrMiniKQL::TPgType& pgType = input.GetPg();
+            auto pgOut = output.mutable_pg_type();
+            pgOut->Setoid(pgType.Getoid());
+            break;
+        }
         default: {
             Y_ABORT("Unknown protobuf type: %s", input.DebugString().c_str());
         }
@@ -270,8 +274,13 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
             }
             break;
         }
-        case Ydb::Type::kPgType:
-            ythrow yexception() << "PostgreSQL types are not supported";
+        case Ydb::Type::kPgType: {
+            output.SetKind(NKikimrMiniKQL::ETypeKind::Pg);
+            const Ydb::PgType& pgType = input.pg_type();
+            auto pgOut = output.MutablePg();
+            pgOut->Setoid(pgType.Getoid());
+            break;
+        }
         default: {
             ythrow yexception() << "Unknown protobuf type: "
                                 << input.DebugString();
@@ -682,8 +691,20 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
             }
             break;
         }
-        case NKikimrMiniKQL::ETypeKind::Pg:
-            ythrow yexception() << "PostgreSQL types are not supported";
+        case NKikimrMiniKQL::ETypeKind::Pg: {
+            if (inputValue.GetValueValueCase() == NKikimrMiniKQL::TValue::kNullFlagValue) {
+                output.Setnull_flag_value(::google::protobuf::NULL_VALUE);
+            } else if (inputValue.HasBytes()) {
+                const auto& stringRef = inputValue.GetBytes();
+                output.set_bytes_value(stringRef.data(), stringRef.size());
+            } else if (inputValue.HasText()) {
+                const auto& stringRef = inputValue.GetText();
+                output.set_text_value(stringRef.data(), stringRef.size());
+            } else {
+                Y_ENSURE(false, "malformed pg value");
+            }
+            break;
+        }
         default: {
             ythrow yexception() << "Unknown protobuf type: "
                                 << inputType.DebugString();
@@ -795,8 +816,11 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
             }
             break;
         }
-        case Ydb::Type::kPgType:
-            ythrow yexception() << "PostgreSQL types are not supported";
+        case Ydb::Type::kPgType: {
+            const auto& stringRef = inputValue.Gettext_value();
+            output.SetText(stringRef.data(), stringRef.size());
+            break;
+        }
         default: {
             throw yexception() << "Unknown protobuf type: "
                                 << inputType.DebugString();
@@ -1181,6 +1205,10 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         // Uuid value was verified at parsing time
         break;
 
+    case NScheme::NTypeIds::Pg:
+        // no pg validation here
+        break;
+
     default:
         err = Sprintf("Unexpected type %d", type.GetTypeId());
         return false;
@@ -1193,7 +1221,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-bool CellFromProtoVal(const NScheme::TTypeInfo& type, const Ydb::Value* vp, bool allowCastFromString,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp, bool allowCastFromString,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool, bool allowInfDouble)
 {
     if (vp->Hasnull_flag_value()) {
@@ -1317,6 +1345,56 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, const Ydb::Value* vp, bool
         c = TCell((const char*)&valInPool, sizeof(valInPool));
         break;
     }
+    case NScheme::NTypeIds::Pg : {
+        TString binary;
+        bool isText = false;
+        TString text = val.Gettext_value();
+        if (!text.empty()) {
+            isText = true;
+            auto desc = type.GetPgTypeDesc();
+            auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
+            if (res.Error) {
+                err = TStringBuilder() << "Invalid text value for "
+                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
+                return false;
+            }
+            binary = res.Str;
+        } else {
+            binary = val.Getbytes_value();
+        }
+        auto* desc = type.GetPgTypeDesc();
+        if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
+            auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
+            if (res.Error) {
+                err = TStringBuilder() << "Unable to coerce value for "
+                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
+                return false;
+            }
+            if (res.NewValue) {
+                const auto valueInPool = valueDataPool.AppendString(TStringBuf(*res.NewValue));
+                c = TCell(valueInPool.data(), valueInPool.size());
+            } else if (isText) {
+                const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
+                c = TCell(valueInPool.data(), valueInPool.size());
+            } else {
+                c = TCell(binary.data(), binary.size());
+            }
+        } else {
+            auto error = NPg::PgNativeBinaryValidate(TStringBuf(binary), desc);
+            if (error) {
+                err = TStringBuilder() << "Invalid binary value for "
+                    << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *error;
+                return false;
+            }
+            if (isText) {
+                const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
+                c = TCell(valueInPool.data(), valueInPool.size());
+            } else {
+                c = TCell(binary.data(), binary.size());
+            }
+        }
+        break;
+    }
     default:
         err = Sprintf("Unexpected type %d", type.GetTypeId());
         return false;
@@ -1437,6 +1515,9 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
 
     NACLib::TDiffACL diffACL;
     diffACL.ClearAccess();
+    // A present input describes the complete ACL state. Treat an omitted field as
+    // false and apply it explicitly.
+    diffACL.SetInterruptInheritance(in->interrupt_inheritance());
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;
@@ -1488,9 +1569,9 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
         for (size_t i = 0; i < tupleType->tuple_type().elementsSize(); ++i) {
             const auto& ti = tupleType->tuple_type().Getelements(i);
             if (checkNullability && !types[i].IsNotNull) {
-                // do not allow to build cell for nullable column from not nullable type
+                // do not allow to build cell for nullable column from not nullable type (PG type allways optional)
                 CHECK_OR_RETURN_ERROR(
-                    ti.type_case() == Ydb::Type::kOptionalType,
+                    ti.type_case() == Ydb::Type::kOptionalType || ti.type_case() == Ydb::Type::kPgType,
                     "Element at index " + ToString(i) + " in not an Optional");
             }
             const auto& item = ti.type_case() == Ydb::Type::kOptionalType ? ti.Getoptional_type().Getitem() : ti;
@@ -1509,8 +1590,14 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
                     "Element at index " + ToString(i) + " has type " + Type_PrimitiveTypeId_Name(typeId) + " but expected type is " + ToString(types[i].TypeInfo.GetTypeId()));
                 break;
             }
+            case Ydb::Type::kPgType: {
+                CHECK_OR_RETURN_ERROR(typeInfoMod.TypeInfo == types[i].TypeInfo && typeInfoMod.TypeMod == types[i].TypeMod,
+                    "Element at index " + ToString(i) + " has pg type " + NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetPgTypeDesc(), typeInfoMod.TypeMod)
+                    + " but expected type is " + NPg::PgTypeNameFromTypeDesc(types[i].TypeInfo.GetPgTypeDesc(), types[i].TypeMod));
+                break;
+            }
             default:
-                CHECK_OR_RETURN_ERROR(false, "Element at index " + ToString(i) + " in not a TypeId");
+                CHECK_OR_RETURN_ERROR(false, "Element at index " + ToString(i) + " in not a TypeId or PgType");
                 break;
             }
         }
@@ -1528,9 +1615,14 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
         // allow to build cell for nullable column from not nullable type for compatibility reason, so there is no checks.
         // nested value will be unwrapped in CellFromProtoVal()
 
+        i32 typmod = -1;
+        if (types[i].TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg && !types[i].TypeMod.empty()) {
+            const auto result = NPg::BinaryTypeModFromTextTypeMod(types[i].TypeMod, types[i].TypeInfo.GetPgTypeDesc());
+            CHECK_OR_RETURN_ERROR(!result.Error, Sprintf("Invalid TypeMod in tuple at position %" PRIu32 ", error: %s", i, result.Error->data()));
+        }
         TCell c;
         TString cellErr;
-        bool parsed = CellFromProtoVal(types[i].TypeInfo, &v, allowCastFromString, c, cellErr, valueDataPool);
+        bool parsed = CellFromProtoVal(types[i].TypeInfo, typmod, &v, allowCastFromString, c, cellErr, valueDataPool);
 
         CHECK_OR_RETURN_ERROR(parsed, cellErr + " in tuple at position " + ToString(i));
 

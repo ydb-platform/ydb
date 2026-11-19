@@ -1704,6 +1704,7 @@ Y_UNIT_TEST(Table) {
     TTestEnv env(1, 4, {
         .StoragePools = 3,
         .ShowCreateTable = true,
+        .EnablePgCompatibility = true,
         .EnableFulltextIndex = true,
         .EnableSuperLemmer = true,
     });
@@ -1751,7 +1752,7 @@ Y_UNIT_TEST(Table) {
             CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
-                Key3 Int16 NOT NULL,
+                Key3 PgInt2 NOT NULL,
                 Value1 Utf8,
                 Value2 Bool,
                 Value3 String,
@@ -2429,7 +2430,7 @@ Y_UNIT_TEST(TableChangefeedAfterInitialScan) {
 }
 
 Y_UNIT_TEST(TableSequences) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnablePgCompatibility = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2531,7 +2532,7 @@ Y_UNIT_TEST(TableSequences) {
 }
 
 Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnablePgCompatibility = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2545,7 +2546,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
-                Key3 Int16 NOT NULL,
+                Key3 PgInt2 NOT NULL,
                 Value1 Utf8,
                 Value2 Bool,
                 Value3 String,
@@ -2561,7 +2562,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE `test_show_create` (
                 `Key1` Int64 NOT NULL,
                 `Key2` Utf8 NOT NULL,
-                `Key3` Int16 NOT NULL,
+                `Key3` pgint2 NOT NULL,
                 `Value1` Utf8,
                 `Value2` Bool,
                 `Value3` String,
@@ -2641,7 +2642,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
-                Key3 Int16 NOT NULL,
+                Key3 PgInt2 NOT NULL,
                 Value1 Utf8,
                 Value2 Bool,
                 Value3 String,
@@ -2669,7 +2670,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE `test_show_create` (
                 `Key1` Int64 NOT NULL,
                 `Key2` Utf8 NOT NULL,
-                `Key3` Int16 NOT NULL,
+                `Key3` pgint2 NOT NULL,
                 `Value1` Utf8,
                 `Value2` Bool,
                 `Value3` String,

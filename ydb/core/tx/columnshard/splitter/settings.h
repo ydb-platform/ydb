@@ -85,18 +85,18 @@ public:
         , SplitSettings(settings)
         , EntityIds(std::move(entities))
     {
-        AFL_VERIFY(!!Name);
+        YDB_LOG_VERIFY(!!Name);
     }
 
     TGroupFeatures(const TString& name, const TSplitSettings& settings)
         : Name(name)
         , SplitSettings(settings)
     {
-        AFL_VERIFY(!!Name);
+        YDB_LOG_VERIFY(!!Name);
     }
 
     void AddEntity(const ui32 entityId) {
-        AFL_VERIFY(EntityIds.emplace(entityId).second);
+        YDB_LOG_VERIFY(EntityIds.emplace(entityId).second);
     }
 
     bool IsEmpty() const {
@@ -118,7 +118,8 @@ public:
     TEntityGroups(const TGroupFeatures& defaultGroup)
         : DefaultGroupFeatures(defaultGroup)
     {
-        AFL_VERIFY(DefaultGroupFeatures.IsEmpty())("problem", "default group cannot be not empty");
+        YDB_LOG_VERIFY(DefaultGroupFeatures.IsEmpty(),
+            {"problem", "default group cannot be not empty"});
     }
 
     TEntityGroups(const TSplitSettings& splitSettings, const TString& name)
@@ -136,13 +137,13 @@ public:
 
     TGroupFeatures& RegisterGroup(const TString& groupName, const TSplitSettings& settings) {
         auto it = GroupEntities.find(groupName);
-        AFL_VERIFY(it == GroupEntities.end());
+        YDB_LOG_VERIFY(it == GroupEntities.end());
         return GroupEntities.emplace(groupName, TGroupFeatures(groupName, settings)).first->second;
     }
 
     TGroupFeatures& MutableGroupVerified(const TString& groupName) {
         auto it = GroupEntities.find(groupName);
-        AFL_VERIFY(it != GroupEntities.end());
+        YDB_LOG_VERIFY(it != GroupEntities.end());
         return it->second;
     }
 
@@ -157,9 +158,9 @@ public:
 
     void Add(TGroupFeatures&& features, const TString& groupName) {
         for (auto&& i : features.GetEntityIds()) {
-            AFL_VERIFY(UsedEntityIds.emplace(i).second);
+            YDB_LOG_VERIFY(UsedEntityIds.emplace(i).second);
         }
-        AFL_VERIFY(GroupEntities.emplace(groupName, std::move(features)).second);
+        YDB_LOG_VERIFY(GroupEntities.emplace(groupName, std::move(features)).second);
     }
 
     THashMap<TString, TGroupFeatures>::const_iterator begin() const {

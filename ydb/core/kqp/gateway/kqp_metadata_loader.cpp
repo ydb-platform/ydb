@@ -267,7 +267,7 @@ void CheckWritesAreDisabled(const TIndexProto& indexes, NYql::TKikimrTableMetada
 }
 
 TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
-    return NScheme::TypeName(typeInfoMod.TypeInfo);
+    return NScheme::TypeName(typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
 
 TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,

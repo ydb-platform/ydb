@@ -1,5 +1,5 @@
 #include "mkql_computation_node_ut.h"
-#include "mkql_program_builder_test_utils.h"
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 
 namespace NKikimr::NMiniKQL {

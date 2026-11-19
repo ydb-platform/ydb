@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
+#include <yql/essentials/ast/yql_ast.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -95,13 +95,9 @@ private:
     bool ValidateViewStatement = true;
 };
 
-NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
-
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
     NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
     NSQLTranslation::TTranslationSettings* effectiveSettings = nullptr);
-
-TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder, bool perStatementExecution);
 
 } // namespace NKqp
 } // namespace NKikimr

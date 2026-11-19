@@ -40,8 +40,8 @@ struct TDatabaseState {
         const TString& poolId = ev->Get()->PoolId;
         auto& subscription = PendingSubscriptions[poolId];
         if (subscription.Subscribers.empty()) {
-            subscription.Fetcher = TActivationContext::Register(
-                CreatePoolFetcherActor(SelfId, ev->Get()->DatabaseId, poolId, nullptr, WorkloadManagerConfig));
+            subscription.Fetcher =
+                TActivationContext::Register(CreatePoolFetcherActor(SelfId, ev->Get()->DatabaseId, poolId, nullptr, WorkloadManagerConfig));
         }
 
         subscription.Subscribers.emplace(ev->Sender);
@@ -53,8 +53,8 @@ struct TDatabaseState {
             return;
         }
 
-        it->second.Fetcher = TActivationContext::Register(
-            CreatePoolFetcherActor(SelfId, ev.DatabaseId, ev.PoolId, nullptr, WorkloadManagerConfig));
+        it->second.Fetcher =
+            TActivationContext::Register(CreatePoolFetcherActor(SelfId, ev.DatabaseId, ev.PoolId, nullptr, WorkloadManagerConfig));
     }
 
     void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
@@ -88,9 +88,9 @@ struct TDatabaseState {
             }
         } else {
             // A failed fetch does not confirm deletion. Keep subscribers until an authoritative result arrives.
-            TActivationContext::Schedule(POOL_SUBSCRIPTION_RETRY_DELAY,
-                std::make_unique<IEventHandle>(SelfId, SelfId,
-                    new TEvPrivate::TEvRetryPoolSubscription(ev->Get()->DatabaseId, poolId, ev->Sender)));
+            TActivationContext::Schedule(
+                POOL_SUBSCRIPTION_RETRY_DELAY, std::make_unique<IEventHandle>(SelfId, SelfId,
+                                                   new TEvPrivate::TEvRetryPoolSubscription(ev->Get()->DatabaseId, poolId, ev->Sender)));
             return;
         }
         PendingSubscriptions.erase(it);

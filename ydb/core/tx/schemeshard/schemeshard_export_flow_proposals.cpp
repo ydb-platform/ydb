@@ -139,20 +139,21 @@ static bool MakeLegacyTableSchemeSnapshot(TSchemeShard* ss, const TPath& sourceP
     return true;
 }
 
-TString ComputeIndexItemSuffix(
+TMaybe<TString> ComputeIndexItemSuffix(
     const NKikimrSchemeOp::TBackupTask* snapshot,
     const NKikimrSchemeOp::TPathDescription& sourceDescription,
     const TString& indexImplTablePath,
     bool encrypted,
-    bool exportChangefeeds)
+    bool exportChangefeeds,
+    TString& error)
 {
+    error.clear();
     if (!encrypted) {
         return indexImplTablePath;
     }
     const auto& parentDescription = snapshot && snapshot->HasTable() ? snapshot->GetTable() : sourceDescription;
 
-    static constexpr int INVALID_IDX = 999;
-    int idx = INVALID_IDX;
+    int idx = 0;
     bool found = false;
 
     TStringBuf indexName;
@@ -191,16 +192,22 @@ TString ComputeIndexItemSuffix(
         }
     }
 
+    if (!found) {
+        error = TStringBuilder() << "Index implementation table is missing from the table scheme: " << indexImplTablePath;
+        return Nothing();
+    }
+
     std::stringstream ss2;
-    ss2 << std::setfill('0') << std::setw(3) << std::right << (found ? idx : INVALID_IDX);
+    ss2 << std::setfill('0') << std::setw(3) << std::right << idx;
     return ss2.str();
 }
 
-static TString ComputeIndexItemSuffix(
+static TMaybe<TString> ComputeIndexItemSuffix(
     TSchemeShard* ss,
     const TExportInfo& exportInfo,
     const TExportInfo::TItem& item,
-    bool encrypted)
+    bool encrypted,
+    TString& error)
 {
     if (!encrypted) {
         return item.SourcePathName;
@@ -212,28 +219,32 @@ static TString ComputeIndexItemSuffix(
     const auto copiedParentPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, item.ParentIdx), ss);
     const auto* snapshot = FindTableSchemeSnapshot(ss, copiedParentPath);
     NKikimrSchemeOp::TPathDescription sourceDescription;
+
     if (!snapshot || !snapshot->HasTable()) {
         // Copies created before scheme capture was introduced use the live source.
         const auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
-        if (parentPath.IsResolved() && !parentPath.IsDeleted()) {
-            TString error;
-            NKikimrSchemeOp::TBackupTask legacySnapshot;
-            if (MakeLegacyTableSchemeSnapshot(ss, parentPath, copiedParentPath,
-                    exportInfo.IncludeIndexData, legacySnapshot, error)) {
-                sourceDescription.CopyFrom(legacySnapshot.GetTable());
-            }
+        if (!parentPath.IsResolved() || parentPath.IsDeleted()) {
+            error = "Source table is not available and the table scheme snapshot is missing";
+            return Nothing();
         }
+
+        NKikimrSchemeOp::TBackupTask legacySnapshot;
+        if (!MakeLegacyTableSchemeSnapshot(ss, parentPath, copiedParentPath, exportInfo.IncludeIndexData, legacySnapshot, error)) {
+            return Nothing();
+        }
+        sourceDescription.CopyFrom(legacySnapshot.GetTable());
     }
-    return ComputeIndexItemSuffix(snapshot, sourceDescription, item.SourcePathName, encrypted,
-        AppData()->FeatureFlags.GetEnableChangefeedsExport());
+
+    return ComputeIndexItemSuffix(snapshot, sourceDescription, item.SourcePathName, encrypted, AppData()->FeatureFlags.GetEnableChangefeedsExport(), error);
 }
 
 template <typename TSettings>
-TString ComputeIndexItemPath(
+TMaybe<TString> ComputeIndexItemPath(
     TSchemeShard* ss,
     const TExportInfo::TItem& item,
     ui32 itemIdx, const TExportInfo& exportInfo,
-    const TSettings& exportSettings)
+    const TSettings& exportSettings,
+    TString& error)
 {
     TString itemPath;
     if (item.ParentIdx == Max<ui32>()) {
@@ -245,16 +256,21 @@ TString ComputeIndexItemPath(
         if (!itemPath.empty() && itemPath.back() != '/') {
             itemPath += '/';
         }
-        itemPath += ComputeIndexItemSuffix(ss, exportInfo, item,
-            exportSettings.has_encryption_settings());
+
+        const auto suffix = ComputeIndexItemSuffix(ss, exportInfo, item, exportSettings.has_encryption_settings(), error);
+        if (!suffix) {
+            return Nothing();
+        }
+
+        itemPath += *suffix;
     }
     return itemPath;
 }
 
-TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
+TMaybe<TString> ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx, TString& error) {
     Ydb::Export::ExportToS3Settings settings;
     Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
-    return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings);
+    return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings, error);
 }
 
 static bool FillSetValForSequences(
@@ -504,7 +520,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
 
-            backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
+            const auto itemPath = ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings, error);
+            if (!itemPath) {
+                return nullptr;
+            }
+            backupSettings.SetObjectKeyPattern(*itemPath);
 
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:
@@ -555,7 +575,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
-            backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
+            const auto itemPath = ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings, error);
+            if (!itemPath) {
+                return nullptr;
+            }
+            backupSettings.SetPath(*itemPath);
 
             // TODO: Parquet format support for FS will be added after public API approval
 

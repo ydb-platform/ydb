@@ -491,7 +491,8 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
-            Resume(txc, ctx);
+            Y_ABORT_UNLESS(Self->Exports.contains(Id));
+            Resume(Self->Exports.at(Id), txc, ctx);
         }
 
         return true;
@@ -813,23 +814,30 @@ private:
         }
     }
 
-    void UploadCompletion(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+    void UploadCompletion(const TExportInfo::TPtr& exportInfo, ui32 itemIdx, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const bool operationMarker = itemIdx == Max<ui32>();
-        auto& uploader = operationMarker
-            ? exportInfo.ExportMetadataUploader
-            : exportInfo.Items.at(itemIdx).SchemeUploader;
-
+        auto& uploader = operationMarker ? exportInfo->ExportMetadataUploader : exportInfo->Items.at(itemIdx).SchemeUploader;
         if (uploader) {
             return;
         }
 
         Ydb::Export::ExportToS3Settings settings;
-        Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
-        const TString prefix = operationMarker
-            ? GetExportCompletionPrefix(settings)
-            : ExportItemDestinationPrefix(Self, exportInfo, itemIdx);
+        Y_ABORT_UNLESS(settings.ParseFromString(exportInfo->Settings));
 
-        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo.Id, itemIdx, settings, prefix));
+        TString error;
+        const auto prefix = operationMarker ? TMaybe<TString>(GetExportCompletionPrefix(settings)) : ExportItemDestinationPrefix(Self, *exportInfo, itemIdx, error);
+        if (!prefix) {
+            auto& item = exportInfo->Items.at(itemIdx);
+            Self->TxIdToExport.erase(item.WaitTxId);
+            item.WaitTxId = InvalidTxId;
+            item.State = EState::Cancelled;
+            item.Issue = error;
+            Self->PersistExportItemState(db, *exportInfo, itemIdx);
+            CancelAndPersistExport(exportInfo, itemIdx, "cannot determine completion marker destination", db);
+            return;
+        }
+
+        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo->Id, itemIdx, settings, *prefix));
         Self->RunningExportSchemeUploaders.emplace(uploader);
         // Bootstrap waits for this event: no S3 request is issued before commit.
         Send(uploader, new TEvents::TEvWakeup());
@@ -849,7 +857,7 @@ private:
         }
 
         if (exportInfo->Kind == TExportInfo::EKind::S3) {
-            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+            UploadCompletion(exportInfo, Max<ui32>(), db, ctx);
         } else {
             CompleteTransfer(exportInfo, db);
         }
@@ -1163,15 +1171,17 @@ private:
         return output;
     }
 
-    void Resume(TTransactionContext& txc, const TActorContext& ctx) {
-        Y_ABORT_UNLESS(Self->Exports.contains(Id));
-        TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
-
+    void Resume(TExportInfo::TPtr exportInfo, TTransactionContext& txc, const TActorContext& ctx) {
         YDB_LOG_DEBUG("TExport::TTxProgress: Resume",
-            {"id", Id},
+            {"id", exportInfo->Id},
         );
 
         NIceDb::TNiceDb db(txc.DB);
+
+        if (exportInfo->RecoveryError && exportInfo->IsWorking()) {
+            exportInfo->Issue = exportInfo->RecoveryError;
+            exportInfo->State = EState::Cancellation;
+        }
 
         switch (exportInfo->State) {
         case EState::CreateExportDir:
@@ -1190,7 +1200,7 @@ private:
         case EState::Transferring: {
             const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
             if (exportInfo->Kind == TExportInfo::EKind::S3 && allItemsDone) {
-                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+                UploadCompletion(exportInfo, Max<ui32>(), db, ctx);
                 break;
             }
             TDeque<ui32> pendingTables;
@@ -1791,6 +1801,11 @@ private:
 
             exportInfo->State = EState::Transferring;
             exportInfo->WaitTxId = InvalidTxId;
+            if (exportInfo->RecoveryError) {
+                // Let an in-flight consistent copy finish before cancelling its export.
+                Resume(exportInfo, txc, ctx);
+                return;
+            }
             RefreshIndexItems(*exportInfo, db);
             TDeque<ui32> tables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
@@ -1834,7 +1849,7 @@ private:
             if (needsCompletionMarker) {
                 // Keep the durable backup tx id until the marker is acknowledged.
                 // Recovery can recheck BackupHistory and safely repeat the PUT.
-                UploadCompletion(*exportInfo, itemIdx, ctx);
+                UploadCompletion(exportInfo, itemIdx, db, ctx);
                 return;
             }
 

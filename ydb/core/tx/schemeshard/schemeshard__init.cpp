@@ -4664,6 +4664,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        THashMap<TPathId, TString> tableSchemeSnapshotErrors;
+
         // Read structural table scheme snapshots captured together with table copies
         {
             TTableSchemeSnapshotRows snapshots;
@@ -4677,36 +4679,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             );
 
             for (auto& [pathId, tableDesc, changefeedUnderlyingTopics] : snapshots) {
-                bool restored = false;
-                auto fillTableSchemeSnapshot = [&](auto& tableInfo) {
-                    if (tableInfo->BackupSettings.HasTable()) {
-                        return;
-                    }
-
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*tableInfo->BackupSettings.MutableTable(), tableDesc));
-
-                    tableInfo->BackupSettings.ClearChangefeedUnderlyingTopics();
-                    if (changefeedUnderlyingTopics) {
-                        NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
-                        for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
-                            *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
-                        }
-                    }
-                    restored = true;
-                };
-
-                bool found = false;
+                NKikimrSchemeOp::TBackupTask* backupSettings = nullptr;
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
-                    found = true;
-                    fillTableSchemeSnapshot(it->second);
+                    backupSettings = &it->second->BackupSettings;
                 } else if (Self->ColumnTables.contains(pathId)) {
-                    found = true;
-                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
-                    fillTableSchemeSnapshot(tableInfo);
+                    backupSettings = &Self->ColumnTables.at(pathId).GetPtr()->BackupSettings;
                 }
 
-                if (!found) {
+                if (!backupSettings) {
                     // Old binaries ignore this additive table and may remove the private copy
                     // while leaving its snapshot behind
                     Self->RemoveTableSchemeSnapshot(db, pathId);
@@ -4714,6 +4694,30 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         {"pathId", pathId},
                     );
                     continue;
+                }
+
+                NKikimrSchemeOp::TPathDescription description;
+                NKikimrSchemeOp::TChangefeedUnderlyingTopics topics;
+                TString error;
+                if (!ParseFromStringNoSizeLimit(description, tableDesc)) {
+                    error = "Cannot parse persisted table scheme snapshot";
+                } else if (changefeedUnderlyingTopics && !ParseFromStringNoSizeLimit(topics, changefeedUnderlyingTopics)) {
+                    error = "Cannot parse changefeed topics in persisted table scheme snapshot";
+                }
+
+                if (error) {
+                    tableSchemeSnapshotErrors.emplace(pathId, error);
+                    YDB_LOG_ERROR_CTX(ctx, "Cannot restore table scheme snapshot",
+                        {"pathId", pathId},
+                        {"error", error},
+                    );
+                    continue;
+                }
+
+                const bool restored = !backupSettings->HasTable();
+                if (restored) {
+                    *backupSettings->MutableTable() = std::move(description);
+                    *backupSettings->MutableChangefeedUnderlyingTopics() = std::move(*topics.MutableChangefeedUnderlyingTopics());
                 }
 
                 YDB_LOG_DEBUG_CTX(ctx, (restored ? "Loaded table scheme snapshot" : "Retained table scheme snapshot"),
@@ -5298,6 +5302,32 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        if (!tableSchemeSnapshotErrors.empty()) {
+            THashMap<TPathId, TExportInfo::TPtr> exportsByPath;
+            for (const auto& [id, exportInfo] : Self->Exports) {
+                if (exportInfo->IsPreparing() || (exportInfo->IsWorking() && !AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone))) {
+                    exportsByPath.emplace(exportInfo->ExportPathId, exportInfo);
+                }
+            }
+
+            for (const auto& [pathId, error] : tableSchemeSnapshotErrors) {
+                auto currentPathId = pathId;
+                while (currentPathId) {
+                    if (auto* exportInfo = exportsByPath.FindPtr(currentPathId)) {
+                        (*exportInfo)->RecoveryError = TStringBuilder() << error << ": " << pathId;
+                        break;
+                    }
+
+                    const auto* path = Self->PathsById.FindPtr(currentPathId);
+                    if (!path || (*path)->ParentPathId == currentPathId) {
+                        break;
+                    }
+
+                    currentPathId = (*path)->ParentPathId;
+                }
+            }
+        }
+
         // Read imports
         {
             // read main info
@@ -5407,7 +5437,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
-                        item.Metadata = ::NKikimr::NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
+                        try {
+                            item.Metadata = ::NKikimr::NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
+                        } catch (const std::exception& ex) {
+                            importInfo->RecoveryError = TStringBuilder()
+                                << "Cannot restore persisted import metadata for item "
+                                << itemIdx << ": " << ex.what();
+
+                            YDB_LOG_ERROR_CTX(ctx, "Cannot restore import metadata",
+                                {"importId", importId},
+                                {"itemIdx", itemIdx},
+                                {"error", importInfo->RecoveryError},
+                            );
+                        }
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {

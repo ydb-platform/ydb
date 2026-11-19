@@ -7,12 +7,13 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-TString ComputeIndexItemSuffix(
+TMaybe<TString> ComputeIndexItemSuffix(
     const NKikimrSchemeOp::TBackupTask* snapshot,
     const NKikimrSchemeOp::TPathDescription& sourceDescription,
     const TString& indexImplTablePath,
     bool encrypted,
-    bool exportChangefeeds
+    bool exportChangefeeds,
+    TString& error
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
@@ -54,7 +55,7 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
 );
 
 TString ExportItemPathName(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
-TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
+TMaybe<TString> ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx, TString& error);
 
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db,
     TExportInfo::EState droppingState, std::function<void(ui64)> func);

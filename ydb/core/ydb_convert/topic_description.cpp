@@ -269,8 +269,12 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     for (const auto& consumer : config.GetConsumers()) {
-        if (!FillConsumer(*out.add_consumers(), config, consumer, status, error)) {
+        auto& publicConsumer = *out.add_consumers();
+        if (!FillConsumer(publicConsumer, config, consumer, status, error)) {
             return false;
+        }
+        if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            (*out.mutable_attributes())["_ydb_replication_consumer"] = publicConsumer.name();
         }
     }
     return true;

@@ -127,7 +127,11 @@ message TRemoteSnapshotInfo {
 
 message TNodeRemoteSnapshotCollectionInfo {
     optional uint32 NodeId = 1;
+    // Owner's collection time in seconds, used for unavailable-node expiry.
     optional uint64 UpdateTime = 2;
+    // The exact inclusive maximum snapshot step (milliseconds) eligible for collection
+    // under the owner's promotion delay. Missing legacy metadata means zero.
+    optional uint64 PromotionCutoffStep = 3;
 }
 
 message TRemoteSnapshots {

@@ -68,6 +68,11 @@ public:
     void Clear();
 
     class TView : public TInputRangeAdaptor<TView> {
+    public:
+        ui64 GetMaxSnapshotStep() const {
+            return MaxSnapshotStep;
+        }
+
     private:
         friend class TInputRangeAdaptor<TView>;
         friend class TLocalSnapshotsStorage;
@@ -105,11 +110,19 @@ class TRemoteSnapshotsStorage : public TThrRefBase {
     struct TNodeSnapshotsState {
         TInstant CollectionTime;
         TVector<TRemoteSnapshotInfo> RemoteSnapshots;
+        // A capped contribution may omit snapshots at or above this border.
+        TRowVersion SnapshotBorder = TRowVersion::Max();
+        // Unknown legacy cutoffs keep cleanup paused until a fresh owner report.
+        ui64 PromotionCutoffStep = 0;
     };
 
 public:
-    void Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime);
-    void UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime);
+    void Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime,
+        const THashMap<ui32, ui64>& nodeIdToPromotionCutoffStep = {});
+    void UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime,
+        const THashMap<ui32, ui64>& nodeIdToPromotionCutoffStep = {});
+    // Set the incoming round's border before Init or UpdateAndCleanExpired, so
+    // every updated contribution keeps the border protecting its omitted points.
     void UpdateBorder(const TRowVersion& border);
     void Clear();
 
@@ -134,6 +147,10 @@ public:
 
     TView View() const;
     TRowVersion GetBorder() const;
+
+    // Minimum of the exact local view cutoff and all cached remote owner cutoffs.
+    ui64 GetPromotionCutoffStep(ui64 localPromotionCutoffStep) const;
+    THashMap<ui32, ui64> GetNodeIdToPromotionCutoffStep() const;
 
     // Oldest collection time across all contributing nodes, including the local node (counted
     // as now since its snapshots are collected right now). With no remote nodes this is now.

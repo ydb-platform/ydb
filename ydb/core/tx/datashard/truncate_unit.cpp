@@ -80,6 +80,21 @@ EExecutionStatus TTruncateUnit::Execute(
     const auto truncateVersion = DataShard.GetMvccVersion(op.Get());
     txc.DB.RemoveRowVersions(localTid, TRowVersion::Min(), truncateVersion);
 
+    // Persistent availability also authorizes reads below the watermark.
+    // Invalidate destroyed points through the normal removal path, which keeps
+    // referenced records until their existing readers release them.
+    auto& snapshotManager = DataShard.GetSnapshotManager();
+    TVector<TSnapshotKey> snapshotsToRemove;
+    const TSnapshotTableKey snapshotsScope(pathId.OwnerId, pathId.LocalPathId);
+    for (const auto& [key, snapshot] : snapshotManager.GetSnapshots(snapshotsScope)) {
+        if (TRowVersion(key.Step, key.TxId) < truncateVersion) {
+            snapshotsToRemove.push_back(key);
+        }
+    }
+    for (const auto& key : snapshotsToRemove) {
+        snapshotManager.RemoveSnapshot(txc.DB, key);
+    }
+
     // Truncate drops every row version, so nothing below this operation can be read any more.
     // Advancing the low watermark keeps a stale snapshot read failing loudly instead of silently
     // returning no rows.

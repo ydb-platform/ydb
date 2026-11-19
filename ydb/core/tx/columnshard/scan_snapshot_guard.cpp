@@ -95,17 +95,12 @@ public:
 
 NOlap::TSnapshot BuildRegistryMinSnapshotForNewReads(const ui64 passedStep, const NOlap::TSnapshot& lastCleanupSnapshot,
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry>& registry, const NKikimrConfig::TLongTxServiceConfig& longTxConfig) {
-    // OldestCollectionTime tells us how fresh the registry actually is (oldest collection time
-    // across all contributing nodes). Anchoring on it means the floor backs off on its own when
-    // the registry is stale (e.g. under CPU saturation), instead of trusting a fixed worst-case
-    // estimate. A read on a remote node may still be missing from the registry for up to:
-    //   - LocalSnapshotPromotionTimeSeconds: a snapshot isn't propagated until it is promoted;
-    //   - MaxClockSkewMs: that collection time was stamped against the remote node's wall clock.
-    // So we may only clean strictly below OldestCollectionTime minus that margin.
-    const ui64 marginMs =
-        TDuration::Seconds(longTxConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds() + longTxConfig.GetMaxClockSkewMs();
-    const ui64 oldestCollectionMs = registry->GetOldestCollectionTime().MilliSeconds();
-    ui64 serviceMinReadStep = (oldestCollectionMs > marginMs ? oldestCollectionMs - marginMs : 0);
+    // Each producer reports the cutoff actually used to publish its snapshots.
+    // Its promotion delay may differ from ours. Unknown cutoffs are zero, so
+    // age-based cleanup waits until every contributing producer is known.
+    const ui64 cutoffStep = registry->GetMinPromotionCutoffStep();
+    const ui64 clockSkewMs = longTxConfig.GetMaxClockSkewMs();
+    ui64 serviceMinReadStep = (cutoffStep > clockSkewMs ? cutoffStep - clockSkewMs : 0);
     // The freshness floor must never exceed the current step.
     serviceMinReadStep = std::min(serviceMinReadStep, passedStep);
 

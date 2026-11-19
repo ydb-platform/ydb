@@ -93,6 +93,9 @@ namespace NTest {
             NPage::TConf conf = Conf;
             conf.MaxRows = subset.MaxRows();
             conf.MinRowVersion = subset.MinRowVersion();
+            if (RemovedRowVersions) {
+                conf.MinRowVersion = RemovedRowVersions.AdjustDown(conf.MinRowVersion);
+            }
             Writer = new TPartWriter(scheme, Tags, blocks, conf, subset.Epoch());
 
             TMyScan scanner(this, subset, Env.Get());

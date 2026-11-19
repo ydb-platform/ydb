@@ -96,6 +96,10 @@ namespace NCompGen {
                 ui64 partRows = partView->Stat.Rows;
                 ui64 partDrops = partView->Stat.Drops;
 
+                // A final positive-version erase cannot be removed before
+                // version cleanup reaches it. Garbage stats track that point.
+                partDrops -= Min(partDrops, partView->Stat.RetainedErases);
+
                 // Assume worst case: every drop has a hidden row that won't go away
                 partDrops -= Min(partDrops, partView->Stat.HiddenRows);
 

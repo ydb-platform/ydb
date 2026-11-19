@@ -121,38 +121,41 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::ViewPromotedUpToStep(ui64 
         maxSnapshotStep};
 }
 
-void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime) {
+void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime,
+        const THashMap<ui32, ui64>& nodeIdToPromotionCutoffStep) {
     AFL_ENSURE(NodeIdToState.empty());
     // Seed collection times from the peer first, so freshness (GetOldestCollectionTime) is meaningful
     // right after prefill instead of collapsing to Zero (which disables age-based cleanup).
     for (const auto& [nodeId, collectionTime] : nodeIdToCollectionTime) {
-        NodeIdToState[nodeId].CollectionTime = collectionTime;
+        auto& state = NodeIdToState[nodeId];
+        state.CollectionTime = collectionTime;
+        state.SnapshotBorder = SnapshotBorder;
+        const auto* cutoffStep = nodeIdToPromotionCutoffStep.FindPtr(nodeId);
+        state.PromotionCutoffStep = cutoffStep ? *cutoffStep : 0;
     }
     for (const auto& snapshot : snapshots) {
         const auto nodeId = snapshot.SessionActorId.NodeId();
-        NodeIdToState[nodeId].RemoteSnapshots.push_back(snapshot);
+        auto& state = NodeIdToState[nodeId];
+        state.RemoteSnapshots.push_back(snapshot);
+        state.SnapshotBorder = SnapshotBorder;
+        const auto* cutoffStep = nodeIdToPromotionCutoffStep.FindPtr(nodeId);
+        state.PromotionCutoffStep = cutoffStep ? *cutoffStep : 0;
     }
     Ready = true;
 }
 
 
-void TRemoteSnapshotsStorage::UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime) {
+void TRemoteSnapshotsStorage::UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime,
+        const THashMap<ui32, ui64>& nodeIdToPromotionCutoffStep) {
     const auto now = AppData()->TimeProvider->Now();
+    const auto expirationTime = TDuration::Seconds(AppData()->LongTxServiceConfig.GetUnavailableNodeSnapshotsExpirationTimeSeconds());
 
     THashSet<ui32> nodeIdsToUpdateSnapshots;
     THashSet<ui32> nodeIdsToDeleteSnapshots;
 
     for (const auto& [nodeId, state] : NodeIdToState) {
-        if (!updatedNodeIdToCollectionTime.contains(nodeId)
-                && state.CollectionTime + TDuration::Seconds(AppData()->LongTxServiceConfig.GetUnavailableNodeSnapshotsExpirationTimeSeconds()) < now) {
+        if (state.CollectionTime + expirationTime < now) {
             nodeIdsToDeleteSnapshots.insert(nodeId);
-        }
-    }
-
-    for (const auto& [nodeId, collectionTime] : updatedNodeIdToCollectionTime) {
-        if (NodeIdToState[nodeId].CollectionTime < collectionTime) {
-            nodeIdsToUpdateSnapshots.insert(nodeId);
-            NodeIdToState.at(nodeId).CollectionTime = collectionTime;
         }
     }
 
@@ -160,8 +163,28 @@ void TRemoteSnapshotsStorage::UpdateAndCleanExpired(const TVector<TRemoteSnapsho
         NodeIdToState.erase(nodeId);
     }
 
-    for (const auto& nodeId : nodeIdsToUpdateSnapshots) {
-        NodeIdToState.at(nodeId).RemoteSnapshots.clear();
+    // The wire format has one border for the whole collection. Associate it
+    // conservatively with every owner, including owners with no explicit points.
+    for (const auto& [nodeId, collectionTime] : updatedNodeIdToCollectionTime) {
+        // A replayed collection must not extend the missing owner's grace period.
+        if (collectionTime + expirationTime < now) {
+            continue;
+        }
+        auto [it, inserted] = NodeIdToState.try_emplace(nodeId);
+        auto& state = it->second;
+        const auto* cutoffStep = nodeIdToPromotionCutoffStep.FindPtr(nodeId);
+        const ui64 promotionCutoffStep = cutoffStep ? *cutoffStep : 0;
+        if (inserted || state.CollectionTime < collectionTime) {
+            nodeIdsToUpdateSnapshots.insert(nodeId);
+            state.CollectionTime = collectionTime;
+            state.RemoteSnapshots.clear();
+            state.SnapshotBorder = SnapshotBorder;
+            state.PromotionCutoffStep = promotionCutoffStep;
+        } else {
+            // Equal or older collections cannot release cached protection.
+            state.SnapshotBorder = std::min(state.SnapshotBorder, SnapshotBorder);
+            state.PromotionCutoffStep = std::min(state.PromotionCutoffStep, promotionCutoffStep);
+        }
     }
 
     for (const auto& snapshot : snapshots) {
@@ -219,7 +242,27 @@ void TRemoteSnapshotsStorage::Clear() {
 }
 
 TRowVersion TRemoteSnapshotsStorage::GetBorder() const {
-    return SnapshotBorder;
+    TRowVersion border = SnapshotBorder;
+    for (const auto& [nodeId, state] : NodeIdToState) {
+        border = std::min(border, state.SnapshotBorder);
+    }
+    return border;
+}
+
+ui64 TRemoteSnapshotsStorage::GetPromotionCutoffStep(ui64 localPromotionCutoffStep) const {
+    for (const auto& [nodeId, state] : NodeIdToState) {
+        localPromotionCutoffStep = std::min(localPromotionCutoffStep, state.PromotionCutoffStep);
+    }
+    return localPromotionCutoffStep;
+}
+
+THashMap<ui32, ui64> TRemoteSnapshotsStorage::GetNodeIdToPromotionCutoffStep() const {
+    THashMap<ui32, ui64> result;
+    result.reserve(NodeIdToState.size());
+    for (const auto& [nodeId, state] : NodeIdToState) {
+        result[nodeId] = state.PromotionCutoffStep;
+    }
+    return result;
 }
 
 TInstant TRemoteSnapshotsStorage::GetOldestCollectionTime() const {

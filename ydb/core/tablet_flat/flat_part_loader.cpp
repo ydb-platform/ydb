@@ -433,6 +433,7 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
             (stat && stat->HasRows()) ? stat->GetRows() : 0,
             (stat && stat->HasHiddenRows()) ? stat->GetHiddenRows() : 0,
             (stat && stat->HasHiddenDrops()) ? stat->GetHiddenDrops() : 0,
+            (stat && stat->HasRetainedErases()) ? stat->GetRetainedErases() : 0,
         }
     );
 

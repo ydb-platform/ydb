@@ -247,7 +247,8 @@ namespace {
     public:
         TSnapshotCollectorActor(const TLocalSnapshotsStorage::TView& localSnapshotsView, TInstant now, TActorId parentActorId, TEvLongTxService::TEvCollectSnapshots* event, const TSubtreeSplitter& subtreeSplitter)
             : TTreeNodeActor(parentActorId, event, subtreeSplitter)
-            , LocalCollectionTime(now) {
+            , LocalCollectionTime(now)
+            , LocalPromotionCutoffStep(localSnapshotsView.GetMaxSnapshotStep()) {
             for (const auto& localSnapshot : localSnapshotsView) {
                 TRemoteSnapshotInfo remoteSnapshot(
                     localSnapshot.Snapshot,
@@ -292,12 +293,14 @@ namespace {
             NodesWithCollectionTimes.emplace_back(TNodeWithCollectionTime{
                 .NodeId = SelfId().NodeId(),
                 .CollectionTime = LocalCollectionTime.Seconds(),
+                .PromotionCutoffStep = LocalPromotionCutoffStep,
             });
 
             for (const auto& nodeWithCollectionTime : NodesWithCollectionTimes) {
                 auto* nodeInfoProto = event->Record.MutableSnapshots()->AddNodesCollectionInfo();
                 nodeInfoProto->SetNodeId(nodeWithCollectionTime.NodeId);
                 nodeInfoProto->SetUpdateTime(nodeWithCollectionTime.CollectionTime);
+                nodeInfoProto->SetPromotionCutoffStep(nodeWithCollectionTime.PromotionCutoffStep);
             }
 
             return std::move(event);
@@ -327,6 +330,7 @@ namespace {
                 NodesWithCollectionTimes.emplace_back(TNodeWithCollectionTime{
                     .NodeId = nodeCollectionInfo.GetNodeId(),
                     .CollectionTime = nodeCollectionInfo.GetUpdateTime(),
+                    .PromotionCutoffStep = nodeCollectionInfo.GetPromotionCutoffStep(),
                 });
             }
 
@@ -352,9 +356,11 @@ namespace {
         struct TNodeWithCollectionTime {
             ui32 NodeId;
             ui64 CollectionTime;
+            ui64 PromotionCutoffStep;
         };
         TVector<TNodeWithCollectionTime> NodesWithCollectionTimes;
         TInstant LocalCollectionTime;
+        ui64 LocalPromotionCutoffStep;
         TSet<TRemoteSnapshotInfo, TReverseComparatorBySnapshotAndSessionId> CollectedSnapshots;
         TRowVersion SnapshotBorder = TRowVersion::Max();
     };
@@ -737,6 +743,7 @@ private:
         if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
             // Update remote snapshots storage and continue propagation
             THashMap<ui32, TInstant> nodeIdToCollectionTime;
+            THashMap<ui32, ui64> nodeIdToPromotionCutoffStep;
             TVector<TRemoteSnapshotInfo> remoteSnapshots;
             for (const auto& snapshot : ev->Get()->Record.GetSnapshots().GetSnapshots()) {
                 NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
@@ -758,6 +765,7 @@ private:
             for (const auto& nodeCollectionInfo : ev->Get()->Record.GetSnapshots().GetNodesCollectionInfo()) {
                 if (nodeCollectionInfo.GetNodeId() != SelfId().NodeId()) {
                     nodeIdToCollectionTime[nodeCollectionInfo.GetNodeId()] = TInstant::Seconds(nodeCollectionInfo.GetUpdateTime());
+                    nodeIdToPromotionCutoffStep[nodeCollectionInfo.GetNodeId()] = nodeCollectionInfo.GetPromotionCutoffStep();
                 }
             }
 
@@ -771,7 +779,7 @@ private:
             RemoteSnapshotsStorage->UpdateBorder(border);
             std::sort(std::begin(remoteSnapshots), std::end(remoteSnapshots),
                 TRemoteSnapshotInfo::TComparatorBySnapshotAndSessionId{});
-            RemoteSnapshotsStorage->UpdateAndCleanExpired(remoteSnapshots, nodeIdToCollectionTime);
+            RemoteSnapshotsStorage->UpdateAndCleanExpired(remoteSnapshots, nodeIdToCollectionTime, nodeIdToPromotionCutoffStep);
 
             LastRemoteSnapshotsUpdate = AppData()->TimeProvider->Now();
             if (Counters.TimeSinceLastRemoteSnapshotsUpdateMs) {
@@ -809,10 +817,23 @@ private:
             {"logPrefix", LogPrefix},
             {"sender", ev->Sender});
 
+        if (!RemoteSnapshotsStorage->IsReady()) {
+            // A timed-out prefill lets us join the exchange before our remote
+            // state is known. Do not turn that unknown state into an empty,
+            // ready registry on another node; its timeout keeps it waiting for
+            // a real exchange just as we are.
+            YDB_LOG_DEBUG("Skipping prefill because remote snapshots storage is not ready",
+                {"logPrefix", LogPrefix},
+                {"sender", ev->Sender});
+            return;
+        }
+
         auto resultEvent = std::make_unique<TEvLongTxService::TEvRemoteSnapshotsPrefillResult>();
 
         TSet<TRemoteSnapshotInfo, TReverseComparatorBySnapshotAndSessionId> collectedSnapshots;
-        TRowVersion snapshotBorder = TRowVersion::Max();
+        // Cached lists may already be capped. Their omitted snapshots are still
+        // protected by this border, even when no explicit point mentions them.
+        TRowVersion snapshotBorder = RemoteSnapshotsStorage->GetBorder();
 
         auto addToCollectedSnapshots = [&collectedSnapshots, &snapshotBorder](const TRemoteSnapshotInfo& snapshot) {
             AFL_ENSURE(collectedSnapshots.insert(snapshot).second);
@@ -828,7 +849,8 @@ private:
         }
 
         const auto now = AppData()->TimeProvider->Now();
-        for (const auto& localSnapshot : LocalSnapshotsStorage->View(now)) {
+        auto localSnapshotsView = LocalSnapshotsStorage->View(now);
+        for (const auto& localSnapshot : localSnapshotsView) {
             TRemoteSnapshotInfo remoteSnapshot(
                 localSnapshot.Snapshot,
                 localSnapshot.SessionActorId,
@@ -855,15 +877,18 @@ private:
 
         // Convey per-node collection times so the receiver's registry freshness (OldestCollectionTime)
         // is meaningful right after prefill, instead of treating all prefilled nodes as unknown (Zero).
+        const auto nodeIdToPromotionCutoffStep = RemoteSnapshotsStorage->GetNodeIdToPromotionCutoffStep();
         for (const auto& [nodeId, collectionTime] : RemoteSnapshotsStorage->GetNodeIdToCollectionTime()) {
             auto* nodeInfoProto = resultEvent->Record.MutableSnapshots()->AddNodesCollectionInfo();
             nodeInfoProto->SetNodeId(nodeId);
             nodeInfoProto->SetUpdateTime(collectionTime.Seconds());
+            nodeInfoProto->SetPromotionCutoffStep(nodeIdToPromotionCutoffStep.at(nodeId));
         }
         // This node's own snapshots are known as of now.
         auto* localNodeInfoProto = resultEvent->Record.MutableSnapshots()->AddNodesCollectionInfo();
         localNodeInfoProto->SetNodeId(SelfId().NodeId());
         localNodeInfoProto->SetUpdateTime(now.Seconds());
+        localNodeInfoProto->SetPromotionCutoffStep(localSnapshotsView.GetMaxSnapshotStep());
 
         YDB_LOG_DEBUG("Sending TEvRemoteSnapshotsPrefillResult to with snapshots",
             {"logPrefix", LogPrefix},
@@ -960,9 +985,11 @@ private:
         }
 
         THashMap<ui32, TInstant> nodeIdToCollectionTime;
+        THashMap<ui32, ui64> nodeIdToPromotionCutoffStep;
         for (const auto& nodeCollectionInfo : snapshots.GetNodesCollectionInfo()) {
             if (nodeCollectionInfo.GetNodeId() != SelfId().NodeId()) {
                 nodeIdToCollectionTime[nodeCollectionInfo.GetNodeId()] = TInstant::Seconds(nodeCollectionInfo.GetUpdateTime());
+                nodeIdToPromotionCutoffStep[nodeCollectionInfo.GetNodeId()] = nodeCollectionInfo.GetPromotionCutoffStep();
             }
         }
 
@@ -976,7 +1003,7 @@ private:
         RemoteSnapshotsStorage->UpdateBorder(border);
         std::sort(std::begin(remoteSnapshots), std::end(remoteSnapshots),
             TRemoteSnapshotInfo::TComparatorBySnapshotAndSessionId{});
-        RemoteSnapshotsStorage->Init(remoteSnapshots, nodeIdToCollectionTime);
+        RemoteSnapshotsStorage->Init(remoteSnapshots, nodeIdToCollectionTime, nodeIdToPromotionCutoffStep);
         LastRemoteSnapshotsUpdate = AppData()->TimeProvider->Now();
 
         ProceedToPublish();

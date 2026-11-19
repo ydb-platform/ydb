@@ -31,6 +31,8 @@ void PublishRegistry(const IImmutableSnapshotRegistryHolderPtr& holder,
 {
     auto builder = CreateImmutableSnapshotRegistryBuilder();
     builder->SetOldestCollectionTime(collectionTime);
+    builder->SetMinPromotionCutoffStep(
+        (collectionTime - TDuration::Seconds(MakeConfig().GetLocalSnapshotPromotionTimeSeconds())).MilliSeconds());
     builder->SetSnapshotBorder(border);
     for (const auto& snapshot : snapshots) {
         builder->AddSnapshot(snapshot.Tables, snapshot.Version);
@@ -120,6 +122,34 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetention) {
         UNIT_ASSERT(policy.ShouldRetain(TABLE_A, boundary.Next()));
     }
 
+    Y_UNIT_TEST(ProducerCutoffIsIndependentOfReceiverPromotionDelay) {
+        const auto holder = CreateImmutableSnapshotRegistryHolder();
+        auto builder = CreateImmutableSnapshotRegistryBuilder();
+        builder->SetOldestCollectionTime(TInstant::MilliSeconds(1000000));
+        // The producer uses 120 seconds and has not published a snapshot from
+        // 70 seconds ago. A receiver using 30 seconds must still preserve it.
+        builder->SetMinPromotionCutoffStep(880000);
+        holder->Set(std::move(*builder).Build());
+        for (const ui64 promotionSeconds : {0, 30, 120}) {
+            auto config = MakeConfig();
+            config.SetLocalSnapshotPromotionTimeSeconds(promotionSeconds);
+            const TSnapshotRetentionPolicy policy(true, holder, config);
+            UNIT_ASSERT_VALUES_EQUAL(policy.GetCleanupBoundary(TRowVersion::Max()), TRowVersion(875000, 0));
+            UNIT_ASSERT(policy.ShouldRetain(TABLE_A, TRowVersion(930000, 1)));
+        }
+    }
+
+    Y_UNIT_TEST(MissingProducerCutoffPreservesHistory) {
+        const auto holder = CreateImmutableSnapshotRegistryHolder();
+        auto builder = CreateImmutableSnapshotRegistryBuilder();
+        builder->SetOldestCollectionTime(TInstant::MilliSeconds(1000000));
+        holder->Set(std::move(*builder).Build());
+        const TSnapshotRetentionPolicy policy(true, holder, MakeConfig());
+        UNIT_ASSERT(!policy.IsWaitingForRegistry());
+        UNIT_ASSERT_VALUES_EQUAL(policy.GetCleanupBoundary(TRowVersion::Max()), TRowVersion::Min());
+        UNIT_ASSERT(policy.ShouldRetain(TABLE_A, TRowVersion(100, 1)));
+    }
+
     Y_UNIT_TEST(ExistingCleanupCandidateIsNotAdvanced) {
         const auto holder = CreateImmutableSnapshotRegistryHolder();
         PublishRegistry(holder);
@@ -154,11 +184,10 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetention) {
         }
     }
 
-    Y_UNIT_TEST(LargeMarginsDoNotWrapAround) {
+    Y_UNIT_TEST(LargeClockSkewDoesNotWrapAround) {
         const auto holder = CreateImmutableSnapshotRegistryHolder();
         PublishRegistry(holder);
         auto config = MakeConfig();
-        config.SetLocalSnapshotPromotionTimeSeconds(Max<ui64>());
         config.SetMaxClockSkewMs(Max<ui64>());
         const TSnapshotRetentionPolicy policy(true, holder, config);
 

@@ -136,7 +136,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         {
             auto r2 = me.ToLine().SelectRowVersionN(table1, 1_u64);
-            UNIT_ASSERT_VALUES_EQUAL(r2.Ready, EReady::Gone);
+            UNIT_ASSERT_VALUES_EQUAL(r2.Ready, EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(r2.RowVersion, TRowVersion(1, 11));
+            UNIT_ASSERT_VALUES_EQUAL(r2.RowOp, ERowOp::Erase);
             UNIT_ASSERT_VALUES_EQUAL(r2.LockMode, ELockMode::Exclusive);
             UNIT_ASSERT_VALUES_EQUAL(r2.LockTxId, 123u);
         }

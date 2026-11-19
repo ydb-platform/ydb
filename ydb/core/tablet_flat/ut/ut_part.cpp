@@ -116,6 +116,40 @@ namespace {
 
         env->PrechargePhase = false;
     }
+
+    void CheckLatestCommittedErase(const TPartEggs& eggs, ui32 key, TRowVersion version) {
+        TTestEnv env;
+        TPartIter iter(eggs.Lone().Get(), { }, eggs.Scheme->Keys, &env);
+        const TCell keyCell = TCell::Make(key);
+        UNIT_ASSERT_VALUES_EQUAL(iter.Seek({ &keyCell, 1 }, ESeek::Exact), EReady::Data);
+        ELockMode lockMode = ELockMode::None;
+        ui64 lockTxId = 0;
+        const auto committed = iter.SkipToCommitted(nullptr, nullptr, lockMode, lockTxId);
+        UNIT_ASSERT(committed);
+        UNIT_ASSERT_VALUES_EQUAL(committed.RowVersion, version);
+        UNIT_ASSERT_VALUES_EQUAL(committed.RowOp, ERowOp::Erase);
+    }
+
+    NProto::TRoot PartRoot(const TPartEggs& eggs) {
+        const auto* meta = eggs.Lone()->Store->GetMeta();
+        UNIT_ASSERT(meta);
+        TMemoryInput input(meta->data(), meta->size());
+        NProto::TRoot root;
+        UNIT_ASSERT(root.ParseFromArcadiaStream(&input));
+        return root;
+    }
+
+    void CheckRetainedEraseStats(const TPartEggs& eggs, TRowVersion version) {
+        UNIT_ASSERT_VALUES_EQUAL(eggs.Written->RetainedErases, 1u);
+        const auto part = eggs.Lone();
+        UNIT_ASSERT_VALUES_EQUAL(part->Stat.RetainedErases, 1u);
+        const auto root = PartRoot(eggs);
+        UNIT_ASSERT(root.GetStat().HasRetainedErases());
+        UNIT_ASSERT_VALUES_EQUAL(root.GetStat().GetRetainedErases(), 1u);
+        UNIT_ASSERT(part->GarbageStats);
+        UNIT_ASSERT(part->GarbageStats->GetGarbageBytes(version.Prev())
+            < part->GarbageStats->GetGarbageBytes(version));
+    }
 }
 
 Y_UNIT_TEST_SUITE(TPart) {
@@ -581,6 +615,109 @@ Y_UNIT_TEST_SUITE(TPart) {
             .To(71).Ver({5, 50}).Is(hey).IsVer({5, 50})
             .To(72).Ver({5, 49}).Is(EReady::Gone)
             .To(73).Next().IsOp(ERowOp::Erase, foo).IsVer({4, 0});
+    }
+
+    Y_UNIT_TEST(FinalEraseKeepsConflictVersionUntilRemoved)
+    {
+        TLayoutCook lay;
+        lay.Col(0, 0, NScheme::NTypeIds::Uint32).Key({ 0 });
+        const auto key = *TSchemedCookRow(*lay).Col(1_u32);
+        const TRowVersion erased(20, 1);
+
+        auto eggs = TPartCook(lay, PageConf())
+            .Ver(erased).Add(key, ERowOp::Erase)
+            .Finish();
+        UNIT_ASSERT_VALUES_EQUAL(eggs.Written->Rows, 1u);
+        CheckRetainedEraseStats(eggs, erased);
+        UNIT_ASSERT_VALUES_EQUAL(eggs.Lone()->GarbageStats->GetGarbageBytes(erased.Prev()), 0u);
+        CheckLatestCommittedErase(eggs, 1, erased);
+        TCheckIter(eggs, { })
+            .Seek(key, ESeek::Exact).IsOp(ERowOp::Erase, key).IsVer(erased)
+            .Ver(erased.Prev()).Is(EReady::Gone);
+
+        // Non-final markers may still hide an underlay and must keep their
+        // original drop accounting. Missing metadata uses the legacy zero.
+        auto nonFinalConf = PageConf();
+        nonFinalConf.Final = false;
+        const auto nonFinal = TPartCook(lay, nonFinalConf)
+            .Ver(erased).Add(key, ERowOp::Erase)
+            .Finish();
+        UNIT_ASSERT_VALUES_EQUAL(nonFinal.Written->RetainedErases, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(nonFinal.Lone()->Stat.RetainedErases, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(nonFinal.Lone()->Stat.Drops, 1u);
+        UNIT_ASSERT(!PartRoot(nonFinal).GetStat().HasRetainedErases());
+        UNIT_ASSERT(nonFinal.Lone()->GarbageStats);
+        UNIT_ASSERT_VALUES_EQUAL(nonFinal.Lone()->GarbageStats->GetGarbageBytes(erased.Prev()), 0u);
+        UNIT_ASSERT(nonFinal.Lone()->GarbageStats->GetGarbageBytes(erased) > 0);
+
+        TRowVersionRanges removed;
+        removed.Add(TRowVersion::Min(), erased.Next());
+        const auto cleaned = TCompaction(nullptr, PageConf())
+            .WithRemovedRowVersions(removed).Do(eggs);
+        UNIT_ASSERT_VALUES_EQUAL(cleaned.Written->Rows, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(cleaned.Written->RetainedErases, 0u);
+        UNIT_ASSERT(cleaned.Parts.empty());
+    }
+
+    Y_UNIT_TEST(FinalConsecutiveErasesKeepNewestConflictVersion)
+    {
+        TLayoutCook lay;
+        lay.Col(0, 0, NScheme::NTypeIds::Uint32).Key({ 0 });
+        const auto key = *TSchemedCookRow(*lay).Col(1_u32);
+
+        // The newer erase is a write conflict at 75/1, while the older erase
+        // must still hide the insertion for reads between 50/1 and 100/1.
+        const auto eggs = TPartCook(lay, PageConf())
+            .Ver({100, 1}).Add(key, ERowOp::Erase)
+            .Ver({50, 1}).Add(key, ERowOp::Erase)
+            .Ver({10, 1}).Add(key)
+            .Finish();
+        CheckRetainedEraseStats(eggs, {100, 1});
+        CheckLatestCommittedErase(eggs, 1, {100, 1});
+        TCheckIter(eggs, { })
+            .Seek(key, ESeek::Exact).IsOp(ERowOp::Erase, key).IsVer({100, 1})
+            .Ver({75, 1}).IsOp(ERowOp::Erase, key).IsVer({50, 1})
+            .Ver({50, 1}).IsOp(ERowOp::Erase, key).IsVer({50, 1})
+            .Ver({49, 1}).Is(key).IsVer({10, 1})
+            .Ver({9, 1}).Is(EReady::Gone);
+    }
+
+    Y_UNIT_TEST(FinalEraseKeepsConflictAcrossRemovedVersionGaps)
+    {
+        TLayoutCook lay;
+        lay.Col(0, 0, NScheme::NTypeIds::Uint32).Key({ 0 });
+        const auto key = *TSchemedCookRow(*lay).Col(1_u32);
+        const TRowVersion snapshot(30, 1);
+        const TRowVersion cleanup(60, 1);
+        const auto eggs = TPartCook(lay, PageConf())
+            .Ver({50, 1}).Add(key, ERowOp::Erase)
+            .Ver({40, 1}).Add(key)
+            .Ver({20, 1}).Add(key, ERowOp::Erase)
+            .Ver({10, 1}).Add(key)
+            .Finish();
+
+        // Both insertions can disappear while preserving absence at 30/1.
+        // The latest erase is rewound to 30/2 and the older one to Min, so the
+        // positive conflict version must survive these consecutive erases.
+        TRowVersionRanges removed;
+        removed.Add(TRowVersion::Min(), snapshot);
+        removed.Add(snapshot.Next(), cleanup);
+        const auto compacted = TCompaction(nullptr, PageConf())
+            .WithRemovedRowVersions(removed).Do(eggs);
+        UNIT_ASSERT_VALUES_EQUAL(compacted.Written->Rows, 1u);
+        CheckRetainedEraseStats(compacted, snapshot.Next());
+        UNIT_ASSERT_VALUES_EQUAL(compacted.Lone()->GarbageStats->GetGarbageBytes(snapshot), 0u);
+        CheckLatestCommittedErase(compacted, 1, snapshot.Next());
+        TCheckIter(compacted, { })
+            .Seek(key, ESeek::Exact).IsOp(ERowOp::Erase, key).IsVer(snapshot.Next())
+            .Ver(snapshot).Is(EReady::Gone);
+
+        removed.Add(TRowVersion::Min(), cleanup);
+        const auto cleaned = TCompaction(nullptr, PageConf())
+            .WithRemovedRowVersions(removed).Do(compacted);
+        UNIT_ASSERT_VALUES_EQUAL(cleaned.Written->Rows, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(cleaned.Written->RetainedErases, 0u);
+        UNIT_ASSERT(cleaned.Parts.empty());
     }
 
     Y_UNIT_TEST(ManyVersions)

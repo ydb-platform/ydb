@@ -140,6 +140,7 @@ namespace NTable {
             ui64 Rows;      /* Total rows count in the TPart    */
             ui64 HiddenRows; /* Hidden (non-main) total rows */
             ui64 HiddenDrops; /* Hidden (non-main) rows with ERowOp::Erase */
+            ui64 RetainedErases = 0; /* Final head erases retained for positive row versions */
         };
 
         TPart(const TLogoBlobID &label, TParams params, TStat stat)

@@ -73,6 +73,7 @@ message TStat {
     optional uint64 Rows = 4;   // All rows count in the TPart
     optional uint64 HiddenRows = 5; // Hidden (non-head) total rows
     optional uint64 HiddenDrops = 6; // Hidden (non-main) rows with ERowOp::Erase
+    optional uint64 RetainedErases = 7; // Final head erases retained for positive row versions
 }
 
 message TRoot { // NTable::TPart page collection metablob

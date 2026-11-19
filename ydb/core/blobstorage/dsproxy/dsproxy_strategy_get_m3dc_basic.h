@@ -146,7 +146,9 @@ namespace NKikimr {
                 situations.push_back(diskPart.Situation);
             }
 
-            if (!info.GetQuorumChecker().CheckFailModelForSubgroup(failed)) {
+            // phantom check waits for replies from all the disks and judges every blob on its own, so the verdict is
+            // not affected by early termination of the whole request
+            if (!PhantomCheck && !info.GetQuorumChecker().CheckFailModelForSubgroup(failed)) {
                 return EStrategyOutcome::Error("TMirror3dcBasicGetStrategy failed the Fail Model check");
             } else if (requested) {
                 // we can't finish request now, because the VGet was just issued or still being executed, so we
@@ -155,31 +157,37 @@ namespace NKikimr {
             } else if (!state.Whole.Needed.IsSubsetOf(state.Whole.Here())) {
                 // we haven't requested anything, but there is no required data in buffer, so blob is lost
                 DSP_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
-                state.WholeSituation = TBlobState::ESituation::Absent;
-                if (PhantomCheck || info.GetQuorumChecker().CheckQuorumForSubgroup(possiblyWritten)) {
-                    // this blob is either:
-                    // 1. Has full quorum of Lost & Error replies
-                    // 2. Is checked for being phantom during replication
-                    // in both cases we return Absent only when there are only Lost and Absent replies from the disks,
-                    // otherwise we return ERROR assuming this blob could be restored
-                    for (const TBlobState::ESituation situation : situations) {
-                        switch (situation) {
-                            case TBlobState::ESituation::Absent:
-                            case TBlobState::ESituation::Lost:
-                                // these statuses do not lead to error as they represent missing blob data
-                                break;
+                bool hasErrors = false;
+                for (const TBlobState::ESituation situation : situations) {
+                    switch (situation) {
+                        case TBlobState::ESituation::Absent:
+                        case TBlobState::ESituation::Lost:
+                            // these statuses do not lead to error as they represent missing blob data
+                            break;
 
-                            case TBlobState::ESituation::Unknown:
-                            case TBlobState::ESituation::Present:
-                            case TBlobState::ESituation::Sent:
-                                // unexpected state
-                                Y_DEBUG_ABORT_UNLESS(false);
-                                [[fallthrough]];
-                            case TBlobState::ESituation::Error:
-                                state.WholeSituation = TBlobState::ESituation::Error;
-                                break;
-                        }
+                        case TBlobState::ESituation::Unknown:
+                        case TBlobState::ESituation::Present:
+                        case TBlobState::ESituation::Sent:
+                            // unexpected state
+                            Y_DEBUG_ABORT_UNLESS(false);
+                            [[fallthrough]];
+                        case TBlobState::ESituation::Error:
+                            hasErrors = true;
+                            break;
                     }
+                }
+                // ordinary read reports the blob as missing when there are no error replies or when the disks that
+                // could possibly have the blob written (replied with error or not yet replicated) do not form
+                // the write quorum; otherwise we return ERROR assuming this blob could be restored
+                const bool missing = !hasErrors || !info.GetQuorumChecker().CheckQuorumForSubgroup(possiblyWritten);
+                if (PhantomCheck) {
+                    // phantom check is strict as any disk that replied with error may contain the blob, so we return
+                    // Absent only when there are only Lost and Absent replies; though the blob still looks like
+                    // a phantom one when ordinary read would report it as missing
+                    state.LooksLikePhantom = missing;
+                    state.WholeSituation = hasErrors ? TBlobState::ESituation::Error : TBlobState::ESituation::Absent;
+                } else {
+                    state.WholeSituation = missing ? TBlobState::ESituation::Absent : TBlobState::ESituation::Error;
                 }
                 return EStrategyOutcome::DONE;
             } else {

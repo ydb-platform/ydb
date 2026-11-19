@@ -77,6 +77,7 @@ constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 #define PDISK_SYS_LOG_RECORD_VERSION_6 6
 #define PDISK_SYS_LOG_RECORD_VERSION_7 7
 #define PDISK_SYS_LOG_RECORD_VERSION_8 8
+#define PDISK_SYS_LOG_RECORD_VERSION_9 9
 #define PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000 1000
 #define FORMAT_TEXT_SIZE 1024
 
@@ -416,7 +417,7 @@ struct TSysLogRecord {
     TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
-        : Version(PDISK_SYS_LOG_RECORD_VERSION_8)
+        : Version(PDISK_SYS_LOG_RECORD_VERSION_9)
         , LogHeadChunkIdx(0)
         , Reserved1(0)
         , LogHeadChunkPreviousNonce((ui64)-1)
@@ -445,6 +446,28 @@ struct TSysLogRecord {
         }
         str << "}";
         return str.Str();
+    }
+};
+
+// Appended after ownersSizeInUnitsInfo starting with SysLog record version 9.
+// Keep the legacy TSysLogRecord header layout unchanged.
+struct TSysLogDiskState {
+    enum EFlags : ui32 {
+        FlagSlow = 1 << 0,
+    };
+
+    ui32 Flags = 0;
+
+    bool IsSlow() const {
+        return Flags & FlagSlow;
+    }
+
+    void SetSlow(bool slow) {
+        if (slow) {
+            Flags |= FlagSlow;
+        } else {
+            Flags &= ~FlagSlow;
+        }
     }
 };
 
@@ -830,6 +853,7 @@ struct TDiskFormat {
         ui32 baseSysLogRecordSize = sizeof(TSysLogRecord)
                 + diskChunks * sizeof(TChunkInfo)
                 + sizeof(TSysLogFirstNoncesToKeep)
+                + sizeof(TSysLogDiskState)
                 + TChunkTrimInfo::SizeForChunkCount(diskChunks);
         ui32 sysLogFirstSectorPayload = sectorPayload - sizeof(TFirstLogPageHeader);
         ui32 sysLogExtraSectorPayload = sectorPayload - sizeof(TLogPageHeader);

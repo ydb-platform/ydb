@@ -761,15 +761,11 @@ public:
         ConductFallbackPatch(Runtime, Args);
     }
 
-    void CheckNonNormalPatch(bool enableVPatchForTesting, EMirror3dcGroupState state) {
+    void CheckNonNormalPatch(bool enableVPatchForTesting) {
         auto patch = CreatePatch(Runtime, Env, Args);
         auto patchActor = Env.CreatePatchRequestActor(patch, true, enableVPatchForTesting);
         PatchActorId = Runtime.Register(patchActor.release(), 0, 0, TMailboxType::Simple, 0, Env.FakeProxyActorId);
-        if (state == NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER) {
-            ReceivePatchResult(Runtime, Args, NKikimrProto::ERROR);
-        } else {
-            ConductNaivePatch(Runtime, Args, ENaivePatchCase::Ok);
-        }
+        ConductNaivePatch(Runtime, Args, ENaivePatchCase::Ok);
         UNIT_ASSERT(!Runtime.FindActor(PatchActorId));
     }
 };
@@ -786,7 +782,7 @@ Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
                 // Exercise both VPatch and VMovedPatch entry paths.
                 for (const bool enableVPatchForTesting : {false, true}) {
                     TMirror3dcVPatchActorTest test({realms.begin(), realms.end()}, state);
-                    test.CheckNonNormalPatch(enableVPatchForTesting, state);
+                    test.CheckNonNormalPatch(enableVPatchForTesting);
                 }
             } while (std::next_permutation(realms.begin(), realms.end()));
         }

@@ -164,15 +164,14 @@ message TGroupState {
 
         DC_RECOVERY_INV1 = 5;  // I/I/R.
 
-        DC_SOLO_DISASTER = 6;  // Legacy read-only I/L/L. The controller can only leave this state.
-        DC_SOLO_INV1 = 7;  // I/X/X.
-        DC_SOLO_INV2_PENDING = 8;  // I/X/X.
-        DC_SOLO_INV2 = 9;  // I/X/X.
+        DC_SOLO_INV1 = 6;  // I/X/X.
+        DC_SOLO_INV2_PENDING = 7;  // I/X/X.
+        DC_SOLO_INV2 = 8;  // I/X/X.
 
-        DC_SOLO_RECOVERY_INV1_PENDING = 10;  // I/R/X.
-        DC_SOLO_RECOVERY_INV1 = 11;  // I/R/X.
-        DC_SOLO_RECOVERY_INV2_PENDING = 12;  // I/R/X.
-        DC_SOLO_RECOVERY_INV2 = 13;  // I/R/X.
+        DC_SOLO_RECOVERY_INV1_PENDING = 9;  // I/R/X.
+        DC_SOLO_RECOVERY_INV1 = 10;  // I/R/X.
+        DC_SOLO_RECOVERY_INV2_PENDING = 11;  // I/R/X.
+        DC_SOLO_RECOVERY_INV2 = 12;  // I/R/X.
     }
 }
 

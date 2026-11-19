@@ -61,20 +61,20 @@ void CheckRangePagination(bool reverse, ui32 crcMode) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDSProxyRangePagination) {
-    Y_UNIT_TEST(LeavingRealmsCanHoldTheEntireConfirmedBlob) {
+    Y_UNIT_TEST(FailedLeavingDiskCanMakeRangeIncomplete) {
         using DC = NKikimrBlobStorage::TDataCenterState;
         TTestBasicRuntime runtime;
         SetupRuntime(runtime);
         TDSProxyEnv env;
         env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc), 0, 0,
             TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false,
-            {DC::INCLUDED, DC::LEAVING, DC::LEAVING}, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
+            {DC::INCLUDED, DC::INCLUDED, DC::LEAVING}, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         TTestState state(runtime, env.Info);
         TGroupMock& group = state.GetGroupMock();
         const TLogoBlobID id(123456, 1, 1, 0, state.BlobSize, 0);
         for (ui32 slot = 0; slot < 6; ++slot) {
             auto& disk = group.GetVDiskInSubgroup(id, slot);
-            if (disk.GetVDiskId().FailRealm != 0) {
+            if (disk.GetVDiskId().FailRealm != 1) {
                 group.PutPartAtSlot(id, slot, slot % 3 + 1, state.BlobData);
             }
         }
@@ -85,7 +85,8 @@ Y_UNIT_TEST_SUITE(TDSProxyRangePagination) {
                 auto request = state.GrabEventPtr<TEvBlobStorage::TEvVGet>();
                 auto reply = state.CreateEventResultPtr(request, NKikimrProto::UNKNOWN);
                 const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
-                if (leavingUnavailable && disk.FailRealm != 0) {
+                // One failed disk in each realm can hide 1+1+1.
+                if (disk.FailDomain == 0 && (disk.FailRealm != 2 || leavingUnavailable)) {
                     reply->Get()->Record.SetStatus(NKikimrProto::ERROR);
                 } else {
                     group.OnVGet(*request->Get(), *reply->Get());

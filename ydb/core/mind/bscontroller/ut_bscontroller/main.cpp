@@ -527,8 +527,8 @@ namespace {
                         : TState::DC_SOLO_RECOVERY_INV1)
                         : TState::DC_RECOVERY_INV1;
                 } else if (excluded == 2) {
-                    state = copies == 2 ? TState::DC_SOLO_INV2
-                        : copies == 1 ? TState::DC_SOLO_INV1 : TState::DC_SOLO_DISASTER;
+                    UNIT_ASSERT(copies == 1 || copies == 2);
+                    state = copies == 2 ? TState::DC_SOLO_INV2 : TState::DC_SOLO_INV1;
                 } else if (excluded == 1) {
                     state = copies == 2 ? TState::DC_FAILURE_INV2
                         : copies == 1 ? TState::DC_FAILURE_INV1 : TState::DC_FAILURE;

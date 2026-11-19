@@ -82,10 +82,6 @@ class TMirror3dcWriteQuorumChecker {
                 available[realm] = 0; // Startup requires both Included realms.
             }
         }
-        if (State == NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER) {
-            // READ_ONLY still requires two surviving disks in its only Included realm.
-            return CheckCounts(available, EMirror3dcLayout::LAYOUT_2, EParticipants::Write);
-        }
         return CheckCounts(available, WriteLayout, EParticipants::Write);
     }
 
@@ -249,7 +245,7 @@ public:
 
     bool CheckQuorumForLayout(const TSubgroupPartLayout& parts) const {
         // Existing copies in Leaving realms still contribute to the blob layout.
-        if (HasMirror3dcLeavingRealm(State)) {
+        if (State == NKikimrBlobStorage::TGroupState::DC_FAILURE) {
             return CheckCounts(CountParts(parts), WriteLayout, EParticipants::Read);
         }
         return CheckWriteQuorumForLayout(parts);
@@ -336,7 +332,7 @@ public:
     }
 
     // parts contains known copies; failedDisks includes errors and NOT_YET replies.
-    // I and P can supply data or hide E. A recovering realm can only contribute to W.
+    // Included and Leaving can supply data or hide E. Recovering can contribute to W.
     // For E > 0, uncertainty that can hide E takes precedence over known copies.
     TBlobStorageGroupInfo::EBlobState GetBlobState(const TSubgroupPartLayout& parts,
             const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const {

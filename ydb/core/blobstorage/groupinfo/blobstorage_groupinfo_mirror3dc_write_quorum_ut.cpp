@@ -284,7 +284,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         const TCase cases[] = {
             {TState::NORMAL, {{3, 2, 0}, {3, 0, 2}, {2, 3, 0}, {2, 0, 3}, {0, 3, 2}, {0, 2, 3}}},
             {TState::DC_FAILURE, {{3, 2, 0}, {2, 3, 0}, {2, 2, 3}}},
-            {TState::DC_SOLO_DISASTER, {{3, 2, 0}, {3, 0, 2}, {2, 3, 0}, {2, 0, 3}}},
             {TState::DC_FAILURE_INV1, {{3, 2, 0}, {2, 3, 0}}},
             {TState::DC_FAILURE_INV2_PENDING, {{3, 2, 0}, {2, 3, 0}}},
             {TState::DC_FAILURE_INV2, {{2, 2, 0}}},
@@ -593,38 +592,31 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         CheckBlobStateCase(failure, {}, {1, 1, 1}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
         CheckBlobStateCase(failure, {}, {1, 1, 0}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
 
-        TMirror3dcGroupState readOnly{TState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}};
-        CheckCase(readOnly, {3, 3, 3}, false);
-        CheckBlobStateCase(readOnly, {}, {0, 2, 2}, TBlobStorageGroupInfo::EBS_DISINTEGRATED);
-        CheckBlobStateCase(readOnly, {}, {0, 1, 3}, TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY);
-
-        for (TMirror3dcGroupState state : {failure, readOnly}) {
-            CheckCase(state, {1, 1, 1}, false);
-            CheckBlobStateCase(state, {1, 1, 1}, {}, TBlobStorageGroupInfo::EBS_FULL);
-            TBlobStorageGroupInfo info = MakeInfo(state);
-            for (ui32 hash = 0; hash < 3; ++hash) {
-                auto checker = TryCreateChecker(info, hash);
-                UNIT_ASSERT(checker);
-                TBlobStorageGroupInfo::TVDiskIds subgroup;
-                info.PickSubgroup(hash, &subgroup, nullptr);
-                TSubgroupPartLayout parts;
-                for (ui32 disk = 0; disk < 3; ++disk) {
-                    if (IsLeaving(state.FailRealmStates[subgroup[disk].FailRealm])) {
-                        parts.AddItem(disk, disk, info.Type);
-                        break;
-                    }
+        CheckCase(failure, {1, 1, 1}, false);
+        CheckBlobStateCase(failure, {1, 1, 1}, {}, TBlobStorageGroupInfo::EBS_FULL);
+        TBlobStorageGroupInfo info = MakeInfo(failure);
+        for (ui32 hash = 0; hash < 3; ++hash) {
+            auto checker = TryCreateChecker(info, hash);
+            UNIT_ASSERT(checker);
+            TBlobStorageGroupInfo::TVDiskIds subgroup;
+            info.PickSubgroup(hash, &subgroup, nullptr);
+            TSubgroupPartLayout parts;
+            for (ui32 disk = 0; disk < 3; ++disk) {
+                if (IsLeaving(failure.FailRealmStates[subgroup[disk].FailRealm])) {
+                    parts.AddItem(disk, disk, info.Type);
+                    break;
                 }
-                for (ui32 disk = 0; disk < 9; ++disk) {
-                    bool target = disk < 3 && IsIncluded(state.FailRealmStates[subgroup[disk].FailRealm]);
-                    UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, disk), target ? 1u << disk : 0);
-                }
+            }
+            for (ui32 disk = 0; disk < 9; ++disk) {
+                bool target = disk < 3 && IsIncluded(failure.FailRealmStates[subgroup[disk].FailRealm]);
+                UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, disk), target ? 1u << disk : 0);
             }
         }
     }
 
     Y_UNIT_TEST(UnknownDiskDoesNotDuplicateAReportedCopyInEnsuredLayout) {
-        auto info = MakeInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER,
-            {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}});
+        auto info = MakeInfo({NKikimrBlobStorage::TGroupState::DC_FAILURE,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::LEAVING}});
         auto checker = TryCreateChecker(info, 0);
         UNIT_ASSERT(checker);
         TSubgroupPartLayout parts;

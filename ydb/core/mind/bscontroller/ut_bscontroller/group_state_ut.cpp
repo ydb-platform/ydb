@@ -17,12 +17,9 @@ using TFailRealm = NKikimrBlobStorage::TDataCenterState;
 struct TVDiskReplicationStatus {
     bool Replicated = true;
     std::optional<ui32> ReplicatingRealm;
-    std::optional<TVDiskIdShort> ReplicatingDisk;
     std::optional<TVDiskIdShort> ErrorDisk;
     std::optional<bool> DurabilityReplicated = true;
     bool FailSecondRealm = false;
-    std::optional<ui32> UnreplicatedRealm;
-    bool ObsoleteGeneration = false;
     bool OnlyFirstRealm = false;
 };
 
@@ -74,14 +71,12 @@ public:
             TEvBlobStorage::TEvVStatus::TPtr request = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>(disks);
             TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
             UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, Info.Generation);
-            const bool available = (!status.FailSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0)
-                && (!status.UnreplicatedRealm || disk.FailRealm != *status.UnreplicatedRealm);
-            if (!available || status.ObsoleteGeneration || (status.OnlyFirstRealm && disk.FailRealm != 0)) {
+            const bool available = !status.FailSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0;
+            if (!available || (status.OnlyFirstRealm && disk.FailRealm != 0)) {
                 --disk.GroupGeneration;
             }
             const TVDiskIdShort diskId(disk);
-            const bool replicated = status.Replicated && available && status.ReplicatingRealm != disk.FailRealm
-                && status.ReplicatingDisk != diskId;
+            const bool replicated = status.Replicated && available && status.ReplicatingRealm != disk.FailRealm;
             const auto replyStatus = status.ErrorDisk == diskId ? NKikimrProto::ERROR : NKikimrProto::OK;
             std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
                 std::make_unique<TEvBlobStorage::TEvVStatusResult>(replyStatus, disk, true, replicated, false, 1);
@@ -217,69 +212,18 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
         fixture.AssertNoProposal();
         fixture.ReplyRepair(repair, NKikimrProto::OK);
-        // One incomplete Included realm cannot contain the next E=1+1 by itself.
+        // With an unhealthy disk in each Included realm, the next E=1+1 can still be hidden.
         status.ReplicatingRealm = 1;
+        status.ErrorDisk.emplace(0, 0, 0);
+        fixture.ReplyRound(6, status);
+        fixture.AssertNoProposal();
+        fixture.AssertNoRepair();
+        // One incomplete Included realm cannot contain the next E=1+1 by itself.
+        status.ErrorDisk.reset();
         fixture.ReplyRound(6, status);
         auto proposal = fixture.GetProposal();
         UNIT_ASSERT(proposal.State == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         UNIT_ASSERT(proposal.Realms[2] == TFailRealm::EXCLUDED);
-    }
-
-    Y_UNIT_TEST(SoloDisasterRequiresPendingSourcesBeforePromotion) {
-        TGroupStateFixture fixture;
-        fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER,
-            {TFailRealm::INCLUDED, TFailRealm::LEAVING, TFailRealm::LEAVING});
-        TVDiskReplicationStatus status;
-        status.UnreplicatedRealm = 2;
-        status.ReplicatingRealm = 1;
-        fixture.ReplyRound(9, status);
-        fixture.AssertNoRepair();
-        fixture.AssertNoProposal();
-        status.ReplicatingRealm.reset();
-        fixture.ReplyRound(6, status);
-        auto repair = fixture.GetRepair();
-        fixture.AssertNoProposal();
-        fixture.ReplyRepair(repair, NKikimrProto::OK);
-        fixture.ReplyRound(3);
-        auto proposal = fixture.GetProposal();
-        UNIT_ASSERT(proposal.State == NKikimrBlobStorage::TGroupState::DC_SOLO_INV1);
-        UNIT_ASSERT(proposal.Realms[0] == TFailRealm::INCLUDED);
-        UNIT_ASSERT(proposal.Realms[1] == TFailRealm::EXCLUDED);
-        UNIT_ASSERT(proposal.Realms[2] == TFailRealm::EXCLUDED);
-    }
-
-    Y_UNIT_TEST(SoloDisasterRechecksDiskHealthAfterSuccessfulRepair) {
-        TGroupStateFixture fixture;
-        fixture.Update(4, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER,
-            {TFailRealm::LEAVING, TFailRealm::INCLUDED, TFailRealm::LEAVING});
-        fixture.ReplyRound(9);
-        auto repair = fixture.GetRepair();
-        fixture.ReplyRepair(repair, NKikimrProto::OK);
-        fixture.AssertNoProposal();
-
-        // E=1 in the next state: a single lost disk in the surviving realm can hide a copy.
-        TVDiskReplicationStatus status;
-        status.ReplicatingDisk.emplace(1, 2, 0);
-        fixture.ReplyRound(3, status);
-        fixture.AssertNoProposal();
-        fixture.AssertNoRepair();
-
-        // The first disk recovers, but a different disk now reports an error.
-        status.ReplicatingDisk.reset();
-        status.ErrorDisk.emplace(1, 0, 0);
-        fixture.ReplyRound(3, status);
-        fixture.AssertNoProposal();
-        fixture.AssertNoRepair();
-
-        fixture.ReplyRound(3, {.ObsoleteGeneration = true});
-        fixture.AssertNoProposal();
-        fixture.AssertNoRepair();
-
-        fixture.ReplyRound(3);
-        auto proposal = fixture.GetProposal();
-        UNIT_ASSERT(proposal.State == NKikimrBlobStorage::TGroupState::DC_SOLO_INV1);
-        UNIT_ASSERT(proposal.Realms == (TFailRealmStates{TFailRealm::EXCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}));
-        fixture.AssertNoRepair();
     }
 
     Y_UNIT_TEST(SoloRecoveryPendingWaitsForRecoveringVDiskStartup) {

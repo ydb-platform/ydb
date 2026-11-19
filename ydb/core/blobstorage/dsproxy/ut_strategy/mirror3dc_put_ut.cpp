@@ -389,9 +389,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         TTest failed({NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::LEAVING}});
         UNIT_ASSERT(failed.Run(TEvBlobStorage::TEvPut::TacticMinLatency, false, true) == EStrategyOutcome::IN_PROGRESS);
         failed.Expect({3, 3, 0});
-        TTest readOnly({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}});
-        UNIT_ASSERT(readOnly.Run(TEvBlobStorage::TEvPut::TacticMinLatency, false, true) == EStrategyOutcome::ERROR);
-        readOnly.Expect({0, 0, 0});
         // Explicit 3x3 mode must also reject errors that exceed E.
         TTest partial({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
         partial.Set({1, 1, 2}, TBlobState::ESituation::Error);

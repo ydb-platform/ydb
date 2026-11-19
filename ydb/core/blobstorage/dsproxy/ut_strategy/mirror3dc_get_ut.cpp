@@ -173,29 +173,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
     }
 
-    Y_UNIT_TEST(ReadOnlyRestoreRequiresExistingRedundancy) {
-        for (bool full : {false, true}) {
-            TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}});
-            for (ui32 disk = 0; disk < 9; ++disk) {
-                if (disk < 2) {
-                    t.Data(disk);
-                } else if (disk > 2) {
-                    t.Reply(disk, TBlobState::ESituation::Absent);
-                }
-            }
-            UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
-            UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
-            if (full) {
-                t.Data(2);
-            } else {
-                t.Reply(2, TBlobState::ESituation::Absent);
-            }
-            auto outcome = t.RunRestore();
-            UNIT_ASSERT(outcome == (full ? EStrategyOutcome::DONE : EStrategyOutcome::ERROR));
-            UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
-        }
-    }
-
     Y_UNIT_TEST(RestoreRetriesFailedWriteAndAcceleratesPendingWrite) {
         for (bool accelerate : {false, true}) {
             TTest t({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}); // One failed write stays within E = 2.
@@ -334,13 +311,18 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
     }
 
     Y_UNIT_TEST(ReadsRequestedRangeFromIncludedOrLeavingRealm) {
-        for (const TMirror3dcGroupState states : {TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, TMirror3dcGroupState{NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::LEAVING}}}) {
+        using G = NKikimrBlobStorage::TGroupState;
+        const TMirror3dcGroupState cases[] = {
+            {G::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}},
+            {G::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::LEAVING}},
+        };
+        for (const auto& states : cases) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t(states, cookie, 2, 3);
-                if (states.FailRealmStates[1] == TDataCenterState::LEAVING) {
+                if (states.State == G::DC_FAILURE) {
                     // Force fallback to Leaving, which can supply the requested data.
                     for (ui32 disk = 0; disk < 9; ++disk) {
-                        if (t.Realm(disk) == 0) {
+                        if (IsIncluded(states.FailRealmStates[t.Realm(disk)])) {
                             t.Reply(disk, TBlobState::ESituation::Absent);
                         }
                     }

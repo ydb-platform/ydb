@@ -23,7 +23,6 @@ constexpr TStateCase Cases[] = {
     {TGroupState::DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::LEAVING}, ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22},
     {TGroupState::DC_FAILURE_INV1, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_11},
     {TGroupState::DC_FAILURE_INV2, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_22, ELayout::LAYOUT_22},
-    {TGroupState::DC_SOLO_DISASTER, {TFailRealm::INCLUDED, TFailRealm::LEAVING, TFailRealm::LEAVING}, ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22},
     {TGroupState::DC_SOLO_INV1, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_1},
     {TGroupState::DC_SOLO_INV2, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, ELayout::LAYOUT_2, ELayout::LAYOUT_2, ELayout::LAYOUT_2},
     {TGroupState::DC_SOLO_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED}, ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_1},
@@ -47,7 +46,11 @@ static_assert([] {
 
 Y_UNIT_TEST_SUITE(TGroupStateTest) {
     Y_UNIT_TEST(PoliciesAndPhysicalPermutations) {
-        UNIT_ASSERT_VALUES_EQUAL(std::size(Cases), TGroupState::EState_descriptor()->value_count());
+        const auto* states = TGroupState::EState_descriptor();
+        UNIT_ASSERT_VALUES_EQUAL(std::size(Cases), states->value_count());
+        for (int value = 0; value < states->value_count(); ++value) {
+            UNIT_ASSERT_VALUES_EQUAL(states->value(value)->number(), value);
+        }
         for (const auto& test : Cases) {
             const auto policy = GetMirror3dcGroupLayouts(test.State);
             UNIT_ASSERT(policy);
@@ -94,7 +97,6 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
 
     Y_UNIT_TEST(AllowedEdgesHaveValidPolicies) {
         UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(TGroupState::DC_FAILURE, TGroupState::DC_FAILURE_INV1));
-        UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(TGroupState::DC_SOLO_DISASTER, TGroupState::DC_SOLO_INV1));
         for (const auto& edge : Mirror3dcAllowedGroupTransitions) {
             UNIT_ASSERT(GetMirror3dcGroupLayouts(edge.From));
             UNIT_ASSERT(GetMirror3dcGroupLayouts(edge.To));
@@ -119,22 +121,19 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
                     continue;
                 }
                 UNIT_ASSERT(!TakeDownFailRealm(*failure, second));
-                auto legacy = *failure;
-                legacy.State = TGroupState::DC_SOLO_DISASTER;
-                legacy.Realms[second] = TFailRealm::LEAVING;
-                UNIT_ASSERT(!IsAllowedMirror3dcGroupTransition(*failure, legacy));
-                UNIT_ASSERT(ReturnFailRealm(legacy, second) == failure);
+                auto premature = *failure;
+                premature.Realms[second] = TFailRealm::LEAVING;
+                UNIT_ASSERT(!IsValidMirror3dcGroupConfiguration(premature));
 
                 const auto solo = TakeDownFailRealm(*repaired, second);
                 UNIT_ASSERT(solo && solo->State == TGroupState::DC_SOLO_INV1);
                 UNIT_ASSERT(solo->Realms[first] == TFailRealm::EXCLUDED);
                 UNIT_ASSERT(solo->Realms[second] == TFailRealm::EXCLUDED);
                 UNIT_ASSERT(IsAllowedMirror3dcGroupTransition(*repaired, *solo));
-                UNIT_ASSERT(RecoveringComplete(legacy) == solo);
                 auto permuted = solo->Realms;
                 std::sort(permuted.begin(), permuted.end());
                 do {
-                    UNIT_ASSERT_VALUES_EQUAL(IsAllowedMirror3dcGroupTransition(legacy, {solo->State, permuted}),
+                    UNIT_ASSERT_VALUES_EQUAL(IsAllowedMirror3dcGroupTransition(*repaired, {solo->State, permuted}),
                         permuted == solo->Realms);
                 } while (std::next_permutation(permuted.begin(), permuted.end()));
             }
@@ -228,10 +227,8 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
             UNIT_ASSERT(!IsMirror3dcReplicationTarget(state, TFailRealm::INCLUDED));
             UNIT_ASSERT(!IsMirror3dcReplicationTarget(state, TFailRealm::LEAVING));
         }
-        for (const auto state : {TGroupState::DC_FAILURE, TGroupState::DC_SOLO_DISASTER}) {
-            UNIT_ASSERT(IsMirror3dcReplicationTarget(state, TFailRealm::INCLUDED));
-            UNIT_ASSERT(!IsMirror3dcReplicationTarget(state, TFailRealm::LEAVING));
-        }
+        UNIT_ASSERT(IsMirror3dcReplicationTarget(TGroupState::DC_FAILURE, TFailRealm::INCLUDED));
+        UNIT_ASSERT(!IsMirror3dcReplicationTarget(TGroupState::DC_FAILURE, TFailRealm::LEAVING));
         UNIT_ASSERT(GetMirror3dcReadLayout(TGroupState::DC_SOLO_INV2_PENDING) == ELayout::LAYOUT_1);
     }
 }

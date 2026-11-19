@@ -86,21 +86,22 @@ namespace {
             return Info->GetVDiskInSubgroup(subgroupIdx, FullId.Hash());
         }
 
-        void EnterSoloDisaster(ui32 includedRealm) {
+        void EnterLeaving(ui32 leavingRealm) {
             using R = NKikimrBlobStorage::TDataCenterState;
             ui32 groupId = Info->GroupID.GetRawId();
             NKikimrBlobStorage::TConfigRequest config;
             config.SetIgnoreGroupFailModelChecks(true);
             auto *definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
             definition->SetGroupId(groupId);
-            definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
+            definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
             for (ui32 realm = 0; realm < 3; ++realm) {
-                definition->AddFailRealmStates(realm == includedRealm ? R::INCLUDED : R::LEAVING);
+                definition->AddFailRealmStates(realm == leavingRealm ? R::LEAVING : R::INCLUDED);
             }
             auto response = Env.Invoke(config);
             UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
             Env.Sim(TDuration::Seconds(5));
             Info = Env.GetGroupInfo(groupId);
+            UNIT_ASSERT(Info->GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::DC_FAILURE);
         }
 
         void PutLocalPart(ui32 subgroupIdx, ui32 partId) {
@@ -200,44 +201,17 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         UNIT_ASSERT(!fixture.Read(8, 3));
     }
 
-    Y_UNIT_TEST(SoloDisasterPlacementCanReadWorkingDisksBeforeReplDone) {
-        TFixture f;
-        ui32 included = f.VDisk(2).FailRealm;
-        for (ui32 disk : {2u, 5u, 8u}) {
-            TVDiskID id = f.VDisk(disk);
-            TActorId service = f.Info->GetActorId(TVDiskIdShort(id));
-            f.Env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, service, {}, nullptr, 0), service.NodeId());
-            f.Env.WaitForVDiskRepl(service, id);
-        }
-        f.EnterSoloDisaster(included);
-        const TActorId edge = f.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        auto scan = [&](bool includePlacement) {
-            auto request = std::make_unique<TEvBlobStorage::TEvAssimilate>(std::nullopt, std::nullopt, std::nullopt, true, true);
-            request->ExpectedGeneration = f.Info->GroupGeneration;
-            request->IncludePartPlacement = includePlacement;
-            f.Env.Runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, f.Info->GroupID, request.release());
-            });
-            auto response = f.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvAssimilateResult>(edge, false,
-                f.Env.Runtime->GetClock() + TDuration::Minutes(1));
-            UNIT_ASSERT(response);
-            return response->Get()->Status;
-        };
-        UNIT_ASSERT_VALUES_EQUAL(scan(false), NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(scan(true), NKikimrProto::OK);
-    }
-
-    Y_UNIT_TEST(SoloDisasterRepairsConfirmedBlobFromPendingRealms) {
+    Y_UNIT_TEST(RepairQueriesLeavingRealm) {
         TFixture f;
         f.Env.CommenceReplication();
-        // A legal NORMAL write placed both pairs outside the future Included realm.
+        // A legal NORMAL write placed both pairs outside the realm that needs repair.
         for (ui32 disk : {0u, 1u, 3u, 4u}) {
             f.PutLocalPart(disk, disk % 3 + 1);
         }
-        const ui32 included = f.VDisk(2).FailRealm;
+        const ui32 leaving = f.VDisk(0).FailRealm;
         const ui32 groupId = f.Info->GroupID.GetRawId();
         const TActorId edge = f.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        ui32 pendingReads = 0;
+        ui32 leavingReads = 0;
         f.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NGroupSyncer::TEvRunMirror3dcRepair::EventType && event->Sender != edge) {
                 return false; // run one scan explicitly below
@@ -246,12 +220,12 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
                 const auto *sender = f.Env.Runtime->GetActor(event->Sender);
                 if (sender && sender->GetActivityType() == NKikimrServices::TActivity::BS_BLOB_RECOVERY_ACTOR) {
                     const auto& record = event->Get<TEvBlobStorage::TEvVGet>()->Record;
-                    pendingReads += record.GetVDiskID().GetRing() != included;
+                    leavingReads += record.GetVDiskID().GetRing() == leaving;
                 }
             }
             return true;
         };
-        f.EnterSoloDisaster(included);
+        f.EnterLeaving(leaving);
         UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(6, 1).GetStatus(), NKikimrProto::ERROR);
         UNIT_ASSERT(!f.Read(6, 1));
         UNIT_ASSERT(!f.Read(2, 3));
@@ -263,7 +237,7 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
             edge, false, f.Env.Runtime->GetClock() + TDuration::Minutes(1));
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
-        UNIT_ASSERT(pendingReads);
+        UNIT_ASSERT(leavingReads);
         f.CheckWritten(2, 3);
         UNIT_ASSERT(!f.Read(5, 3));
         UNIT_ASSERT(!f.Read(8, 3));

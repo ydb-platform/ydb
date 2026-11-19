@@ -6,6 +6,7 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#include <util/digest/numeric.h>
 #include <util/generic/yexception.h>
 #include <util/string/escape.h>
 
@@ -67,10 +68,9 @@ TKqpQueryId::TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf dat
     }
 
     const size_t headerSize = FieldCount * sizeof(ui32);
-    // Only a guess to avoid reallocations, not part of the format: 64 bytes for
-    // the settings and the parameter count, 24 bytes per parameter name and type.
+    // A rough estimate to avoid reallocations, not part of the format.
     const size_t sizeEstimate = headerSize + cluster.size() + database.size() + databaseId.size() + userSid.size()
-        + text.size() + encodedGUCSettings.size() + 64 + (QueryParameterTypes_ ? QueryParameterTypes_->size() * 24 : 0);
+        + encodedGUCSettings.size() + 64 + (QueryParameterTypes_ ? QueryParameterTypes_->size() * 24 : 0);
     TString key;
     key.reserve(sizeEstimate);
     key.resize(headerSize);
@@ -89,8 +89,6 @@ TKqpQueryId::TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf dat
     endField(FieldDatabaseId);
     key.append(userSid);
     endField(FieldUserSid);
-    key.append(text);
-    endField(FieldText);
     Settings_.AppendCacheKey(key);
     endField(FieldSettings);
     key.append(encodedGUCSettings);
@@ -105,7 +103,7 @@ TKqpQueryId::TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf dat
     }
 
     Key_ = std::move(key);
-    Hash_ = THash<TString>()(Key_);
+    Hash_ = CombineHashes(THash<TString>()(Key_), THash<TString>()(Text_));
 }
 
 TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
@@ -153,9 +151,8 @@ bool TKqpQueryId::IsSql() const {
 }
 
 bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
-    // Hash_ covers the whole Key_: keys with the same long text and different
-    // parameter types are told apart without walking the text.
-    return Hash_ == other.Hash_ && Key_ == other.Key_;
+    // Different keys almost always differ in the hash, so a long text is not walked.
+    return Hash_ == other.Hash_ && Key_ == other.Key_ && Text_ == other.Text_;
 }
 
 TString TKqpQueryId::SerializeToString() const {
@@ -164,7 +161,7 @@ TString TKqpQueryId::SerializeToString() const {
         << "Database: " << Database() << ", "
         << "DatabaseId: " << DatabaseId() << ", "
         << "UserSid: " << UserSid() << ", "
-        << "Text: " << EscapeC(Text_) << ", "
+        << "Text: " << EscapeC(Text()) << ", "
         << "Settings: " << Settings_.SerializeToString() << ", ";
     if (QueryParameterTypes_) {
         result << "QueryParameterTypes: [";

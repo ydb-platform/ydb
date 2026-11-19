@@ -12,10 +12,10 @@
 
 namespace NKikimr::NKqp {
 
-// Compile cache key. Everything that takes part in equality is encoded into one
-// buffer when the key is built, so that the comparison done under the cache lock
-// is a hash check and a single memcmp. The buffer starts with the end offsets of
-// its fields, then the raw field bytes follow.
+// Compile cache key. Everything that takes part in equality except the text is
+// encoded into one buffer when the key is built, so that the comparison done under
+// the cache lock is a hash check and two memcmp calls. The buffer starts with the
+// end offsets of its fields, then the raw field bytes follow.
 struct TKqpQueryId {
 public:
     using TParameterTypes = std::map<TString, Ydb::Type>;
@@ -28,8 +28,6 @@ public:
         const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<const TParameterTypes> queryParameterTypes,
         const TGUCSettings& gUCSettings);
 
-    // Encoding GUC settings is the expensive part of building a key. A session
-    // encodes them once and builds its keys from the bytes.
     static TString EncodeGUCSettings(const TGUCSettings& gUCSettings);
 
     TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf databaseId, TStringBuf userSid,
@@ -52,8 +50,6 @@ public:
         return Field(FieldUserSid);
     }
 
-    // Shares the buffer of the request text: the hot path takes the text of a
-    // cached query as TString on every request.
     const TString& Text() const {
         return Text_;
     }
@@ -94,7 +90,6 @@ private:
         FieldDatabase,
         FieldDatabaseId,
         FieldUserSid,
-        FieldText,
         FieldSettings,
         FieldGUCSettings,
         FieldCount,
@@ -104,15 +99,14 @@ private:
 
 private:
     TString Key_;
-    size_t Hash_ = 0;
+    // Kept apart: shares the request's buffer.
     TString Text_;
+    size_t Hash_ = 0;
     TKqpQuerySettings Settings_;
     std::shared_ptr<const TParameterTypes> QueryParameterTypes_;
 };
-// GUC settings encoded for TKqpQueryId. Encoding costs about a microsecond, so
-// the bytes are kept while the settings stay equal to the ones they were encoded
-// from; comparing the settings is much cheaper. Who changed them and when does
-// not matter.
+// Keeps the encoded bytes while the settings stay equal to the ones they were
+// encoded from: comparing the settings is much cheaper than encoding them.
 class TKqpEncodedGUCSettings {
 public:
     TStringBuf Get(const TGUCSettings& gUCSettings);

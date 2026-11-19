@@ -659,7 +659,6 @@ struct TEvPQProxy {
         TString Topic;
         ui32 PartitionId;
         ui64 AssignId;
-        ui64 EndOffset;
     };
 };
 

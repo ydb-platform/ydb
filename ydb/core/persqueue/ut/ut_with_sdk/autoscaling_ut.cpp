@@ -2139,10 +2139,16 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
         readSession->Run();
 
-        // Give the ended event time to arrive.
-        Sleep(TDuration::Seconds(2));
-
-        auto events = readSession->GetEndedPartitionEvents();
+        // Wait (bounded) for the ended event to arrive instead of a fixed sleep.
+        auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        std::vector<EvEndMsg> events;
+        while (TInstant::Now() < deadline) {
+            events = readSession->GetEndedPartitionEvents();
+            if (!events.empty()) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
         UNIT_ASSERT_VALUES_EQUAL_C(events.size(), 1u, "Exactly one partition session must end");
         const auto& ev = events.front();
         UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.AdjacentPartitionIds, "No adjacent partitions after split");

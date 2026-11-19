@@ -2563,19 +2563,12 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
     auto& topic = it->second;
 
-    // Match the partition by the sender actor: it uniquely identifies the
-    // partition instance within this session, so the event cannot be
-    // attributed to a partition of another topic that happens to have the
-    // same partition id.
-    TPartitionActorInfo* partitionInfo = nullptr;
-    for (auto& [_, p] : Partitions) {
-        if (p.Actor == ev->Sender) {
-            partitionInfo = &p;
-            break;
-        }
-    }
-
-    if (!partitionInfo) {
+    // Look up by AssignId, mirroring Handle(TEvReadWindowExhausted): Partitions
+    // is a flat map shared by all topics of the session, and the AssignId is
+    // session-unique, so the event cannot be attributed to a partition of
+    // another topic that happens to have the same partition id.
+    auto partitionIt = Partitions.find(msg->AssignId);
+    if (partitionIt == Partitions.end()) {
         // Stale/late event: the partition may have already been released or the
         // session is shutting down. Ignore it instead of tearing down the whole
         // session, matching the other stale-event paths in this actor. Do not
@@ -2583,28 +2576,29 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
         // session no longer holds.
         return;
     }
+    auto& partitionInfo = partitionIt->second;
 
     // Cross-check the identity claimed by the event: a mismatch means a
     // stale/inconsistent event - drop it before notifying the balancer,
     // mirroring the check in Handle(TEvReadWindowExhausted).
-    if (partitionInfo->Topic->GetInternalName() != msg->Topic
-            || partitionInfo->Partition.Partition != msg->PartitionId) {
+    if (partitionInfo.Topic->GetInternalName() != msg->Topic
+            || partitionInfo.Partition.Partition != msg->PartitionId) {
         return;
     }
 
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, partitionInfo->Partition.Partition, AutoPartitioningSupport, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, partitionInfo.Partition.Partition, AutoPartitioningSupport, msg->FirstMessage));
 
-    partitionInfo->EndOffset = msg->EndOffset;
-    partitionInfo->ReadingFinished = true;
+    partitionInfo.EndOffset = msg->EndOffset;
+    partitionInfo.ReadingFinished = true;
 
-    NotifyChildren(*partitionInfo, ctx);
+    NotifyChildren(partitionInfo, ctx);
 
     if constexpr (Protocol == EProtocol::Topic) {
         if (AutoPartitioningSupport) {
             TServerMessage result;
             result.set_status(Ydb::StatusIds::SUCCESS);
             auto* r = result.mutable_end_partition_session();
-            r->set_partition_session_id(partitionInfo->Partition.AssignId);
+            r->set_partition_session_id(partitionInfo.Partition.AssignId);
 
             for (auto p : msg->AdjacentPartitionIds) {
                 r->add_adjacent_partition_ids(p);
@@ -2618,22 +2612,22 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
                 }
             }
 
-            if (partitionInfo->WindowExhaustedSent) {
+            if (partitionInfo.WindowExhaustedSent) {
                 // The client already received end_partition_session for this
                 // partition session when its max_offset window was exhausted.
                 // A second one (even with child partition ids after a split)
                 // would be a duplicate for the same partition session id.
                 LOG_I("Suppressing duplicate end partition stream event (max_offset exhaustion already reported)",
-                    {"partition", partitionInfo->Partition});
+                    {"partition", partitionInfo.Partition});
             } else {
                 LOG_I("Sending to client end partition stream event");
-                SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+                SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
             }
 
             // A real finish supersedes a deferred exhaustion EOF: drop the
             // latch so a later flush in SendWindowExhaustedIfNeeded cannot
             // emit a duplicate empty end_partition_session.
-            partitionInfo->WindowExhausted = false;
+            partitionInfo.WindowExhausted = false;
         }
     }
 

@@ -973,6 +973,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             });
         }
 
+        // Cancel the control session stream: unblocks a pending Read on it
+        // (used to join the background reader thread on any exit path).
+        void CancelControlSession() {
+            if (ControlContext) {
+                ControlContext->TryCancel();
+            }
+        }
+
         void Connect(TPersQueueV1TestServer& server) {
             grpc::ChannelArguments args;
             args.SetMaxReceiveMessageSize(64_MB);
@@ -1715,6 +1723,28 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             }
         });
 
+        // RAII: cancel the control session and join the reader thread on any
+        // exit path, including a failed UNIT_ASSERT (otherwise the blocked
+        // Read leaves a joinable thread behind and the framework aborts on
+        // the test teardown).
+        struct TControlReaderJoinGuard {
+            TDirectReadTestSetup& Setup;
+            std::thread& Thread;
+            bool Joined = false;
+
+            ~TControlReaderJoinGuard() {
+                Join();
+            }
+
+            void Join() {
+                if (!Joined) {
+                    Joined = true;
+                    Setup.CancelControlSession();
+                    Thread.join();
+                }
+            }
+        } controlReaderGuard{setup, controlReader};
+
         // While the direct read is not acked, the EOF must be deferred: no
         // control stream messages at all are expected in this window (nothing
         // else is in flight, so any message seen here is the bug).
@@ -1748,7 +1778,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(controlMsgs[0].end_partition_session().partition_session_id(), assignId);
         }
 
-        controlReader.join();
+        controlReaderGuard.Join();
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
@@ -9950,7 +9980,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     // The read window may already be exhausted when the partition session starts
-    // (readOffset == max_offset). The server must still send end_partition_session
+    // (readOffset == max_offset + 1 - the inclusive window is already fully read).
+    // The server must still send end_partition_session
     // instead of silently starting a read that can never deliver data.
     Y_UNIT_TEST(MaxOffsetExhaustedOnFirstReadSendsEndPartitionSession) {
         TServerSettings settings = PQSettings(0);

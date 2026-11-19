@@ -1784,7 +1784,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, Partition.AssignId, FirstRead,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds), EndOffset));
-        } else if (FirstRead && !WindowExhaustedSent) {
+        } else if (FirstRead) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         }
 

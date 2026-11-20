@@ -123,6 +123,10 @@ public:
     class TTxRemoveBridgePile;
     class TTxBridgeRollback;
     class TTxUpdatePileOverrides;
+    class TTxUpdateBackupPileConfigs;
+    void UpdateBackupPileConfigs();
+    bool BackupPileConfigCheckScheduled = false;
+    bool BackupPileConfigRecheck = false;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -734,6 +738,8 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
+        TMaybe<ui64> BackupDesiredRevision;
+        TMaybe<ui64> BackupAppliedRevision;
         // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
         std::optional<EMirror3dcGroupState> Mirror3dcState;
@@ -825,6 +831,8 @@ public:
                     Table::BlobDepotId,
                     Table::ErrorReason,
                     Table::NeedAlter,
+                    Table::BackupDesiredRevision,
+                    Table::BackupAppliedRevision,
                     Table::BridgeGroupInfo
                 > adapter(
                     &TGroupInfo::Generation,
@@ -850,6 +858,8 @@ public:
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
                     &TGroupInfo::NeedAlter,
+                    &TGroupInfo::BackupDesiredRevision,
+                    &TGroupInfo::BackupAppliedRevision,
                     &TGroupInfo::BridgeGroupInfo
                 );
             callback(&adapter);
@@ -1005,6 +1015,14 @@ public:
         // is this group a pile of some other bridge proxy group, and hence not visible on its own
         bool IsBridgePileOnly() const {
             return BridgePileId && !IsInlinePile();
+        }
+
+        bool IsBackupPileMember() const {
+            return IsBridgePileOnly() && VirtualGroupState.Defined();
+        }
+
+        bool IsBackupPileMemberReady() const {
+            return VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING && !NeedAlter.GetOrElse(false);
         }
 
         bool IsDecommitted() const {
@@ -1431,6 +1449,19 @@ public:
         bool RandomizeGroupMapping;
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
+        TMaybe<TString> BackupPileName;
+
+        const TBridgeInfo::TPile* GetBackupPile(const TBridgeInfo *bridge) const {
+            if (BackupPileName && bridge) {
+                for (const auto& pile : bridge->Piles) {
+                    if (!pile.IsFreeSlot && pile.Type == NKikimrBridge::BACKUP && pile.Name == *BackupPileName) {
+                        return &pile;
+                    }
+                }
+            }
+            return nullptr;
+        }
+
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
@@ -1553,6 +1584,7 @@ public:
                     Table::RandomizeGroupMapping,
                     Table::DefaultGroupSizeInUnits,
                     Table::BridgeMode,
+                    Table::BackupPileName,
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
@@ -1584,6 +1616,7 @@ public:
                     &TStoragePoolInfo::RandomizeGroupMapping,
                     &TStoragePoolInfo::DefaultGroupSizeInUnits,
                     &TStoragePoolInfo::BridgeMode,
+                    &TStoragePoolInfo::BackupPileName,
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
@@ -2871,6 +2904,7 @@ public:
         }
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
+        UpdateBackupPileConfigs();
         UpdatePileOverrides();
         ApplyStorageConfig();
         ReconcileDataCenterStates();

@@ -25,6 +25,7 @@ namespace NKikimr {
             TGroupGeometryInfo Geometry;
             const TBoxStoragePoolId StoragePoolId;
             TStoragePoolInfo StoragePool;
+            std::set<TBridgePileId> ValidatedBackupPiles;
             TBridgePileId CurrentPileId;
             std::map<TBridgePileId, std::unique_ptr<TGroupMapper>> Mappers;
             TGroupMapper *Mapper = nullptr;
@@ -97,7 +98,8 @@ namespace NKikimr {
                 };
                 if (StoragePool.BridgeMode && State.BridgeInfo) {
                     State.BridgeInfo->ForEachPile([&](TBridgePileId pileId) {
-                        if (State.BridgeInfo->GetPile(pileId)->State != NKikimrBridge::TClusterState::INACTIVE
+                        if (State.BridgeInfo->GetPile(pileId)->Type != NKikimrBridge::BACKUP
+                                && State.BridgeInfo->GetPile(pileId)->State != NKikimrBridge::TClusterState::INACTIVE
                                 && !State.Self.IsBridgePileBeingRemoved(pileId)
                                 && !State.Self.IsBridgePileAwaitingParts(pileId)) {
                             check(pileId);
@@ -145,7 +147,7 @@ namespace NKikimr {
                     return {};
                 }
                 const auto *pile = bridgeInfo->GetPile(pileId);
-                if (pile->State == NKikimrBridge::TClusterState::INACTIVE ||
+                if (pile->Type == NKikimrBridge::BACKUP || pile->State == NKikimrBridge::TClusterState::INACTIVE ||
                         State.Self.IsBridgePileBeingRemoved(pileId) ||
                         State.Self.IsBridgePileAwaitingParts(pileId)) {
                     return {}; // the group gets no part in this pile
@@ -296,6 +298,22 @@ namespace NKikimr {
 
             TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId,
                     std::optional<ui32> groupSizeInUnitsOverride = std::nullopt) {
+                if (bridgeProxyGroupId) {
+                    const auto *pile = State.BridgeInfo->GetPile(bridgePileId);
+                    if (pile->Type == NKikimrBridge::BACKUP) {
+                        if (ValidatedBackupPiles.insert(bridgePileId).second) {
+                            State.ValidateBackupPileInfrastructure(*pile);
+                        }
+                        NKikimrBlobStorage::TAllocateVirtualGroup cmd;
+                        cmd.SetName(TStringBuilder() << "bridge/" << bridgeProxyGroupId->GetRawId()
+                            << '/' << bridgePileId.GetPileIndex());
+                        cmd.SetHiveId(AppData()->DomainsInfo->GetHive());
+                        cmd.MutableChannelProfiles()->CopyFrom(pile->Backup.GetChannelProfiles());
+                        cmd.MutableS3BackendSettings()->CopyFrom(pile->Backup.GetS3());
+                        return State.CreateVirtualGroup(cmd, StoragePoolId, bridgePileId, bridgeProxyGroupId,
+                            groupSizeInUnitsOverride.value_or(StoragePool.DefaultGroupSizeInUnits));
+                    }
+                }
                 SelectPile(bridgePileId);
                 ////////////////////////////////////////////////////////////////////////////////////////////
                 // ALLOCATE GROUP ID FOR THE NEW GROUP
@@ -472,6 +490,10 @@ namespace NKikimr {
                                                && it != State.ExplicitReconfigureMap.end(),
                         };
                     } else if (IgnoreGroupSanityChecks) {
+                        if (const auto* owner = StoragePool.GetBackupPile(State.BridgeInfo.get());
+                                owner && owner != State.BridgeInfo->GetPileForNode(targetPDiskId.NodeId)) {
+                            throw TExFitGroupError() << "cannot force a backup infrastructure VDisk outside its pile";
+                        }
                         disk.Reassignment = TGroupMapper::TForceVDiskOnPDisk{targetPDiskId};
                     } else {
                         disk.Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{targetPDiskId};
@@ -775,11 +797,14 @@ namespace NKikimr {
             bool UsesCrossPilePlacement() const {
                 // Activation requires completed BSC conversion. Until then legacy ordinary pools
                 // must remain confined to the implicit pile.
-                return !StoragePool.BridgeMode && !DDisk && State.Self.StorageConfig
+                return !StoragePool.BridgeMode && !StoragePool.BackupPileName && !DDisk && State.Self.StorageConfig
                     && State.Self.StorageConfig->GetClusterStateDetails().GetNonUniformStorageEnabled();
             }
 
             TGroupMapper::TPileScope GetPlacementScope(TBridgePileId groupPileId) const {
+                if (const auto* pile = StoragePool.GetBackupPile(State.BridgeInfo.get())) {
+                    return pile->BridgePileId;
+                }
                 if (UsesCrossPilePlacement() && !groupPileId) {
                     return TGroupMapper::TPileScope::AcrossPiles();
                 }
@@ -1024,6 +1049,14 @@ namespace NKikimr {
             // scan through all storage pools and fit the number of groups to desired one
             auto processSingleStoragePool = [&](TBoxStoragePoolId storagePoolId, const TStoragePoolInfo& storagePool,
                     bool createNewGroups, const auto& enumerateGroups) {
+                if (storagePool.BackupPileName) {
+                    const auto *pile = storagePool.GetBackupPile(state.BridgeInfo.get());
+                    if (!pile || !state.StorageConfig || NBridge::GetPileState(state.StorageConfig->GetClusterState(),
+                            pile->BridgePileId) == NKikimrBridge::TClusterState::INACTIVE ||
+                            state.Self.IsBridgePileBeingRemoved(pile->BridgePileId)) {
+                        return; // keep desired capacity in the pool definition until the pile is provisioned
+                    }
+                }
                 TVector<TGroupId> groupIds;
                 enumerateGroups([&](TGroupId groupId) {
                     groupIds.push_back(groupId);
@@ -1038,7 +1071,7 @@ namespace NKikimr {
                     TStringBuilder identifier;
                     identifier << "Kind# " << storagePool.Kind.size() << ":" << storagePool.Kind
                         << " Erasure# " << storagePool.ErasureSpecies
-                        << " BridgeMode# " << storagePool.BridgeMode
+                        << " BackupPile# " << storagePool.BackupPileName << " BridgeMode# " << storagePool.BridgeMode
                         << " Geometry# " << storagePool.RealmLevelBegin << "," << storagePool.RealmLevelEnd
                         << "," << storagePool.DomainLevelBegin << "," << storagePool.DomainLevelEnd
                         << "," << storagePool.NumFailRealms << "," << storagePool.NumFailDomainsPerFailRealm

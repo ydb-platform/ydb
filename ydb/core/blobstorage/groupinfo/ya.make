@@ -11,6 +11,7 @@ PEERDIR(
 )
 
 SRCS(
+    group_blob_cipher.cpp
     blobstorage_groupinfo_blobmap.cpp
     blobstorage_groupinfo_blobmap.h
     blobstorage_groupinfo.cpp

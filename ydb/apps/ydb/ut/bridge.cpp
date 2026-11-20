@@ -337,6 +337,35 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(service.ClusterCalls.load(), 2);
     }
 
+    Y_UNIT_TEST_F(BackupPileAndVirtualMemberDiagnostics, TBridgeCliFixture) {
+        auto& service = Service<TBridgeService>();
+        service.ClusterResult.mutable_pile_states(1)->set_type(Ydb::Bridge::PileState::BACKUP);
+        auto* pile = PrepareSummary().add_piles();
+        pile->set_pile_name("secondary");
+        pile->set_pending_backup_configs(1);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--detailed", "--format", "json"}), &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["piles"][1]["type"].GetString(), "BACKUP");
+        UNIT_ASSERT_VALUES_EQUAL(json["synchronization_summary"]["piles"][0]["pending_backup_configs"].GetUInteger(), 1);
+
+        auto* group = PrepareGroups().add_groups();
+        group->set_group_id(100);
+        group->set_pile_name("secondary");
+        group->set_virtual_group_id(200);
+        group->set_blob_depot_id(300);
+        group->set_virtual_group_state("WORKING");
+        group->set_desired_config_revision(4);
+        group->set_applied_config_revision(3);
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"groups", "--database-path", "/Root/app", "--format", "json"}), &json));
+        const auto& row = json["groups"][0];
+        UNIT_ASSERT_VALUES_EQUAL(row["virtual_group_id"].GetUInteger(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(row["blob_depot_id"].GetUInteger(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(row["desired_config_revision"].GetUInteger(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(row["applied_config_revision"].GetUInteger(), 3);
+        UNIT_ASSERT(!row.Has("physical_group_id"));
+    }
+
     Y_UNIT_TEST_F(ListHelpShowsViewsAndOptions, TBridgeCliFixture) {
         for (const auto* option : {"--help", "-hh"}) {
             const auto help = RunList({option});

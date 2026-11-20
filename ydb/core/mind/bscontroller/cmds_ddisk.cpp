@@ -11,6 +11,11 @@ namespace NKikimr::NBsController {
         ui64 storagePoolId = 0;
         ui64 maxPoolId = 0;
         const auto& pools = StoragePools.Get();
+        for (const auto& [id, pool] : pools) {
+            if (pool.BackupPileName && pool.Name == cmd.GetName()) {
+                throw TExError() << "storage pool name belongs to a backup infrastructure pool";
+            }
+        }
         for (auto it = pools.lower_bound({boxId, 0}); it != pools.end() && std::get<0>(it->first) == boxId; ++it) {
             const ui64 id = std::get<1>(it->first);
             const TStoragePoolInfo &info = it->second;

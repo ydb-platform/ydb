@@ -30,6 +30,10 @@ namespace NKikimr::NBlobDepot {
 
         TBlobDepot* const Self;
         THashMap<ui64, TBlock> Blocks;
+        // Physical assimilate exposes storage-info versions as blocks keyed by the complemented tablet ID.
+        std::map<ui64, ui32> BridgeBlocks;
+        friend class TBlobDepot;
+        void IndexBridgeBlock(ui64 tabletId, const TBlock& block);
 
         // tablets whose data still has to be dropped after a complete deletion has been seen; the
         // set is drained by TTxDeleteTabletData once the data is loaded

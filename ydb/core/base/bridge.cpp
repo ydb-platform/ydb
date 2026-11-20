@@ -3,6 +3,7 @@
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <google/protobuf/util/message_differencer.h>
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 
@@ -42,10 +43,24 @@ namespace NKikimr {
             return bridgePileId ? std::make_optional(bridgePileId.GetPileIndex()) : std::nullopt;
         }
 
+        static void CopyPileSettings(NKikimrBridge::TPileRegistry::TPile *slot, const NKikimrConfig::TBridgeConfig::TPile& pile) {
+            slot->SetName(pile.GetName());
+            slot->SetType(pile.GetType());
+            if (pile.HasBackup()) {
+                if (!slot->HasBackup() || !google::protobuf::util::MessageDifferencer::Equals(slot->GetBackup(), pile.GetBackup())) {
+                    slot->SetBackupConfigRevision(slot->GetBackupConfigRevision() + 1);
+                }
+                slot->MutableBackup()->CopyFrom(pile.GetBackup());
+            } else {
+                slot->ClearBackup();
+                slot->ClearBackupConfigRevision();
+            }
+        }
+
         NKikimrBridge::TPileRegistry MakeImpliedPileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig) {
             NKikimrBridge::TPileRegistry registry;
             for (const auto& pile : bridgeConfig.GetPiles()) {
-                registry.AddPiles()->SetName(pile.GetName());
+                CopyPileSettings(registry.AddPiles(), pile);
             }
             if (const auto index = GetImplicitPileIndex(bridgeConfig.PilesSize())) {
                 TBridgePileId::FromPileIndex(*index).CopyToProto(&registry,
@@ -68,9 +83,9 @@ namespace NKikimr {
 
         NKikimrBridge::TPileRegistry AssignPileIds(const NKikimrBridge::TPileRegistry& registry,
                 const NKikimrConfig::TBridgeConfig& bridgeConfig) {
-            THashSet<TString> configured;
+            THashMap<TString, const NKikimrConfig::TBridgeConfig::TPile*> configured;
             for (const auto& pile : bridgeConfig.GetPiles()) {
-                configured.insert(pile.GetName());
+                configured.emplace(pile.GetName(), &pile);
             }
 
             // settings of the registry other than the list of piles (like PileListChanged) are kept as they are
@@ -80,8 +95,9 @@ namespace NKikimr {
             THashSet<TString> placed;
             for (const auto& pile : registry.GetPiles()) {
                 auto *slot = res.AddPiles();
-                if (pile.HasName() && configured.contains(pile.GetName())) {
-                    slot->CopyFrom(pile); // the pile keeps its slot along with its settings
+                if (auto it = configured.find(pile.GetName()); pile.HasName() && it != configured.end()) {
+                    slot->CopyFrom(pile); // retain AddedGeneration
+                    CopyPileSettings(slot, *it->second);
                     placed.insert(pile.GetName());
                 }
             }
@@ -95,7 +111,7 @@ namespace NKikimr {
                     ++freeIndex;
                 }
                 auto *slot = freeIndex < res.PilesSize() ? res.MutablePiles(freeIndex) : res.AddPiles();
-                slot->SetName(pile.GetName());
+                CopyPileSettings(slot, pile);
             }
 
             while (res.PilesSize() && !res.GetPiles(res.PilesSize() - 1).HasName()) {

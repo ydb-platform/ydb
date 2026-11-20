@@ -277,6 +277,9 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
+                OPTIONAL(NeedAlter)
+                OPTIONAL(BackupDesiredRevision)
+                OPTIONAL(BackupAppliedRevision)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());

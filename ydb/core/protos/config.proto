@@ -45,6 +45,7 @@ import "ydb/library/actors/protos/interconnect.proto";
 import "yql/essentials/core/file_storage/proto/file_storage.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";
 import "ydb/core/protos/s3_settings.proto";
+import "ydb/core/protos/bridge.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrConfig;
@@ -3582,6 +3583,8 @@ message TShutdownConfig {
 message TBridgeConfig {
     message TPile {
         optional string Name = 1; // name (to be matched with node's BridgePileName)
+        optional NKikimrBridge.EPileType Type = 2 [default = REGULAR];
+        optional NKikimrBridge.TBackupPileConfig Backup = 3;
     }
     // Preserve the legacy order until the cluster has a persisted pile registry. Once the registry is present,
     // pile identities are resolved by name and this local list may be reordered.
@@ -3846,15 +3849,15 @@ message TAppConfig {
     optional TUdfStoreConfig UdfStoreConfig = 95;
 
     repeated TNamedConfig NamedConfigs = 100;
-    optional string ClusterYamlConfig = 101;
+    optional string ClusterYamlConfig = 101 [(Ydb.sensitive) = true, debug_redact = true];
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
 
     optional string ConfigDirPath = 104;
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
-    optional string StartupConfigYaml = 107;
-    optional string StartupStorageYaml = 108;
+    optional string StartupConfigYaml = 107 [(Ydb.sensitive) = true, debug_redact = true];
+    optional string StartupStorageYaml = 108 [(Ydb.sensitive) = true, debug_redact = true];
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
     optional TGeneralCacheConfig ColumnDataCache = 111;

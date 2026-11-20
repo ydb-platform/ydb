@@ -61,10 +61,19 @@ public:
                 auto *pb = out.AddMatchingGroups();
                 for (const TGroupInfo *group : groups) {
                     if (!group->Down && (group->SeenOperational || !record.GetOnlySeenOperational())) {
+                        const auto& pool = Self->StoragePools.at(group->StoragePoolId);
+                        const auto *backupPile = pool.GetBackupPile(Self->BridgeInfo.get());
+                        if (pool.BackupPileName && !backupPile) {
+                            continue;
+                        }
                         auto *reportedGroup = pb->AddGroups();
+                        if (backupPile) {
+                            backupPile->BridgePileId.CopyToProto(reportedGroup,
+                                &NKikimrBlobStorage::TGroupMetrics::TGroupParameters::SetBackupPileId);
+                        }
                         reportedGroup->SetErasureSpecies(group->ErasureSpecies);
                         reportedGroup->SetGroupID(group->ID.GetRawId());
-                        reportedGroup->SetStoragePoolName(Self->StoragePools.at(group->StoragePoolId).Name);
+                        reportedGroup->SetStoragePoolName(pool.Name);
                         reportedGroup->SetPhysicalGroup(group->IsPhysicalGroup());
                         reportedGroup->SetDecommitted(group->IsDecommitted());
                         if (!group->FillInGroupParameters(reportedGroup, Self)) {

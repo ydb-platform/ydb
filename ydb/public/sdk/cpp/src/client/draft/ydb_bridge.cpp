@@ -26,6 +26,7 @@ std::vector<TPileStateUpdate> StateFromProto(const Ydb::Bridge::GetClusterStateR
         state.push_back({
             .PileName = s.pile_name(),
             .State = static_cast<EPileState>(s.state()),
+            .Type = static_cast<EPileType>(s.type()),
         });
     }
     return state;
@@ -97,6 +98,7 @@ TPileSynchronization PileSynchronizationFromProto(const Ydb::Bridge::PileSynchro
     return {
         .PileName = proto.has_pile_name() ? std::optional<std::string>(proto.pile_name()) : std::nullopt,
         .Databases = DatabaseSyncCountsFromProto(proto.databases()),
+        .PendingBackupConfigs = proto.pending_backup_configs(),
     };
 }
 
@@ -128,6 +130,12 @@ TGroupSynchronization GroupSynchronizationFromProto(const Ydb::Bridge::GroupSync
         .SyncStatus = SynchronizationStatusFromProto(proto.sync_status()),
         .SyncPhase = proto.sync_phase(),
         .LastSyncError = proto.has_last_sync_error() ? std::optional<TSynchronizationError>(SynchronizationErrorFromProto(proto.last_sync_error())) : std::nullopt,
+        .VirtualGroupId = proto.has_virtual_group_id() ? std::optional<uint32_t>(proto.virtual_group_id()) : std::nullopt,
+        .BlobDepotId = proto.has_blob_depot_id() ? std::optional<uint64_t>(proto.blob_depot_id()) : std::nullopt,
+        .VirtualGroupState = proto.has_virtual_group_state() ? std::optional<std::string>(proto.virtual_group_state()) : std::nullopt,
+        .DesiredConfigRevision = proto.has_desired_config_revision() ? std::optional<uint64_t>(proto.desired_config_revision()) : std::nullopt,
+        .AppliedConfigRevision = proto.has_applied_config_revision() ? std::optional<uint64_t>(proto.applied_config_revision()) : std::nullopt,
+        .ProvisioningError = proto.has_provisioning_error() ? std::optional<std::string>(proto.provisioning_error()) : std::nullopt,
     };
 }
 

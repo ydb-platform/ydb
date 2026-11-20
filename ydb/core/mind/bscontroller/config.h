@@ -345,6 +345,11 @@ namespace NKikimr {
                 return res;
             }
 
+            void ValidateBackupPileInfrastructure(const TBridgeInfo::TPile& pile) const;
+
+            TGroupId CreateVirtualGroup(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd,
+                TBoxStoragePoolId poolId, TBridgePileId pileId, std::optional<TGroupId> proxyId, ui32 groupSize);
+
             // delete the group along with its VDisks
             void DeleteExistingGroupWithVSlots(const TGroupInfo& group) {
                 const TGroupId groupId = group.ID;

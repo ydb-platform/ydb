@@ -150,9 +150,57 @@ void TBlobStorageController::UpdateGroupLayoutStatus() {
     }
 }
 
+// A bridged write consumes capacity in every required member. Fold reported depot metrics the
+// same way physical members' metrics are folded, regardless of the order of the piles.
+static void MergeBackupGroupResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters& result,
+        const NKikimrBlobStorage::TGroupMetrics::TGroupParameters& depot) {
+    auto merge = [](auto& to, const auto& from) {
+        if (from.HasSpace()) {
+            to.SetSpace(to.HasSpace() ? Min(to.GetSpace(), from.GetSpace()) : from.GetSpace());
+        }
+        if (from.HasIOPS()) {
+            to.SetIOPS(to.HasIOPS() ? Min(to.GetIOPS(), from.GetIOPS()) : from.GetIOPS());
+        }
+        if (from.HasReadThroughput()) {
+            to.SetReadThroughput(to.HasReadThroughput() ? Min(to.GetReadThroughput(), from.GetReadThroughput())
+                : from.GetReadThroughput());
+        }
+        if (from.HasWriteThroughput()) {
+            to.SetWriteThroughput(to.HasWriteThroughput() ? Min(to.GetWriteThroughput(), from.GetWriteThroughput())
+                : from.GetWriteThroughput());
+        }
+        if (from.HasOccupancy()) {
+            to.SetOccupancy(Max(to.GetOccupancy(), from.GetOccupancy()));
+        }
+    };
+    if (depot.HasAssuredResources()) {
+        merge(*result.MutableAssuredResources(), depot.GetAssuredResources());
+    }
+    if (depot.HasCurrentResources()) {
+        merge(*result.MutableCurrentResources(), depot.GetCurrentResources());
+    }
+    if (depot.HasAvailableSize()) {
+        result.SetAvailableSize(result.HasAvailableSize() ? Min(result.GetAvailableSize(), depot.GetAvailableSize())
+            : depot.GetAvailableSize());
+    }
+    if (depot.HasAllocatedSize()) {
+        result.SetAllocatedSize(Max(result.GetAllocatedSize(), depot.GetAllocatedSize()));
+    }
+    if (depot.HasSpaceColor()) {
+        result.SetSpaceColor(result.HasSpaceColor() ? Max(result.GetSpaceColor(), depot.GetSpaceColor()) : depot.GetSpaceColor());
+    }
+}
+
 bool TBlobStorageController::TGroupInfo::FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
         TBlobStorageController *self) const {
-    if (GroupMetrics) {
+    if (IsBackupPileMember()) {
+        if (!GroupMetrics) {
+            return false;
+        }
+        const auto& metrics = GroupMetrics->GetGroupParameters();
+        MergeBackupGroupResources(*params, metrics);
+        return metrics.HasSpaceColor();
+    } else if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
         return true;
     } else if (BridgeGroupInfo) {
@@ -456,6 +504,14 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (changed) {
             for (const auto& [groupId, group] : GroupMap) {
                 SysViewChangedGroups.insert(groupId);
+                if (Loaded && group->IsBackupPileMember() && group->NeedAlter.GetOrElse(false) &&
+                        !group->VirtualGroupSetupMachineId) {
+                    const auto* pile = BridgeInfo->FindPile(group->BridgePileId);
+                    if (pile && NBridge::PileStateTraits(pile->State).AllowsConnection &&
+                            pile->State != NKikimrBridge::TClusterState::SUSPENDED) {
+                        StartVirtualGroupSetupMachine(group.Get());
+                    }
+                }
             }
             for (const auto& [groupId, iter] : GroupToWaitingSelectGroupsItem) {
                 groupsToCheck.insert(groupId);
@@ -515,6 +571,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         CheckUnsyncedBridgePiles();
     }
 
+    UpdateBackupPileConfigs();
     CheckBridgeConversion();
     CheckBridgePileOperation();
     CheckBridgeGroupModes(); // groups may wait for their piles to get synchronized

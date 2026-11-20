@@ -171,6 +171,9 @@ private:
         request.set_dry_run(settings.DryRun_);
         request.set_allow_unknown_fields(settings.AllowUnknownFields_);
         request.set_bypass_checks(settings.BypassChecks_);
+        for (const auto& pile : settings.ConfirmS3RouteChangeForPiles_) {
+            request.add_confirm_s3_route_change_for_piles(pile);
+        }
     }
 };
 

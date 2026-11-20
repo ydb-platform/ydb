@@ -459,6 +459,21 @@ void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool dis
         const TGroupId groupId = *it;
         TGroupInfo *group = FindGroup(groupId);
         if (group || discard) {
+            if (group && group->IsBackupPileMember() && nodeId) {
+                // A syncer assignment supplies the child and its parent without a GetGroup request.
+                // The warden can keep using both proxies after the assignment finishes.
+                if (auto* node = FindNode(nodeId); node && node->ConnectedServerId) {
+                    auto subscribe = [&](TGroupId id) {
+                        if (node->GroupsRequested.insert(id).second) {
+                            GroupToNode.emplace(id, nodeId);
+                        }
+                    };
+                    subscribe(groupId);
+                    if (group->BridgeProxyGroupId) {
+                        subscribe(*group->BridgeProxyGroupId);
+                    }
+                }
+            }
             NKikimrBlobStorage::TNodeWardenServiceSet *serviceSetProto = result->Record.MutableServiceSet();
             NKikimrBlobStorage::TGroupInfo *groupProto = serviceSetProto->AddGroups();
             if (!group) {
@@ -475,10 +490,13 @@ void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool dis
                 }
 
                 SerializeGroupInfo(groupProto, *group, info, scopeId);
-            } else if (nodeId) {
-                // group is not listable, so we have to postpone the request from NW
-                group->WaitingNodes.insert(nodeId);
-                GetNode(nodeId).WaitingForGroups.insert(group->ID);
+            } else {
+                serviceSetProto->MutableGroups()->RemoveLast();
+                if (nodeId) {
+                    // The group is published when its BlobDepot becomes ready.
+                    group->WaitingNodes.insert(nodeId);
+                    GetNode(nodeId).WaitingForGroups.insert(group->ID);
+                }
             }
 
             // this group is processed, remove it from the set

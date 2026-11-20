@@ -195,6 +195,15 @@ namespace NKikimr::NBsController {
                 }
                 const TGroupId partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                 const TGroupInfo *part = partId == group.ID ? &group : finder(partId);
+                if (part && part->IsBackupPileMember()) {
+                    if (part->GroupMetrics && part->GroupMetrics->GetGroupParameters().HasSpaceColor()) {
+                        const auto color = part->GroupMetrics->GetGroupParameters().GetSpaceColor();
+                        res.Color = res.Color ? Max(*res.Color, color) : color;
+                    } else {
+                        res.Complete = false;
+                    }
+                    return;
+                }
                 if (!part || part->VDisksInGroup.empty()) {
                     res.Complete = false;
                     return;
@@ -212,7 +221,7 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::UpdateDatabaseSpacePool(const TBoxStoragePoolId& poolId, const TStoragePoolInfo& pool) {
         std::optional<TDatabaseSpaceTracker::TScope> scope;
-        if (pool.SchemeshardId && pool.PathItemId) {
+        if (!pool.BackupPileName && pool.SchemeshardId && pool.PathItemId) {
             scope.emplace(*pool.SchemeshardId, *pool.PathItemId);
         }
         DatabaseSpace.SetPool(poolId, scope);

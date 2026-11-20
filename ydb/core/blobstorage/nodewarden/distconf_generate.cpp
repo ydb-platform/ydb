@@ -18,6 +18,11 @@ namespace NKikimr::NStorage {
             return "self-management is not enabled";
         }
         const auto& smConfig = config->GetSelfManagementConfig();
+        if (Cfg->BridgeConfig && std::ranges::none_of(Cfg->BridgeConfig->GetPiles(), [](const auto& pile) {
+                return pile.GetType() == NKikimrBridge::REGULAR;
+            })) {
+            return "a new bridged cluster requires a REGULAR pile for its initial primary";
+        }
 
         const bool noStaticGroup = !config->HasBlobStorageConfig() || // either no BlobStorageConfig section at all
             !config->GetBlobStorageConfig().HasServiceSet() || // or no ServiceSet in there
@@ -65,6 +70,10 @@ namespace NKikimr::NStorage {
 
                     const auto& piles = bridge->GetPiles();
                     for (int i = 0; i < piles.size(); ++i) {
+                        if (piles.Get(i).GetType() == NKikimrBridge::BACKUP) {
+                            group->MutableBridgeGroupState()->AddPile()->SetAbsent(true);
+                            continue; // provision-pile allocates its static group part
+                        }
                         prefix << "pile# " << i << ' ';
                         allocateGroup(TBridgePileId::FromPileIndex(i), bridgeProxyGroupId);
                         auto *pile = group->MutableBridgeGroupState()->AddPile();

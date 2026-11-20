@@ -587,6 +587,16 @@ namespace NKikimr::NStorage {
             }
         }
 
+        for (const auto& pile : config.GetClusterStateDetails().GetPileRegistry().GetPiles()) {
+            if (const auto error = ValidateBackupPileConfig(pile.GetType(), pile.HasBackup() ? &pile.GetBackup() : nullptr)) {
+                return *error;
+            }
+            if (pile.GetType() == NKikimrBridge::BACKUP &&
+                    (!pile.HasName() || !pile.GetBackupConfigRevision() || GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelBackupPile)) {
+                return "backup storage requires a named pile, a profile revision and the backup pile feature level";
+            }
+        }
+
         if (config.HasClusterState() && config.GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
             if (GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelPileOverrides) {
                 return "storage pool pile overrides require the corresponding bridge feature level";

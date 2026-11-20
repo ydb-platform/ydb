@@ -71,6 +71,7 @@ namespace NKikimr::NGRpcService {
             to.mutable_piles()->Reserve(from.piles_size());
             for (auto& pile : *from.mutable_piles()) {
                 auto* row = to.add_piles();
+                row->set_pending_backup_configs(pile.pending_backup_configs());
                 if (pile.has_pile_name()) {
                     row->set_pile_name(std::move(*pile.mutable_pile_name()));
                 }
@@ -133,6 +134,24 @@ namespace NKikimr::NGRpcService {
                 row->set_group_id(group.group_id());
                 if (group.has_physical_group_id()) {
                     row->set_physical_group_id(group.physical_group_id());
+                }
+                if (group.has_virtual_group_id()) {
+                    row->set_virtual_group_id(group.virtual_group_id());
+                }
+                if (group.has_blob_depot_id()) {
+                    row->set_blob_depot_id(group.blob_depot_id());
+                }
+                if (group.has_virtual_group_state()) {
+                    row->set_virtual_group_state(std::move(*group.mutable_virtual_group_state()));
+                }
+                if (group.has_desired_config_revision()) {
+                    row->set_desired_config_revision(group.desired_config_revision());
+                }
+                if (group.has_applied_config_revision()) {
+                    row->set_applied_config_revision(group.applied_config_revision());
+                }
+                if (group.has_provisioning_error()) {
+                    row->set_provisioning_error(std::move(*group.mutable_provisioning_error()));
                 }
                 if (group.has_storage_pool()) {
                     MovePool(*group.mutable_storage_pool(), *row->mutable_storage_pool());

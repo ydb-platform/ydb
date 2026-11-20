@@ -6,6 +6,20 @@
 
 using namespace NKikimr::NYaml;
 
+Y_UNIT_TEST_SUITE(ConfigTextForDiagnosticsTest) {
+    Y_UNIT_TEST(S3CredentialsAndAliases) {
+        const TString plain = "bridge_config: {piles: [{name: main}]}";
+        UNIT_ASSERT_VALUES_EQUAL(ConfigTextForDiagnostics(plain), plain);
+        for (const TString& config : TVector<TString>{
+                "defaults: &value private\nbridge_config: {piles: [{backup: {s3: {settings: {secret_key: *value}}}}]}",
+                "---\npiles: []\n---\nsettings: {\"AccessKey\": private}",
+                R"({"bridgeConfig": {"piles": [{"backup":{"s3":{"settings":{"secret\u005fkey":"private"}}}}]}})",
+                "settings: {secret_key: private"}) {
+            UNIT_ASSERT(!ConfigTextForDiagnostics(config).Contains("private"));
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(DefaultOpaqueConfigParser) {
 
     Y_UNIT_TEST(ParsesFieldsCorrectly) {

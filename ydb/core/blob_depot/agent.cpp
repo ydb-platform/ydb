@@ -116,6 +116,9 @@ namespace NKikimr::NBlobDepot {
         OnAgentConnect(agent);
 
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, Executor()->Generation());
+        if (Config.HasBridgeGroupGeneration()) {
+            record->SetBridgeGroupGeneration(Config.GetBridgeGroupGeneration());
+        }
         record->SetSpaceColor(agent.LastPushedSpaceColor);
         record->SetApproximateFreeSpaceShare(agent.LastPushedApproximateFreeSpaceShare);
         if (IsHotWriteAdmissionEnabled()) {

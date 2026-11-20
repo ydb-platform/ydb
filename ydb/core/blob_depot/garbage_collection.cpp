@@ -41,6 +41,10 @@ namespace NKikimr::NBlobDepot {
 
             Y_ABORT_UNLESS(Self->Data->IsLoaded());
 
+            if (!Self->CheckBridgeGeneration(Request->Get()->Record.GetBridgeGroupGeneration())) {
+                Finish("bridge group generation changed", NKikimrProto::RACE);
+                return true;
+            }
             if (!ValidateRequest()) {
                 return true;
             }
@@ -192,8 +196,11 @@ namespace NKikimr::NBlobDepot {
 
         void Finish(std::optional<TString> error, std::optional<NKikimrProto::EReplyStatus> status = {}) {
             Y_ABORT_UNLESS(!Finished);
-            auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
+            auto [response, result] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
                 NKikimrProto::OK), std::move(error));
+            if (status == NKikimrProto::RACE) {
+                result->SetBridgeGroupGeneration(Self->Config.GetBridgeGroupGeneration());
+            }
             YDB_LOG_DEBUG("TTxCollectGarbage::Finish",
                 {"marker", "BDT82"},
                 {"id", Self->GetLogId()},

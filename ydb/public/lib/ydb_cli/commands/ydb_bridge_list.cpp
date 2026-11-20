@@ -272,10 +272,21 @@ namespace NYdb::NConsoleClient {
                     item.InsertValue("pile_name", *pile.PileName);
                 }
                 item.InsertValue("databases", DatabaseCountsToJson(pile.Databases));
+                if (pile.PendingBackupConfigs) {
+                    item.InsertValue("pending_backup_configs", pile.PendingBackupConfigs);
+                }
                 piles.AppendValue(item);
             }
             json.InsertValue("piles", piles);
             return json;
+        }
+
+        TString PileTypeToString(NBridge::EPileType type) {
+            switch (type) {
+                case NBridge::EPileType::REGULAR: return "REGULAR";
+                case NBridge::EPileType::BACKUP: return "BACKUP";
+            }
+            return "UNKNOWN";
         }
 
         NJson::TJsonValue ClusterStateToJson(const NBridge::TGetClusterStateResult& result, const std::vector<NBridge::TPileStateUpdate>& state) {
@@ -286,6 +297,7 @@ namespace NYdb::NConsoleClient {
                 NJson::TJsonValue item(NJson::JSON_MAP);
                 item.InsertValue("pile_name", pile.PileName);
                 item.InsertValue("state", PileStateToString(pile.State));
+                item.InsertValue("type", PileTypeToString(pile.Type));
                 piles.AppendValue(item);
             }
             json.InsertValue("piles", piles);
@@ -328,6 +340,24 @@ namespace NYdb::NConsoleClient {
                 item.InsertValue("group_id", group.GroupId);
                 if (group.PhysicalGroupId) {
                     item.InsertValue("physical_group_id", *group.PhysicalGroupId);
+                }
+                if (group.VirtualGroupId) {
+                    item.InsertValue("virtual_group_id", *group.VirtualGroupId);
+                }
+                if (group.BlobDepotId) {
+                    item.InsertValue("blob_depot_id", *group.BlobDepotId);
+                }
+                if (group.VirtualGroupState) {
+                    item.InsertValue("virtual_group_state", *group.VirtualGroupState);
+                }
+                if (group.DesiredConfigRevision) {
+                    item.InsertValue("desired_config_revision", *group.DesiredConfigRevision);
+                }
+                if (group.AppliedConfigRevision) {
+                    item.InsertValue("applied_config_revision", *group.AppliedConfigRevision);
+                }
+                if (group.ProvisioningError) {
+                    item.InsertValue("provisioning_error", *group.ProvisioningError);
                 }
                 if (group.StoragePool) {
                     item.InsertValue("storage_pool", StoragePoolToJson(*group.StoragePool));
@@ -448,6 +478,7 @@ namespace NYdb::NConsoleClient {
         }
 
         void PrintGroupRows(const std::vector<NBridge::TGroupSynchronization>& groups, bool detailed, bool csv) {
+            const bool showVirtualMembers = !csv && std::ranges::any_of(groups, [](const auto& group) { return group.VirtualGroupId.has_value(); });
             TVector<TString> headers = csv
                                            ? TVector<TString>{"group_id", "storage_pool", "pile_name", "pile_name_present", "sync_status"}
                                            : TVector<TString>{"Group", "Pool", "Pile", "Sync"};
@@ -456,6 +487,10 @@ namespace NYdb::NConsoleClient {
                                                     ? TVector<TString>{"physical_group_id", "sync_phase", "last_sync_error", "last_sync_error_occurred_at"}
                                                     : TVector<TString>{"Physical group", "Phase", "Last sync error", "Last error time"};
                 headers.insert(headers.end(), extras.begin(), extras.end());
+                if (showVirtualMembers) {
+                    headers.insert(headers.end(), {"Virtual group", "BlobDepot tablet", "Setup state", "Desired revision",
+                        "Applied revision", "Provisioning error"});
+                }
             }
             TVector<TVector<TString>> rows;
             for (const auto& item : groups) {
@@ -471,6 +506,14 @@ namespace NYdb::NConsoleClient {
                                                                                                         : TString("—"),
                                            csv ? TString(item.SyncPhase) : PrettySyncPhase(item.SyncPhase), SyncErrorMessage(item.LastSyncError),
                                            SyncErrorTime(item.LastSyncError, csv)});
+                    if (showVirtualMembers) {
+                        const auto number = [](const auto& value) -> TString {
+                            return value ? ToString(*value) : TString("—");
+                        };
+                        row.insert(row.end(), {number(item.VirtualGroupId), number(item.BlobDepotId),
+                            OptionalName(item.VirtualGroupState, false), number(item.DesiredConfigRevision),
+                            number(item.AppliedConfigRevision), OptionalName(item.ProvisioningError, false)});
+                    }
                 }
                 rows.push_back(std::move(row));
             }
@@ -498,12 +541,18 @@ namespace NYdb::NConsoleClient {
                 return;
             }
             if (summary || csv) {
-                const TVector<TString> headers = csv
+                const bool showBackup = !csv && std::ranges::any_of(state, [](const auto& pile) {
+                    return pile.Type == NBridge::EPileType::BACKUP;
+                });
+                TVector<TString> headers = csv
                     ? PileCsvHeaders(detailed)
                     : TVector<TString>{"Pile", "State", "Synced/total databases", "Syncing databases", "Pending databases",
                                        "Not required databases", "Unknown databases"};
+                if (showBackup) {
+                    headers.insert(headers.end(), {"Type", "Pending backup configs"});
+                }
                 TVector<TVector<TString>> rows;
-                auto addRow = [&](const std::optional<std::string>& name, const TString& pileState,
+                auto addRow = [&](const std::optional<std::string>& name, const TString& pileState, const TString& pileType,
                                   const NBridge::TPileSynchronization* counts) {
                     TVector<TString> row{OptionalName(name, csv)};
                     if (csv) {
@@ -526,15 +575,19 @@ namespace NYdb::NConsoleClient {
                                                counts ? ToString(counts->Databases.NotRequired) : TString("—"),
                                                counts ? ToString(counts->Databases.Unknown) : TString("—")});
                     }
+                    if (showBackup) {
+                        row.push_back(pileType);
+                        row.push_back(counts ? ToString(counts->PendingBackupConfigs) : TString("—"));
+                    }
                     rows.push_back(std::move(row));
                 };
                 for (const auto& pile : state) {
-                    addRow(pile.PileName, PileStateToString(pile.State), FindPile(summary, pile.PileName));
+                    addRow(pile.PileName, PileStateToString(pile.State), PileTypeToString(pile.Type), FindPile(summary, pile.PileName));
                 }
                 if (summary && !pileFilter) {
                     for (const auto& pile : summary->GetPiles()) {
                         if (!pile.PileName) {
-                            addRow(std::nullopt, {}, &pile);
+                            addRow(std::nullopt, {}, {}, &pile);
                         }
                     }
                 }
@@ -546,7 +599,11 @@ namespace NYdb::NConsoleClient {
                 PrintRows(headers, rows, csv, note);
             } else {
                 for (const auto& pile : state) {
-                    Cout << "Pile " << pile.PileName << ": " << PileStateToString(pile.State) << Endl;
+                    Cout << "Pile " << pile.PileName << ": " << PileStateToString(pile.State);
+                    if (pile.Type != NBridge::EPileType::REGULAR) {
+                        Cout << " (" << PileTypeToString(pile.Type) << ")";
+                    }
+                    Cout << Endl;
                 }
             }
             if (csv) {

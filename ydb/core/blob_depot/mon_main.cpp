@@ -456,6 +456,10 @@ namespace NKikimr::NBlobDepot {
                                     mode = "Unknown";
                                 }
                                 BD_MON_TABLE_ROW("Mode", mode);
+                                if (Self->Config.HasBridgeGroupGeneration()) {
+                                    BD_MON_TABLE_ROW("Bridge group generation", Self->Config.GetBridgeGroupGeneration());
+                                    BD_MON_TABLE_ROW("Backup configuration revision", Self->Config.GetBackupConfigRevision());
+                                }
 
                                 auto id_formatter = [] (auto x) { return x; };
 
@@ -475,6 +479,15 @@ namespace NKikimr::NBlobDepot {
                                     BD_MON_TABLE_ROW("TargetObjectBytes", FormatByteSize(asyncMode.GetTargetObjectBytes()));
                                     BD_MON_TABLE_ROW("RepackBelowLivePercent", asyncMode.GetRepackBelowLivePercent());
                                     BD_MON_TABLE_ROW("UploadPutsInFlight", asyncMode.GetUploadPutsInFlight());
+                                    if (Self->Data->IsLoaded()) {
+                                        const ui64 hot = Self->Data->GetTotalStoredDataSize();
+                                        BD_MON_TABLE_ROW("Hot data", FormatByteSize(hot));
+                                        BD_MON_TABLE_ROW("Hot data above target", FormatByteSize(hot - Min(hot, asyncMode.GetHotTargetBytes())));
+                                        if (Self->IsHotWriteAdmissionEnabled()) {
+                                            BD_MON_TABLE_ROW("Write headroom", FormatByteSize(Self->GetHotWriteHeadroom()));
+                                            BD_MON_TABLE_ROW("Available write credit", FormatByteSize(Self->GetAvailableHotWriteBytes()));
+                                        }
+                                    }
                                 }
 
                                 BD_MON_TABLE_ROW("Endpoint", s3Settings.GetEndpoint());
@@ -496,18 +509,8 @@ namespace NKikimr::NBlobDepot {
 
                                 BD_MON_TABLE_ROW("Bucket", s3Settings.GetBucket());
 
-                                                                // Helper function to mask sensitive data
-                                auto maskSensitive = [](const TString& value) -> TString {
-                                    if (value.empty()) {
-                                        return value;
-                                    }
-                                    if (value.size() <= 12) {
-                                        return TString(4, '*');
-                                    }
-                                    return value.substr(0, 2) + "****" + value.substr(value.size() - 2);
-                                };
-                                BD_MON_TABLE_ROW("AccessKey", maskSensitive(s3Settings.GetAccessKey()));
-                                BD_MON_TABLE_ROW("SecretKey", maskSensitive(s3Settings.GetSecretKey()));
+                                BD_MON_TABLE_ROW("AccessKey", s3Settings.GetAccessKey().empty() ? "" : "[redacted]");
+                                BD_MON_TABLE_ROW("SecretKey", s3Settings.GetSecretKey().empty() ? "" : "[redacted]");
 
                                 BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, Region, id_formatter);
                                 BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, StorageClass, Ydb::Export::ExportToS3Settings::StorageClass_Name);

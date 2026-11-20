@@ -1,11 +1,13 @@
 #include "distconf_invoke.h"
 #include "distconf_quorum.h"
 
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/util/address_classifier.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -317,6 +319,16 @@ namespace NKikimr::NStorage {
             throw TExError() << "Use ApplyDataCenterStates to change DC availability";
         }
         CheckStaticGroupStateUpdate(proposed);
+        const auto& currentPiles = current.GetClusterStateDetails().GetPileRegistry().GetPiles();
+        const auto& nextPiles = proposed.GetClusterStateDetails().GetPileRegistry().GetPiles();
+        for (int i = 0; i < Max(currentPiles.size(), nextPiles.size()); ++i) {
+            const bool hasBackup = i < currentPiles.size() && currentPiles.Get(i).GetType() == NKikimrBridge::BACKUP;
+            const bool willHaveBackup = i < nextPiles.size() && nextPiles.Get(i).GetType() == NKikimrBridge::BACKUP;
+            if (hasBackup != willHaveBackup || (hasBackup &&
+                    !google::protobuf::util::MessageDifferencer::Equals(currentPiles.Get(i), nextPiles.Get(i)))) {
+                throw TExError() << "Use cluster config replace to change backup pile configuration";
+            }
+        }
         StartProposition(request->MutableConfig());
     }
 
@@ -559,8 +571,8 @@ namespace NKikimr::NStorage {
                     AUDIT_PART("status", "SUCCESS")
                     AUDIT_PART("reason", TString(), false)
                     AUDIT_PART("operation", "REPLACE CONFIG")
-                    AUDIT_PART("old_config", oldConfig)
-                    AUDIT_PART("new_config", newConfig)
+                    AUDIT_PART("old_config", NYaml::ConfigTextForDiagnostics(oldConfig))
+                    AUDIT_PART("new_config", NYaml::ConfigTextForDiagnostics(newConfig))
                 );
             }
         }

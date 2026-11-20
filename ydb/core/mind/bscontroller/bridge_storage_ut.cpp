@@ -186,6 +186,27 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
         UNIT_ASSERT(!result.groups(2).has_storage_pool());
     }
 
+    Y_UNIT_TEST(BackupMemberReportsVirtualGroupAndRolloutProgress) {
+        TReportBudget budget;
+        NKikimrBridge::TGroupSynchronizationResult result;
+        NKikimrBridge::TGroupSynchronization member;
+        member.set_virtual_group_id(703u);
+        member.set_blob_depot_id(891u);
+        member.set_virtual_group_state("WORKING");
+        member.set_desired_config_revision(3);
+        member.set_applied_config_revision(2);
+        UNIT_ASSERT(AppendGroup({501, std::nullopt, nullptr, TStringBuf("backup"),
+            {.State = NKikimrBridge::SYNCING}, &member}, budget, result));
+        const auto& row = result.groups(0);
+        UNIT_ASSERT_VALUES_EQUAL(row.group_id(), 501);
+        UNIT_ASSERT(!row.has_physical_group_id());
+        UNIT_ASSERT_VALUES_EQUAL(row.virtual_group_id(), 703u);
+        UNIT_ASSERT_VALUES_EQUAL(row.blob_depot_id(), 891u);
+        UNIT_ASSERT_VALUES_EQUAL(row.virtual_group_state(), "WORKING");
+        UNIT_ASSERT_VALUES_EQUAL(row.desired_config_revision(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(row.applied_config_revision(), 2);
+    }
+
     Y_UNIT_TEST(LargeUpstreamErrorIsRejectedBeforeAppending) {
         const TString error(TEvBlobStorage::TEvControllerQueryBridgeStorage::MaxResultBytes, 'x');
         NKikimrBridge::TStoragePool pool;

@@ -1,6 +1,20 @@
 syntax = "proto3";
 
+import "ydb/core/protos/blob_depot_config.proto";
+
 package NKikimrBridge;
+
+enum EPileType {
+    REGULAR = 0;
+    BACKUP = 1;
+}
+
+message TBackupPileConfig {
+    repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 1;
+    oneof Backend {
+        NKikimrBlobDepot.TS3BackendSettings S3 = 2;
+    }
+}
 
 message TClusterState {
     // each realm state in relation to primary one
@@ -33,6 +47,10 @@ message TPileRegistry {
         // cluster state generation the pile was last added to the cluster in (by add-pile); unset for the piles the
         // cluster got bridged with; nodes having older cluster state belong to the pile removed since then
         optional uint64 AddedGeneration = 2;
+        EPileType Type = 3;
+        TBackupPileConfig Backup = 4;
+        // Starts at one for a newly configured backup pile and increases when a replacement changes its profile.
+        uint64 BackupConfigRevision = 5;
     }
     repeated TPile Piles = 1; // pile with BridgePileId = i + 1 is Piles[i], in sync with TClusterState.PerPileState
     uint32 ImplicitPileId = 2; // pile of nodes without pile name and of groups without pile id; 0 if there is none

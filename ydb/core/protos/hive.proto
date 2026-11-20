@@ -120,6 +120,8 @@ message TEvCreateTablet {
     repeated string AllowedDataCenters = 25;
     optional EBalancerPolicy BalancerPolicy = 26;
     optional bool IsBackup = 27 [default = false];
+    optional uint32 BackupPileId = 28; // BSC-owned BlobDepot pinned to this bridge pile
+    optional uint64 BackupPileAddedGeneration = 29;
 
     optional uint32 ChannelsProfile = 5 [deprecated = true]; // DEPRECATED
     optional uint32 Flags = 6 [deprecated = true]; // DEPRECATED

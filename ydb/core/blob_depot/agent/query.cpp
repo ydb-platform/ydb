@@ -1,5 +1,6 @@
 #include "agent_impl.h"
 #include "blocks.h"
+#include <ydb/core/blobstorage/groupinfo/group_blob_cipher.h>
 
 #include <ydb/core/blob_depot/config.h>
 
@@ -8,10 +9,22 @@
 namespace NKikimr::NBlobDepot {
 
     namespace {
+        bool RequiresEncryptionKey(IEventHandle& ev) {
+            switch (ev.GetTypeRewrite()) {
+                case TEvBlobStorage::EvPut: return !ev.Get<TEvBlobStorage::TEvPut>()->AlreadyEncrypted;
+                case TEvBlobStorage::EvGet: return !ev.Get<TEvBlobStorage::TEvGet>()->IsIndexOnly;
+                case TEvBlobStorage::EvRange: return !ev.Get<TEvBlobStorage::TEvRange>()->IsIndexOnly;
+                case TEvBlobStorage::EvDiscover: return ev.Get<TEvBlobStorage::TEvDiscover>()->ReadBody;
+                case TEvBlobStorage::EvPatch: return true;
+                default: return false;
+            }
+        }
+
         TInstant GetActiveQueryDeadline(IEventHandle& ev, bool includePut) {
             switch (ev.GetTypeRewrite()) {
                 case TEvBlobStorage::EvPut: return includePut ? ev.Get<TEvBlobStorage::TEvPut>()->Deadline : TInstant::Max();
                 case TEvBlobStorage::EvGet: return ev.Get<TEvBlobStorage::TEvGet>()->Deadline;
+                case TEvBlobStorage::EvPatch: return ev.Get<TEvBlobStorage::TEvPatch>()->Deadline;
                 case TEvBlobStorage::EvRange: return ev.Get<TEvBlobStorage::TEvRange>()->Deadline;
                 case TEvBlobStorage::EvDiscover: return ev.Get<TEvBlobStorage::TEvDiscover>()->Deadline;
                 case TEvBlobStorage::EvCheckIntegrity: return ev.Get<TEvBlobStorage::TEvCheckIntegrity>()->Deadline;
@@ -64,14 +77,16 @@ namespace NKikimr::NBlobDepot {
                 break;
         }
 
-        // the request with forced generation is addressed to the physical group at that very generation (subrequests of
-        // the bridge proxy, its syncers, interpile puts, phantom checks); only the DS proxy of that group may serve it, so
-        // it goes there, through the bridge proxy if the group is an inline pile
+        // A decommission overlay forwards fenced requests to its physical group.
+        // A managed virtual child has no inner proxy and checks its fence at the tablet.
         if (const auto *common = dynamic_cast<const TEvBlobStorage::TEvRequestCommon*>(ev->GetBase());
-                common && common->ForceGroupGeneration) {
+                ProxyId && common && common->ForceGroupGeneration) {
             doForward = true;
         }
 
+        if (type == TEvBlobStorage::EvAssimilate && ProxyId) {
+            doForward = true;
+        }
         if (doForward) {
             if (ProxyId) {
                 TActivationContext::Forward(ev, ProxyId);
@@ -92,15 +107,15 @@ namespace NKikimr::NBlobDepot {
 
         if (Mode != EMode::Connected || !PendingEventQ.empty()) {
             size_t size;
-            TInstant deadline;
-            switch (type) {
-#define XX(TYPE) \
-                case TEvBlobStorage::TYPE: { \
-                    const auto* request = p->Get<TEvBlobStorage::T##TYPE>(); \
-                    size = request->CalculateSize(); \
-                    deadline = request->Deadline; \
-                    break; \
+            TInstant deadline = TInstant::Max();
+            const auto inspect = [&](const auto& request) {
+                size = request.CalculateSize();
+                if constexpr (requires { request.Deadline; }) {
+                    deadline = request.Deadline;
                 }
+            };
+            switch (type) {
+#define XX(TYPE) case TEvBlobStorage::TYPE: inspect(*p->Get<TEvBlobStorage::T##TYPE>()); break;
                 ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
                 default:
@@ -125,19 +140,6 @@ namespace NKikimr::NBlobDepot {
             SchedulePendingEventQueueWatchdog();
         } else {
             ProcessStorageEvent(std::move(p), received);
-        }
-    }
-
-    void TBlobDepotAgent::HandleAssimilate(TAutoPtr<IEventHandle> ev) {
-        if (ProxyId) {
-            TActivationContext::Forward(ev, ProxyId);
-        } else {
-            // there is no physical group behind the agent (the virtual group has none, or its decommission is done), so
-            // the request has nothing to enumerate and would be lost if forwarded
-            auto& msg = *ev->Get<TEvBlobStorage::TEvAssimilate>();
-            auto response = msg.MakeErrorResponse(NKikimrProto::ERROR, "no physical group to assimilate",
-                TGroupId::FromValue(VirtualGroupId));
-            Send(ev->Sender, response.release(), 0, ev->Cookie);
         }
     }
 
@@ -208,7 +210,88 @@ namespace NKikimr::NBlobDepot {
         if (!TabletId) {
             query->EndWithError(NKikimrProto::ERROR, "group is in error state");
         } else if (!query->CheckDeadline(TActivationContext::Monotonic())) {
-            query->Initiate();
+            query->Start();
+        }
+    }
+
+    std::optional<ui32> TBlobDepotAgent::TQuery::GetBridgeGroupGeneration() const {
+        if (Agent.ManagedBridgeChild) {
+            return dynamic_cast<TEvBlobStorage::TEvRequestCommon&>(*Event->GetBase()).ForceGroupGeneration;
+        }
+        return std::nullopt;
+    }
+
+    TRope TBlobDepotAgent::TQuery::CryptPayload(const TRope& buffer, TLogoBlobID id, ui32 offset) const {
+        if (!EncryptionInfo || !buffer.size()) {
+            return buffer;
+        }
+        auto result = TRcBuf::Uninitialized(buffer.size());
+        char *dst = result.UnsafeGetDataMut();
+        for (auto it = buffer.Begin(); it.Valid(); it.AdvanceToNextContiguousBlock()) {
+            const auto size = it.ContiguousSize();
+            CryptGroupBlob(dst, it.ContiguousData(), offset, size, id, *EncryptionInfo);
+            offset += size;
+            dst += size;
+        }
+        return TRope(std::move(result));
+    }
+
+    bool TBlobDepotAgent::TQuery::CheckLocalBridgeGeneration() {
+        const auto generation = GetBridgeGroupGeneration();
+        if (generation && !Agent.GroupInfo) {
+            EndWithError(NKikimrProto::ERROR, "virtual group configuration is unavailable");
+            return false;
+        }
+        // The parent may already advertise a generation that this node has not seen.
+        // The tablet checks it for equality against its durable generation.
+        if (generation && Agent.GroupInfo->GetBridgeProxyGroupId() &&
+                *generation < Agent.GroupInfo->GroupGeneration) {
+            RacingGeneration = Agent.GroupInfo->GroupGeneration;
+            EndWithError(NKikimrProto::RACE, "bridge group configuration changed at the node warden");
+            return false;
+        }
+        return true;
+    }
+
+    void TBlobDepotAgent::TQuery::IssueGenerationCheck() {
+        NKikimrBlobDepot::TEvBridgeScan check;
+        check.SetCheckGenerationOnly(true);
+        Agent.Issue(std::move(check), this, std::make_shared<TBridgeGenerationCheck>());
+    }
+
+    void TBlobDepotAgent::TQuery::Start() {
+        const auto& common = dynamic_cast<TEvBlobStorage::TEvRequestCommon&>(*Event->GetBase());
+        if (!Agent.ManagedBridgeChild) {
+            if (common.ForceGroupGeneration) {
+                return EndWithError(NKikimrProto::ERROR, "no physical group for forced generation");
+            }
+        } else if (!common.ForceGroupGeneration) {
+            return EndWithError(NKikimrProto::ERROR, "address the parent bridged group");
+        } else if (!CheckLocalBridgeGeneration()) {
+            return;
+        } else if (Agent.GroupInfo->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
+            if (Agent.GroupInfo->GetCypherKey()->GetIsKeySet()) {
+                EncryptionInfo = Agent.GroupInfo;
+            } else if (RequiresEncryptionKey(*Event)) {
+                return EndWithError(NKikimrProto::ERROR, "virtual group encryption key is unavailable");
+            }
+        }
+        if (Agent.ManagedBridgeChild && Event->GetTypeRewrite() != TEvBlobStorage::EvAssimilate) {
+            IssueGenerationCheck();
+            return;
+        }
+        Initiate();
+    }
+
+    void TBlobDepotAgent::TQuery::HandleGenerationCheck(const NKikimrBlobDepot::TEvBridgeScanResult& result) {
+        if (result.GetStatus() != NKikimrProto::OK) {
+            EndWithError(result.GetStatus(), "bridge group generation changed");
+        } else if (CheckLocalBridgeGeneration() && !CheckDeadline(TActivationContext::Monotonic())) {
+            if (PendingBridgeRead) {
+                SendSuccess(std::move(PendingBridgeRead));
+            } else {
+                Initiate();
+            }
         }
     }
 
@@ -380,6 +463,9 @@ namespace NKikimr::NBlobDepot {
 #undef XX
         }
         Y_ABORT_UNLESS(response);
+        if (status == NKikimrProto::RACE) {
+            dynamic_cast<TEvBlobStorage::TEvResultCommon&>(*response).RacingGeneration = RacingGeneration;
+        }
         if (isTabletStorageInfoVersionObsolete) {
             Y_ABORT_UNLESS(Event->GetTypeRewrite() == TEvBlobStorage::EvBlock);
             static_cast<TEvBlobStorage::TEvBlockResult&>(*response).IsTabletStorageInfoVersionObsolete = true;
@@ -395,6 +481,25 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
+        if (GetBridgeGroupGeneration()) {
+            switch (Event->GetTypeRewrite()) {
+                case TEvBlobStorage::EvGet:
+                case TEvBlobStorage::EvRange:
+                case TEvBlobStorage::EvDiscover:
+                case TEvBlobStorage::EvCheckIntegrity:
+                case TEvBlobStorage::EvGetBlock:
+                case TEvBlobStorage::EvStatus:
+                    // The data or block-lease read can outlive the tablet configuration in which it started.
+                    Y_ABORT_UNLESS(!PendingBridgeRead);
+                    PendingBridgeRead = std::move(response);
+                    IssueGenerationCheck();
+                    return;
+            }
+        }
+        SendSuccess(std::move(response));
+    }
+
+    void TBlobDepotAgent::TQuery::SendSuccess(std::unique_ptr<IEventBase> response) {
         YDB_LOG_DEBUG("Query ends with success",
             {"marker", "BDA15"},
             {"agentId", Agent.LogId},

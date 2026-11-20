@@ -1,7 +1,10 @@
 #include "distconf.h"
 #include "distconf_invoke.h"
+#include <ydb/core/blob_depot/config.h>
+#include <ydb/core/blob_depot/s3_route.h>
 #include <contrib/libs/xxhash/xxhash.h>
 #include <google/protobuf/util/message_differencer.h>
+#include <util/string/split.h>
 
 #include <array>
 
@@ -50,6 +53,18 @@ namespace NKikimr::NStorage {
                 inlinePile->SetGroupGeneration(group->GetGroupGeneration());
                 bumped.emplace(groupId, group->GetGroupGeneration());
             }
+        }
+
+        // Clusters predating the persisted registry used regular physical members in every pile. Startup
+        // YAML may already describe a proposed change which has not gone through configuration replacement.
+        NKikimrBridge::TPileRegistry MakeLegacyPileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig) {
+            auto registry = NBridge::MakeImpliedPileRegistry(bridgeConfig);
+            for (auto& pile : *registry.MutablePiles()) {
+                pile.ClearType();
+                pile.ClearBackup();
+                pile.ClearBackupConfigRevision();
+            }
+            return registry;
         }
 
     } // anonymous
@@ -109,7 +124,7 @@ namespace NKikimr::NStorage {
             // BridgeConfig, so pile ids stay the same
             if (auto *details = config->MutableClusterStateDetails(); !details->HasPileRegistry() && Cfg &&
                     Cfg->BridgeConfig) {
-                auto registry = NBridge::MakeImpliedPileRegistry(*Cfg->BridgeConfig);
+                auto registry = MakeLegacyPileRegistry(*Cfg->BridgeConfig);
                 if (!NBridge::ValidatePileRegistry(registry, *clusterState)) {
                     details->MutablePileRegistry()->Swap(&registry);
                     changes = true;
@@ -138,12 +153,55 @@ namespace NKikimr::NStorage {
                 }
             }
         }
-        return NBridge::MakeImpliedPileRegistry(*bridgeConfig);
+        return config.HasClusterState() ? MakeLegacyPileRegistry(*bridgeConfig) : NBridge::MakeImpliedPileRegistry(*bridgeConfig);
+    }
+
+    std::optional<TString> ValidateBackupPileConfig(NKikimrBridge::EPileType type,
+            const NKikimrBridge::TBackupPileConfig *backup) {
+        if (type == NKikimrBridge::REGULAR && !backup) {
+            return std::nullopt;
+        }
+        if (type != NKikimrBridge::BACKUP || !backup) {
+            return "backup settings must be present exactly for piles of type BACKUP";
+        }
+        if (!backup->HasS3() || !backup->GetS3().HasAsyncMode()) {
+            return "a backup pile requires an asynchronous S3 backend";
+        }
+        const auto& s3 = backup->GetS3().GetSettings();
+        if (s3.HasSecretableAccessKey() || s3.HasSecretableSecretKey()) {
+            return "BlobDepot S3 secret references are unsupported";
+        }
+        if (const auto err = NBlobDepot::ValidateDataCooling(backup->GetS3())) {
+            return TString(*err);
+        }
+        for (TStringBuf segment : StringSplitter(s3.GetObjectKeyPattern()).Split('/')) {
+            if (segment == "." || segment == "..") {
+                return "The effective S3 key prefix must not contain dot segments";
+            }
+        }
+
+        ui64 channels = 0;
+        bool hasData = false;
+        for (const auto& profile : backup->GetChannelProfiles()) {
+            if (!profile.GetStoragePoolName() || profile.HasStoragePoolKind() || !profile.GetCount()) {
+                return "each backup channel profile requires a storage pool name and positive count";
+            }
+            const bool system = profile.GetChannelKind() == NKikimrBlobDepot::TChannelKind::System;
+            if ((channels < 2) != system || (system && channels + profile.GetCount() > 2)) {
+                return "backup channel profiles must begin with two System channels";
+            }
+            channels += profile.GetCount();
+            hasData |= profile.GetChannelKind() == NKikimrBlobDepot::TChannelKind::Data;
+        }
+        if (!hasData || channels > 256) {
+            return "backup channel profiles require a Data channel and at most 256 channels";
+        }
+        return std::nullopt;
     }
 
     std::optional<TString> UpdatePileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig,
             NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig,
-            const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged) {
+            const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged, THashSet<TString> confirmedRoutes) {
         *pileListChanged = false;
         if (!config->HasClusterState()) {
             return std::nullopt; // the cluster is not bridged one yet, pile ids are not persisted anywhere
@@ -154,21 +212,65 @@ namespace NKikimr::NStorage {
         } else if (!bridgeConfig.PilesSize()) {
             return "bridged cluster can't run without bridge config";
         }
+        for (const auto& pile : bridgeConfig.GetPiles()) {
+            if (const auto error = ValidateBackupPileConfig(pile.GetType(), pile.HasBackup() ? &pile.GetBackup() : nullptr)) {
+                return TStringBuilder() << "pile '" << pile.GetName() << "': " << *error;
+            }
+        }
         auto next = NBridge::AssignPileIds(*registry, bridgeConfig);
         auto equals = google::protobuf::util::MessageDifferencer::Equals;
         // nodes running older versions take pile ids from positions of piles in their BridgeConfig, so they can't run
         // with the list of piles changed or reordered; the change is the one of pile ids, or of positions of piles
         // (against the ones in the current config, or the ones matching pile ids when it is unknown)
-        const auto implied = NBridge::MakeImpliedPileRegistry(bridgeConfig);
-        auto positions = next; // flags of the registry and settings of piles are not a matter of positions
-        positions.ClearPileListChanged();
-        positions.ClearRequiredFeatureLevel();
-        for (auto& pile : *positions.MutablePiles()) {
-            pile.ClearAddedGeneration();
+        auto names = [](const NKikimrBridge::TPileRegistry& r) {
+            std::vector<std::optional<TString>> result;
+            for (const auto& pile : r.GetPiles()) {
+                result.push_back(pile.HasName() ? std::make_optional(pile.GetName()) : std::nullopt);
+            }
+            return result;
+        };
+        const auto currentPositions = currentBridgeConfig ? NBridge::MakeImpliedPileRegistry(*currentBridgeConfig) : *registry;
+        *pileListChanged = names(next) != names(*registry) ||
+            names(NBridge::MakeImpliedPileRegistry(bridgeConfig)) != names(currentPositions);
+
+        for (int i = 0; i < next.GetPiles().size(); ++i) {
+            const auto& pile = next.GetPiles(i);
+            if (pile.GetType() == NKikimrBridge::BACKUP) {
+                next.SetRequiredFeatureLevel(Max<ui32>(next.GetRequiredFeatureLevel(), BridgeFeatureLevelBackupPile));
+            }
+            if (i >= registry->GetPiles().size() || !pile.HasName()) {
+                continue;
+            }
+            const auto& prev = registry->GetPiles(i);
+            const bool provisioned = config->GetClusterState().GetPerPileState(i) != NKikimrBridge::TClusterState::INACTIVE;
+            if (!provisioned || !prev.HasName() || prev.GetName() != pile.GetName()) {
+                continue;
+            }
+            if (prev.GetType() != pile.GetType()) {
+                return TStringBuilder() << "can't change type of provisioned pile '" << pile.GetName() << "'";
+            }
+            if (pile.GetType() == NKikimrBridge::BACKUP) {
+                auto oldProfile = prev.GetBackup();
+                auto newProfile = pile.GetBackup();
+                oldProfile.ClearS3();
+                newProfile.ClearS3();
+                if (!equals(oldProfile, newProfile)) {
+                    return TStringBuilder() << "can't change channel profiles of provisioned backup pile '" << pile.GetName() << "'";
+                }
+                const auto& oldS3 = prev.GetBackup().GetS3();
+                const auto& newS3 = pile.GetBackup().GetS3();
+                if (oldS3.GetSettings().GetBucket() != newS3.GetSettings().GetBucket() ||
+                        NBlobDepot::MakeS3BasePath(oldS3.GetSettings(), "depot") != NBlobDepot::MakeS3BasePath(newS3.GetSettings(), "depot")) {
+                    return TStringBuilder() << "changing bucket or prefix requires migrating the objects in pile '" << pile.GetName() << "'";
+                }
+                if (!equals(NBlobDepot::GetS3Route(oldS3), NBlobDepot::GetS3Route(newS3)) && !confirmedRoutes.erase(pile.GetName())) {
+                    return TStringBuilder() << "confirm that the new S3 route accesses the same objects, including in-flight writes, for pile '" << pile.GetName() << "'";
+                }
+            }
         }
-        *pileListChanged = !equals(next, *registry) || !equals(implied, currentBridgeConfig
-            ? NBridge::MakeImpliedPileRegistry(*currentBridgeConfig)
-            : positions);
+        if (!confirmedRoutes.empty()) {
+            return TStringBuilder() << "no S3 route change to confirm for provisioned backup pile '" << *confirmedRoutes.begin() << "'";
+        }
         if (*pileListChanged && config->GetClusterStateDetails().GetBscConversionPending()) {
             return "list of bridge piles can't be changed until BSC finishes conversion of the cluster";
         } else if (*pileListChanged && NBridge::IsRollbackPending(config->GetClusterStateDetails())) {
@@ -206,10 +308,25 @@ namespace NKikimr::NStorage {
             return; // some cluster state has been already defined
         }
 
-        config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(cfg.BridgeConfig->PilesSize()));
+        auto *state = config->MutableClusterState();
+        *state = NBridge::MakeInitialClusterState(cfg.BridgeConfig->PilesSize());
+        bool primarySet = false;
+        for (int i = 0; i < cfg.BridgeConfig->GetPiles().size(); ++i) {
+            if (cfg.BridgeConfig->GetPiles(i).GetType() == NKikimrBridge::BACKUP) {
+                state->SetPerPileState(i, NKikimrBridge::TClusterState::INACTIVE);
+            } else if (!primarySet) {
+                const auto pileId = TBridgePileId::FromPileIndex(i);
+                pileId.CopyToProto(state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+                pileId.CopyToProto(state, &NKikimrBridge::TClusterState::SetPromotedPile);
+                primarySet = true;
+            }
+        }
         *config->MutableClusterStateDetails()->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(*cfg.BridgeConfig);
         if (config->GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
             config->MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelPileOverrides);
+        }
+        if (std::ranges::any_of(cfg.BridgeConfig->GetPiles(), [](const auto& pile) { return pile.GetType() == NKikimrBridge::BACKUP; })) {
+            config->MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelBackupPile);
         }
         if (cfg.BridgeConfig->GetEnableNonUniformStorage()) {
             auto *details = config->MutableClusterStateDetails();
@@ -449,6 +566,8 @@ namespace NKikimr::NStorage {
             return "cluster is already bridged one";
         } else if (bridgeConfig.PilesSize() != 1) {
             return "BridgeConfig must contain exactly one pile to convert cluster to bridged one";
+        } else if (bridgeConfig.GetPiles(0).GetType() != NKikimrBridge::REGULAR) {
+            return "the original pile must be REGULAR to convert an existing cluster";
         } else if (skipStoragePoolConversion && !bridgeConfig.GetEnableNonUniformStorage()) {
             return "skipping storage pool conversion requires bridge_config.enable_non_uniform_storage";
         } else if (!skipStoragePoolConversion && bridgeConfig.GetEnableNonUniformStorage()) {
@@ -469,7 +588,7 @@ namespace NKikimr::NStorage {
         *details->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(bridgeConfig);
         // nodes of older versions don't handle inline piles (their VDisks abort, their bridge proxies loop), so they
         // must neither get the converted config nor connect to the ones having it
-        details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevel);
+        details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelHotStandby);
         if (config->HasBridgeRollback()) {
             // the cluster has been bridged and rolled back before; static group ids are never reused
             details->SetNextStaticGroupId(config->GetBridgeRollback().GetNextStaticGroupId());

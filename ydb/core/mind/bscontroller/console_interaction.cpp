@@ -174,7 +174,7 @@ namespace NKikimr::NBsController {
                 YDB_LOG_ERROR("Failed to parse config obtained from Console",
                     {"marker", "BSC26"},
                     {"errorReason", ex.what()},
-                    {"yaml", yamlReturnedByFetch});
+                    {"yaml", NYaml::ConfigTextForDiagnostics(yamlReturnedByFetch)});
             }
         };
 
@@ -233,8 +233,8 @@ namespace NKikimr::NBsController {
                 } else {
                     YDB_LOG_CRIT("ReverseCommit status received when BSC has YamlConfig/StorageYamlConfig",
                         {"marker", "BSC29"},
-                        {"yamlConfig", Self.YamlConfig},
-                        {"storageYamlConfig", Self.StorageYamlConfig},
+                        {"hasYamlConfig", Self.YamlConfig.has_value()},
+                        {"hasStorageYamlConfig", Self.StorageYamlConfig.has_value()},
                         {"record", record});
                     Y_DEBUG_ABORT();
                 }

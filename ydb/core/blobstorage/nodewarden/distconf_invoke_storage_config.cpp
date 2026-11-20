@@ -403,6 +403,9 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
 
+        if (!request.GetConfirmS3RouteChangeForPiles().empty() && !Self->StorageConfig->HasClusterState()) {
+            throw TExError() << "S3 route confirmation requires a bridged cluster";
+        }
         IsDryRun = request.GetDryRun();
 
         // extract YAML files provided by the user
@@ -512,7 +515,8 @@ namespace NKikimr::NStorage {
                 const auto currentBridgeConfig = GetMergedBridgeConfig(currentMain,
                     Self->StorageConfigYaml ? &currentStorage : nullptr, true);
                 if (auto error = UpdatePileRegistry(bridgeConfig, &config, Self->Cfg->BridgeConfig.get(),
-                        Self->MainConfigYaml ? &currentBridgeConfig : nullptr, &pileListChanged)) {
+                        Self->MainConfigYaml ? &currentBridgeConfig : nullptr, &pileListChanged,
+                        {request.GetConfirmS3RouteChangeForPiles().begin(), request.GetConfirmS3RouteChangeForPiles().end()})) {
                     throw TExError() << *error;
                 }
             }
@@ -977,6 +981,15 @@ namespace NKikimr::NStorage {
             {"response", response});
         if (response.StatusSize() != 1 || response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_DISTCONF_CONTROL) {
             throw TExError() << "BS_CONTROLLER is way too old to process this query";
+        }
+
+        const auto requiresBackupPiles = [](const NKikimrBlobStorage::TStorageConfig& config) {
+            return std::ranges::any_of(config.GetClusterStateDetails().GetPileRegistry().GetPiles(),
+                [](const auto& pile) { return pile.GetType() == NKikimrBridge::BACKUP; });
+        };
+        if (response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_BACKUP_PILES &&
+                (requiresBackupPiles(*Self->StorageConfig) || requiresBackupPiles(ProposedStorageConfig))) {
+            throw TExError() << "BS_CONTROLLER must support backup piles to validate this operation";
         }
 
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();

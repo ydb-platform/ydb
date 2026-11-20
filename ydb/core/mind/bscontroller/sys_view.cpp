@@ -523,10 +523,24 @@ void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageControll
         info->SetPathId(*poolInfo.PathItemId);
     }
 
-    info->SetPDiskFilter(TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(poolInfo.PDiskFilters));
+    // StorageStats groups pools by the effective disk filter, including a dedicated pool's ownership constraint.
+    TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> dedicatedFilters;
+    if (poolInfo.BackupPileName) {
+        for (auto filter : poolInfo.PDiskFilters) {
+            NActorsInterconnect::TNodeLocation location;
+            if (filter.RequiredLocation) {
+                filter.RequiredLocation->Serialize(&location, false);
+            }
+            location.SetBridgePileName(*poolInfo.BackupPileName);
+            filter.SetLocation(TNodeLocation(location).GetSerializedLocation());
+            dedicatedFilters.insert(std::move(filter));
+        }
+    }
+    const auto& filters = poolInfo.BackupPileName ? dedicatedFilters : poolInfo.PDiskFilters;
+    info->SetPDiskFilter(TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(filters));
 
     TStringStream pdiskFilterData;
-    Save(&pdiskFilterData, poolInfo.PDiskFilters);
+    Save(&pdiskFilterData, filters);
     info->SetPDiskFilterData(pdiskFilterData.Str());
     info->SetDefaultGroupSizeInUnits(poolInfo.DefaultGroupSizeInUnits);
 }

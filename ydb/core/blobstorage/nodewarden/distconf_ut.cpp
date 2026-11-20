@@ -15,10 +15,12 @@
 #include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/util/random.h>
 
+#include <ydb/library/actors/struct_log/create_message.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/testlib/helpers.h>
 
@@ -1164,6 +1166,88 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(!QueryKeeper(runtime, keepers.front()).GetQueryConfig().GetConfig().HasClusterState());
     }
 
+    Y_UNIT_TEST(BackupPileDiagnosticRedaction) {
+        NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult response;
+        auto *config = response.MutableQueryConfig()->MutableConfig();
+        auto *pile = config->MutableClusterStateDetails()->MutablePileRegistry()->AddPiles();
+        pile->SetName("archive");
+        auto *settings = pile->MutableBackup()->MutableS3()->MutableSettings();
+        settings->SetAccessKey("iam-test-access");
+        settings->SetSecretKey("iam-test-secret");
+        config->SetConfigComposite("opaque-config-test");
+        const auto log = YDB_LOG_CREATE_MESSAGE({"record", response}).GetValue<TString>("record");
+        UNIT_ASSERT(log);
+        TStringStream html;
+        NStorage::OutputPrettyMessage(html, response);
+        for (const auto& output : {*log, html.Str()}) {
+            UNIT_ASSERT(output.Contains("archive"));
+            UNIT_ASSERT(output.Contains("[REDACTED]"));
+            UNIT_ASSERT(!output.Contains("iam-test-access"));
+            UNIT_ASSERT(!output.Contains("iam-test-secret"));
+            UNIT_ASSERT(!output.Contains("opaque-config-test"));
+        }
+    }
+
+    Y_UNIT_TEST(BackupPileConfigurationAndRouteConfirmation) {
+        NKikimrConfig::TBridgeConfig bridge;
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        auto update = [&](const auto& desired, THashSet<TString> confirmed = {}) {
+            bool changed = false;
+            return NStorage::UpdatePileRegistry(desired, &config, &bridge, &bridge, &changed, std::move(confirmed));
+        };
+        auto desired = bridge;
+        auto *archive = desired.AddPiles();
+        archive->SetName("archive");
+        archive->SetType(NKikimrBridge::BACKUP);
+        UNIT_ASSERT(update(desired));
+        auto *backup = archive->MutableBackup();
+        auto *system = backup->AddChannelProfiles();
+        system->SetStoragePoolName("archive-local");
+        system->SetCount(2);
+        auto *data = backup->AddChannelProfiles();
+        data->SetStoragePoolName("archive-local");
+        data->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+        auto *s3 = backup->MutableS3();
+        s3->MutableAsyncMode();
+        s3->MutableSettings()->SetBucket("bucket");
+        s3->MutableSettings()->SetEndpoint("first");
+        {
+            auto cold = desired;
+            cold.MutablePiles()->SwapElements(0, 2); // archive comes first in YAML
+            NKikimrBlobStorage::TStorageConfig initial;
+            NStorage::TDistributedConfigKeeper::GenerateBridgeInitialState(*MakeNodeWardenConfig(initial, &cold), &initial);
+            const auto& state = initial.GetClusterState();
+            UNIT_ASSERT_EQUAL(state.GetPerPileState(0), NKikimrBridge::TClusterState::INACTIVE);
+            UNIT_ASSERT_EQUAL(state.GetPerPileState(1), NKikimrBridge::TClusterState::SYNCHRONIZED);
+            UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&state, &NKikimrBridge::TClusterState::GetPrimaryPile),
+                TBridgePileId::FromPileIndex(1));
+            UNIT_ASSERT_VALUES_EQUAL(state.GetPromotedPile(), state.GetPrimaryPile());
+            UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(initial), ui32(NStorage::BridgeFeatureLevelBackupPile));
+        }
+        UNIT_ASSERT(!update(desired));
+        bridge = desired;
+        UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(config), ui32(NStorage::BridgeFeatureLevelBackupPile));
+        UNIT_ASSERT_EQUAL(config.GetClusterState().GetPerPileState(2), NKikimrBridge::TClusterState::INACTIVE);
+        auto revision = [&] { return config.GetClusterStateDetails().GetPileRegistry().GetPiles(2).GetBackupConfigRevision(); };
+        UNIT_ASSERT_VALUES_EQUAL(revision(), 1);
+        config.MutableClusterState()->SetPerPileState(2, NKikimrBridge::TClusterState::DISCONNECTED);
+        s3->MutableSettings()->SetSecretKey("rotated");
+        UNIT_ASSERT(!update(desired));
+        UNIT_ASSERT_VALUES_EQUAL(revision(), 2);
+        UNIT_ASSERT(!update(desired));
+        UNIT_ASSERT_VALUES_EQUAL(revision(), 2);
+        s3->MutableSettings()->SetEndpoint("second");
+        UNIT_ASSERT(update(desired));
+        UNIT_ASSERT_VALUES_EQUAL(revision(), 2);
+        UNIT_ASSERT(!update(desired, {"archive"}));
+        UNIT_ASSERT_VALUES_EQUAL(revision(), 3);
+        s3->MutableSettings()->SetBucket("different");
+        UNIT_ASSERT(update(desired, {"archive"}));
+        UNIT_ASSERT_VALUES_EQUAL(revision(), 3);
+    }
+
     // replaced config gets pile registry stored; new piles are INACTIVE, only INACTIVE piles can be dropped; change of
     // the list of piles or their order is reported, as it requires every node to support it
     Y_UNIT_TEST(UpdatePileRegistry) {
@@ -2244,7 +2328,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId),
             TBridgePileId::FromPileIndex(0));
         // nodes of older versions, which don't handle inline piles, neither get the config nor connect
-        UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(config), NStorage::BridgeFeatureLevel);
+        UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(config), ui32(NStorage::BridgeFeatureLevelHotStandby));
 
         // static group becomes an inline pile with bumped generation
         const auto& ss = config.GetBlobStorageConfig().GetServiceSet();

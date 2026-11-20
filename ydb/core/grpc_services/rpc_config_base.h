@@ -197,9 +197,6 @@ protected:
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             self->FillDistconfQuery(*ev);
             self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());
-        } else if (RequireSelfManagement) {
-            self->Reply(Ydb::StatusIds::BAD_REQUEST, "operating self-management is required to fulfill this request",
-                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
         } else { // classic BSC
             CreatePipe();
         }
@@ -231,6 +228,10 @@ protected:
 
     void CreatePipe() {
         auto *self = Self();
+        if (RequireSelfManagement) {
+            return self->Reply(Ydb::StatusIds::BAD_REQUEST, "operating self-management is required to fulfill this request",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+        }
         BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), MakeBSControllerID(), GetPipeConfig()));
 
         auto req = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();

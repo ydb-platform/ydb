@@ -66,6 +66,7 @@ namespace NKikimr::NBlobDepot {
             // Expiry watermarks belong to one generation; the new tablet starts allocating from step 1 again.
             ExpiredSteps.clear();
         }
+        ManagedBridgeChild = msg.HasBridgeGroupGeneration();
         BlobDepotGeneration = msg.GetGeneration();
         HotWriteCreditEpoch = msg.GetHotWriteCreditEpoch();
         DecommitGroupId = msg.HasDecommitGroupId() ? std::make_optional(msg.GetDecommitGroupId()) : std::nullopt;
@@ -404,12 +405,20 @@ namespace NKikimr::NBlobDepot {
     template<typename T, typename TEvent>
     ui64 TBlobDepotAgent::Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId) {
         auto ev = std::make_unique<TEvent>();
+        if constexpr (requires { msg.SetBridgeGroupGeneration(0); }) {
+            if (auto *query = dynamic_cast<TQuery*>(sender)) {
+                if (const auto generation = query->GetBridgeGroupGeneration()) {
+                    msg.SetBridgeGroupGeneration(*generation);
+                }
+            }
+        }
         msg.Swap(&ev->Record);
         return Issue(std::move(ev), sender, std::move(context), std::move(traceId));
     }
 
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBridgeScan msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId);

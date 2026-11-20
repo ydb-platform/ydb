@@ -39,6 +39,10 @@ public:
 
             // find all bridged groups and check their sync states
             State->Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
+                if (groupInfo.IsBackupPileMember() && groupInfo.BridgePileId == unsyncedBridgePileId &&
+                        !groupInfo.IsBackupPileMemberReady()) {
+                    somethingUnsynced = true;
+                }
                 if (!groupInfo.BridgeGroupInfo) {
                     return; // this is not a bridge proxy group
                 }
@@ -328,7 +332,7 @@ public:
         ConversionId = Self->StorageConfig->GetClusterStateDetails().GetBscConversionId();
 
         // new groups are created bridged from now on
-        auto needsBridgeMode = [](const TStoragePoolInfo& pool) { return !pool.BridgeMode && !pool.DDisk; };
+        auto needsBridgeMode = [](const TStoragePoolInfo& pool) { return !pool.BridgeMode && !pool.DDisk && !pool.BackupPileName; };
         if (std::ranges::any_of(State->StoragePools.Get() | std::views::values, needsBridgeMode)) {
             for (auto& pool : State->StoragePools.Unshare() | std::views::values) {
                 if (needsBridgeMode(pool)) {
@@ -340,6 +344,9 @@ public:
         // turn existing physical groups into inline piles
         bool blocked = false;
         State->Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
+            if (State->StoragePools.Get().at(groupInfo.StoragePoolId).BackupPileName) {
+                return;
+            }
             if (groupInfo.IsBridgeConversionCandidate()) {
                 State->Groups.FindForUpdate(groupId)->MakeInlinePile(NBridge::GetInlinePileId());
                 State->GroupContentChanged.insert(groupId);
@@ -557,6 +564,17 @@ public:
 
 private:
     size_t DoStep(TConfigState& state) override {
+        if (const auto* pile = state.BridgeInfo->GetPile(PileId); pile->Type == NKikimrBridge::BACKUP) {
+            state.ValidateBackupPileInfrastructure(*pile);
+            for (const auto& [id, pool] : state.StoragePools.Get()) {
+                if (pool.BackupPileName && *pool.BackupPileName == pile->Name) {
+                    state.Fit.PoolsAndGroups.emplace(id, std::nullopt);
+                }
+            }
+            NKikimrBlobStorage::TConfigResponse::TStatus status;
+            const ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
+            Self->FitGroupsForUserConfig(state, domain, {}, {}, status, true);
+        }
         Self->AddBridgePileGroups(state, PileId, BecameUnsyncedGeneration, &Added);
         return Added.size();
     }
@@ -737,7 +755,8 @@ size_t TBlobStorageController::RemoveBridgePileGroups(TConfigState& state, TBrid
             return;
         } else if (const auto *pile = bridgeInfo->GetPileForNode(vslotId.NodeId); !pile || pile->BridgePileId != pileId) {
             return;
-        } else if (const TGroupInfo *group = state.Groups.Find(vslot.GroupId); !group || group->BridgePileId != pileId) {
+        } else if (const TGroupInfo *group = state.Groups.Find(vslot.GroupId); !group || (group->BridgePileId != pileId &&
+                state.StoragePools.Get().at(group->StoragePoolId).GetBackupPile(bridgeInfo.get()) != pile)) {
             throw TExError() << "GroupId# " << vslot.GroupId << " has VDisks in the pile, but it is not a part of bridged"
                 " group, its data would be lost";
         }
@@ -756,6 +775,28 @@ size_t TBlobStorageController::RemoveBridgePileGroups(TConfigState& state, TBrid
 
     for (const TGroupId proxyGroupId : proxyGroupIds) {
         DropBridgeGroupPart(state, proxyGroupId, pileId);
+    }
+
+    // Removing exclusively owned infrastructure detaches its VSlots durably. The operator's desired capacity
+    // stays in the now dormant pool so provision-pile can fit it again in a new incarnation.
+    std::vector<TBoxStoragePoolId> backingPools;
+    for (const auto& [id, pool] : state.StoragePools.Get()) {
+        if (pool.GetBackupPile(bridgeInfo.get()) == bridgeInfo->GetPile(pileId)) {
+            backingPools.push_back(id);
+        }
+    }
+    for (const auto& id : backingPools) {
+        auto& pool = state.StoragePools.Unshare().at(id);
+        const ui32 desired = pool.NumGroups;
+        std::vector<TGroupId> groups;
+        const auto& index = state.StoragePoolGroups.Get();
+        for (auto it = index.lower_bound({id, TGroupId::Zero()}); it != index.end() && it->first == id; ++it) {
+            groups.push_back(it->second);
+        }
+        for (const auto groupId : groups) {
+            state.DeleteExistingGroupWithVSlots(*state.Groups.Find(groupId));
+        }
+        pool.NumGroups = desired;
     }
 
     // nodes of the pile can't connect until it is added again, so nobody can tell how their drives are; INACTIVE set by
@@ -1811,6 +1852,10 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
                 if (targetGroupId != syncerState.TargetGroupId) {
                     continue;
                 }
+                const auto* target = FindGroup(targetGroupId);
+                if (target && target->IsBackupPileMember() && !target->IsBackupPileMemberReady()) {
+                    continue; // wait for the depot to fence writers using the previous generation
+                }
                 if (pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
                     continue; // this group is synced
                 }
@@ -1904,8 +1949,14 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
 
                 // find available nodes
                 std::vector<TNodeId> nodes;
-                if (const TGroupInfo *group = FindGroup(targetGroupId)) {
-                    for (const auto& vdisk : group->VDisksInGroup) {
+                if (target && target->IsBackupPileMember()) {
+                    for (const auto nodeId : bridgePile->StaticNodeIds) {
+                        if (const auto* node = FindNode(nodeId); node && node->Registered) {
+                            nodes.push_back(nodeId);
+                        }
+                    }
+                } else if (target) {
+                    for (const auto& vdisk : target->VDisksInGroup) {
                         nodes.push_back(vdisk->VSlotId.NodeId);
                     }
                 } else if (const auto it = StaticGroups.find(targetGroupId); it != StaticGroups.end()) {

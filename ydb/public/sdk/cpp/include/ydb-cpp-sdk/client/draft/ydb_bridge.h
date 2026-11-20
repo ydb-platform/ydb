@@ -70,11 +70,17 @@ enum class EPileState {
     HOT_STANDBY = 8, // Best-effort writes outside quorums; rejoin before promotion.
 };
 
+enum class EPileType {
+    REGULAR = 0,
+    BACKUP = 1,
+};
+
 struct TPileStateUpdate {
     std::string PileName;
     EPileState State = EPileState::DISCONNECTED;
     // Not sent in UpdateClusterState requests; use TUpdateClusterStateSettings::ExpectedGeneration for the guard.
     uint64_t Generation = 0;
+    EPileType Type = EPileType::REGULAR; // populated by GetClusterState
 };
 
 // Operation changing the set of piles of the cluster that is not finished yet.
@@ -147,6 +153,7 @@ struct TSynchronizationError {
 struct TPileSynchronization {
     std::optional<std::string> PileName;
     TDatabaseSyncCounts Databases;
+    uint64_t PendingBackupConfigs = 0;
 };
 
 // One storage owner and pile; Mixed counts only bridged pools.
@@ -169,6 +176,12 @@ struct TGroupSynchronization {
     // Diagnostic only; use SyncStatus for programmatic checks.
     std::string SyncPhase;
     std::optional<TSynchronizationError> LastSyncError;
+    std::optional<uint32_t> VirtualGroupId;
+    std::optional<uint64_t> BlobDepotId;
+    std::optional<std::string> VirtualGroupState;
+    std::optional<uint64_t> DesiredConfigRevision;
+    std::optional<uint64_t> AppliedConfigRevision;
+    std::optional<std::string> ProvisioningError;
 };
 
 struct TListPileSynchronizationSettings: public TOperationRequestSettings<TListPileSynchronizationSettings> {};

@@ -93,21 +93,22 @@ void TNodeWarden::SendRegisterNode() {
     YDB_LOG_DEBUG("SendRegisterNode",
         {"marker", "NW20"});
 
-    TVector<ui32> startedDynamicGroups, generations;
+    TVector<ui32> subscribedGroups, generations;
     for (const auto& [groupId, group] : Groups) {
-        // RegisterNode carries dynamic groups that are either actively proxied now or marked as sticky
-        // local-placement subscriptions (MustSubscribe) to keep their updates across reconnects.
-        if ((group.ProxyId || group.MustSubscribe) &&
-                TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic &&
+        const auto type = TGroupID(groupId).ConfigurationType();
+        // A virtual bridge member has no local VSlots from which BSC could recover its subscription.
+        // An outstanding lookup may also have lost its reply when the pipe disconnected.
+        const bool virtualMember = type == EGroupConfigurationType::Virtual && (!group.Info || group.Info->GetBridgePileId());
+        if ((group.ProxyId || group.MustSubscribe) && (type == EGroupConfigurationType::Dynamic || virtualMember) &&
                 (!group.Info || group.Info->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::DONE)) {
-            startedDynamicGroups.push_back(groupId);
+            subscribedGroups.push_back(groupId);
             generations.push_back(group.Info ? group.Info->GroupGeneration : 0);
         }
     }
 
     WorkingLocalDrives = ListLocalDrives();
 
-    auto ev = std::make_unique<TEvBlobStorage::TEvControllerRegisterNode>(LocalNodeId, startedDynamicGroups, generations,
+    auto ev = std::make_unique<TEvBlobStorage::TEvControllerRegisterNode>(LocalNodeId, subscribedGroups, generations,
         WorkingLocalDrives);
     FillInVDiskStatus(ev->Record.MutableVDiskStatus(), true);
     ev->Record.SetDeclarativePDiskManagement(true);

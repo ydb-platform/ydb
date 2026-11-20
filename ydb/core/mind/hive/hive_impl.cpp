@@ -1289,8 +1289,10 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
         }
         auto forcedGroupsSize = record.ForcedGroupIDsSize();
         if (forcedGroupsSize > 0) {
+            const bool checkPoolOwnership = BridgeInfo && std::ranges::any_of(BridgeInfo->Piles, [](const auto& pile) {
+                return pile.Type == NKikimrBridge::BACKUP;
+            });
             TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups;
-            tablet->ChannelProfileNewGroup = channelProfileNewGroup;
             groups.resize(forcedGroupsSize);
             for (ui32 i = 0; i < forcedGroupsSize; ++i) {
                 ui32 channel = record.GetChannels(i);
@@ -1304,7 +1306,18 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
                     groups[i].SetErasureSpecies(groupParameters.GetErasureSpecies());
                 }
                 groups[i].SetGroupID(record.GetForcedGroupIDs(i));
+                if (checkPoolOwnership || parameters->BackupPileId) {
+                    const auto& pool = tablet->GetStoragePool(channel);
+                    const auto group = pool.Groups.find(groups[i].GetGroupID());
+                    if (group == pool.Groups.end() || !group->second.IsMatchesParameters(*parameters)) {
+                        YDB_LOG_WARN("Forced channel reassignment violates storage pool ownership or placement",
+                            {"tabletId", tablet->Id}, {"channel", channel}, {"groupId", groups[i].GetGroupID()});
+                        return;
+                    }
+                    groups[i].CopyFrom(group->second.GroupParameters);
+                }
             }
+            tablet->ChannelProfileNewGroup = channelProfileNewGroup;
             if (!std::exchange(tablet->IsMarkedForReassign, true)) {
                 UpdateCounterTabletsReassigning(+1);
             }
@@ -3681,7 +3694,10 @@ THolder<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletI
     Y_ABORT_UNLESS(channelId < tablet.BoundChannels.size());
     const auto& binding = tablet.BoundChannels[channelId];
     filter->GroupParameters.MutableStoragePoolSpecifier()->SetName(binding.GetStoragePoolName());
-    if (binding.HasPhysicalGroupsOnly()) {
+    filter->BackupPileId = tablet.NodeFilter.BackupPileId;
+    if (filter->BackupPileId) {
+        filter->PhysicalGroupsOnly = true;
+    } else if (binding.HasPhysicalGroupsOnly()) {
         filter->PhysicalGroupsOnly = binding.GetPhysicalGroupsOnly();
     } else {
         filter->PhysicalGroupsOnly = channelId < 2; // true for channels 0, 1 by default and false for the others

@@ -19,8 +19,10 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/protobuf_printer/security_json_printer.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/yaml_config/util.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -33,6 +35,8 @@
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
 #include <util/string/subst.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
 
@@ -464,7 +468,7 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
 
     YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest",
         {"subscriber", subscriber},
-        {"ev", notification->Record.ShortDebugString()});
+        {"ev", notification->Record});
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
 }
@@ -571,8 +575,8 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
         labels.AppendValue(std::move(label));
     }
 
-    response.InsertValue("yaml_config", MainYamlConfig);
-    response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
+    response.InsertValue("yaml_config", NYaml::ConfigTextForDiagnostics(MainYamlConfig));
+    response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(NYaml::ConfigTextForDiagnostics(ResolvedJsonConfig), true));
 
     response.InsertValue("unknown_fields", UnknownFieldsToJsonArray(ResolvedConfigUnknownFields));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
@@ -606,7 +610,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE("Send",
-        {"ev", resp->Record.ShortDebugString()});
+        {"ev", resp->Record});
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -838,9 +842,9 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                     } else {
                                         str << "    CurrentConfigId: " << subscription->CurrentConfig.Version.ShortDebugString() << Endl;
                                     }
-                                    str << "    CurrentConfig: " << subscription->CurrentConfig.Config.ShortDebugString() << Endl;
+                                    str << "    CurrentConfig: " << SecureDebugString(subscription->CurrentConfig.Config) << Endl;
                                     if (subscription->UpdateInProcess) {
-                                        str << "    UpdateInProcess: " << subscription->UpdateInProcess->Record.ShortDebugString() << Endl
+                                        str << "    UpdateInProcess: " << SecureDebugString(subscription->UpdateInProcess->Record) << Endl
                                             << "    SubscribersToUpdate:";
                                         for (auto &id : subscription->SubscribersToUpdate) {
                                             str << " " << id;
@@ -876,7 +880,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                         DIV_CLASS("yaml-sticky-btn") { }
                                     }
                                     TAG_ATTRS(TDiv, {{"id", "yaml-config-item"}, {"name", "yaml-config-itemm"}}) {
-                                        str << MainYamlConfig;
+                                        str << NYaml::ConfigTextForDiagnostics(MainYamlConfig);
                                     }
                                 }
                                 str << "<hr/>" << Endl;
@@ -895,7 +899,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                     }
                                     DIV_CLASS("yaml-config-item") {
                                         if (DatabaseYamlConfig) {
-                                            str << *DatabaseYamlConfig;
+                                            str << NYaml::ConfigTextForDiagnostics(*DatabaseYamlConfig);
                                         }
                                     }
                                 }
@@ -916,7 +920,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                                 DIV_CLASS("yaml-sticky-btn") { }
                                             }
                                             DIV_CLASS("yaml-config-item") {
-                                                str << config;
+                                                str << NYaml::ConfigTextForDiagnostics(config);
                                             }
                                         }
                                     }
@@ -941,7 +945,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                             DIV_CLASS("yaml-sticky-btn") { }
                                         }
                                         DIV_CLASS("yaml-config-item") {
-                                            str << StartupStorageYaml;
+                                            str << NYaml::ConfigTextForDiagnostics(StartupStorageYaml);
                                         }
                                     }
                                 }
@@ -968,14 +972,14 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                     DIV_CLASS("yaml-sticky-btn") { }
                                 }
                                 TAG_ATTRS(TDiv, {{"id", "resolved-yaml-config-item"}, {"name", "resolved-yaml-config-itemm"}}) {
-                                    str << ResolvedYamlConfig;
+                                    str << NYaml::ConfigTextForDiagnostics(ResolvedYamlConfig);
                                 }
                             }
                         }
                         str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("resolved-json-config", "Resolved JSON config") {
                             PRE() {
-                                str << ResolvedJsonConfig << Endl;
+                                str << NYaml::ConfigTextForDiagnostics(ResolvedJsonConfig) << Endl;
                             }
                         }
                         str << "<br />" << Endl;
@@ -1180,7 +1184,14 @@ try {
     google::protobuf::util::MessageDifferencer md;
     auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
     md.set_field_comparator(&fieldComparator);
-    md.ReportDifferencesToString(&StartupConfigInfo);
+    const auto hasBackup = [](const NKikimrConfig::TAppConfig& config) {
+        return std::ranges::any_of(config.GetBridgeConfig().GetPiles(), [](const auto& pile) { return pile.HasBackup(); });
+    };
+    if (hasBackup(BaseConfig) || hasBackup(CandidateStartupConfig)) {
+        StartupConfigInfo = "Detailed configuration changes are hidden for backup piles.";
+    } else {
+        md.ReportDifferencesToString(&StartupConfigInfo);
+    }
     StartupConfigProcessDiff = !md.Compare(BaseConfig, CandidateStartupConfig);
     *StartupConfigChanged = StartupConfigProcessDiff ? 1 : 0;
 }
@@ -1532,7 +1543,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
 
     YDB_LOG_TRACE("Send",
         {"sender", ev->Sender},
-        {"ev", resp->Config->ShortDebugString()});
+        {"ev", *resp->Config});
 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
 }

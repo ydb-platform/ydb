@@ -147,6 +147,15 @@ namespace NKikimr::NStorage {
             if (!currentGroup || currentGroup->GetGroupGeneration() < newGroup->GetGroupGeneration()) {
                 currentGroup.emplace(*newGroup);
             }
+            if (fromController && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Virtual &&
+                    currentGroup->HasBridgeProxyGroupId()) {
+                // A syncer can populate these cache entries before either proxy is started.
+                // Keep the subscriptions when registering on a new controller pipe.
+                group.MustSubscribe = true;
+                if (const ui32 parentId = currentGroup->GetBridgeProxyGroupId(); !EjectedGroups.contains(parentId)) {
+                    Groups[parentId].MustSubscribe = true;
+                }
+            }
 
             // apply encryption parameters from new protobuf
             auto& ep = group.EncryptionParams;

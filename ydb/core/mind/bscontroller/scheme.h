@@ -97,6 +97,8 @@ struct Schema : NIceDb::Schema {
         struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
         struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
         struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
+        struct BackupDesiredRevision : Column<122, NScheme::NTypeIds::Uint64> {};
+        struct BackupAppliedRevision : Column<123, NScheme::NTypeIds::Uint64> {};
         struct Metrics           : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
         struct BridgeGroupInfo   : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupInfo; }; // bridged group protobuf
 
@@ -104,7 +106,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
-              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo, FailRealmStates>;
+              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo, FailRealmStates, BackupDesiredRevision, BackupAppliedRevision>;
     };
 
     struct State : Table<1> {
@@ -355,6 +357,8 @@ struct Schema : NIceDb::Schema {
         struct PersistentBufferAllocationMode : Column<30, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct TargetInvariant : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupState::ETargetInvariant; };
 
+        struct BackupPileName : Column<32, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
@@ -362,7 +366,7 @@ struct Schema : NIceDb::Schema {
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
             DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode,
-            TargetInvariant>;
+            TargetInvariant, BackupPileName>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

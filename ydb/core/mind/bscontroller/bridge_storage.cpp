@@ -130,6 +130,9 @@ namespace NKikimr::NBsController::NBridgeStorage {
             return false; // reject before copying an arbitrarily long upstream error
         }
         NKikimrBridge::TGroupSynchronization row;
+        if (input.VirtualMember) {
+            row.CopyFrom(*input.VirtualMember);
+        }
         row.set_group_id(input.GroupId);
         if (input.PhysicalGroupId) {
             row.set_physical_group_id(*input.PhysicalGroupId);
@@ -210,6 +213,12 @@ namespace NKikimr::NBsController {
         auto copy = NBridgeStorage::ObserveCopy(context);
         if (copy.Part && copy.CurrentGeneration && copy.State != NKikimrBridge::NOT_REQUIRED) {
             const auto partId = TGroupId::FromProto(copy.Part, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            if (copy.State == NKikimrBridge::SYNCED) {
+                const auto member = GroupMap.find(partId);
+                if (member != GroupMap.end() && member->second->IsBackupPileMember() && !member->second->IsBackupPileMemberReady()) {
+                    copy.State = NKikimrBridge::PENDING;
+                }
+            }
             if (const auto it = BridgeSyncState.find(partId); it != BridgeSyncState.end() && it->second.Stage == copy.Part->GetStage()) {
                 copy.LastError = &it->second.LastError;
                 copy.LastErrorTimestamp = it->second.LastErrorTimestamp;
@@ -453,6 +462,10 @@ namespace NKikimr::NBsController {
                 return true;
             }
             physical = actual->ID.GetRawId();
+            if (actual->IsBackupPileMember()) {
+                placement.insert(actual->BridgePileId);
+                return true;
+            }
             if (actual->VDisksInGroup.empty()) {
                 return true;
             }
@@ -469,10 +482,32 @@ namespace NKikimr::NBsController {
             }
             return true;
         };
+        const bool countBackupConfigs = query.GetView() == TQuery::PILES &&
+            std::ranges::any_of(piles, [](const auto* pile) { return pile->Type == NKikimrBridge::BACKUP; });
+        std::map<TBridgePileId, ui64> pendingBackupConfigs;
         ui64 unattributedPools = 0;
         const bool scopedDatabase = query.GetView() == TQuery::DATABASES && query.GetFilterPools();
         for (const auto& poolId : selected) {
             const auto& pool = StoragePools.at(poolId);
+            if (pool.BackupPileName && query.GetView() != TQuery::GROUPS) {
+                continue; // these pools back the infrastructure and do not own databases
+            }
+            if (countBackupConfigs) {
+                for (auto it = StoragePoolGroups.lower_bound({poolId, TGroupId::Zero()});
+                        it != StoragePoolGroups.end() && it->first == poolId; ++it) {
+                    if (!budget.Visit()) {
+                        return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                    }
+                    const auto* member = FindGroup(it->second);
+                    if (member && member->IsBackupPileMember()) {
+                        const auto* pile = BridgeInfo->FindPile(member->BridgePileId);
+                        if (pile && (!member->BlobDepotId ||
+                                member->BackupAppliedRevision.GetOrElse(0) < pile->BackupConfigRevision)) {
+                            ++pendingBackupConfigs[member->BridgePileId];
+                        }
+                    }
+                }
+            }
             TOwnerSummary* owner = nullptr;
             if (query.GetView() != TQuery::GROUPS) {
                 const TPathId path(pool.SchemeshardId.GetOrElse(0), pool.PathItemId.GetOrElse(0));
@@ -568,10 +603,33 @@ namespace NKikimr::NBsController {
                             CopyPool(poolId, pool.Name, &reportedPool);
                             poolFilled = true;
                         }
-                        const auto physical = !pool.BridgeMode ? ordinaryPhysical :
+                        auto physical = !pool.BridgeMode ? ordinaryPhysical :
                             copy.Part ? std::optional<ui32>(copy.Part->GetGroupId()) : std::nullopt;
+                        NKikimrBridge::TGroupSynchronization virtualMember;
+                        if (const auto* member = physical ? FindGroup(TGroupId::FromValue(*physical)) : nullptr;
+                                member && member->IsBackupPileMember()) {
+                            virtualMember.set_virtual_group_id(*physical);
+                            physical.reset();
+                            if (member->BlobDepotId) {
+                                virtualMember.set_blob_depot_id(*member->BlobDepotId);
+                            }
+                            virtualMember.set_virtual_group_state(NKikimrBlobStorage::EVirtualGroupState_Name(*member->VirtualGroupState));
+                            if (pile) {
+                                virtualMember.set_desired_config_revision(pile->BackupConfigRevision);
+                            }
+                            if (member->BackupAppliedRevision) {
+                                virtualMember.set_applied_config_revision(*member->BackupAppliedRevision);
+                            }
+                            if (member->ErrorReason) {
+                                if (!budget.Fits(member->ErrorReason->size())) {
+                                    return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                                }
+                                virtualMember.set_provisioning_error(*member->ErrorReason);
+                            }
+                        }
                         if (!NBridgeStorage::AppendGroup({group->ID.GetRawId(), physical, &reportedPool,
-                                                          pile ? std::optional<TStringBuf>(pile->Name) : std::nullopt, copy}, budget, *report.MutableGroups())) {
+                                                          pile ? std::optional<TStringBuf>(pile->Name) : std::nullopt, copy,
+                                                          virtualMember.has_virtual_group_id() ? &virtualMember : nullptr}, budget, *report.MutableGroups())) {
                             return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                         }
                     }
@@ -693,6 +751,7 @@ namespace NKikimr::NBsController {
                 }
                 NKikimrBridge::TPileSynchronization row;
                 row.set_pile_name(pile->Name);
+                row.set_pending_backup_configs(pendingBackupConfigs[pile->BridgePileId]);
                 databaseCounts[pile->BridgePileId].ToProto(row.mutable_databases());
                 if (reportBridgeDatabases) {
                     bridgeDatabaseCounts[pile->BridgePileId].ToProto(row.mutable_bridge_databases());

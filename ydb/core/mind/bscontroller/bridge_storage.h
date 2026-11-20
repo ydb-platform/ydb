@@ -73,6 +73,7 @@ namespace NKikimr::NBsController::NBridgeStorage {
         const NKikimrBridge::TStoragePool* Pool = nullptr;
         std::optional<TStringBuf> PileName;
         TCopyObservation Copy;
+        const NKikimrBridge::TGroupSynchronization* VirtualMember = nullptr;
     };
 
     // Used by the live controller path and the synthetic materialization benchmark.

@@ -383,7 +383,7 @@ namespace NKikimr::NStorage {
         // compatible settings catch up through the config exchange, while the connectivity checker refuses the ones
         // running without BridgeConfig or of older versions until the admin restarts them properly
         const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
-        RequireBridgeCapability(BridgeFeatureLevel, {}, {}, [this, skipStoragePoolConversion] {
+        RequireBridgeCapability(BridgeFeatureLevelHotStandby, {}, {}, [this, skipStoragePoolConversion] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
                     skipStoragePoolConversion)) {

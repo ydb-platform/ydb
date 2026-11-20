@@ -214,6 +214,9 @@ namespace NKikimr::NBlobDepot {
                     footer.StoredBlobId = Request.Id;
                 }
 
+                if (EncryptionInfo && !Request.AlreadyEncrypted) {
+                    Request.Buffer = CryptPayload(Request.Buffer, Request.Id, 0);
+                }
                 auto put = [&](EBlobType type, TRope&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_ABORT_UNLESS(!locator->HasGroupId() || locator->GetGroupId() == groupId);
@@ -226,9 +229,12 @@ namespace NKikimr::NBlobDepot {
                         .Tactic = Request.Tactic,
                         .WriteSource = Request.WriteSource,
                         .DataKind = Request.DataKind,
+                        .IsZeroEntry = Request.IsZeroEntry,
                     });
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
-                    ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
+                    if (!Request.IgnoreBlock) {
+                        ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
+                    }
                     YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_sendToProxy",
                         {"marker", "BDEV10"},
                         {"VG", Agent.VirtualGroupId},
@@ -413,7 +419,8 @@ namespace NKikimr::NBlobDepot {
 
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 auto& item = msg.GetItems(0);
-                if (const auto status = item.GetStatus(); status != NKikimrProto::OK && status != NKikimrProto::RACE) {
+                if (const auto status = item.GetStatus(); status != NKikimrProto::OK &&
+                        (status != NKikimrProto::RACE || msg.HasBridgeGroupGeneration())) {
                     if (CommitBlobSeqSpan) {
                         CommitBlobSeqSpan.EndError(item.GetErrorReason());
                     }

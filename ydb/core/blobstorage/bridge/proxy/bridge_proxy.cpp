@@ -2174,9 +2174,9 @@ namespace NKikimr {
                     handle.reset(CreateEventForBSProxy(observer.value_or(handle->Sender), GroupId, handle->ReleaseBase().Release(),
                         handle->Cookie, std::move(handle->TraceId)));
                 }
-                if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
-                    // static group configuration is updated a bit differently, so we can't expect for instant update;
-                    // here we introduce a backoff timer
+                const auto type = TGroupID(item.GroupId).ConfigurationType();
+                if (type == EGroupConfigurationType::Static || type == EGroupConfigurationType::Virtual) {
+                    // Static groups wait for distributed configuration and virtual children wait for their tablet's fence.
                     constexpr ui32 maxCounter = 20;
                     constexpr double maxFactor = 6.0 / maxCounter;
                     auto timeout = TDuration::MicroSeconds(pow(10, Min(common->RestartCounter - 1, maxCounter) * maxFactor));

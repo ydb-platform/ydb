@@ -163,14 +163,27 @@ namespace NKikimr::NBsController {
         // made ordinary ones after that
         const bool rollingBack = Self.IsBeingRolledBack();
         const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit && !rollingBack;
+        TMaybe<TString> backupPileName = existing ? current->second.BackupPileName : Nothing();
+        if (cmd.HasBackupPileName()) {
+            if (existing && (!backupPileName || *backupPileName != cmd.GetBackupPileName())) {
+                throw TExError() << "a storage pool's backup pile ownership cannot be changed";
+            }
+            backupPileName = cmd.GetBackupPileName();
+        }
         const bool bridgeMode = existing ? current->second.BridgeMode
-            : cmd.HasBridgeMode() ? cmd.GetBridgeMode() : defaultBridgeMode;
+            : cmd.HasBridgeMode() ? cmd.GetBridgeMode() : defaultBridgeMode && !backupPileName;
         if (existing && cmd.HasBridgeMode() && cmd.GetBridgeMode() != bridgeMode) {
             throw TExError() << "can't change storage pool BridgeMode";
         } else if (!existing && bridgeMode && rollingBack) {
             throw TExError() << "new storage pool can't be a bridged one while the cluster is being rolled back";
         }
-        if (!existing && bridgeMode != defaultBridgeMode) {
+        if (backupPileName && bridgeMode) {
+            throw TExError() << "backup infrastructure requires an ordinary pool";
+        }
+        if (existing && backupPileName && current->second.Name != cmd.GetName()) {
+            throw TExError() << "a dedicated backup storage pool cannot be renamed";
+        }
+        if (!existing && !backupPileName && bridgeMode != defaultBridgeMode) {
             const auto& details = Self.StorageConfig
                 ? Self.StorageConfig->GetClusterStateDetails()
                 : NKikimrBridge::TClusterStateDetails::default_instance();
@@ -193,6 +206,15 @@ namespace NKikimr::NBsController {
 
         // Resolve the default only at creation; updates preserve the stored mode.
         storagePool.BridgeMode = bridgeMode;
+        storagePool.BackupPileName = backupPileName;
+        if (backupPileName && !storagePool.GetBackupPile(BridgeInfo.get())) {
+            throw TExError() << "unknown backup pile " << *backupPileName;
+        }
+        for (const auto& [otherId, other] : StoragePools.Get()) {
+            if (id != otherId && other.Name == storagePool.Name && (backupPileName || other.BackupPileName)) {
+                throw TExError() << "a backup infrastructure pool requires a unique storage pool name";
+            }
+        }
 
         if (cmd.HasGeometry()) {
             storagePool.SetGroupGeometry(cmd.GetGeometry());
@@ -230,6 +252,14 @@ namespace NKikimr::NBsController {
         }
 
         for (const auto &item : cmd.GetPDiskFilter()) {
+            if (backupPileName) {
+                for (const auto& property : item.GetProperty()) {
+                    const auto& location = property.GetLocation();
+                    if (location.HasBridgePileName() && location.GetBridgePileName() != *backupPileName) {
+                        throw TExError() << "PDisk location selects a different pile than BackupPileName";
+                    }
+                }
+            }
             storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
         }
 
@@ -251,7 +281,7 @@ namespace NKikimr::NBsController {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
             // inline pile keeps its own VDisks, so it must match the pool geometry like any physical group
-            if (group->BridgeGroupInfo && !group->IsInlinePile()) {
+            if ((group->BridgeGroupInfo && !group->IsInlinePile()) || group->IsBackupPileMember()) {
                 continue;
             }
             const auto [erasure, inserted] = erasures.try_emplace(group->BridgePileId);
@@ -337,6 +367,9 @@ namespace NKikimr::NBsController {
         const auto it = storagePools.find(id);
         if (it == storagePools.end()) {
             throw TExError() << "StoragePoolId# " << id << " not found";
+        } else if (const auto* pile = it->second.GetBackupPile(BridgeInfo.get());
+                pile && pile->State != NKikimrBridge::TClusterState::INACTIVE) {
+            throw TExError() << "backup infrastructure pool is still in use by pile " << pile->Name;
         } else if (it->second.DDisk) {
             throw TExError() << "can't invoke DeleteStoragePool against DDisk pool";
         }
@@ -419,6 +452,8 @@ namespace NKikimr::NBsController {
             throw TExError() << "StoragePoolId# " << id << " not found";
         } else if (it->second.DDisk) {
             throw TExError() << "can't change BridgeMode of DDisk pool";
+        } else if (it->second.BackupPileName) {
+            throw TExError() << "backup infrastructure storage pools must be ordinary";
         }
         const ui64 nextGen = CheckGeneration(cmd, StoragePools.Get(), id);
 
@@ -478,6 +513,9 @@ namespace NKikimr::NBsController {
                 if (!pile) {
                     throw TExError() << "GroupId# " << group.ID << " has VDisk on NodeId# " << vslot->VSlotId.NodeId
                         << " which belongs to no pile";
+                } else if (pile->Type == NKikimrBridge::BACKUP) {
+                    throw TExError() << "GroupId# " << group.ID << " has physical VDisks in backup pile " << pile->Name
+                        << " and cannot become an inline bridge member";
                 } else if (pileId && *pileId != pile->BridgePileId) {
                     throw TExError() << "GroupId# " << group.ID << " resides in several piles, it can't be made"
                         " bridged";
@@ -605,6 +643,10 @@ namespace NKikimr::NBsController {
                     (pileId != authorityPileId && pile->State != NKikimrBridge::TClusterState::SYNCHRONIZED) ||
                     !NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
                 throw TExError() << "GroupId# " << group.ID << " part in pile " << pile->Name << " is not synchronized";
+            } else if (const auto* member = Groups.Find(TGroupId::FromValue(part->GetGroupId()));
+                    member && member->IsBackupPileMember() && !member->IsBackupPileMemberReady()) {
+                throw TExError() << "GroupId# " << group.ID << " backup member in " << pile->Name
+                    << " is waiting for BlobDepot configuration";
             } else if (pileId == authorityPileId && !state.GetAuthorityPileId()) {
                 return; // the only part of the group
             }
@@ -803,6 +845,9 @@ namespace NKikimr::NBsController {
 
         if (origin.DDisk || target.DDisk) {
             throw TExError() << "can't move groups between DDisk pools";
+        }
+        if (origin.BackupPileName || target.BackupPileName) {
+            throw TExError() << "cannot move groups to or from backup infrastructure storage pools";
         }
         if (origin.BridgeMode != target.BridgeMode) {
             throw TExError() << "can't move groups between pools with different BridgeMode";
@@ -1437,7 +1482,11 @@ namespace NKikimr::NBsController {
         // a bridge proxy group goes along with its parts (Hive and Console know proxy groups only)
         std::vector<TGroupId> groups;
         for (const ui32 groupId : cmd.GetGroupIds()) {
-            groups.push_back(TGroupId::FromValue(groupId));
+            const auto id = TGroupId::FromValue(groupId);
+            if (const auto *group = Groups.Find(id); group && StoragePools.Get().at(group->StoragePoolId).BackupPileName) {
+                throw TExError() << "backup infrastructure groups are removed with their pile";
+            }
+            groups.push_back(id);
         }
         DeleteGroupsWithBridgeParts(groups, [](TGroupId groupId) {
             throw TExGroupNotFound(groupId.GetRawId());

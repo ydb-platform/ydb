@@ -21,6 +21,7 @@ namespace NKikimr::NGRpcService {
                 }
                 auto* state = to.add_pile_states();
                 state->set_pile_name(pile->Name);
+                state->set_type(pile->Type == NKikimrBridge::BACKUP ? Ydb::Bridge::PileState::BACKUP : Ydb::Bridge::PileState::REGULAR);
                 state->set_state(GetPublicBridgePileState(from, TBridgePileId::FromPileIndex(i)));
             }
             to.set_generation(from.GetGeneration());

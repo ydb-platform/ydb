@@ -22,8 +22,15 @@ message PileState {
         HOT_STANDBY = 8; // receives best-effort writes outside quorums; must rejoin before promotion
     }
 
+    enum Type {
+        REGULAR = 0;
+        BACKUP = 1;
+    }
+
     // The name of the pile
     string pile_name = 1 [(length).le = 128];
     // The operational state of the pile
     State state = 2;
+    // Storage type reported by GetClusterState.
+    Type type = 3;
 }

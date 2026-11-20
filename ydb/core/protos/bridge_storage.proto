@@ -127,6 +127,7 @@ message TPileSynchronization {
     // Same classification as databases, restricted to fully bridged storage owners.
     // Shared storage counts once. Omitted for pool-filtered reports.
     TDatabaseSyncCounts bridge_databases = 3;
+    uint64 pending_backup_configs = 5;
 }
 
 // Last error; may remain while synchronization is running.
@@ -164,4 +165,10 @@ message TGroupSynchronization {
     // Diagnostic phase; use sync_status for programmatic checks.
     string sync_phase = 6;
     TSynchronizationError last_sync_error = 7;
+    optional uint32 virtual_group_id = 8;
+    optional uint64 blob_depot_id = 9;
+    optional string virtual_group_state = 10;
+    optional uint64 desired_config_revision = 11;
+    optional uint64 applied_config_revision = 12;
+    optional string provisioning_error = 13;
 }

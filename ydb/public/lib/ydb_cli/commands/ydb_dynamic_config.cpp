@@ -536,6 +536,10 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .StoreTrue(&DryRun);
     config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
         .StoreTrue(&AllowUnknownFields);
+    if (!UseLegacyApi) {
+        config.Opts->AddLongOption("confirm-s3-route-change", "Confirm that this backup pile's new S3 route reaches the same objects, including in-flight writes. Repeat for each affected pile.")
+            .RequiredArgument("PILE_NAME").AppendTo(&ConfirmS3RouteChangeForPiles);
+    }
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .StoreTrue(&Force);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
@@ -575,6 +579,9 @@ int TCommandConfigReplace::Run(TConfig& config) {
         settings.DryRun();
     }
 
+    for (const auto& pile : ConfirmS3RouteChangeForPiles) {
+        settings.AppendConfirmS3RouteChangeForPiles(pile);
+    }
     if (AllowUnknownFields) {
         settings.AllowUnknownFields();
     }
@@ -585,7 +592,8 @@ int TCommandConfigReplace::Run(TConfig& config) {
         status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
     }
 
-    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {
+    if (ConfirmS3RouteChangeForPiles.empty() &&
+        (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED)) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
 
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);

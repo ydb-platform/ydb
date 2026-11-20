@@ -15,7 +15,8 @@ namespace NKikimr::NBlobDepot {
             TGenStep Hard;
         };
 
-        THashMap<std::tuple<ui64, ui8>, TBarrier> Barriers;
+        std::map<std::tuple<ui64, ui8>, TBarrier> Barriers;
+        friend class TBlobDepot;
 
         // Requests that arrived before the data was loaded. They are all handed over to
         // TTxCollectGarbage in OnDataLoaded and nothing is queued after that.

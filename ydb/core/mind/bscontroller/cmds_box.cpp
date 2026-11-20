@@ -429,9 +429,16 @@ namespace NKikimr::NBsController {
         }
 
         for (const auto& [id, srcSlot] : sourcePDisk->VSlotsOnPDisk) {
-            if (srcSlot->Group && srcSlot->Group->BridgePileId) {
-                const auto *pile = BridgeInfo->GetPileForNode(destinationPDiskId.NodeId);
-                if (!pile || pile->BridgePileId != srcSlot->Group->BridgePileId) {
+            if (!srcSlot->Group) {
+                continue;
+            }
+            TBridgePileId requiredPileId = srcSlot->Group->BridgePileId;
+            if (const auto* owner = StoragePools.Get().at(srcSlot->Group->StoragePoolId).GetBackupPile(BridgeInfo.get())) {
+                requiredPileId = owner->BridgePileId;
+            }
+            if (requiredPileId) {
+                const auto* pile = BridgeInfo->GetPileForNode(destinationPDiskId.NodeId);
+                if (!pile || pile->BridgePileId != requiredPileId) {
                     throw TExError() << "Can't move VDisk of GroupId# " << srcSlot->Group->ID << " to NodeId# "
                         << destinationPDiskId.NodeId << " outside its pile";
                 }

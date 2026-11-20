@@ -15,6 +15,30 @@ using namespace NHive;
 using namespace NKikimrBlobStorage;
 
 Y_UNIT_TEST_SUITE(StoragePool) {
+    Y_UNIT_TEST(BackupPileOwnsDedicatedGroups) {
+        THiveSharedSettings settings;
+        TStoragePoolInfo pool("local", &settings);
+        TGroupMetrics::TGroupParameters group;
+        group.SetStoragePoolName("local");
+        group.SetGroupID(1);
+        group.SetPhysicalGroup(true);
+        group.SetBackupPileId(TBridgePileId::FromPileIndex(1).GetLocalDb());
+        pool.UpdateStorageGroup(1, group);
+
+        TGroupFilter filter;
+        filter.GroupParameters.MutableStoragePoolSpecifier()->SetName("local");
+        filter.PhysicalGroupsOnly = true;
+        UNIT_ASSERT(!pool.GetStorageGroup(1).IsMatchesParameters(filter));
+        filter.BackupPileId = TBridgePileId::FromPileIndex(0);
+        UNIT_ASSERT(!pool.GetStorageGroup(1).IsMatchesParameters(filter));
+        filter.BackupPileId = TBridgePileId::FromPileIndex(1);
+        UNIT_ASSERT(pool.GetStorageGroup(1).IsMatchesParameters(filter));
+
+        group.ClearBackupPileId();
+        pool.UpdateStorageGroup(1, group);
+        UNIT_ASSERT(!pool.GetStorageGroup(1).IsMatchesParameters(filter));
+    }
+
     double GetAvg(const TMap<ui32, ui32>& values) {
         double sum = 0;
         for (auto [id, value] : values) {

@@ -482,6 +482,8 @@ struct TNodeFilter {
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     bool MustBePrimaryPile = true;
+    TBridgePileId BackupPileId;
+    ui64 BackupPileAddedGeneration = 0;
 
     const THive* Hive;
 

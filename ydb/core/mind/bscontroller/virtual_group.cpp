@@ -5,10 +5,12 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/config.h>
 #include <ydb/core/blob_depot/s3_route.h>
+#include <ydb/core/blob_depot/types.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <google/protobuf/util/message_differencer.h>
+#include <util/generic/guid.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -45,6 +47,9 @@ namespace NKikimr::NBsController {
         try {
             Groups.ForEach([&](TGroupId key, const TGroupInfo& value) {
                 if (value.VirtualGroupName == cmd.GetName()) {
+                    if (value.IsBackupPileMember()) {
+                        throw TExError() << "virtual group name belongs to a managed backup pile member";
+                    }
                     throw TExFound{key};
                 }
             });
@@ -53,11 +58,6 @@ namespace NKikimr::NBsController {
             status.SetAlready(true);
             return;
         }
-
-        // allocate group identifier
-        auto& nextGroupId = NextVirtualGroupId.Unshare();
-        TGroupID groupId(EGroupConfigurationType::Virtual, 1, nextGroupId.GetRawId());
-        ++nextGroupId;
 
         // determine storage pool that will contain newly created virtual group
         TBoxStoragePoolId storagePoolId;
@@ -93,19 +93,75 @@ namespace NKikimr::NBsController {
                 throw TExError() << "StoragePool must be specified in one of allowed ways";
         }
 
-        auto& pool = pools.at(storagePoolId);
+        status.AddGroupId(CreateVirtualGroup(cmd, storagePoolId, {}, {}, 0).GetRawId());
+    }
+
+    void TBlobStorageController::TConfigState::ValidateBackupPileInfrastructure(const TBridgeInfo::TPile& pile) const {
+#if defined(_win_) || defined(KIKIMR_DISABLE_S3_OPS)
+        throw TExError() << "backup piles require BlobDepot S3 support";
+#endif
+        if (pile.Backup.GetS3().HasAsyncMode() && !AppData()->FeatureFlags.GetEnableBlobDepotDataCooling()) {
+            throw TExError() << "backup pile with asynchronous S3 export requires EnableBlobDepotDataCooling";
+        }
+        // Validate even an empty cluster against the longest depot name this pile can allocate.
+        const TString largestName = TStringBuilder() << "bridge/" << Max<ui32>() << '/' << pile.BridgePileId.GetPileIndex()
+            << '/' << TGUID{{Max<ui32>(), Max<ui32>(), Max<ui32>(), Max<ui32>()}}.AsGuidString();
+        const NBlobDepot::TS3Locator largestLocator{.Generation = Max<ui32>(), .KeyId = Max<ui64>()};
+        const TString prefix = NBlobDepot::MakeS3BasePath(pile.Backup.GetS3().GetSettings(), largestName);
+        if (largestLocator.MakeObjectName(prefix).size() > 1024) {
+            throw TExError() << "S3 object keys including the depot namespace and locator must fit in 1024 bytes";
+        }
+        if (!AppData()->DomainsInfo->GetHive() || AppData()->DomainsInfo->GetHive() == TDomainsInfo::BadTabletId) {
+            throw TExError() << "backup pile requires a root Hive";
+        }
+        THashSet<TString> pools;
+        for (const auto& [id, pool] : StoragePools.Get()) {
+            if (pool.BackupPileName && *pool.BackupPileName == pile.Name && pool.NumGroups) {
+                pools.insert(pool.Name);
+            }
+        }
+        for (const auto& profile : pile.Backup.GetChannelProfiles()) {
+            if (!pools.contains(profile.GetStoragePoolName())) {
+                throw TExError() << "backup pile requires dedicated infrastructure pool " << profile.GetStoragePoolName()
+                    << " with nonzero group count";
+            }
+        }
+    }
+
+    TGroupId TBlobStorageController::TConfigState::CreateVirtualGroup(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd,
+            TBoxStoragePoolId storagePoolId, TBridgePileId pileId, std::optional<TGroupId> bridgeProxyId, ui32 groupSize) {
+        // allocate group identifier
+        auto& nextGroupId = NextVirtualGroupId.Unshare();
+        TGroupID groupId(EGroupConfigurationType::Virtual, 1, nextGroupId.GetRawId());
+        ++nextGroupId;
+
+        auto& pool = StoragePools.Unshare().at(storagePoolId);
         if (pool.DDisk) {
             throw TExError() << "can't invoke AllocateVirtualGroup against DDisk pool";
+        } else if (pool.BackupPileName) {
+            throw TExError() << "cannot allocate a virtual group in a backup infrastructure pool";
+        }
+        if (pileId) {
+            Groups.ForEach([&](TGroupId, const TGroupInfo& value) {
+                if (value.VirtualGroupName == cmd.GetName()) {
+                    throw TExError() << "virtual group name already in use: " << cmd.GetName();
+                }
+            });
         }
 
         // create entry in group table
-        auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,
+        auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), pileId ? 1u : 0u, 0u,
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
-            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u, false);
+            TString(), TString(), pileId ? groupId.GetRaw() : 0u, 0u, false, false, groupSize, pileId, storagePoolId,
+            0u, 0u, 0u, false);
 
         // bind group to storage pool
-        ++pool.NumGroups;
+        if (pileId) {
+            group->BridgeProxyGroupId = bridgeProxyId;
+        } else {
+            ++pool.NumGroups;
+        }
         StoragePoolGroups.Unshare().emplace(storagePoolId, group->ID);
 
         auto& index = IndexGroupSpeciesToGroup.Unshare();
@@ -129,16 +185,24 @@ namespace NKikimr::NBsController {
 
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetVirtualGroupId(group->ID.GetRawId());
+        if (pileId) {
+            config.SetBridgeGroupGeneration(group->Generation);
+            group->BackupDesiredRevision = BridgeInfo->GetPile(pileId)->BackupConfigRevision;
+            config.SetBackupConfigRevision(*group->BackupDesiredRevision);
+            // Reprovisioning the same bridge member must start with a fresh S3 prefix.
+            config.SetName(TStringBuilder() << cmd.GetName() << '/' << CreateGuidAsString());
+        } else {
+            config.SetName(cmd.GetName());
+        }
         config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());
         if (cmd.HasS3BackendSettings()) {
             SetS3BackendSettings(config, cmd.GetS3BackendSettings());
         }
-        config.SetName(cmd.GetName());
 
         const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
         Y_ABORT_UNLESS(success);
 
-        status.AddGroupId(group->ID.GetRawId());
+        return group->ID;
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& /*status*/) {
@@ -156,6 +220,8 @@ namespace NKikimr::NBsController {
                 }
                 // group is already being decommitted -- make this operation idempotent
                 continue;
+            } else if (StoragePools.Get().at(group->StoragePoolId).BackupPileName) {
+                throw TExError() << "cannot decommit backup infrastructure groups";
             } else if (group->VirtualGroupState) {
                 throw TExError() << "group is already virtual" << TErrorParams::GroupId(groupId);
             } else if (group->IsBridgePileOnly()) {
@@ -242,6 +308,8 @@ namespace NKikimr::NBsController {
         TGroupInfo *group = Groups.FindForUpdate(groupId);
         if (!group) {
             throw TExGroupNotFound(groupId.GetRawId());
+        } else if (group->IsBackupPileMember()) {
+            throw TExError() << "backup pile members are managed through the pile configuration";
         } else if (!group->VirtualGroupState) {
             throw TExError() << "group is not virtual" << TErrorParams::GroupId(groupId.GetRawId());
         } else if (auto s = group->VirtualGroupState; s != NKikimrBlobStorage::EVirtualGroupState::NEW && s != NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
@@ -275,6 +343,9 @@ namespace NKikimr::NBsController {
         }
 
         TGroupInfo *group = Groups.FindForUpdate(*groupId);
+        if (group->IsBackupPileMember()) {
+            throw TExError() << "backup pile members are managed through the pile configuration";
+        }
         if (!group->BlobDepotConfig) {
             Y_DEBUG_ABORT(); // this should never happen
             throw TExError() << "Virtual group does not contain BlobDepotConfig";
@@ -528,6 +599,13 @@ namespace NKikimr::NBsController {
             if (!group->VirtualGroupState) { // group was deleted or reset to non-decommitting during the last transaction
                 return PassAway();
             }
+            if (group->IsBackupPileMember()) {
+                const auto* pile = Self->BridgeInfo ? Self->BridgeInfo->FindPile(group->BridgePileId) : nullptr;
+                if (!pile || !NBridge::PileStateTraits(pile->State).AllowsConnection ||
+                        pile->State == NKikimrBridge::TClusterState::SUSPENDED) {
+                    return PassAway(); // BSC restarts setup when the pile can connect again
+                }
+            }
 
             YDB_LOG_DEBUG("Bootstrap",
                 {"marker", "BSCVG01"},
@@ -723,13 +801,17 @@ namespace NKikimr::NBsController {
             ev->Record.SetOwner(Self->TabletID());
             ev->Record.SetOwnerIdx(GroupId.GetRawId());
             ev->Record.SetTabletType(TTabletTypes::BlobDepot);
+            if (group->IsBackupPileMember()) {
+                group->BridgePileId.CopyToProto(&ev->Record, &NKikimrHive::TEvCreateTablet::SetBackupPileId);
+                ev->Record.SetBackupPileAddedGeneration(Self->BridgeInfo->GetPile(group->BridgePileId)->AddedGeneration);
+            }
             ev->Record.ClearBindedChannels();
 
             for (const auto& item : config.GetChannelProfiles()) {
                 const TString& storagePoolName = item.GetStoragePoolName();
                 NKikimrStoragePool::TChannelBind binding;
                 binding.SetStoragePoolName(storagePoolName);
-                if (config.GetIsDecommittingGroup()) {
+                if (config.GetIsDecommittingGroup() || group->IsBackupPileMember()) {
                     binding.SetPhysicalGroupsOnly(true);
                 }
                 for (ui32 i = 0; i < item.GetCount(); ++i) {
@@ -878,6 +960,8 @@ namespace NKikimr::NBsController {
                 UpdateBlobDepotConfig([tabletId](auto& config) {
                     config.SetTabletId(tabletId);
                 });
+            } else if (group->IsBackupPileMember() && record.GetStatus() == NKikimrProto::NOTREADY) {
+                Schedule(TDuration::Seconds(1), new TEvents::TEvBootstrap);
             } else {
                 CreateFailed(TStringBuilder() << "failed to create BlobDepot tablet"
                     << " Reason# " << NKikimrHive::EErrorReason_Name(record.GetErrorReason())
@@ -995,6 +1079,18 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(config.HasTabletId());
                 group.BlobDepotId = config.GetTabletId();
                 group.NeedAlter = false;
+                if (group.IsBackupPileMember()) {
+                    const bool revisionChanged = group.BackupAppliedRevision != group.BackupDesiredRevision;
+                    group.BackupAppliedRevision = group.BackupDesiredRevision;
+                    state.Callbacks.push_back([&self = state.Self, revisionChanged] {
+                        self.RecheckUnsyncedBridgePiles = true;
+                        self.CheckUnsyncedBridgePiles();
+                        self.ProcessSyncers();
+                        if (revisionChanged) {
+                            self.UpdateBackupPileConfigs();
+                        }
+                    });
+                }
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
                     group.DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS;
                     state.GroupContentChanged.insert(group.ID);
@@ -1074,6 +1170,90 @@ namespace NKikimr::NBsController {
             }
         }
     };
+
+    class TBlobStorageController::TTxUpdateBackupPileConfigs : public TTransactionBase<TBlobStorageController> {
+        std::optional<TConfigState> State;
+
+    public:
+        using TTransactionBase::TTransactionBase;
+        TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_BACKUP_PILE_CONFIGS; }
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            if (!Self->BridgeInfo) {
+                return true;
+            }
+            constexpr size_t MaxInflightPerPile = 8;
+            std::map<TBridgePileId, size_t> inflight;
+            for (const auto& [id, group] : Self->GroupMap) {
+                if (group->IsBackupPileMember() && group->BackupAppliedRevision &&
+                        group->BackupAppliedRevision != group->BackupDesiredRevision) {
+                    ++inflight[group->BridgePileId];
+                }
+            }
+            for (const auto& [id, group] : Self->GroupMap) {
+                if (!group->IsBackupPileMember()) {
+                    continue;
+                }
+                const auto* pile = Self->BridgeInfo->FindPile(group->BridgePileId);
+                if (!pile || pile->Type != NKikimrBridge::BACKUP || !pile->BackupConfigRevision ||
+                        group->BackupDesiredRevision.GetOrElse(0) >= pile->BackupConfigRevision) {
+                    continue;
+                }
+                auto& count = inflight[group->BridgePileId];
+                if (group->BackupAppliedRevision == group->BackupDesiredRevision) {
+                    if (count >= MaxInflightPerPile) {
+                        continue;
+                    }
+                    ++count;
+                }
+                if (!State) {
+                    State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+                }
+                auto* updated = State->Groups.FindForUpdate(id);
+                NKikimrBlobDepot::TBlobDepotConfig config;
+                Y_ABORT_UNLESS(config.ParseFromString(*updated->BlobDepotConfig));
+                // Distconf validates that the S3 route still reaches the same namespace. Channel bindings
+                // are immutable for the lifetime of a provisioned pile.
+                config.MutableS3BackendSettings()->CopyFrom(pile->Backup.GetS3());
+                config.SetBackupConfigRevision(pile->BackupConfigRevision);
+                updated->BlobDepotConfig = config.SerializeAsString();
+                updated->BackupDesiredRevision = pile->BackupConfigRevision;
+                if (updated->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
+                    updated->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::NEW;
+                    updated->ErrorReason.Clear();
+                }
+                updated->NeedAlter = true;
+            }
+            if (State) {
+                if (const auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    YDB_LOG_ERROR("Failed to reconcile backup pile configurations", {"error", *error});
+                }
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            if (State) {
+                State->ApplyConfigUpdates();
+            }
+            Self->BackupPileConfigCheckScheduled = false;
+            if (std::exchange(Self->BackupPileConfigRecheck, false)) {
+                Self->UpdateBackupPileConfigs();
+            }
+        }
+    };
+
+    void TBlobStorageController::UpdateBackupPileConfigs() {
+        if (Loaded && BridgeInfo && std::ranges::any_of(BridgeInfo->Piles, [](const auto& pile) {
+                return pile.Type == NKikimrBridge::BACKUP;
+            })) {
+            if (std::exchange(BackupPileConfigCheckScheduled, true)) {
+                BackupPileConfigRecheck = true;
+            } else {
+                Execute(new TTxUpdateBackupPileConfigs(this));
+            }
+        }
+    }
 
     void TBlobStorageController::CommitVirtualGroupUpdates(TConfigState& state) {
         for (const auto& [base, overlay] : state.Groups.Diff()) {

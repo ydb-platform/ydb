@@ -1,9 +1,59 @@
 #include "yaml_config_helpers.h"
 
+#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
+#include <util/string/ascii.h>
+
 #define XXH_INLINE_ALL
 #include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NYaml {
+
+namespace {
+
+bool CanDisplayYamlNode(const YAML::Node& node, size_t& budget, size_t depth) {
+    if (!budget || depth == 0) {
+        return false;
+    }
+    --budget;
+    if (node.IsMap()) {
+        for (const auto& entry : node) {
+            if (!entry.first.IsScalar()) {
+                return false;
+            }
+            const TStringBuf key(entry.first.Scalar());
+            if (AsciiEqualsIgnoreCase(key, "access_key") || AsciiEqualsIgnoreCase(key, "accessKey") ||
+                    AsciiEqualsIgnoreCase(key, "secret_key") || AsciiEqualsIgnoreCase(key, "secretKey") ||
+                    !CanDisplayYamlNode(entry.second, budget, depth - 1)) {
+                return false;
+            }
+        }
+    } else if (node.IsSequence()) {
+        for (const auto& item : node) {
+            if (!CanDisplayYamlNode(item, budget, depth - 1)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // anonymous
+
+TString ConfigTextForDiagnostics(const TString& config) {
+    // A JSON string literal can be included in either the JSON or the text monitoring response.
+    static const TString redacted = R"("[REDACTED]")";
+    try {
+        size_t budget = config.size() + 1;
+        for (const auto& document : YAML::LoadAll(std::string(config.data(), config.size()))) {
+            if (!CanDisplayYamlNode(document, budget, 200)) {
+                return redacted;
+            }
+        }
+        return config;
+    } catch (const YAML::Exception&) {
+        return redacted;
+    }
+}
 
 NJson::TJsonValue* Traverse(NJson::TJsonValue& json, const TVector<TString>& pathPieces) {
     NJson::TJsonValue* elem = &json;

@@ -1,7 +1,13 @@
 #include "bridge_pile_ops.h"
 
+#include <ydb/core/base/hive.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+
+#if !defined(KIKIMR_DISABLE_S3_OPS) && !defined(_win_)
+#include <ydb/core/wrappers/fake_storage.h>
+#endif
 
 #include <util/generic/scope.h>
 
@@ -29,9 +35,451 @@ namespace {
         });
     }
 
+#if !defined(KIKIMR_DISABLE_S3_OPS) && !defined(_win_)
+    void AddBackupPileToConfig(TEnvironmentSetup& env, const TString& bucket, const TString& secretKey) {
+        auto add = [&](YAML::Node& config) {
+            auto pile = YAML::Load(R"(
+name: pile_3
+type: BACKUP
+backup:
+  channel_profiles:
+    - {storage_pool_name: backup-local, channel_kind: System, count: 2}
+    - {storage_pool_name: backup-local, channel_kind: Data, count: 2}
+  s3:
+    settings: {endpoint: fake.fake, access_key: test-key, object_key_pattern: bridge}
+    async_mode: {max_pending_bytes: 1073741824}
+)");
+            pile["backup"]["s3"]["settings"]["bucket"] = bucket;
+            pile["backup"]["s3"]["settings"]["secret_key"] = secretKey;
+            config["bridge_config"]["piles"].push_back(pile);
+            AddPileHosts(config, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+        };
+        WaitUntil(env, [&] {
+            const auto response = ReplaceMainConfig(env, add);
+            if (response.GetStatus() == TResult::OK) {
+                return true;
+            }
+            UNIT_ASSERT_EQUAL_C(response.GetStatus(), TResult::ERROR, response.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), "Some static nodes did not report their BridgeConfig");
+            return false;
+        }, "all static nodes report their bridge configuration", TDuration::Seconds(1), 30);
+    }
+
+#endif
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeAddPile) {
+#if !defined(KIKIMR_DISABLE_S3_OPS) && !defined(_win_)
+    Y_UNIT_TEST(BackupPileJoinsExportsAndBecomesPrimary) {
+        const TString bucket = "bridge-backup-pile";
+        const TString secretKey = "bridge-backup-key";
+        auto* s3 = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>();
+        s3->Clear();
+        s3->SetSecretKey(secretKey);
+
+        TFeatureFlags flags;
+        flags.SetEnableBlobDepotDataCooling(true);
+        const ui8 keyData[32] = "bridge backup test key";
+        const TEncryptionKey key{
+            .Key = {keyData, sizeof(keyData)},
+            .Version = 1,
+            .Id = "backup test key",
+        };
+        TEnvironmentSetup env({
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Encryption = true,
+            .ConfigPreprocessor = [key](ui32, TNodeWardenConfig& config) {
+                config.TenantKey = key;
+                // Let Wardens run the generated per-pile StateStorage rings across the loss of node 1.
+                config.DomainsConfig = std::make_unique<NKikimrConfig::TDomainsConfig>();
+            },
+            .LocationGenerator = GetBridgedLocation,
+            .SetupHive = true,
+            .FeatureFlags = flags,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+            .InitialConfiguredNodeCount = 16,
+        });
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker data(env);
+        data.Write(groupId);
+
+        AddBackupPileToConfig(env, bucket, secretKey);
+        env.Sim(TDuration::Seconds(10));
+
+        CreateAnotherPool(env, 2, [](auto& pool) {
+            pool.SetName("backup-local");
+            pool.SetKind("backup-local");
+            pool.SetBridgeMode(false);
+            pool.SetBackupPileName("pile_3");
+            pool.SetEncryptionMode(TBlobStorageGroupInfo::EEM_NONE);
+            pool.ClearPDiskFilter();
+            auto* filter = pool.AddPDiskFilter();
+            filter->AddProperty()->SetType(NKikimrBlobStorage::NVME);
+            filter->AddProperty()->MutableLocation()->SetBridgePileName("pile_3");
+        });
+        const auto registered = QueryStorageConfig(env).GetClusterStateDetails().GetPileRegistry().GetPiles(2);
+        auto* localPile = env.Runtime->GetAppDataBridgeConfig().AddPiles();
+        localPile->SetName(registered.GetName());
+        localPile->SetType(registered.GetType());
+        localPile->MutableBackup()->CopyFrom(registered.GetBackup());
+        env.ConfiguredNodeCount = LastThirdPileNodeId;
+        for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
+            env.StartNode(nodeId);
+        }
+        env.Sim(TDuration::Seconds(30));
+        AddPileAndWait(env, "pile_3");
+
+        const auto baseConfig = env.FetchBaseConfig();
+        const auto& groups = baseConfig.GetGroup();
+        const auto backup = std::find_if(groups.begin(), groups.end(), [](const auto& group) {
+            return group.HasVirtualGroupInfo();
+        });
+        UNIT_ASSERT(backup != groups.end());
+        UNIT_ASSERT(backup->GetGroupId() != groupId);
+        UNIT_ASSERT_VALUES_EQUAL(backup->VSlotIdSize(), 0);
+        RejoinPile(env, 2);
+        WaitUntil(env, [&] { return !s3->GetBucket(bucket).GetObjectKeys().empty(); }, "backup pile exports synchronized data");
+
+        for (const ui64 hotLimit : {512_MB, 256_MB}) {
+            const auto update = ReplaceMainConfig(env, [&](YAML::Node& config) {
+                config["bridge_config"]["piles"][2]["backup"]["s3"]["async_mode"]["max_pending_bytes"] = hotLimit;
+            });
+            UNIT_ASSERT_EQUAL_C(update.GetStatus(), TResult::OK, update.GetErrorReason());
+        }
+        const auto revision = QueryStorageConfig(env).GetClusterStateDetails().GetPileRegistry().GetPiles(2)
+            .GetBackupConfigRevision();
+        UNIT_ASSERT(revision > registered.GetBackupConfigRevision());
+        const auto queryEdge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        WaitUntil(env, [&] {
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+            request->Record.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+            request->Record.SetPileName("pile_3");
+            env.Runtime->SendToPipe(env.TabletId, queryEdge, request.release(), 0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            const auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
+                queryEdge, false, env.Runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            const auto& rows = response->Get()->Record.GetGroups().groups();
+            return std::ranges::any_of(rows, [&](const auto& row) {
+                return row.group_id() == groupId && row.has_virtual_group_id() &&
+                    row.applied_config_revision() == revision && row.desired_config_revision() == revision;
+            });
+        }, "newest live backup profile is applied");
+
+        const ui32 backupNode = FirstThirdPileNodeId;
+        const auto& [writtenGroup, blobId, expected] = data.GetWritten().front();
+        UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
+        for (const auto& objectKey : s3->GetBucket(bucket).GetObjectKeys()) {
+            const auto object = s3->GetBucket(bucket).GetObject(objectKey);
+            UNIT_ASSERT(object);
+            UNIT_ASSERT(!object->Contains(expected));
+        }
+        const auto edge = env.Runtime->AllocateEdgeActor(backupNode, __FILE__, __LINE__);
+        TString race;
+        WaitUntil(env, [&] {
+            const auto groupInfo = GetGroupInfo(env, groupId);
+            const auto& member = groupInfo.GetBridgeGroupState().GetPile(2);
+            UNIT_ASSERT_VALUES_EQUAL(member.GetGroupId(), backup->GetGroupId());
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                auto get = std::make_unique<TEvBlobStorage::TEvGet>(blobId, 1, 3, deadline, NKikimrBlobStorage::FastRead);
+                get->ForceGroupGeneration = member.GetGroupGeneration();
+                SendToBSProxy(edge, member.GetGroupId(), get.release());
+            });
+            const auto read = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false, deadline);
+            UNIT_ASSERT(read);
+            if (read->Get()->Status == NKikimrProto::RACE) {
+                race = TStringBuilder() << "parent member generation " << member.GetGroupGeneration()
+                    << ", child generation " << GetGroupInfo(env, member.GetGroupId()).GetGroupGeneration()
+                    << ", node warden generation " << GetNodeGroupGeneration(env, member.GetGroupId(), backupNode)
+                    << ", reported generation " << read->Get()->RacingGeneration << ": " << read->Get()->ErrorReason;
+                return false; // the direct request raced the node's or the tablet's generation update
+            }
+            CheckGetResult(*read->Get(), expected.substr(1, 3));
+            return true;
+        }, "cold read at the current backup group generation", TDuration::MilliSeconds(100), 100, [&] { return race; });
+
+        auto next = QueryStorageConfig(env).GetClusterState();
+        TBridgePileId::FromPileIndex(2).CopyToProto(&next, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(2).CopyToProto(&next, &NKikimrBridge::TClusterState::SetPromotedPile);
+        next.SetGeneration(next.GetGeneration() + 1);
+        const auto promotion = InvokeDistconf(env, [&](auto& record) {
+            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(next);
+        });
+        UNIT_ASSERT_EQUAL_C(promotion.GetStatus(), TResult::OK, promotion.GetErrorReason());
+        data.Write(groupId, backupNode);
+        data.CheckAll(backupNode);
+
+        auto waitForBackupConfig = [&](const NKikimrBridge::TClusterState& expected) {
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            for (ui32 nodeId = backupNode; nodeId <= LastThirdPileNodeId; ++nodeId) {
+                const auto local = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+                const auto warden = MakeBlobStorageNodeWardenID(nodeId);
+                env.Runtime->Send(new IEventHandle(warden, local, new TEvNodeWardenQueryStorageConfig(true)), nodeId);
+                for (;;) {
+                    const auto reply = env.WaitForEdgeActorEvent<TEvNodeWardenStorageConfig>(local, false, deadline);
+                    UNIT_ASSERT_C(reply && reply->Get()->Config, "No failover configuration on node " << nodeId);
+                    const auto& current = reply->Get()->Config->GetClusterState();
+                    if (current.GetGeneration() >= expected.GetGeneration() &&
+                            current.GetPrimaryPile() == expected.GetPrimaryPile() &&
+                            current.GetPerPileState(0) == expected.GetPerPileState(0) &&
+                            current.GetPerPileState(1) == expected.GetPerPileState(1)) {
+                        const auto& config = *reply->Get()->Config;
+                        for (const auto* component : {&config.GetStateStorageConfig(), &config.GetStateStorageBoardConfig(),
+                                &config.GetSchemeBoardConfig()}) {
+                            bool hasBackupRing = false;
+                            for (const auto& ring : component->GetRingGroups()) {
+                                const ui32 pile = TBridgePileId::FromProto(&ring,
+                                    &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId).GetPileIndex();
+                                if (pile == 2) {
+                                    hasBackupRing = true;
+                                    UNIT_ASSERT_EQUAL_C(ring.GetPileState(), NKikimrConfig::TStateStorageConfig::PRIMARY,
+                                        ring.ShortDebugString());
+                                } else if (expected.GetPerPileState(pile) == NKikimrBridge::TClusterState::DISCONNECTED) {
+                                    UNIT_ASSERT_EQUAL_C(ring.GetPileState(), NKikimrConfig::TStateStorageConfig::DISCONNECTED,
+                                        ring.ShortDebugString());
+                                }
+                            }
+                            UNIT_ASSERT_C(hasBackupRing, component->ShortDebugString());
+                        }
+                        break;
+                    }
+                }
+                env.Runtime->Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, warden, local, nullptr, 0), nodeId);
+            }
+        };
+        waitForBackupConfig(next);
+        const ui32 regularMember = GetGroupInfo(env, groupId).GetBridgeGroupState().GetPile(1).GetGroupId();
+        auto isolated = QueryStorageConfig(env, backupNode).GetClusterState();
+        isolated.SetPerPileState(0, NKikimrBridge::TClusterState::DISCONNECTED);
+        isolated.SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        isolated.SetGeneration(isolated.GetGeneration() + 1);
+        // Bound the immediate retries of the fixture's pinned system tablet bootstrappers during the transition.
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> deaths;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvTablet::TEvTabletDead::EventType) {
+                const auto tablet = event->Get<TEvTablet::TEvTabletDead>()->TabletID;
+                if (tablet == env.TabletId || tablet == MakeDefaultHiveID()) {
+                    deaths.emplace_back(nodeId, std::move(event));
+                    return false;
+                }
+            }
+            return true;
+        };
+        Y_DEFER { env.Runtime->FilterFunction = {}; };
+        for (ui32 nodeId = 1; nodeId < backupNode; ++nodeId) {
+            env.StopNode(nodeId);
+        }
+        WaitUntil(env, [&] {
+            const auto response = InvokeDistconf(env, [&](auto& record) {
+                record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(isolated);
+            }, backupNode, env.Runtime->GetClock() + TDuration::Seconds(30));
+            if (response.GetStatus() == TResult::NO_QUORUM || response.GetStatus() == TResult::RACE) {
+                return false;
+            }
+            UNIT_ASSERT_EQUAL_C(response.GetStatus(), TResult::OK, response.ShortDebugString());
+            return true;
+        }, "disconnect both failed regular piles", TDuration::Seconds(1), 120);
+
+        waitForBackupConfig(isolated);
+        env.Runtime->FilterFunction = {};
+        for (auto& [nodeId, event] : deaths) {
+            env.Runtime->Send(event.release(), nodeId);
+        }
+        // The test fixture pins both system tablet bootstrappers to the lost first node.
+        env.Runtime->CreateTestBootstrapper(TTestActorSystem::CreateTestTabletInfo(env.TabletId,
+            TTabletTypes::BSController, env.Settings.Erasure.GetErasure(), env.GroupId, 3),
+            &CreateFlatBsController, backupNode);
+        env.Runtime->CreateTestBootstrapper(TTestActorSystem::CreateTestTabletInfo(MakeDefaultHiveID(),
+            TTabletTypes::Hive, env.Settings.Erasure.GetErasure(), env.GroupId, 3), &CreateDefaultHive, backupNode);
+
+        std::map<ui64, TString> lookups;
+        std::map<ui64, TString> bootErrors;
+        Y_DEFER { env.Runtime->FilterFunction = {}; };
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvStateStorage::EvInfo) {
+                const auto* lookup = event->Get<TEvStateStorage::TEvInfo>();
+                if (lookup->TabletID == env.TabletId || lookup->TabletID == MakeDefaultHiveID()) {
+                    lookups[lookup->TabletID] = lookup->ToString();
+                }
+            } else if (event->GetTypeRewrite() == TEvTablet::EvTabletDead) {
+                const auto* death = event->Get<TEvTablet::TEvTabletDead>();
+                bootErrors[death->TabletID] = TStringBuilder() << "death reason " << ui32(death->Reason);
+            }
+            return true;
+        };
+        auto queryController = [&] {
+            const auto caller = env.Runtime->AllocateEdgeActor(backupNode, __FILE__, __LINE__);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
+            request->Record.AddGroupIDs(groupId);
+            env.Runtime->SendToPipe(env.TabletId, caller, request.release(), Max<ui64>(),
+                TTestActorSystem::GetPipeConfigWithRetries());
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(caller, false,
+                env.Runtime->GetClock() + TDuration::Minutes(2));
+        };
+        const auto bscCaller = env.Runtime->AllocateEdgeActor(backupNode, __FILE__, __LINE__);
+        auto configRequest = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* pool = configRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
+        pool->SetBoxId(1);
+        pool->AddStoragePoolId(1);
+        env.Runtime->SendToPipe(env.TabletId, bscCaller, configRequest.release(), 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const auto bscReply = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerConfigResponse>(bscCaller, false,
+            env.Runtime->GetClock() + TDuration::Minutes(2));
+        UNIT_ASSERT_C(bscReply && bscReply->Get()->Record.GetResponse().GetSuccess(),
+            "BSC did not serve its storage pool on the isolated backup pile " << lookups[env.TabletId] << ' ' << bootErrors[env.TabletId]);
+        const auto hiveCaller = env.Runtime->AllocateEdgeActor(backupNode, __FILE__, __LINE__);
+        env.Runtime->SendToPipe(MakeDefaultHiveID(), hiveCaller, new TEvHive::TEvRequestHiveNodeStats, 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        UNIT_ASSERT_C(env.WaitForEdgeActorEvent<TEvHive::TEvResponseHiveNodeStats>(hiveCaller, false,
+            env.Runtime->GetClock() + TDuration::Minutes(2)), "Hive did not boot on the isolated backup pile "
+            << lookups[MakeDefaultHiveID()] << ' ' << bootErrors[MakeDefaultHiveID()]);
+        env.Runtime->FilterFunction = {};
+        data.SendPut(groupId, edge);
+        const auto put = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Minutes(2));
+        UNIT_ASSERT_C(put, "Timed out writing to the backup as the only available pile");
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Get()->Status, NKikimrProto::OK, put->Get()->ToString());
+        const auto& [_, recoveryId, recoveryData] = data.GetWritten().back();
+        auto readRecoveredBlob = [&](ui32 nodeId, ui32 targetGroup, std::optional<ui32> generation) {
+            const auto reader = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(reader, [&] {
+                auto* request = new TEvBlobStorage::TEvGet(recoveryId, 0, 0, deadline, NKikimrBlobStorage::FastRead);
+                request->ForceGroupGeneration = generation;
+                SendToBSProxy(reader, targetGroup, request);
+            });
+            const auto read = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(reader, false, deadline);
+            UNIT_ASSERT_C(read, "Timed out reading the backup-only write from group " << targetGroup);
+            CheckGetResult(*read->Get(), recoveryData);
+        };
+        readRecoveredBlob(backupNode, groupId, {});
+
+        constexpr ui32 regularNode = 9;
+        std::map<ui32, TString> lastSync;
+        Y_DEFER { env.Runtime->FilterFunction = {}; };
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto* finished = event->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                lastSync[finished->TargetGroupId.GetRawId()] = TStringBuilder() << "node " << nodeId
+                    << " from " << finished->SourceGroupId << " generation " << finished->BridgeProxyGroupGeneration
+                    << " result " << finished->ErrorReason.value_or("OK");
+            }
+            return true;
+        };
+        for (ui32 nodeId = regularNode; nodeId < backupNode; ++nodeId) {
+            env.StartNode(nodeId);
+        }
+        auto rejoining = QueryStorageConfig(env, backupNode).GetClusterState();
+        rejoining.SetPerPileState(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        rejoining.SetGeneration(rejoining.GetGeneration() + 1);
+        const auto rejoin = InvokeDistconf(env, [&](auto& record) {
+            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(rejoining);
+        }, backupNode, env.Runtime->GetClock() + TDuration::Seconds(30));
+        UNIT_ASSERT_EQUAL_C(rejoin.GetStatus(), TResult::OK, rejoin.ShortDebugString());
+        WaitUntil(env, [&] {
+            return QueryStorageConfig(env, backupNode).GetClusterState().GetPerPileState(1)
+                == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        }, "regular pile synchronizes from backup", [&] {
+            const auto storage = QueryStorageConfig(env, backupNode);
+            TStringBuilder description;
+            description << "cluster " << storage.GetClusterState().ShortDebugString();
+            for (const auto& state : storage.GetClusterStateDetails().GetPileSyncState()) {
+                description << " sync state " << state.ShortDebugString();
+            }
+            for (const auto& [target, status] : lastSync) {
+                description << " sync target " << target << ": " << status;
+            }
+            for (const auto& group : storage.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (group.HasBridgeGroupState()) {
+                    description << " static group " << group.GetGroupID() << ' ' << group.GetBridgeGroupState().ShortDebugString();
+                }
+            }
+            if (const auto reply = queryController()) {
+                for (const auto& group : reply->Get()->Record.GetServiceSet().GetGroups()) {
+                    description << " group state " << group.GetBridgeGroupState().ShortDebugString();
+                }
+            } else {
+                description << " no BSC reply";
+            }
+            return TString(description);
+        });
+        readRecoveredBlob(regularNode, regularMember, GetNodeGroupGeneration(env, regularMember, regularNode));
+    }
+
+    Y_UNIT_TEST(BackupPilePreflightChecksDedicatedStorageBeforeAddingAnyGroups) {
+        TFeatureFlags flags;
+        flags.SetEnableBlobDepotDataCooling(false);
+        TEnvironmentSetup env({
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SetupHive = true,
+            .FeatureFlags = flags,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+            .InitialConfiguredNodeCount = 16,
+        });
+        AddBackupPileToConfig(env, "backup-preflight", "test-key");
+        env.Sim(TDuration::Seconds(10));
+
+        ExpectError(AddPile(env, "pile_3"), "EnableBlobDepotDataCooling");
+        const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [] { AppData()->FeatureFlags.SetEnableBlobDepotDataCooling(true); });
+        ExpectError(AddPile(env, "pile_3"), "requires dedicated infrastructure pool backup-local");
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* pool = request.AddCommand()->MutableDefineStoragePool();
+        pool->SetBoxId(1);
+        pool->SetStoragePoolId(2);
+        pool->SetName("backup-local");
+        pool->SetKind("backup-local");
+        pool->SetErasureSpecies("block-4-2");
+        pool->SetVDiskKind("Default");
+        pool->SetNumGroups(1);
+        pool->SetBackupPileName("pile_3");
+        auto* filter = pool->AddPDiskFilter();
+        filter->AddProperty()->SetType(NKikimrBlobStorage::NVME);
+        auto* location = filter->AddProperty()->MutableLocation();
+        location->SetBridgePileName("pile_2");
+        const auto conflict = env.Invoke(request);
+        UNIT_ASSERT(!conflict.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(conflict.GetErrorDescription(), "different pile");
+
+        pool->ClearPDiskFilter();
+        pool->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::NVME);
+        const auto defined = env.Invoke(request);
+        UNIT_ASSERT_C(defined.GetSuccess(), defined.GetErrorDescription());
+        UNIT_ASSERT(GetPoolGroups(env.FetchBaseConfig(), 2).empty());
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env, 2).GetBackupPileName(), "pile_3");
+
+        AddPileAndWait(env, "pile_3");
+        const auto base = env.FetchBaseConfig();
+        const auto groups = GetPoolGroups(base, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        UNIT_ASSERT(!groups.front()->HasVirtualGroupInfo());
+        UNIT_ASSERT(groups.front()->VSlotIdSize());
+        for (const auto& slot : groups.front()->GetVSlotId()) {
+            UNIT_ASSERT_LE(FirstThirdPileNodeId, slot.GetNodeId());
+            UNIT_ASSERT_LE(slot.GetNodeId(), LastThirdPileNodeId);
+        }
+
+        RemovePileAndWait(env, "pile_3");
+        UNIT_ASSERT(GetPoolGroups(env.FetchBaseConfig(), 2).empty());
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env, 2).GetNumGroups(), 1);
+        AddPileAndWait(env, "pile_3");
+        const auto reprovisioned = env.FetchBaseConfig();
+        const auto newGroups = GetPoolGroups(reprovisioned, 2);
+        UNIT_ASSERT_VALUES_EQUAL(newGroups.size(), 1);
+        UNIT_ASSERT_UNEQUAL(newGroups.front()->GetGroupId(), groups.front()->GetGroupId());
+    }
+
+#endif
+
     Y_UNIT_TEST(GroupCreatedWhileBscCommitIsPending) {
         TEnvironmentSetup env(MakeExpandableSettings());
         CreatePoolAndGetGroup(env);

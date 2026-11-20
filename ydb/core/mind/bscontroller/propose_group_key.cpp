@@ -38,7 +38,7 @@ public:
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
 
         if (TGroupInfo *group = State->Groups.FindForUpdate(GroupId)) {
-            if (TGroupID(GroupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
+            if (TGroupID(GroupId).ConfigurationType() != EGroupConfigurationType::Dynamic && !group->IsBackupPileMember()) {
                 YDB_LOG_CRIT("Can't propose key for non-dynamic group",
                     {"marker", "BSCTXPGK01"},
                     {"groupId", GroupId});

@@ -286,9 +286,15 @@ public:
         auto *self = Self();
         self->OnBootstrap();
         const auto& request = *GetProtoRequest();
+        RequireSelfManagement = !request.confirm_s3_route_change_for_piles().empty();
         auto shim = ConvertConfigReplaceRequest(request);
         if (shim.MainConfig) {
             if (NYamlConfig::IsDatabaseConfig(*shim.MainConfig)) {
+                if (RequireSelfManagement) {
+                    self->Reply(Ydb::StatusIds::BAD_REQUEST, "S3 route confirmation applies only to cluster backup piles.",
+                        NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                    return;
+                }
                 DatabaseConfig = shim.MainConfig;
                 if (!ResolveTargetDatabase()) {
                     return;
@@ -349,6 +355,9 @@ public:
         cmd->SetPeerName(Request_->GetPeerName());
         cmd->SetDryRun(protoRequest->dry_run());
         cmd->SetAllowUnknownFields(protoRequest->allow_unknown_fields() || protoRequest->bypass_checks());
+        for (const auto& name : protoRequest->confirm_s3_route_change_for_piles()) {
+            cmd->AddConfirmS3RouteChangeForPiles(name);
+        }
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,

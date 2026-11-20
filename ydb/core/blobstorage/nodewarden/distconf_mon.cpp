@@ -1,6 +1,8 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 
+#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <google/protobuf/util/json_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
@@ -8,6 +10,24 @@
 namespace NKikimr::NStorage {
 
     namespace {
+
+        void HideBackupCredentials(NKikimrBlobStorage::TStorageConfig *config) {
+            for (; config; config = config->HasPrevConfig() ? config->MutablePrevConfig() : nullptr) {
+                if (!config->GetClusterStateDetails().HasPileRegistry()) {
+                    continue;
+                }
+                auto *registry = config->MutableClusterStateDetails()->MutablePileRegistry();
+                for (auto& pile : *registry->MutablePiles()) {
+                    if (pile.GetBackup().GetS3().HasSettings()) {
+                        auto *settings = pile.MutableBackup()->MutableS3()->MutableSettings();
+                        settings->ClearAccessKey();
+                        settings->ClearSecretKey();
+                        config->ClearConfigComposite();
+                        config->ClearCompressedStorageYaml();
+                    }
+                }
+            }
+        }
 
         class TInvokeRequestHandler : public TActorBootstrapped<TInvokeRequestHandler> {
             std::unique_ptr<TEventHandle<NMon::TEvHttpInfo>> Event;
@@ -53,12 +73,24 @@ namespace NKikimr::NStorage {
             }
 
             void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+                auto& record = ev->Get()->Record;
                 YDB_LOG_DEBUG("Receive TEvNodeConfigInvokeOnRootResult",
                     {"marker", "NWDC39"},
-                    {"record", ev->Get()->Record});
+                    {"record", record});
 
+                if (record.HasQueryConfig() && record.GetQueryConfig().HasConfig()) {
+                    HideBackupCredentials(record.MutableQueryConfig()->MutableConfig());
+                } else if (record.HasFetchStorageConfig()) {
+                    auto *fetch = record.MutableFetchStorageConfig();
+                    if (fetch->HasYAML()) {
+                        fetch->SetYAML(NYaml::ConfigTextForDiagnostics(fetch->GetYAML()));
+                    }
+                    if (fetch->HasStorageYAML()) {
+                        fetch->SetStorageYAML(NYaml::ConfigTextForDiagnostics(fetch->GetStorageYAML()));
+                    }
+                }
                 TString data;
-                google::protobuf::util::MessageToJsonString(ev->Get()->Record, &data);
+                google::protobuf::util::MessageToJsonString(record, &data);
 
                 TStringStream s;
                 s << NMonitoring::HTTPOKJSON << data;
@@ -240,12 +272,15 @@ namespace NKikimr::NStorage {
                                     if (error) {
                                         out << "<strong>error: " << error << "</strong>";
                                     } else {
-                                        out << "<pre>" << yaml << "</pre>";
+                                        out << "<pre>";
+                                        EscapeHtmlString(out, NYaml::ConfigTextForDiagnostics(yaml));
+                                        out << "</pre>";
                                     }
                                 }
                                 if (auto yaml = GetStorageYaml(*config)) {
-                                    out << "<strong>storage.yaml (size " << yaml->size() << ")</strong><br/><pre>"
-                                        << *yaml << "</pre>";
+                                    out << "<strong>storage.yaml (size " << yaml->size() << ")</strong><br/><pre>";
+                                    EscapeHtmlString(out, NYaml::ConfigTextForDiagnostics(*yaml));
+                                    out << "</pre>";
                                 }
                             } else {
                                 out << "not defined";

@@ -448,6 +448,13 @@ namespace NKikimr::NBsController {
                 TGroupInfo *group = state.Groups.FindForUpdate(groupId);
                 Y_ABORT_UNLESS(group);
                 ++group->Generation;
+                if (group->IsBackupPileMember()) {
+                    NKikimrBlobDepot::TBlobDepotConfig config;
+                    Y_ABORT_UNLESS(group->BlobDepotConfig && config.ParseFromString(*group->BlobDepotConfig));
+                    config.SetBridgeGroupGeneration(group->Generation);
+                    group->BlobDepotConfig = config.SerializeAsString();
+                    group->NeedAlter = true;
+                }
                 for (const TVSlotInfo *slot : group->VDisksInGroup) {
                     if (slot->GroupGeneration != group->Generation) {
                         TVSlotInfo *mutableSlot = state.VSlots.FindForUpdate(slot->VSlotId);
@@ -1450,6 +1457,9 @@ namespace NKikimr::NBsController {
 
             pb->SetKind(pool.Kind);
             pb->SetBridgeMode(pool.BridgeMode);
+            if (pool.BackupPileName) {
+                pb->SetBackupPileName(*pool.BackupPileName);
+            }
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
             if (pool.DefaultGroupSizeInUnits != 0) {

@@ -96,7 +96,9 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlocksManager::SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic timestamp, TDuration timeToLive) {
         auto& block = Blocks[tabletId];
-        Y_ABORT_UNLESS(block.BlockedGeneration <= blockedGeneration);
+        if (blockedGeneration < block.BlockedGeneration) {
+            return; // a newer block notification overtook this response
+        }
         block.BlockedGeneration = blockedGeneration;
         block.TimeToLive = timeToLive;
         block.ExpirationTimestamp = timestamp + timeToLive;
@@ -104,6 +106,7 @@ namespace NKikimr::NBlobDepot {
             Agent.DropTabletRequest(block.RefreshId);
             block.RefreshId = 0;
         }
+        IssueOnUpdateBlock(block);
     }
 
     void TBlobDepotAgent::TBlocksManager::OnBlockedTablets(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TEvPushNotify::TBlockedTablet>& tablets) {

@@ -195,6 +195,8 @@ message TDefineStoragePool {
     // Resolved at creation from this field or the cluster default; readback returns the stored mode.
     // Omitted updates preserve it, and changing it is not allowed.
     optional bool BridgeMode = 16;
+    // Dedicated ordinary pool for the BlobDepot tablets owned by this backup pile.
+    optional string BackupPileName = 17;
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;

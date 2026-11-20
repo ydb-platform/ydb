@@ -687,6 +687,10 @@ namespace NKikimr::NStorage {
             auto& pile = bridgeInfo->Piles[i];
             pile.BridgePileId = TBridgePileId::FromPileIndex(i);
             pile.Name = registry->GetPiles(i).GetName();
+            pile.Type = registry->GetPiles(i).GetType();
+            pile.Backup = registry->GetPiles(i).GetBackup();
+            pile.AddedGeneration = registry->GetPiles(i).GetAddedGeneration();
+            pile.BackupConfigRevision = registry->GetPiles(i).GetBackupConfigRevision();
             pile.IsFreeSlot = !registry->GetPiles(i).HasName();
         }
         if (const auto implicitPileId = TBridgePileId::FromProto(&registry.value(),

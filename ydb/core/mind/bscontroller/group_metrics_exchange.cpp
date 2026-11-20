@@ -29,16 +29,22 @@ namespace NKikimr::NBsController {
 
             THashSet<TGroupId> groupsToCheck;
 
-            for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
-                if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&item, &NKikimrBlobStorage::TGroupMetrics::GetGroupId))) {
-                    group->GroupMetrics = std::move(item);
-                    groupsToCheck.insert(group->ID);
+            {
+                TDatabaseSpaceTracker::TBatch batch(Self->DatabaseSpace);
+                for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
+                    if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&item, &NKikimrBlobStorage::TGroupMetrics::GetGroupId))) {
+                        group->GroupMetrics = std::move(item);
+                        groupsToCheck.insert(group->ID);
+                        if (group->IsBackupPileMember()) {
+                            Self->UpdateDatabaseSpaceGroup(*group);
+                        }
 
-                    TString s;
-                    const bool success = group->GroupMetrics->SerializeToString(&s);
-                    Y_DEBUG_ABORT_UNLESS(success);
-                    typename TGroupId::Type groupId = group->ID.GetRawId();
-                    db.Table<Schema::Group>().Key(groupId).Update<Schema::Group::Metrics>(s);
+                        TString s;
+                        const bool success = group->GroupMetrics->SerializeToString(&s);
+                        Y_DEBUG_ABORT_UNLESS(success);
+                        typename TGroupId::Type groupId = group->ID.GetRawId();
+                        db.Table<Schema::Group>().Key(groupId).Update<Schema::Group::Metrics>(s);
+                    }
                 }
             }
 
@@ -54,6 +60,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            Self->CommitDatabaseSpaceChanges(db);
             Self->UpdateWaitingGroups(groupsToCheck);
 
             return true;

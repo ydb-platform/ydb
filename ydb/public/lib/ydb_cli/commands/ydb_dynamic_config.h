@@ -44,6 +44,7 @@ private:
     bool Force = false;
     bool DryRun = false;
     bool AllowUnknownFields = false;
+    std::vector<std::string> ConfirmS3RouteChangeForPiles;
     TString DynamicConfig;
     TString Filename;
     bool AllowEmptyDatabase = false;

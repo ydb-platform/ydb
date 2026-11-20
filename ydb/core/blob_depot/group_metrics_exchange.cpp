@@ -56,11 +56,13 @@ namespace NKikimr::NBlobDepot {
 
             std::unordered_set<ui32> processedDataGroups;
 
+            bool complete = !Info()->Channels.empty();
             for (const auto& channel : Info()->Channels) {
                 if (auto *entry = channel.LatestEntry(); entry && channel.Channel < Channels.size()) {
                     TChannelInfo& ch = Channels[channel.Channel];
                     if (const auto it = metrics.find(entry->GroupID); it != metrics.end()) {
                         const auto& p = it->second->GetGroupParameters();
+                        complete &= p.HasSpaceColor();
                         switch (ch.ChannelKind) {
                             case NKikimrBlobDepot::TChannelKind::System:
                                 systemColor = Max(systemColor, p.GetSpaceColor());
@@ -82,8 +84,17 @@ namespace NKikimr::NBlobDepot {
                             case NKikimrBlobDepot::TChannelKind::Log:
                                 break;
                         }
+                    } else {
+                        complete = false;
                     }
+                } else {
+                    complete = false;
                 }
+            }
+
+            const auto color = processedDataGroups.empty() ? systemColor : Max(systemColor, dataColor);
+            if (complete) {
+                params->SetSpaceColor(color);
             }
 
             auto *wb = record.MutableWhiteboardUpdate();
@@ -106,7 +117,9 @@ namespace NKikimr::NBlobDepot {
             const float approximateFreeSpaceShare = denom ? static_cast<float>(available / denom) : 0.0f;
 
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), response.release());
-            SpaceMonitor->SetSpaceColor(dataColor, approximateFreeSpaceShare); // the best data channel space color works for the whole depot
+            if (complete) {
+                SpaceMonitor->SetSpaceColor(color, approximateFreeSpaceShare);
+            }
         }
     }
 

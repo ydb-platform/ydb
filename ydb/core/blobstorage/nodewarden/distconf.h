@@ -1031,10 +1031,11 @@ namespace NKikimr::NStorage {
         // away
         BridgeFeatureLevelRollback = 5,
         BridgeFeatureLevelHotStandby = 6,
+        BridgeFeatureLevelBackupPile = 7,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelHotStandby;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelBackupPile;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
@@ -1058,6 +1059,9 @@ namespace NKikimr::NStorage {
     NKikimrConfig::TBridgeConfig GetMergedBridgeConfig(const NJson::TJsonValue& mainConfig,
         const NJson::TJsonValue *storageConfig, bool allowUnknownFields);
 
+    std::optional<TString> ValidateBackupPileConfig(NKikimrBridge::EPileType type,
+        const NKikimrBridge::TBackupPileConfig *backup);
+
     // Assign pile ids to the piles of the bridge config provided with new cluster configuration and store the resulting
     // pile registry in this configuration, along with the states of the piles (new ones are INACTIVE, and only INACTIVE
     // ones may be dropped); localBridgeConfig is the one this node runs with, currentBridgeConfig is the one of the
@@ -1065,7 +1069,8 @@ namespace NKikimr::NStorage {
     // positions in BridgeConfig, which is allowed only when every node supports it.
     std::optional<TString> UpdatePileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig,
         NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig,
-        const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged);
+        const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged,
+        THashSet<TString> confirmedRoutes = {});
 
     // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
     // and make every static group an inline pile of itself. BSC converts existing pools and their groups afterwards

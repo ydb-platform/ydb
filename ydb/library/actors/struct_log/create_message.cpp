@@ -41,6 +41,7 @@ TStructuredMessage TCreateMessageGuard::PopBuildMessage() {
 void TCreateMessageArg::OutputProtobufMessage(IOutputStream& s, const google::protobuf::Message& value) {
     google::protobuf::TextFormat::Printer p;
     p.SetSingleLineMode(true);
+    p.SetRedactDebugString(true);
     TString str;
     if (p.PrintToString(value, &str)) {
         s << "{" << str << "}";

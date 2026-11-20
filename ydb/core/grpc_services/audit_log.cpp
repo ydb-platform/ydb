@@ -123,11 +123,11 @@ void AuditAcl(std::optional<ui32> status, const TAuditLogParts& parts) {
     AUDIT_LOG(AddOperationParts(auditParts, status, parts););
 }
 
-void AuditConnAuditHeartbeat(const TConnectionFields& fields) {
+void AuditConnHeartbeat(const TConnectionFields& fields) {
     AUDIT_LOG(AddConnectionParts(auditParts, fields););
 }
 
-void AuditAuditHeartbeat(std::optional<ui32> status, const TAuditLogParts& parts) {
+void AuditHeartbeat(std::optional<ui32> status, const TAuditLogParts& parts) {
     AUDIT_LOG(AddOperationParts(auditParts, status, parts););
 }
 
@@ -165,12 +165,11 @@ TAuditWriters GetAuditWriters(TLogClassConfig::ELogClass logClass) {
     case TLogClassConfig::Acl:
         return {AuditConnAcl, AuditAcl};
     case TLogClassConfig::AuditHeartbeat:
-        return {AuditConnAuditHeartbeat, AuditAuditHeartbeat};
+        return {AuditConnHeartbeat, AuditHeartbeat};
     case TLogClassConfig::Default:
         return {AuditConnDefault, AuditDefault};
-    default:
-        return {AuditConnDefault, AuditDefault};
     }
+    return {AuditConnDefault, AuditDefault};
 }
 
 } // namespace

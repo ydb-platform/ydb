@@ -40,7 +40,7 @@ public:
         return *this;
     }
     TLoggerInit& AddComponents(const std::vector<NKikimrServices::EServiceKikimr> services, const TString& name) {
-        AFL_VERIFY(Services.emplace(name, services).second);
+        YDB_LOG_VERIFY(Services.emplace(name, services).second);
         return *this;
     }
     TLoggerInit& RemoveComponents(const TString& name) {

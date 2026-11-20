@@ -21,6 +21,7 @@ namespace NActors {
 }
 
 namespace NKikimr {
+    class TScanAdmissionControl;
     namespace NPathAliasing {
         class TPathNormalizer;
     }
@@ -268,6 +269,7 @@ struct TAppData {
     TIntrusivePtr<NKikimr::TDynamicControlBoard> Dcb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
     TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
+    std::shared_ptr<TScanAdmissionControl> BuildIndexScanAdmission;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 

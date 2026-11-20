@@ -378,15 +378,12 @@ struct TMirrorerEnv {
     TPersQueueCounters Counters;
     std::vector<THolder<TEvPersQueue::TEvRequest>> CapturedRequests;
     std::vector<THolder<TEvPQ::TEvPartitionScaleStatusChanged>> CapturedScale;
-<<<<<<< HEAD
     std::vector<THolder<TEvTxProxySchemeCache::TEvNavigateKeySet>> Navigations;
     std::vector<TActorId> NavigationSenders;
     std::vector<THolder<TEvResolveSecret>> SecretRequests;
     TString Database;
     TString TopicPath;
-=======
     std::vector<THolder<TEvPQ::TEvReplicationData>> CapturedReplicationData;
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
     ui32 ErrorCount = 0;
     ui32 CounterEventCount = 0;
     bool TabletPoisoned = false;
@@ -447,18 +444,14 @@ struct TMirrorerEnv {
         );
 
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
-<<<<<<< HEAD
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
                 NavigationSenders.push_back(ev->Sender);
                 Navigations.emplace_back(ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>());
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (ev->GetTypeRewrite() == TEvResolveSecret::EventType) {
-                SecretRequests.emplace_back(ev->Get<TEvResolveSecret>()->MakeCopy());
-=======
+
             if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvReplicationData::EventType) {
                 CapturedReplicationData.emplace_back(ev->Release<TEvPQ::TEvReplicationData>());
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
                 return TTestActorRuntime::EEventAction::DROP;
             }
             if (ev->Recipient == Tablet && ev->GetTypeRewrite() == TEvPersQueue::TEvRequest::EventType) {

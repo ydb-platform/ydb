@@ -984,6 +984,71 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     return TExprBase{read};
 }
 
+TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TCoFlatMap& flatMap,
+    const TCoTopBase& top, TExprContext& ctx, const TKikimrTableDescription& tableDesc,
+    const TIntrusivePtr<TKikimrTableMetadata>& postingMeta, const TIndexDescription& indexDesc)
+{
+    // The search actor cannot apply a residual SQL predicate before choosing
+    // candidates. Scan index members exactly and keep WHERE ahead of LIMIT.
+    // Reading the posting table also preserves autoupdate=false membership.
+    const auto pos = match.Pos();
+    const bool covered = CheckIndexCovering(match.Columns(), postingMeta);
+    const auto columns = covered
+        ? MergeColumns(match.Columns(), tableDesc.Metadata->KeyColumnNames, ctx)
+        : BuildKeyColumnsList(tableDesc, pos, ctx);
+    TExprBase rows = match.BuildRead(ctx, BuildTableMeta(*postingMeta, pos, ctx), columns);
+
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
+        indexDesc.SpecializedIndexDescription).GetSettings();
+    if (settings.overlap_clusters() > 1) {
+        // Group by the full primary key. Covered values are identical across
+        // a row's postings; SOME preserves them without using them as hash keys.
+        // Aggregate lowers to the distributed grouping pipeline.
+        const THashSet<TString> keyColumns(tableDesc.Metadata->KeyColumnNames.begin(),
+            tableDesc.Metadata->KeyColumnNames.end());
+        TExprNode::TListType handlers;
+        for (const auto& column : columns) {
+            if (keyColumns.contains(TString(column.Value()))) {
+                continue;
+            }
+            handlers.push_back(ctx.Builder(pos)
+                .List()
+                    .Atom(0, column.Value())
+                    .Callable(1, "AggApply")
+                        .Atom(0, "some")
+                        .Callable(1, "ListItemType").Callable(0, "TypeOf").Add(0, rows.Ptr()).Seal().Seal()
+                        .Lambda(2).Param("row").Callable("Member").Arg(0, "row").Atom(1, column.Value()).Seal().Seal()
+                    .Seal()
+                .Seal().Build());
+        }
+        rows = TExprBase(ctx.NewCallable(pos, "Aggregate", {
+            rows.Ptr(), BuildKeyColumnsList(tableDesc, pos, ctx).Ptr(),
+            ctx.NewList(pos, std::move(handlers)), ctx.NewList(pos, {})}));
+    }
+
+    if (covered) {
+        rows = Build<TCoExtractMembers>(ctx, pos)
+            .Input(rows)
+            .Members(match.Columns())
+            .Done();
+    } else {
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
+        rows = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(match.Table())
+            .LookupKeys(rows)
+            .Columns(match.Columns())
+            .Settings(settings.BuildNode(ctx, pos))
+            .Done();
+    }
+    auto read = Build<TCoFlatMap>(ctx, flatMap.Pos())
+        .Input(rows)
+        .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+        .Done().Ptr();
+    VectorTopMain(ctx, top, read);
+    return TExprBase(read);
+}
+
 template<typename T>
 TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHandle pos) {
     auto leafFlag = Build<TCoUint64>(ctx, pos)
@@ -4047,7 +4112,11 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             if (!argument) {
                 return reject(TStringBuilder() << "sorting must contain distance: " << error);
             }
-            auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            const auto body = maybeFlatMap.Lambda().Body();
+            auto asStruct = body.Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            if (!asStruct && indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
+                asStruct = body.Maybe<TCoOptionalIf>().Value().Maybe<TCoAsStruct>();
+            }
             if (!asStruct) {
                 return reject("only simple projection with distance referenced in sorting supported for now");
             }
@@ -4082,6 +4151,15 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                 return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
+        }
+        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                && maybeFlatMap && IsPredicateFlatMap(maybeFlatMap.Cast().Lambda().Body().Ref())) {
+            if (!readTableIndex.FullScan()) {
+                return reject("filtered HNSW search requires a full index scan");
+            }
+            const auto& posting = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Next->Name);
+            return RewriteFilteredHnswScan(readTableIndex, maybeFlatMap.Cast(), topBase, ctx,
+                tableDesc, posting.Metadata, *indexDesc);
         }
         // Unprefixed HNSW uses the actor's all-partition search;
         // the legacy lookup chain only implements k-means cluster traversal.

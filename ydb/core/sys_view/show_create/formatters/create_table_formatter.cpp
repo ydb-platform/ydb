@@ -778,6 +778,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             del = ", ";
         }
 
+        if (kMeansTreeSettings->has_autoupdate()) {
+            Stream << del << "autoupdate=" << (kMeansTreeSettings->autoupdate() ? "true" : "false");
+            del = ", ";
+        }
+
         if (index.has_global_hnsw_index()) {
             const auto& vectorSettings = kMeansTreeSettings->settings();
             if (vectorSettings.has_min_rows()) {

@@ -5,6 +5,8 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <util/string/subst.h>
+
 #include <format>
 
 namespace NKikimr::NKqp {
@@ -922,6 +924,182 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         check(1, "one");
         write("UPDATE `/Root/HnswInlineDml` SET emb=NULL WHERE pk=1;");
         check(2, "replaced");
+    }
+
+    Y_UNIT_TEST_QUAD(HnswFilteredSearchAppliesLimitAfterWhere, EnableVectorSearchActor, CacheEnabled) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        config.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(CacheEnabled ? 64_MB : 0);
+        config.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(CacheEnabled ? 64_MB : 0);
+        TKikimrRunner kikimr{TKikimrSettings(config).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        const auto created = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswFiltered` (
+                id Uint64 NOT NULL, emb String, active Bool, PRIMARY KEY(id),
+                INDEX plain GLOBAL USING hnsw ON (emb)
+                    WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, min_rows=1),
+                INDEX covered GLOBAL USING hnsw ON (emb) COVER (active)
+                    WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, min_rows=1));
+        )").ExtractValueSync(); });
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto written = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            INSERT INTO `/Root/HnswFiltered` (id, emb, active) VALUES
+                (1u, Untag(Knn::ToBinaryStringFloat([0.5f, 0.0f]), "FloatVector"), false),
+                (2u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"), true),
+                (3u, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"), true),
+                (4u, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), NULL);
+        )"); });
+        UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+        for (const TString index : {"plain", "covered"}) {
+            auto read = [&](const TString& projection, const TString& predicate, ui32 limit, bool alias = false) {
+                const TString query = TStringBuilder() << "$q = Knn::ToBinaryStringFloat([0.0f, 0.0f]); SELECT "
+                    << projection << " FROM `/Root/HnswFiltered` VIEW " << index
+                    << (predicate.empty() ? "" : TString(" WHERE ") + predicate)
+                    << " ORDER BY " << (alias ? "distance" : "Knn::EuclideanDistance(emb, $q)")
+                    << " LIMIT " << limit << ";";
+                auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(),
+                    TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync(); });
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return result;
+            };
+            if (CacheEnabled) {
+                bool ready = false;
+                for (ui32 attempt = 0; attempt < 30; ++attempt) {
+                    const auto result = read("id", "", 1);
+                    ui64 rows = 0;
+                    for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+                        for (const auto& access : phase.table_access()) {
+                            if (access.name().EndsWith("/indexImplPostingTable")) {
+                                rows += access.reads().rows();
+                            }
+                        }
+                    }
+                    if (rows == 1) {
+                        ready = true;
+                        break;
+                    }
+                    runtime.SimulateSleep(TDuration::Seconds(1));
+                }
+                UNIT_ASSERT_C(ready, "HNSW graph did not become ready for " << index);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active", 1).GetResultSet(0)), "[[2u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active", 3).GetResultSet(0)), "[[2u];[3u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active AND id > 10u", 1).GetResultSet(0)), "[]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read("id", "active", 0).GetResultSet(0)), "[]");
+            const auto projected = read("id, Knn::EuclideanDistance(emb, $q) AS distance", "active AND id >= 2u", 1, true);
+            TResultSetParser parser(projected.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("id").GetUint64(), 2u);
+            UNIT_ASSERT(!parser.TryNextRow());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(HnswFilteredSearchDeduplicatesOverlappingPostings, Covered) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswOverlapFiltered` (id Uint64 NOT NULL, emb String, active Bool, PRIMARY KEY(id));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto written = ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswOverlapFiltered` (id, emb, active) VALUES
+                (1u, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), false),
+                (2u, Untag(Knn::ToBinaryStringFloat([10.0f, 0.0f]), "FloatVector"), true),
+                (3u, Untag(Knn::ToBinaryStringFloat([100.0f, 0.0f]), "FloatVector"), true);
+        )");
+        UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+        result = session.ExecuteSchemeQuery(TStringBuilder()
+            << "ALTER TABLE `/Root/HnswOverlapFiltered` ADD INDEX idx GLOBAL USING hnsw ON (emb) "
+            << (Covered ? "COVER (active) " : "")
+            << "WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=2, overlap_clusters=2);").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto count = ExecuteDataQuery(session,
+            "SELECT COUNT(*) AS n FROM `/Root/HnswOverlapFiltered/idx/indexImplPostingTable`;");
+        UNIT_ASSERT_C(count.IsSuccess(), count.GetIssues().ToString());
+        TResultSetParser counts(count.GetResultSet(0));
+        UNIT_ASSERT(counts.TryNextRow());
+        UNIT_ASSERT_GT(counts.ColumnParser("n").GetUint64(), 3u);
+        const auto read = ExecuteDataQuery(session, R"(
+            $q = Knn::ToBinaryStringFloat([0.0f, 0.0f]);
+            SELECT id FROM `/Root/HnswOverlapFiltered` VIEW idx WHERE active
+            ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 3;
+        )");
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read.GetResultSet(0)), "[[2u];[3u]]");
+    }
+
+    Y_UNIT_TEST_QUAD(HnswInsertAllowsMissingCoveredColumns, StreamWrite, Prefixed) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamWrite);
+        TKikimrRunner kikimr{TKikimrSettings(config).SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/HnswMissingCover` (
+                id Uint64 NOT NULL, tenant Uint32, emb String, payload String, note String, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON ()" << (Prefixed ? "tenant, emb" : "emb") << R"() COVER (payload, note)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, min_rows=1));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto first = ExecuteDataQuery(session, R"(
+            INSERT INTO `/Root/HnswMissingCover` (id, tenant, emb) VALUES
+                (1u, 7u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")) RETURNING id;
+        )");
+        UNIT_ASSERT_C(first.IsSuccess(), first.GetIssues().ToString());
+        const auto second = ExecuteDataQuery(session, R"(
+            INSERT INTO `/Root/HnswMissingCover` (id, tenant, emb, note) VALUES
+                (2u, 7u, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"), "kept");
+        )");
+        UNIT_ASSERT_C(second.IsSuccess(), second.GetIssues().ToString());
+        for (const TString table : {"/Root/HnswMissingCover", "/Root/HnswMissingCover/idx/indexImplPostingTable"}) {
+            const auto read = ExecuteDataQuery(session, "SELECT id, payload, note FROM `" + table + "` ORDER BY id;");
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            TResultSetParser rows(read.GetResultSet(0));
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("id").GetUint64(), 1u);
+            UNIT_ASSERT(!rows.ColumnParser("payload").GetOptionalString());
+            UNIT_ASSERT(!rows.ColumnParser("note").GetOptionalString());
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("id").GetUint64(), 2u);
+            UNIT_ASSERT(!rows.ColumnParser("payload").GetOptionalString());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("note").GetOptionalString().value(), "kept");
+            UNIT_ASSERT(!rows.TryNextRow());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(HnswShowCreatePreservesAutoupdate, AutoUpdate) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/HnswFrozenOriginal` (id Uint64 NOT NULL, emb String, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (emb)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2,
+                    levels=1, clusters=1, min_rows=1, autoupdate=)" << (AutoUpdate ? "true" : "false") << "));").ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto shown = kikimr.GetQueryClient().ExecuteQuery("SHOW CREATE TABLE `/Root/HnswFrozenOriginal`;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(shown.IsSuccess(), shown.GetIssues().ToString());
+        TResultSetParser parser(shown.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        TString ddl = parser.ColumnParser(0).GetOptionalUtf8().value();
+        UNIT_ASSERT_STRING_CONTAINS(ddl, "autoupdate");
+        SubstGlobal(ddl, "HnswFrozenOriginal", "HnswFrozenReplay");
+        const auto replayed = session.ExecuteSchemeQuery(ddl).ExtractValueSync();
+        UNIT_ASSERT_C(replayed.IsSuccess(), replayed.GetIssues().ToString());
+        for (const TString name : {"HnswFrozenOriginal", "HnswFrozenReplay"}) {
+            const auto written = ExecuteDataQuery(session, "$v = Knn::ToBinaryStringFloat([1.0f, 0.0f]); INSERT INTO `/Root/"
+                + name + "` (id, emb) VALUES (1u, Untag($v, \"FloatVector\"));");
+            UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+            const auto read = ExecuteDataQuery(session,
+                "SELECT COUNT(*) AS n FROM `/Root/" + name + "/idx/indexImplPostingTable`;");
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            TResultSetParser rows(read.GetResultSet(0));
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("n").GetUint64(), AutoUpdate ? 1u : 0u);
+        }
     }
 
     Y_UNIT_TEST(HnswUnsupportedVectorTypeUsesExactScan) {

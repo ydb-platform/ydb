@@ -592,10 +592,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
                 return BuildTableMeta(meta, pos, ctx);
             });
         const auto onlyStreamIndexes = std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return !TIndexDescription::IsVectorIndex(index.second->Type)
-                && index.second->Type != TIndexDescription::EType::GlobalFulltextPlain
-                && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance
-                && index.second->Type != TIndexDescription::EType::GlobalJson;
+            return !TIndexDescription::NeedsWritePrecompute(index.second->Type);
         });
 
         if (onlyStreamIndexes) {

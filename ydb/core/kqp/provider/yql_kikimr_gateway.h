@@ -141,6 +141,13 @@ public:
             || type == EType::GlobalSyncHnsw;
     }
 
+    static bool NeedsWritePrecompute(EType type) {
+        return IsVectorIndex(type)
+            || type == EType::GlobalFulltextPlain
+            || type == EType::GlobalFulltextRelevance
+            || type == EType::GlobalJson;
+    }
+
     const TString Name;
     const TVector<TString> KeyColumns;
     const TVector<TString> DataColumns;

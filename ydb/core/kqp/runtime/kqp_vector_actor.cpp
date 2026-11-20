@@ -181,7 +181,12 @@ private:
         }
         if (EmptyIndex) {
             if (Settings.GetHnswAllowEmptyRouting()) {
-                Y_ENSURE(!IsPrefixed && RootClusters);
+                Y_ENSURE(!IsPrefixed && RootClusters,
+                    "Invalid empty HNSW routing state: levelTable=" << Settings.GetLevelTable().GetTablePath()
+                    << ", inputIndex=" << InputIndex << ", taskId=" << TaskId
+                    << ", vectorColumnIndex=" << Settings.GetVectorColumnIndex()
+                    << ", inputRows=" << PendingRows.size() << ", prefixed=" << IsPrefixed
+                    << ", rootClusters=" << bool(RootClusters));
                 // Full-range HNSW reads do not require a centroid hierarchy.
                 // Use one stable leaf until REBUILD creates a new hierarchy and
                 // posting table together; updates and deletes resolve to the same leaf.

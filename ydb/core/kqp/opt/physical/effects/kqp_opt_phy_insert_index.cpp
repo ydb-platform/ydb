@@ -111,16 +111,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const bool needPrecompute = !useStreamIndex
         || !abortOnError
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            switch (index.second->Type) {
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-                case TIndexDescription::EType::GlobalSyncHnsw:
-                case TIndexDescription::EType::GlobalFulltextPlain:
-                case TIndexDescription::EType::GlobalFulltextRelevance:
-                case TIndexDescription::EType::GlobalJson:
-                    return true;
-                default:
-                    return false;
-            }
+            return TIndexDescription::NeedsWritePrecompute(index.second->Type);
         });
 
     TVector<TStringBuf> insertColumns;
@@ -206,7 +197,10 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         }
 
         for (const auto& column : indexDesc->DataColumns) {
-            if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
+            // The vector resolver requires every covered column. INSERT gives
+            // omitted nullable columns their normal NULL value below.
+            if ((inputColumnsSet.contains(column) || TIndexDescription::IsVectorIndex(indexDesc->Type))
+                    && indexTableColumnsSet.emplace(column).second) {
                 indexTableColumns.emplace_back(column);
             }
         }

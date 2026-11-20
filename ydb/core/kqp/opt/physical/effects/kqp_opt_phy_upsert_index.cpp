@@ -654,16 +654,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     const bool needPrecompute = !useStreamIndex
         || !columnsWithDefaultsSet.empty()
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            switch (index.second->Type) {
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-                case TIndexDescription::EType::GlobalSyncHnsw:
-                case TIndexDescription::EType::GlobalFulltextPlain:
-                case TIndexDescription::EType::GlobalFulltextRelevance:
-                case TIndexDescription::EType::GlobalJson:
-                    return true;
-                default:
-                    return false;
-            }
+            return TIndexDescription::NeedsWritePrecompute(index.second->Type);
         });
 
     if (!needPrecompute) {

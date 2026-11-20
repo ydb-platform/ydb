@@ -1509,6 +1509,57 @@ Y_UNIT_TEST(CannotChangeConsumerType) {
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type");
 }
 
+Y_UNIT_TEST(AlterCdcAddsReplicationConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
+    ExecuteDDL(*setup, "CREATE TABLE cdc_source (id Uint64, PRIMARY KEY (id))");
+    ExecuteDDL(*setup, "ALTER TABLE cdc_source ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+    const TString path = "/Root/cdc_source/feed";
+    auto add = [&](const TString& name) {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* consumer = request.add_add_consumers();
+        consumer->set_name(name);
+        consumer->set_important(true);
+        (*request.mutable_alter_attributes())["_ydb_replication_consumer"] = name;
+        return request;
+    };
+    auto alter = [&](const Ydb::Topic::AlterTopicRequest& request) {
+        return DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+    };
+
+    auto request = add("mirror");
+    request.clear_alter_attributes();
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    const TString mismatch = "Existing CDC consumer does not match the replication consumer";
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::PRECONDITION_FAILED, mismatch);
+
+    // Explicit replacement remains a valid batch; duplicate replay must match the installed consumer.
+    request = add("mirror");
+    request.add_drop_consumers("mirror");
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::ALREADY_EXISTS);
+
+    request.Clear();
+    request.set_path(path);
+    auto* consumer = request.add_alter_consumers();
+    consumer->set_name("mirror");
+    consumer->set_set_important(false);
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("mirror")), Ydb::StatusIds::PRECONDITION_FAILED, mismatch);
+    consumer->set_set_important(true);
+    AssertStatus(alter(request), Ydb::StatusIds::SUCCESS);
+    AssertStatus(alter(add("other")), Ydb::StatusIds::PRECONDITION_FAILED, "CDC stream already has a replication consumer");
+    const auto config = DescribeTabletConfig(runtime, path, "/Root", true);
+    const auto* mirror = NPQ::GetConsumer(config, "mirror");
+    UNIT_ASSERT(mirror && mirror->GetImportant());
+    UNIT_ASSERT(mirror->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    UNIT_ASSERT(!NPQ::GetConsumer(config, "other"));
+}
+
 Y_UNIT_TEST(AlterCdcAllowsRetentionAndWriteLimits) {
     auto setup = CreateSetup();
     ExecuteDDL(*setup, "CREATE TABLE table_cdc (id Uint64, PRIMARY KEY (id))");

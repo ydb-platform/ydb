@@ -10,13 +10,11 @@ using namespace NKikimr::Tests;
 namespace NKikimr::NPersQueueTests {
 
 TRateLimiterTestSetup::TRateLimiterTestSetup(
-    NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity,
     double writeAccountQuota,
     double readAccountQuota,
     bool enableReadQuoting
 )
     : Server(new NPersQueue::TTestServer(false))
-    , LimitedEntity(limitedEntity)
     , WriteAccountQuota(writeAccountQuota)
     , ReadAccountQuota(readAccountQuota)
 {
@@ -118,7 +116,6 @@ void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
 
     settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     settings.PQConfig.MutableQuotingConfig()->SetEnableReadQuoting(enableReadQuoting);
-    settings.PQConfig.MutableQuotingConfig()->SetTopicWriteQuotaEntityToLimit(LimitedEntity);
 
     Server->GrpcServerOptions.SetMaxMessageSize(130_MB);
     Server->StartServer();

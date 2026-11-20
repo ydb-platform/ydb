@@ -25,7 +25,6 @@ ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSession
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut unittest.sole chunk
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-26-4-1_to_prestable-27-1-1-COLUMN]
 ydb/tests/compatibility/common test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_prestable-27-1-1_and_stable-26-4-1]
-ydb/tests/compatibility/common test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolMixedCluster.test[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_column_tables[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-lax]
@@ -36,7 +35,6 @@ ydb/tests/compatibility/indexes test_unique_index.py.TestUniqueIndex.test_unique
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_old_proxy_handles_limit_response_from_current_tablet[mixed_current_and_intermediate-limit_enabled]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_topics[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
-ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_two_partitions[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/fq/multi_plane py3test.[test_dispatch.py] chunk

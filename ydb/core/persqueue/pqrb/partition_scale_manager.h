@@ -38,7 +38,8 @@ private:
             , MinActivePartitions(config.GetPartitionStrategy().GetMinPartitionCount())
             , CurPartitions(std::count_if(config.GetAllPartitions().begin(), config.GetAllPartitions().end(), [](auto& p) {
                 return p.GetStatus() != NKikimrPQ::ETopicPartitionStatus::Inactive;
-            })) {
+            }))
+            , HasKeySchema(config.PartitionKeySchemaSize() > 0) {
         }
 
         ui64 PathId;
@@ -46,6 +47,7 @@ private:
         ui64 MaxActivePartitions;
         ui64 MinActivePartitions;
         ui64 CurPartitions;
+        bool HasKeySchema;
     };
 
     struct TPartitionScaleOperationInfo {

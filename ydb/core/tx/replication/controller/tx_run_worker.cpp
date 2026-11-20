@@ -90,11 +90,13 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        // Once any worker leaves, the persisted worker set is no longer
-        // complete. Keep schema reports blocked until
-        // the next registration pass recreates it.
-        db.Table<Schema::Targets>().Key(Id.ReplicationId(), Id.TargetId()).Update(
-            NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+        if (!Self->ExitingWorkers.contains(Id)) {
+            // Once any worker leaves, the persisted worker set is no longer
+            // complete. Keep schema reports blocked until
+            // the next registration pass recreates it.
+            db.Table<Schema::Targets>().Key(Id.ReplicationId(), Id.TargetId()).Update(
+                NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+        }
         db.Table<Schema::Workers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Delete();
         Remove = true;
         return true;
@@ -106,7 +108,12 @@ public:
         }
 
         Self->RemoveQueue.erase(Id);
-        Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
+        const bool exited = Self->ExitingWorkers.erase(Id);
+        if (exited) {
+            Self->ExitedWorkers.insert(Id);
+        } else {
+            Self->CompleteWorkerSets.erase(std::make_pair(Id.ReplicationId(), Id.TargetId()));
+        }
 
         const auto worker = Self->Workers.find(Id);
         if (worker != Self->Workers.end() && worker->second.HasHeartbeat()) {
@@ -135,6 +142,10 @@ public:
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
+
+        if (exited) {
+            Self->RemoveEndedWorkers(ctx);
+        }
 
         const auto replication = Self->Find(Id.ReplicationId());
         if (!replication) {

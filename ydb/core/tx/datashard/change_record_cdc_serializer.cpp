@@ -79,6 +79,9 @@ public:
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
+            if (Opts.ChoosePartitionByKey) {
+                cmd.SetChoosePartitionKey(record.GetDataChange().GetKey().GetData());
+            }
             return SerializeDataChange(cmd, record);
         case TChangeRecord::EKind::CdcSchemaChange:
             return SerializeSchemaChange(cmd, record);

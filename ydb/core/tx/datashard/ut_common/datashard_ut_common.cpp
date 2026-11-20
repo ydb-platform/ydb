@@ -1965,6 +1965,11 @@ ui64 AsyncAlterAddStream(
         desc.SetTopicAutoPartitioning(true);
         desc.SetMaxPartitionCount(1000);
     }
+    for (const auto& [key, value] : streamDesc.UserAttributes) {
+        auto& attribute = *desc.MutableStreamDescription()->AddUserAttributes();
+        attribute.SetKey(key);
+        attribute.SetValue(value);
+    }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

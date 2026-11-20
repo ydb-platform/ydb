@@ -415,7 +415,8 @@ public:
             TDuration streamRetentionPeriod,
             TDuration consumerAvailabilityPeriod,
             bool consumerImportant,
-            bool enableOmitBackupAttribute)
+            bool enableOmitBackupAttribute,
+            bool supportsKeyRangeAutopartitioning)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -430,6 +431,7 @@ public:
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
+            {"supports_key_range_autopartitioning", supportsKeyRangeAutopartitioning && !schemaChanges},
         }, schemaChanges, initialScan, enableOmitBackupAttribute))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
@@ -501,6 +503,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         : std::nullopt;
     const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
+    const bool supportsKeyRangeAutopartitioning = consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableCdcKeyRangeHeartbeats();
     const bool schemaChanges = AppData()->FeatureFlags.GetEnableAsyncReplicationSchemaChanges();
     const bool initialScan = config.GetInitialScan() || target->IsIndexBuild();
     const bool consumerImportant = !config.HasTransferSpecific() && config.GetAvailabilityPeriod().HasUnlimited();
@@ -515,7 +518,8 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
-        consumerAvailabilityPeriod, consumerImportant, AppData()->ReplicationConfig.GetEnableOmitBackupAttribute());
+        consumerAvailabilityPeriod, consumerImportant, AppData()->ReplicationConfig.GetEnableOmitBackupAttribute(),
+        supportsKeyRangeAutopartitioning);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -523,12 +527,13 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TString& streamName, const TString& streamPath, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
-        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute)
+        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute,
+        bool supportsKeyRangeAutopartitioning)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, streamPath, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
         schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant,
-        enableOmitBackupAttribute);
+        enableOmitBackupAttribute, supportsKeyRangeAutopartitioning);
 }
 
 }

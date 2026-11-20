@@ -8050,9 +8050,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-    void ImportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool replica) {
+    void ImportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool replica,
+            const TTestEnvOptions& options = {}) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -8118,6 +8119,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(ImportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
         ImportSkipsChangefeed(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport, false);
+    }
+
+    Y_UNIT_TEST_FLAG(ImportSkipsLegacyKeyRangeReplicationChangefeed, EnableCdcKeyRangeHeartbeats) {
+        ImportSkipsChangefeed({
+            {"__async_replication", R"({"id":"1","path":"/Root/replica","supports_key_range_autopartitioning":true})"},
+        }, false, false, TTestEnvOptions().EnableCdcKeyRangeHeartbeats(EnableCdcKeyRangeHeartbeats));
     }
 
     Y_UNIT_TEST_FLAG(ReplicaImportSkipsOmittedChangefeed, EnableDataShardDirectPartImport) {

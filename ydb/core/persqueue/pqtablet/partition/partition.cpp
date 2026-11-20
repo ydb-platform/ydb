@@ -135,6 +135,7 @@ static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
 TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
                                                      const NKikimrPQ::TPartitions& partitionsData,
+                                                     const NKikimrPQ::TPQTabletConfig& tabletConfig,
                                                      const TPartitionGraph& graph,
                                                      ui32 partitionId);
 
@@ -2234,6 +2235,9 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                 auto* m = result->Data.AddMessageGroup();
                 m->SetId(id);
                 m->SetSeqNo(v.SeqNo);
+                if (v.KeyRange) {
+                    v.KeyRange->Serialize(*m->MutableKeyRange());
+                }
             }
         }
         Send(TabletActorId, result.Release());
@@ -3724,7 +3728,7 @@ void TPartition::AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry)
 
     const auto graph = MakePartitionGraph(*entry.TabletConfig);
     for (const auto& partition : entry.TabletConfig->GetPartitions()) {
-        const auto explicitMessageGroups = CreateExplicitMessageGroups(*entry.BootstrapConfig, *entry.PartitionsData, graph, partition.GetPartitionId());
+        const auto explicitMessageGroups = CreateExplicitMessageGroups(*entry.BootstrapConfig, *entry.PartitionsData, *entry.TabletConfig, graph, partition.GetPartitionId());
 
         TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
         for (const auto& [id, mg] : *explicitMessageGroups) {

@@ -670,7 +670,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         WaitUntil(env, [&] { return passthrough; }, "ordinary group config", TDuration::MilliSeconds(100), 600);
         read(2);
         checkReply(2);
-        const auto counters = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "GetLow")->GetSubgroup("sizeClass", "262144");
+        const auto counters = GetBridgeHandleCounters(GetBridgeRequestCounters(env, 1), "GetLow", "262144");
         UNIT_ASSERT(!counters->FindHistogram("bridgeResponseTimeMs"));
 
         // A request sent before the rollback races with the new VDisk generation and retries on the inner DSProxy.
@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("bridgeRequestBytes", true)->Val(), data.size());
         UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("bridgeResponseBytes", true)->Val(), data.size());
-        UNIT_ASSERT_VALUES_EQUAL(counters->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(counters, "OK")->Val(), 1);
         CheckSingleBridgeResponseLatency(counters, env.Runtime->GetClock() - start);
     }
 

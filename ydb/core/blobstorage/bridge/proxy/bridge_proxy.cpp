@@ -28,18 +28,18 @@ namespace NKikimr {
             const bool TrackDelivery;
             const TMonotonic StartTime;
             const ui64 RequestBytes;
-            TBridgeProxyCounters::TRequestCounters Counters;
+            TBridgeProxyCounters::TRequestCounters::TPtr Counters;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ClientRelay;
 
         public:
             TForwardedReplyActor(TActorId client, bool trackDelivery, TMonotonic startTime, ui64 requestBytes,
-                    const TBridgeProxyCounters::TRequestCounters& counters, std::shared_ptr<TEvBlobStorage::TExecutionRelay> relay)
+                    TBridgeProxyCounters::TRequestCounters::TPtr counters, std::shared_ptr<TEvBlobStorage::TExecutionRelay> relay)
                 : TActor(&TThis::StateFunc)
                 , Client(client)
                 , TrackDelivery(trackDelivery)
                 , StartTime(startTime)
                 , RequestBytes(requestBytes)
-                , Counters(counters)
+                , Counters(std::move(counters))
                 , ClientRelay(std::move(relay))
             {}
 
@@ -49,7 +49,7 @@ namespace NKikimr {
                         TActivationContext::Send(ev->Forward(Client));
                     }
                 } else {
-                    Counters.CountReply(RequestBytes, *ev->GetBase(), TActivationContext::Monotonic() - StartTime);
+                    Counters->CountReply(RequestBytes, *ev->GetBase(), TActivationContext::Monotonic() - StartTime);
                     SetExecutionRelay(*ev->GetBase(), std::move(ClientRelay));
                     TActivationContext::Send(ev->Forward(Client));
                 }
@@ -1263,7 +1263,7 @@ namespace NKikimr {
             if (common.BridgeProxyPoolCounters) {
                 const TDuration latency = TActivationContext::Monotonic() - common.BridgeProxyStartTime;
                 auto [counters, bytes] = RequestCounters.ForRequest(*common.BridgeProxyPoolCounters, request);
-                counters.CountReply(bytes, *response, latency);
+                counters->CountReply(bytes, *response, latency);
             }
             if (routingTimeout) {
                 if (const auto *counters = GetRoutingCounters(common)) {

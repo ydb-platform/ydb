@@ -182,8 +182,8 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         const TLogoBlobID first(100500, 1, 1, 0, data.size(), 0);
         const TLogoBlobID second(100500, 1, 2, 0, data.size(), 0);
         const TLogoBlobID missing(100500, 1, 3, 0, 19, 0);
-        const auto put = pool->GetSubgroup("handleClass", "PutUserData")->GetSubgroup("sizeClass", "4096");
-        const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
+        const auto put = GetBridgeHandleCounters(pool, "PutUserData", "4096");
+        const auto get = GetBridgeHandleCounters(pool, "GetFast", "256");
         auto send = [&](IEventBase *ev) {
             env.Runtime->WrapInActorContext(edge, [&] { SendToBSProxy(edge, groupId, ev); });
         };
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         // The existing physical DSProxy selectors aggregate across subsystem labels.
         UNIT_ASSERT(!put->FindCounter("requestBytes"));
         UNIT_ASSERT(!put->FindHistogram("responseTimeMs"));
-        UNIT_ASSERT_VALUES_EQUAL(put->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(put, "OK")->Val(), 2);
 
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[2]);
         queries[0].Set(first, 4, 13);
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[1].Status, NKikimrProto::NODATA);
         UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), 29);
         UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeResponseBytes", true)->Val(), 13);
-        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(get, "OK")->Val(), 1);
     }
 
     Y_UNIT_TEST(LatencyIncludesQueueAndRoutingRestart) {
@@ -235,9 +235,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         test.CheckSuccess(1);
         const auto pool = GetBridgeRequestCounters(test.Env, 1);
         UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingRestarts", true)->Val(), 1);
-        const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
+        const auto get = GetBridgeHandleCounters(pool, "GetFast", "256");
         UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(get, "OK")->Val(), 1);
         CheckSingleBridgeResponseLatency(get, test.ResultAt.at(1) - start);
     }
 
@@ -283,9 +283,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.Status, NKikimrProto::NO_GROUP, result.ToString());
         UNIT_ASSERT(result.ExecutionRelay == relay);
         const auto pool = GetBridgeRequestCounters(test.Env, 1);
-        const auto get = pool->GetSubgroup("handleClass", "GetLow")->GetSubgroup("sizeClass", "262144");
+        const auto get = GetBridgeHandleCounters(pool, "GetLow", "262144");
         UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingRestarts", true)->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "NO_GROUP")->GetCounter("completedRequests", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(get, "NO_GROUP")->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), id.BlobSize());
         CheckSingleBridgeResponseLatency(get, test.ResultAt.at(cookie) - start);
     }
@@ -326,8 +326,8 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         test.Env.Sim(TDuration::Seconds(3)); // expired work must not resume or reply twice
         const auto pool = GetBridgeRequestCounters(test.Env, 1);
         UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingTimeouts", true)->Val(), 1);
-        const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
-        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "ERROR")->GetCounter("completedRequests", true)->Val(), 1);
+        const auto get = GetBridgeHandleCounters(pool, "GetFast", "256");
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(get, "ERROR")->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), 20);
     }
 
@@ -590,9 +590,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::ERROR, res->ToString());
         UNIT_ASSERT_C(duration <= TDuration::Seconds(1), duration);
         const auto counters = GetBridgeRequestCounters(env, nodeId);
-        const auto reads = counters->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
+        const auto reads = GetBridgeHandleCounters(counters, "GetFast", "256");
         UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("RoutingTimeouts", true)->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reads->GetSubgroup("status", "ERROR")->GetCounter("completedRequests", true)->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(reads, "ERROR")->Val(), 2);
 
         hold = false;
         for (auto& ev : std::exchange(held, {})) {
@@ -705,9 +705,8 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT(poisoned);
         UNIT_ASSERT_C(res, "restarted request lost when the proxy stopped");
-        const auto put = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "PutTabletLog")
-            ->GetSubgroup("sizeClass", "256");
-        UNIT_ASSERT_VALUES_EQUAL(put->GetSubgroup("status", "ERROR")->GetCounter("completedRequests", true)->Val(), 1);
+        const auto put = GetBridgeHandleCounters(GetBridgeRequestCounters(env, 1), "PutTabletLog", "256");
+        UNIT_ASSERT_VALUES_EQUAL(GetBridgeCompletedRequests(put, "ERROR")->Val(), 1);
     }
 
     // the request restarted as it waits for the pile disconnected keeps the routing wait it has left

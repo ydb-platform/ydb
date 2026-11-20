@@ -538,8 +538,8 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         TEnvironmentSetup env(MakeBridgedSettings());
         TDataChecker checker(env);
         const ui32 groupId = PrepareBridgedCluster(env, checker);
-        const ui32 backingGroup = env.GetGroups().back();
-        UNIT_ASSERT_UNEQUAL(groupId, backingGroup);
+        const auto groups = env.GetGroups();
+        const ui32 backingGroup = groups.front() == groupId ? groups.back() : groups.front();
         const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         constexpr ui64 tabletId = 100601;
         auto sendBlock = [&](ui32 group, ui32 generation) {
@@ -591,8 +591,8 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         auto alreadyCount = [&] {
             ui64 total = 0;
             for (ui32 nodeId : env.Runtime->GetNodes()) {
-                total += GetBridgeRequestCounters(env, nodeId)->GetSubgroup("operation", "Block")
-                    ->GetSubgroup("status", "ALREADY")->GetCounter("completedRequests", true)->Val();
+                const auto block = GetBridgeRequestCounters(env, nodeId)->GetSubgroup("operation", "Block");
+                total += GetBridgeCompletedRequests(block, "ALREADY")->Val();
             }
             return total;
         };
@@ -637,9 +637,8 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
             UNIT_ASSERT(bridge);
             const ui32 nodeId = bridge->NodeId();
             const auto edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-            const auto get = GetBridgeRequestCounters(env, nodeId)->GetSubgroup("handleClass", "GetAsync")
-                ->GetSubgroup("sizeClass", "262144");
-            const auto completed = get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+            const auto get = GetBridgeHandleCounters(GetBridgeRequestCounters(env, nodeId), "GetAsync", "262144");
+            const auto completed = GetBridgeCompletedRequests(get, "OK");
             const auto bytes = get->GetCounter("bridgeRequestBytes", true);
             const auto completedBefore = completed->Val();
             const auto bytesBefore = bytes->Val();
@@ -709,9 +708,8 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         nextPage.WaitForHeld();
 
         const auto edge = env.Runtime->AllocateEdgeActor(bridge->NodeId(), __FILE__, __LINE__);
-        const auto get = GetBridgeRequestCounters(env, bridge->NodeId())->GetSubgroup("handleClass", "GetFast")
-            ->GetSubgroup("sizeClass", "256");
-        const auto completed = get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+        const auto get = GetBridgeHandleCounters(GetBridgeRequestCounters(env, bridge->NodeId()), "GetFast", "256");
+        const auto completed = GetBridgeCompletedRequests(get, "OK");
         const auto bytes = get->GetCounter("bridgeRequestBytes", true);
         const auto completedBefore = completed->Val();
         const auto bytesBefore = bytes->Val();

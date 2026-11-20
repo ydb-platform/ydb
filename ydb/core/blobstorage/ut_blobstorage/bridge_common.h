@@ -24,11 +24,20 @@ namespace NBridgeTest {
         return GetBridgeRequestCounters(env, nodeId, env.StoragePoolName);
     }
 
+    inline auto GetBridgeHandleCounters(const ::NMonitoring::TDynamicCounterPtr& pool, const TString& handleClass,
+            const TString& sizeClass) {
+        return pool->GetSubgroup("handleClass", handleClass)->GetSubgroup("sizeClass", sizeClass);
+    }
+
+    inline auto GetBridgeCompletedRequests(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& status) {
+        return counters->GetSubgroup("status", status)->GetCounter("completedRequests", true);
+    }
+
     inline void CheckSingleBridgeResponseLatency(const ::NMonitoring::TDynamicCounterPtr& counters, TDuration elapsed) {
         const auto hist = counters->FindHistogram("bridgeResponseTimeMs");
         UNIT_ASSERT(hist);
         const auto snapshot = hist->Snapshot();
-        const double elapsedMs = elapsed.MicroSeconds() / 1000.0;
+        const double elapsedMs = elapsed.MillisecondsFloat();
         bool found = false;
         for (ui32 i = 0; i < snapshot->Count(); ++i) {
             const bool expected = !found && elapsedMs <= snapshot->UpperBound(i);
@@ -40,8 +49,8 @@ namespace NBridgeTest {
 
     // TDataChecker writes small blobs with the TabletLog handle class.
     inline auto GetCompletedTestWrites(TEnvironmentSetup& env, ui32 nodeId, const TString& poolName) {
-        return GetBridgeRequestCounters(env, nodeId, poolName)->GetSubgroup("handleClass", "PutTabletLog")
-            ->GetSubgroup("sizeClass", "256")->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+        const auto pool = GetBridgeRequestCounters(env, nodeId, poolName);
+        return GetBridgeCompletedRequests(GetBridgeHandleCounters(pool, "PutTabletLog", "256"), "OK");
     }
 
     // nodes of natively bridged cluster: 8 nodes per pile

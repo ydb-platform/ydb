@@ -26,6 +26,8 @@ namespace NKikimr {
 
     public:
         struct TRequestCounters {
+            using TPtr = std::shared_ptr<TRequestCounters>;
+
             ::NMonitoring::TDynamicCounterPtr Group;
             ::NMonitoring::THistogramPtr ResponseTime;
             TCounterPtr RequestBytes;
@@ -33,7 +35,7 @@ namespace NKikimr {
             THashMap<NKikimrProto::EReplyStatus, TCounterPtr> Completed;
 
             void CountReply(ui64 bytes, const IEventBase& response, TDuration latency) {
-                ResponseTime->Collect(latency.MicroSeconds() / 1000.0);
+                ResponseTime->Collect(latency.MillisecondsFloat());
                 if (RequestBytes) {
                     *RequestBytes += bytes;
                 }
@@ -52,32 +54,33 @@ namespace NKikimr {
 
     private:
         ::NMonitoring::TDynamicCounterPtr Pool;
-        // Cache the handles used by this actor. The sensors themselves are shared by all proxies in the pool.
-        std::map<std::tuple<ui32, EHandleClass, ui32>, TRequestCounters> Requests;
+        // Reply observers on this mailbox keep their cache entry alive across pool changes and proxy shutdown.
+        std::map<std::tuple<ui32, EHandleClass, ui32>, TRequestCounters::TPtr> Requests;
 
-        TRequestCounters& GetRequestCounters(ui32 type, EHandleClass handleClass, ui64 bytes) {
+        const TRequestCounters::TPtr& GetRequestCounters(ui32 type, EHandleClass handleClass, ui64 bytes) {
             const ui32 sizeClass = TStoragePoolCounters::GetSizeClass(handleClass, bytes);
-            const auto [it, inserted] = Requests.try_emplace({type, handleClass, sizeClass});
-            auto& counters = it->second;
-            if (inserted) {
+            auto& counters = Requests[{type, handleClass, sizeClass}];
+            if (!counters) {
+                counters = std::make_shared<TRequestCounters>();
                 if (type == TEvBlobStorage::EvPut || type == TEvBlobStorage::EvGet) {
-                    counters.Group = Pool->GetSubgroup("handleClass", TStoragePoolCounters::GetHandleClassName(handleClass))
+                    counters->Group = Pool->GetSubgroup("handleClass", TStoragePoolCounters::GetHandleClassName(handleClass))
                         ->GetSubgroup("sizeClass", TStoragePoolCounters::GetSizeClassName(handleClass, sizeClass));
-                    counters.RequestBytes = counters.Group->GetCounter("bridgeRequestBytes", true);
+                    counters->RequestBytes = counters->Group->GetCounter("bridgeRequestBytes", true);
                     if (type == TEvBlobStorage::EvGet) {
-                        counters.ResponseBytes = counters.Group->GetCounter("bridgeResponseBytes", true);
+                        counters->ResponseBytes = counters->Group->GetCounter("bridgeResponseBytes", true);
                     }
                 } else {
-                    counters.Group = Pool->GetSubgroup("operation", TEvBlobStorage::TEvRequestCommon::GetRequestName(type));
+                    counters->Group = Pool->GetSubgroup("operation", TEvBlobStorage::TEvRequestCommon::GetRequestName(type));
                 }
-                counters.ResponseTime = counters.Group->GetHistogram("bridgeResponseTimeMs",
+                counters->ResponseTime = counters->Group->GetHistogram("bridgeResponseTimeMs",
                     ::NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(NPDisk::DEVICE_TYPE_UNKNOWN)));
             }
             return counters;
         }
 
     public:
-        std::pair<TRequestCounters&, ui64> ForRequest(const TBridgeProxyPoolCounters& admitted, const IEventBase& request) {
+        std::pair<const TRequestCounters::TPtr&, ui64> ForRequest(const TBridgeProxyPoolCounters& admitted,
+                const IEventBase& request) {
             if (Pool != admitted.Pool) {
                 Pool = admitted.Pool;
                 Requests.clear();

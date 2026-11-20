@@ -297,8 +297,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             converted.GetErrorReason());
         WaitUntil(env, [&] { return inlineViewConfigured; }, "inline pile configuration", TDuration::MilliSeconds(100));
 
-        const auto reads = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "GetFast")
-            ->GetSubgroup("sizeClass", "256")->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+        const auto pool = GetBridgeRequestCounters(env, 1);
+        const auto reads = GetBridgeCompletedRequests(GetBridgeHandleCounters(pool, "GetFast", "256"), "OK");
         const auto before = reads->Val();
         env.Runtime->Send(held.release(), 1);
         const auto range = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false);
@@ -678,8 +678,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
         // BlobDepot read path checks integrity of blobs in its backing groups
         const auto pool = GetBridgeRequestCounters(env, 1);
-        const auto checks = pool->GetSubgroup("operation", "CheckIntegrity")->GetSubgroup("status", "OK")
-            ->GetCounter("completedRequests", true);
+        const auto checks = GetBridgeCompletedRequests(pool->GetSubgroup("operation", "CheckIntegrity"), "OK");
         const auto checksBefore = checks->Val();
         {
             auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
@@ -695,9 +694,9 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         UNIT_ASSERT_VALUES_EQUAL(checks->Val(), checksBefore + 1);
 
         // replication sends phantom checks to the physical group with its own generation
-        const auto reads = pool->GetSubgroup("handleClass", "GetAsync")->GetSubgroup("sizeClass", "262144")
+        const auto reads = GetBridgeHandleCounters(pool, "GetAsync", "262144")
             ->GetCounter("bridgeRequestBytes", true);
-        const auto writes = pool->GetSubgroup("handleClass", "PutTabletLog")->GetSubgroup("sizeClass", "256")
+        const auto writes = GetBridgeHandleCounters(pool, "PutTabletLog", "256")
             ->GetCounter("bridgeRequestBytes", true);
         const auto readBefore = reads->Val();
         const auto writtenBefore = writes->Val();
@@ -743,10 +742,9 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         auto traffic = [&](const char* handleClass, const char* sizeClass) {
             std::pair<i64, i64> totals{};
             for (ui32 nodeId : env.Runtime->GetNodes()) {
-                const auto counters = GetBridgeRequestCounters(env, nodeId)->GetSubgroup("handleClass", handleClass)
-                    ->GetSubgroup("sizeClass", sizeClass);
+                const auto counters = GetBridgeHandleCounters(GetBridgeRequestCounters(env, nodeId), handleClass, sizeClass);
                 totals.first += counters->GetCounter("bridgeRequestBytes", true)->Val();
-                totals.second += counters->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val();
+                totals.second += GetBridgeCompletedRequests(counters, "OK")->Val();
             }
             return totals;
         };
@@ -755,8 +753,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         };
         const auto reads = traffic("GetAsync", "262144");
         const auto writes = writeTraffic();
-        const auto patches = GetBridgeRequestCounters(env, 1)->GetSubgroup("operation", "Patch")
-            ->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+        const auto pool = GetBridgeRequestCounters(env, 1);
+        const auto patches = GetBridgeCompletedRequests(pool->GetSubgroup("operation", "Patch"), "OK");
         const auto patchesBefore = patches->Val();
         bool movedPatchSucceeded = false;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {

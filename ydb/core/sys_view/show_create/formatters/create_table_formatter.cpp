@@ -778,6 +778,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             del = ", ";
         }
 
+        if (kMeansTreeSettings->has_adaptive_clusters()) {
+            Stream << del << "adaptive_clusters=" << (kMeansTreeSettings->adaptive_clusters() ? "true" : "false");
+            del = ", ";
+        }
+
         if (kMeansTreeSettings->has_autoupdate()) {
             Stream << del << "autoupdate=" << (kMeansTreeSettings->autoupdate() ? "true" : "false");
             del = ", ";

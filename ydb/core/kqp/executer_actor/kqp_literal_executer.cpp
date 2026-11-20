@@ -140,8 +140,9 @@ public:
                 {"txId", TxId},
                 {"ctx", *GetUserRequestContext()},
                 {"traceId", TraceId()});
-            CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
-                YqlIssue({}, EYqlIssueCode(e.GetCode()), e.GetMessage()));
+            const auto status = e.GetCode() == TIssuesIds::KIKIMR_BAD_REQUEST
+                ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::PRECONDITION_FAILED;
+            CreateErrorResponse(status, YqlIssue({}, EYqlIssueCode(e.GetCode()), e.GetMessage()));
         } catch (...) {
             auto msg = CurrentExceptionMessage();
             YDB_LOG_CRIT_COMP(NKikimrServices::KQP_EXECUTER, "TKqpLiteralExecuter, unexpected exception",

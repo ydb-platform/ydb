@@ -249,6 +249,36 @@ Y_UNIT_TEST_SUITE(CreateTableFormatter) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(VectorIndexAdaptiveClusters, Hnsw, Adaptive) {
+        auto table = MakeTableDescription();
+        auto& index = AddIndex(table, Hnsw ? EIndexTypeGlobalHnsw : EIndexTypeGlobalVectorKmeansTree);
+        index.ClearKeyColumnNames();
+        index.AddKeyColumnNames("cover");
+        index.AddKeyColumnNames("value");
+        auto* settings = Hnsw ? index.MutableHnswIndexDescription()->MutableSettings()
+                              : index.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+        settings->set_adaptive_clusters(Adaptive);
+        settings->set_levels(1);
+        settings->set_clusters(4);
+        auto* vector = settings->mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(2);
+        const TString declaration = TStringBuilder() << "INDEX `idx` GLOBAL USING "
+            << (Hnsw ? "hnsw" : "vector_kmeans_tree") << " ON (`cover`, `value`) "
+            << "WITH (distance = euclidean, vector_type = 'float', vector_dimension = 2, "
+            << "clusters = 4, levels = 1, adaptive_clusters = " << (Adaptive ? "true" : "false") << ")";
+        const TString columns = "`key` Uint64, `value` String, `cover` Uint32";
+        for (const bool separate : {false, true}) {
+            const TString expected = separate
+                ? TStringBuilder() << "CREATE TABLE `table` (" << columns << ", PRIMARY KEY (`key`));"
+                    << "ALTER TABLE `table` ADD " << declaration << ";"
+                : TStringBuilder() << "CREATE TABLE `table` (" << columns << ", " << declaration << ", PRIMARY KEY (`key`));";
+            TCreateTableFormatter formatter(separate);
+            AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}), expected);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(Int4VectorIndex, Signed) {
         auto table = MakeTableDescription();
         auto& index = AddIndex(table, EIndexTypeGlobalVectorKmeansTree);

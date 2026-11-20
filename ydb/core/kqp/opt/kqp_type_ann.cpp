@@ -2130,6 +2130,23 @@ TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateKqpVectorSearchLimit(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3, ctx)
+            || !EnsureSpecificDataType(node->Child(0)->Pos(), *node->Child(0)->GetTypeAnn(), EDataSlot::Uint64, ctx)
+            || !EnsureAtom(*node->Child(2), ctx)) {
+        return TStatus::Error;
+    }
+    auto* targetType = RemoveOptionalType(node->Child(1)->GetTypeAnn());
+    if (targetType->GetKind() == ETypeAnnotationKind::Tagged) {
+        targetType = targetType->Cast<TTaggedExprType>()->GetBaseType();
+    }
+    if (!EnsureSpecificDataType(node->Child(1)->Pos(), *targetType, EDataSlot::String, ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(node->Child(0)->GetTypeAnn());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 4, ctx)) {
         return TStatus::Error;
@@ -4203,6 +4220,7 @@ public:
         AddHandler({TKqlSequencer::CallableName()}, HndlInt(&AnnotateSequencer));
         AddHandler({TKqpProgram::CallableName()}, Hndl(&AnnotateKqpProgram));
         AddHandler({TKqpEnsure::CallableName()}, Hndl(&AnnotateKqpEnsure));
+        AddHandler({TKqpVectorSearchLimit::CallableName()}, Hndl(&AnnotateKqpVectorSearchLimit));
         AddHandler({TKqpLockAndCheck::CallableName()}, HndlInt(&AnnotateKqpLockAndCheck));
         AddHandler({TFulltextAnalyze::CallableName()}, Hndl(&AnnotateFulltextAnalyze));
         AddHandler({TKqpStreamEnumerate::CallableName()}, Hndl(&AnnotateKqpStreamEnumerate));

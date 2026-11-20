@@ -1158,7 +1158,8 @@ private:
 
                 if (callable.Maybe<TCoUdf>() || callable.Maybe<TCoScriptUdf>() ||
                     callable.Maybe<TCoUnwrap>() ||
-                    callable.Maybe<TCoEnsure>() || callable.Maybe<TKqpEnsure>())
+                    callable.Maybe<TCoEnsure>() || callable.Maybe<TKqpEnsure>() ||
+                    callable.Maybe<TKqpVectorSearchLimit>())
                 {
                     blackistedNode = callable;
                     return false;

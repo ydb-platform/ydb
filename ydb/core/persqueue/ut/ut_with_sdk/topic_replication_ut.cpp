@@ -19,17 +19,9 @@ public:
     NYdb::NTopic::TTopicClient Client;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> Stub;
 
-<<<<<<< HEAD
-    explicit TTopicReplicationEnv(const Tests::TServerSettings& settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings())
-        : Setup("TopicReplication", settings, false)
-=======
-    explicit TTopicReplicationEnv(
-        bool useTopicApi = false,
-        const Tests::TServerSettings& settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(),
-        std::shared_ptr<NPQ::TPersQueueMirrorReaderFactory> factory = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>())
-        : Factory(std::move(factory))
-        , Setup("TopicReplication", settings, false)
->>>>>>> 7b5fba6ece7 (add possibility to create replication consumer by topic api (#60000))
+    explicit TTopicReplicationEnv(bool useTopicApi = false)
+        : Factory(std::make_shared<NPQ::TPersQueueMirrorReaderFactory>())
+        , Setup("TopicReplication", NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(), false)
         , Driver(Setup.MakeDriverConfig())
         , Client(Driver)
         , Stub(Ydb::PersQueue::V1::PersQueueService::NewStub(grpc::CreateChannel(
@@ -37,7 +29,6 @@ public:
         , UseTopicApi(useTopicApi)
     {
         auto& runtime = Setup.GetRuntime();
-        Factory = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>();
         Factory->Initialize(runtime.GetAnyNodeActorSystem(), runtime.GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings());
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).PersQueueMirrorReaderFactory = Factory.get();
@@ -403,78 +394,6 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTopicReplication) {
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST(WriteAfterDisablingActiveReplicationWithConsumerOffsets) {
-        auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
-        settings.FeatureFlags.SetEnableDstTopicReplicationDisabled(false);
-        auto factory = std::make_shared<TObservedMirrorReaderFactory>();
-        TTopicReplicationEnv env(false, settings, factory);
-        const TString source = "/Root/active_replication_source";
-        const TString destination = "/Root/active_replication_destination";
-        env.Create(source, true);
-        env.Create(destination, false);
-        env.EnableMirroring(source, destination);
-
-        env.Write(source, 0, 3);
-        env.Commit(source, 1);
-        env.WaitForOffsets(destination, 1, 3);
-
-        env.Write(source, 3, 2);
-        env.Commit(source, 2);
-        env.WaitForOffsets(destination, 2, 5);
-
-        auto sessionReleased = factory->GetSessionReleasedFuture();
-        UNIT_ASSERT(!sessionReleased.HasValue());
-        auto& runtime = env.Setup.GetRuntime();
-        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-            runtime.GetAppData(node).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
-        }
-
-        env.Write(source, 5, 3, "-source-only");
-        // A disabled destination stops its mirrorer. Wait for the real read
-        // session to be released before checking that no new data was mirrored.
-        UNIT_ASSERT_C(sessionReleased.Wait(TDuration::Seconds(30)), "Mirrorer did not release its read session");
-        env.WaitForOffsets(destination, 2, 5);
-
-        // Keep the mirror rule and continue writing after the replicated data.
-        env.Write(destination, 5, 2);
-        env.Read(destination, 2, 5, 7);
-        env.WaitForOffsets(destination, 7, 7);
-        const auto destinationSettings = env.Describe(destination);
-        UNIT_ASSERT(destinationSettings.has_remote_mirror_rule());
-        UNIT_ASSERT_VALUES_EQUAL(destinationSettings.attributes().at("_ydb_mirror_consumer_offsets"), "true");
-    }
-
-    Y_UNIT_TEST(WriteWithDisabledReplicationAndRetainedMirrorRule) {
-        TTopicReplicationEnv env;
-        auto& runtime = env.Setup.GetRuntime();
-        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-            runtime.GetAppData(node).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
-        }
-
-        const TString source = "/Root/disabled_replication_source";
-        const TString destination = "/Root/disabled_replication_destination";
-        env.Create(source, true);
-        env.Create(destination, false);
-        env.Write(source, 0, 3);
-        env.Commit(source, 2);
-        env.EnableMirroring(source, destination);
-
-        env.Write(destination, 0, 1);
-        env.Read(destination, 0, 1, 1);
-        const auto settings = env.Describe(destination);
-        UNIT_ASSERT(settings.has_remote_mirror_rule());
-        UNIT_ASSERT_VALUES_EQUAL(settings.attributes().at("_ydb_mirror_consumer_offsets"), "true");
-
-        env.Setup.GetServer().KillTopicPqTablets(destination);
-        // Replaying the producer sequence after restart must still be deduplicated.
-        env.Write(destination, 0, 2);
-        env.Read(destination, 1, 1, 2);
-        env.WaitForOffsets(destination, 2, 2);
-    }
-
->>>>>>> 7b5fba6ece7 (add possibility to create replication consumer by topic api (#60000))
     Y_UNIT_TEST(RejectInvalidReplicationAttributes) {
         TTopicReplicationEnv env;
         const TString path = "/Root/replication_attributes";

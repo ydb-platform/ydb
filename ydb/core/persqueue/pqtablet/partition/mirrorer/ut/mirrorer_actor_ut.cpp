@@ -449,7 +449,10 @@ struct TMirrorerEnv {
                 Navigations.emplace_back(ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>());
                 return TTestActorRuntime::EEventAction::DROP;
             }
-
+            if (ev->GetTypeRewrite() == TEvResolveSecret::EventType) {
+                SecretRequests.emplace_back(ev->Get<TEvResolveSecret>()->MakeCopy());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
             if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvReplicationData::EventType) {
                 CapturedReplicationData.emplace_back(ev->Release<TEvPQ::TEvReplicationData>());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -477,14 +480,9 @@ struct TMirrorerEnv {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-<<<<<<< HEAD
         auto converter = MakeTopicConverter(Database, TopicPath);
         auto mirrorConfig = options.MirrorConfig;
-=======
-        auto converter = MakeTopicConverter();
-        auto mirrorConfig = MakeMirrorConfig();
         mirrorConfig.SetMirrorConsumerOffsets(options.MirrorConsumerOffsets);
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
         Mirrorer = Runtime.Register(CreateMirrorer(
             TabletId,
             Tablet,

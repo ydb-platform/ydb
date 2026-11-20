@@ -58,15 +58,12 @@ struct TCreatePartitionParams {
     TVector<TCreateConsumerParams> ExtraDiskConsumers;
     TInstant EndWriteTimestamp;
     bool FillHead = false;
-<<<<<<< HEAD
-=======
     // Meta has [Begin, End) but data range returns NODATA (issue #49507).
     bool NoDataKeys = false;
     // Meta has [Begin, End) but data range returns OK with zero pairs
     // (FormHeadAndProceed empty-keys path).
     bool EmptyDataRangeOk = false;
     TMaybe<ui64> MirroredOffset;
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
 };
 
 }
@@ -117,8 +114,6 @@ public:
         return partition.GetWriteTimeEstimate(offset);
     }
 
-<<<<<<< HEAD
-=======
     static ui64 GetStartOffset(TPartition& partition) {
         return partition.GetStartOffset();
     }
@@ -137,14 +132,10 @@ public:
         return partition.UsersInfoStorage->GetIfExists(consumer);
     }
 
-<<<<<<< HEAD
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
-=======
     static bool HasPendingReplicationData(const TPartition& partition) {
         return partition.PendingReplicationData.has_value();
     }
 
->>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
 private:
     TInitMetaStep* MetaStep;
 };
@@ -561,18 +552,17 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         }
 
         WaitDataRangeRequest();
-        SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
-
-<<<<<<< HEAD
-        if (params.FillHead) {
-            WaitBlobReadRequest();
-            SendBlobReadResponse(params.Begin, params.End);
-=======
+        if (params.NoDataKeys || params.EmptyDataRangeOk) {
+            auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+            event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+            event->Record.AddReadRangeResult()->SetStatus(params.NoDataKeys ? NKikimrProto::NODATA : NKikimrProto::OK);
+            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+        } else {
+            SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
             if (params.FillHead) {
                 WaitBlobReadRequest();
                 SendBlobReadResponse();
             }
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
         }
 
         if (!params.Partition.IsSupportivePartition()) {
@@ -2322,778 +2312,507 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
-<<<<<<< HEAD
-=======
-// ResetOffset used to key its reply by SetClientInfo.Cookie, which shares the
-// tablet/compaction cookie space. A SetOffset with cookie=1 in flight while
-// ResetOffset registered dst=1 made ScheduleReplyOk steal the commit reply.
-Y_UNIT_TEST_F(ResetOffsetDoesNotStealSetOffsetReply, TPartitionFixture)
+Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionTxTestHelper)
 {
     const TPartitionId partition{0};
+    //const ui64 begin = 0;
+    const ui64 end = 2'000;
+    const TString client = "client";
+    const TString session = "session";
+    Init(TTxBatchingTestParams{.EndOffset=end});
+
+    CreateSession(client, session);
+    auto txTmp = MakeAndSendWriteTx({});
+
+    for (ui64 txId = 1; txId <= 1'002; ++txId) {
+        SendProposeTransactionRequest(partition.InternalPartitionId,
+                                      txId - 1, txId, // range
+                                      client,
+                                      "topic-path",
+                                      true,
+                                      txId);
+    }
+
+    WaitWriteInfoRequest(txTmp, true);
+    SendTxRollback(txTmp);
+
+    // //
+    // // the first command in the queue will start writing
+    // //
+    // WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1}}}});
+
+    //
+    // messages from 2 to 1001 will be queued and the OVERLOADED error will be returned to the last one
+    //
+    WaitProposeTransactionResponse({.TxId=1'001, .Status=NKikimrPQ::TEvProposeTransactionResult::OVERLOADED});
+    WaitProposeTransactionResponse({.TxId=1'002, .Status=NKikimrPQ::TEvProposeTransactionResult::OVERLOADED});
+
+    //
+    // the writing has ended
+    //
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    //
+    // the commands from the queue will be executed as one
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'000}}}});
+
+    //
+    // while the writing is in progress, another command has arrived
+    //
+    SendProposeTransactionRequest(partition.InternalPartitionId,
+                                  1'000, 1'002, // range
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  1'003);
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    //
+    // it will be processed
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'002}}}});
+}
+
+Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 begin = 0;
+    const ui64 end = 10;
     const TString client = "client";
     const TString session = "session";
 
-    CreatePartition({.Partition=partition, .Begin=0, .End=10});
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+
+    //
+    // create session
+    //
     CreateSession(client, session);
 
-    SendSetOffset(1, client, 5, session);
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=5}}}});
+    SendProposeTransactionRequest(partition.InternalPartitionId,
+                                  0, 2,  // 0 --> 2
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  1);
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=2}}}});
 
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kEarliest, 0, 1));
+    SendProposeTransactionRequest(partition.InternalPartitionId,
+                                  2, 0,          // begin > end
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  2);
+    SendProposeTransactionRequest(partition.InternalPartitionId,
+                                  4, 6,          // begin > client.end
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  3);
+    SendProposeTransactionRequest(partition.InternalPartitionId,
+                                  1, 4,          // begin < client.end
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  4);
+    SendProposeTransactionRequest(partition.InternalPartitionId,
+                                  2, 4,          // begin == client.end
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  5);
+    SendProposeTransactionRequest(partition.InternalPartitionId,
+                                  4, 13,         // end > partition.end
+                                  client,
+                                  "topic-path",
+                                  true,
+
+                                  6);
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=0}}}});
+    WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=4}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitProposeTransactionResponse({.TxId=2, .Status=NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
+    WaitProposeTransactionResponse({.TxId=3, .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+    WaitProposeTransactionResponse({.TxId=4, .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+    WaitProposeTransactionResponse({.TxId=5, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitProposeTransactionResponse({.TxId=6, .Status=NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
+
+    SendGetOffset(6, client);
+    WaitProxyResponse({.Cookie=6, .Offset=4});
+}
+
+Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+    const ui64 begin = 0;
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+
+    const ui64 step = 12345;
+    const ui64 txId = 67890;
+
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
+    CreateSession(client, session);
+
+    SendCalcPredicate(step, txId, client, 0, 2);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
+
+    SendCommitTx(step, txId);
+
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=0}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
+}
+
+Y_UNIT_TEST_F(ExpiredHasDataDeadlineIsAnsweredImmediately, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const ui64 hasDataCookie = 42;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end});
+
+    auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+    event->Record.SetPartition(partition.InternalPartitionId);
+    event->Record.SetOffset(end);
+    event->Record.SetDeadline(0);
+    event->Record.SetCookie(hasDataCookie);
+    ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(2));
+    UNIT_ASSERT_C(response, "Expired HasData deadline must not wait for the periodic partition wakeup");
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetEndOffset(), end);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSizeLag(), 0);
+}
+
+Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+    const ui64 begin = 0;
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+
+    const ui64 step = 12345;
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
+    const ui64 txId_3 = 67892;
+
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
+    CreateSession(client, session);
+
+    SendCalcPredicate(step, txId_1, client, 0, 1);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
+
+    SendCalcPredicate(step, txId_2, client, 0, 2);
+    SendCalcPredicate(step, txId_3, client, 0, 2);
+
+    SendCommitTx(step, txId_1);
+
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Session=session, .Offset=0}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Session=session, .Offset=1}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
+
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
+    SendRollbackTx(step, txId_2);
+
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=TPartitionId(partition), .Predicate=false});
+    SendRollbackTx(step, txId_3);
+
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_2, .UserInfos={{1, {.Session=session, .Offset=1}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session=session, .Offset=1}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+}
+
+Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+    const ui64 begin = 0;
+    const ui64 end = 10;
+
+    const ui64 step = 12345;
+    const ui64 txId = 67890;
+
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    CreateSession("client-1", "session-1");
+    CreateSession("client-2", "session-2");
+
+    SendSetOffset(1, "client-1", 3, "session-1");
+    SendCalcPredicate(step, txId, "client-2", 0, 1);
+    SendSetOffset(2, "client-1", 6, "session-1");
+
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-1", .Offset=3}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     WaitProxyResponse({.Cookie=1, .Status=NMsgBusProxy::MSTATUS_OK});
-    auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-    UNIT_ASSERT(reset);
-    UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(reset->GetPartitionId(), partition.OriginalPartitionId);
 
-    SendGetOffset(2, client);
-    WaitProxyResponse({.Cookie=2, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=0});
-}
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
+    SendCommitTx(step, txId);
 
-namespace {
-
-TClientBlob MakeResetOffsetTestBlob(
-    const TString& data,
-    ui64 seqNo,
-    TInstant writeTs,
-    ui32 logicalMessageCount = 1,
-    bool isBatch = false)
-{
-    TString sourceId = "src";
-    TString payload = data;
-    return TClientBlob(
-        std::move(sourceId), seqNo, std::move(payload), TMaybe<TPartData>(),
-        writeTs, writeTs, 0, TString(), TString(),
-        logicalMessageCount, isBatch);
-}
-
-// Large messages (>512 KiB) are stored as TPartData parts. TotalSize is the
-// original message size; the part payload itself stays small for the test.
-TClientBlob MakeResetOffsetTestPart(
-    const TString& data,
-    ui64 seqNo,
-    TInstant writeTs,
-    ui16 partNo,
-    ui16 totalParts,
-    ui32 totalSize)
-{
-    TString sourceId = "src";
-    TString payload = data;
-    return TClientBlob(
-        std::move(sourceId), seqNo, std::move(payload),
-        TPartData(partNo, totalParts, totalSize),
-        writeTs, writeTs, 0, TString(), TString());
-}
-
-TString PackResetOffsetBatch(ui64 offset, const TVector<TClientBlob>& messages) {
-    TBatch batch(offset, 0);
-    for (const auto& message : messages) {
-        batch.AddBlob(message);
-    }
-    batch.Pack();
-    TString raw;
-    batch.SerializeTo(raw);
-    return raw;
-}
-
-TString PackResetOffsetBatches(const TVector<std::pair<ui64, TClientBlob>>& batches) {
-    TString raw;
-    for (const auto& [offset, message] : batches) {
-        TBatch batch(offset, 0);
-        batch.AddBlob(message);
-        batch.Pack();
-        batch.SerializeTo(raw);
-    }
-    return raw;
-}
-
-THolder<TEvPQ::TEvBlobResponse> MakeResetOffsetBlobResponse(
-    TEvPQ::TEvBlobRequest& request,
-    const TString& packed)
-{
-    TVector<TRequestedBlob> blobs;
-    for (auto& src : request.Blobs) {
-        UNIT_ASSERT_C(packed.size() <= src.Size, "packed blob does not fit TRequestedBlob.Size");
-        blobs.push_back(TRequestedBlob(
-            src.Offset,
-            src.PartNo,
-            src.Count,
-            src.InternalPartsCount,
-            src.Size,
-            packed,
-            src.Key,
-            src.CreationUnixTime));
-    }
-    return MakeHolder<TEvPQ::TEvBlobResponse>(request.Cookie, std::move(blobs));
-}
-
-void PutMessagesInNewHead(THead& newHead, ui64 offset, TVector<TClientBlob> messages, bool pack) {
-    std::deque<TClientBlob> blobs(messages.begin(), messages.end());
-    TBatch batch = TBatch::FromBlobs(offset, std::move(blobs));
-    if (pack) {
-        batch.Pack();
-        newHead.PackedSize = batch.GetPackedSize();
-    } else {
-        newHead.PackedSize = 0;
-    }
-    newHead.Offset = offset;
-    newHead.PartNo = 0;
-    newHead.AddBatch(batch);
-}
-
-} // namespace
-
-// FROM_WRITTEN_AT must read a multi-message blob and commit to the first message
-// whose WriteTimestamp is >= target — not to the blob start.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtCommitsInsideBlob, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=3});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 3u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(300);
-
-    CreateSession(client, session);
-
-    const auto ts0 = TInstant::Seconds(100);
-    const auto ts1 = TInstant::Seconds(200);
-    const auto ts2 = TInstant::Seconds(300);
-
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts1.MilliSeconds(), 1));
-
-    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT(blobRequest);
-    UNIT_ASSERT_VALUES_EQUAL(
-        blobRequest->Cookie, static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset));
-    UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs.size(), 1u);
-
-    SendEvent(MakeResetOffsetBlobResponse(*blobRequest, PackResetOffsetBatch(0, {
-        MakeResetOffsetTestBlob("m0", 1, ts0),
-        MakeResetOffsetTestBlob("m1", 2, ts1),
-        MakeResetOffsetTestBlob("m2", 3, ts2),
-    })).Release());
-
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=1}}}});
+    WaitCmdWrite({.Count=5, .UserInfos={
+                 {1, {.Session="session-2", .Offset=0}},
+                 {3, {.Session="session-1", .Offset=0}}
+                 }});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-    UNIT_ASSERT(reset);
-    UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 1u);
 
-    SendGetOffset(2, client);
-    WaitProxyResponse({.Cookie=2, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=1});
+    WaitCmdWrite({.Count=5, .UserInfos={
+                 {1, {.Session="session-2", .Offset=1}},
+                 {3, {.Session="session-1", .Offset=6}}
+                 }});
 }
 
-// A blob with Count == 1 is a single message: do not read it from KV.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSkipsReadOfSingleMessageBlob, TPartitionFixture)
+Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 {
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
+    // Partition meta is ahead of the commit (stale replay). Tablet always sends SerializedTx on commit;
+    // partition must persist tx KV before TEvTxDone (stable-25-4 -> stable-26-1).
+    const TPartitionId partition{3};
+    const ui64 step = 12345;
+    const ui64 txId = 67890;
 
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=1});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 1u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(100);
+    CreatePartitionStaleReplayAhead(partition, 0, 10);
 
-    CreateSession(client, session);
+    auto serializedTxBody = MakeStaleSerializedTxBody(partition, step, txId);
+    SendCommitTx(step, txId, {.SerializedTx = std::move(serializedTxBody)});
 
-    ui32 resetOffsetBlobReads = 0;
-    auto observer = Ctx->Runtime->AddObserver<TEvPQ::TEvBlobRequest>([&](TEvPQ::TEvBlobRequest::TPtr& ev) {
-        if (ev->Get()->Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset)) {
-            ++resetOffsetBlobReads;
-        }
-    });
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not precede KV response for stale commit with SerializedTx");
 
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
-        TInstant::Seconds(50).MilliSeconds(), 1));
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=0}}}});
+    auto kv = GrabStaleMetaKvRequest("expected KV request with stale tx meta persist");
+    AssertStaleMetaKvHasTxKey(*kv, txId, partition.OriginalPartitionId, "first KV");
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not arrive before SendCmdWriteResponse");
+
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    {
-        auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(reset);
-        UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 1u);
-    }
 
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
-        TInstant::Seconds(200).MilliSeconds(), 2));
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=1}}}});
+    WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
+}
+
+Y_UNIT_TEST_F(OldPlanStep_SecondStaleCommitWhileKvInflight, TPartitionFixture)
+{
+    // Two stale commits: second arrives while first KV response is still pending — must not crash
+    // (TryAppendStaleTxMetaWrites runs again only after InFlight is cleared on write complete).
+    const TPartitionId partition{3};
+    const ui64 step = 12345;
+    const ui64 txId1 = 67890;
+    const ui64 txId2 = 67891;
+
+    CreatePartitionStaleReplayAhead(partition, 0, 10);
+
+    auto body = MakeStaleSerializedTxBody(partition, step, txId1);
+    SendCommitTx(step, txId1, {.SerializedTx = std::move(body)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone before first KV");
+
+    auto kv = GrabStaleMetaKvRequest("expected first stale-meta KV request");
+    AssertStaleMetaKvHasTxKey(*kv, txId1, partition.OriginalPartitionId, "first KV");
+
+    body = MakeStaleSerializedTxBody(partition, step, txId2);
+    SendCommitTx(step, txId2, {.SerializedTx = std::move(body)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not appear while first KV unanswered");
+
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    {
-        auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(reset);
-        UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(reset->GetCookie(), 2u);
-    }
 
-    UNIT_ASSERT_VALUES_EQUAL(resetOffsetBlobReads, 0u);
-}
+    WaitCommitTxDone({.TxId=txId1, .Partition=TPartitionId(partition)});
 
-// Offset holes inside a blob (two batches at 0 and 5) must not be collapsed to 0,1.
-// Persist is not completed: committing into a hole would start an endless timestamp-read.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtHonorsOffsetGapsInsideBlob, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
+    kv = GrabStaleMetaKvRequest("expected second stale-meta KV after first completes");
+    AssertStaleMetaKvHasTxKey(*kv, txId2, partition.OriginalPartitionId, "second KV");
 
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=2});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 2u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(200);
-    TPartitionTestWrapper::BlobEncoder(*actor).EndOffset = 10;
-
-    CreateSession(client, session);
-
-    const auto tsEarly = TInstant::Seconds(100);
-    const auto tsLate = TInstant::Seconds(200);
-
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, tsLate.MilliSeconds(), 1));
-
-    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT(blobRequest);
-    UNIT_ASSERT_VALUES_EQUAL(
-        blobRequest->Cookie, static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset));
-
-    SendEvent(MakeResetOffsetBlobResponse(*blobRequest, PackResetOffsetBatches({
-        {0, MakeResetOffsetTestBlob("early", 1, tsEarly)},
-        {5, MakeResetOffsetTestBlob("late", 2, tsLate)},
-    })).Release());
-
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=5}}}});
-}
-
-// Timestamp before every message → StartOffset. Timestamp after every message → EndOffset.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtBeforeAndAfterPartitionRange, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=3});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 3u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(300);
-
-    CreateSession(client, session);
-
-    const auto ts0 = TInstant::Seconds(100);
-    const auto ts1 = TInstant::Seconds(200);
-    const auto ts2 = TInstant::Seconds(300);
-    const auto packed = PackResetOffsetBatch(0, {
-        MakeResetOffsetTestBlob("m0", 1, ts0),
-        MakeResetOffsetTestBlob("m1", 2, ts1),
-        MakeResetOffsetTestBlob("m2", 3, ts2),
-    });
-    cz.DataKeysBody[0].Size = Max<ui32>(cz.DataKeysBody[0].Size, packed.size());
-
-    auto waitResetOffsetBlobRequest = [&]() {
-        TAutoPtr<IEventHandle> handle;
-        auto* blobRequest = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvBlobRequest>(
-            handle,
-            [](const TEvPQ::TEvBlobRequest& ev) {
-                return ev.Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset);
-            },
-            TDuration::Seconds(5));
-        UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
-    };
-
-    auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
-        SendEvent(new TEvPQ::TEvResetOffsetRequest(
-            "topic", client, partition.OriginalPartitionId,
-            NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts.MilliSeconds(), cookie));
-
-        auto blobRequest = waitResetOffsetBlobRequest();
-        SendEvent(MakeResetOffsetBlobResponse(*blobRequest, packed).Release());
-
-        WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=expectedOffset}}}});
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetCookie(), cookie);
-
-        SendGetOffset(cookie + 100, client);
-        WaitProxyResponse({.Cookie=cookie + 100, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=expectedOffset});
-    };
-
-    runAt(TInstant::Seconds(50), 1, 0);   // before first message
-    runAt(TInstant::Seconds(400), 2, 3);  // after last message → EndOffset
-}
-
-// Kafka batch is atomic: commit to the first offset of the batch or skip the whole batch.
-// Interior logical offsets of the batch are never chosen (batch body is not unpacked).
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtKafkaBatchIsAtomic, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-
-    // Offsets: 0 (before), 1..3 (kafka batch LMC=3), 4 (after). Key.Count == total LMC == 5.
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=5});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 5u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(300);
-
-    CreateSession(client, session);
-
-    const auto tsBefore = TInstant::Seconds(100);
-    const auto tsBatch = TInstant::Seconds(200);
-    const auto tsAfter = TInstant::Seconds(300);
-    const auto packed = PackResetOffsetBatch(0, {
-        MakeResetOffsetTestBlob("before", 1, tsBefore),
-        MakeResetOffsetTestBlob("batch", 2, tsBatch, /*logicalMessageCount=*/3, /*isBatch=*/true),
-        MakeResetOffsetTestBlob("after", 3, tsAfter),
-    });
-    cz.DataKeysBody[0].Size = Max<ui32>(cz.DataKeysBody[0].Size, packed.size());
-
-    // Pack/unpack must preserve kafka-batch atomicity before the partition path runs.
-    {
-        auto batches = GetUnpackedBatches(cz.DataKeysBody[0].Key, packed);
-        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(batches[0].Blobs.size(), 3u);
-        UNIT_ASSERT_VALUES_EQUAL(batches[0].Blobs[1].LogicalMessageCount, 3u);
-        UNIT_ASSERT(batches[0].Blobs[1].IsBatch);
-        UNIT_ASSERT_VALUES_EQUAL(
-            *FindFirstOffsetAtOrAfterTimestamp(tsBatch, 0, batches), 1u);
-        // Sub-second deltas are fine for FindFirst; ResetOffset truncates to seconds when
-        // EnableSkipMessagesWithObsoleteTimestamp is on (the default).
-        UNIT_ASSERT_VALUES_EQUAL(
-            *FindFirstOffsetAtOrAfterTimestamp(tsBatch + TDuration::MilliSeconds(1), 0, batches), 4u);
-        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(tsAfter + TDuration::MilliSeconds(1), 0, batches).Defined());
-    }
-
-    auto waitResetOffsetBlobRequest = [&]() {
-        TAutoPtr<IEventHandle> handle;
-        auto* blobRequest = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvBlobRequest>(
-            handle,
-            [](const TEvPQ::TEvBlobRequest& ev) {
-                return ev.Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset);
-            },
-            TDuration::Seconds(5));
-        UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
-    };
-
-    auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
-        SendEvent(new TEvPQ::TEvResetOffsetRequest(
-            "topic", client, partition.OriginalPartitionId,
-            NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts.MilliSeconds(), cookie));
-
-        auto blobRequest = waitResetOffsetBlobRequest();
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            blobRequest->Blobs.size(), 1u,
-            "expected a single candidate blob for ResetOffset");
-        UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs[0].Count, 5u);
-        {
-            TRequestedBlob probe(
-                blobRequest->Blobs[0].Offset,
-                blobRequest->Blobs[0].PartNo,
-                blobRequest->Blobs[0].Count,
-                blobRequest->Blobs[0].InternalPartsCount,
-                Max<ui32>(blobRequest->Blobs[0].Size, packed.size()),
-                packed,
-                blobRequest->Blobs[0].Key,
-                blobRequest->Blobs[0].CreationUnixTime);
-            auto batches = probe.GetBatches();
-            UNIT_ASSERT(batches);
-            auto found = FindFirstOffsetAtOrAfterTimestamp(ts, 0, *batches);
-            if (expectedOffset == 5) {
-                UNIT_ASSERT(!found.Defined());
-            } else {
-                UNIT_ASSERT(found.Defined());
-                UNIT_ASSERT_VALUES_EQUAL(*found, expectedOffset);
-            }
-        }
-        SendEvent(MakeResetOffsetBlobResponse(*blobRequest, packed).Release());
-
-        WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=expectedOffset}}}});
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetCookie(), cookie);
-
-        SendGetOffset(cookie + 100, client);
-        WaitProxyResponse({.Cookie=cookie + 100, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=expectedOffset});
-    };
-
-    // Use whole-second timestamps: ResetOffsetTimestamp truncates ms when
-    // EnableSkipMessagesWithObsoleteTimestamp is enabled (default).
-    runAt(tsBatch, 1, 1);                             // first offset of the batch
-    runAt(tsBatch + TDuration::Seconds(1), 2, 4);     // skip whole batch → message after
-    runAt(tsAfter + TDuration::Seconds(1), 3, 5);     // after last → EndOffset
-}
-
-// Large message (>512 KiB) stored as two parts in one blob, then a small message.
-// FROM_WRITTEN_AT must use the first part's timestamp and skip interior parts.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtLargeMessagePartsInOneBlob, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-    constexpr ui32 largeMessageSize = 600_KB;
-
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=2});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 2u);
-    cz.DataKeysBody[0].Key = TKey::ForBody(TKeyPrefix::TypeData, partition, 0, 0, 2, 1);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(200);
-
-    CreateSession(client, session);
-
-    const auto tsLarge = TInstant::Seconds(100);
-    const auto tsSmall = TInstant::Seconds(200);
-    const auto packed = PackResetOffsetBatch(0, {
-        MakeResetOffsetTestPart("p0", 1, tsLarge, 0, 2, largeMessageSize),
-        MakeResetOffsetTestPart("p1", 1, tsLarge, 1, 2, largeMessageSize),
-        MakeResetOffsetTestBlob("small", 2, tsSmall),
-    });
-    cz.DataKeysBody[0].Size = Max<ui32>(cz.DataKeysBody[0].Size, packed.size());
-
-    {
-        auto batches = GetUnpackedBatches(cz.DataKeysBody[0].Key, packed);
-        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(batches[0].Blobs.size(), 3u);
-        UNIT_ASSERT_VALUES_EQUAL(
-            *FindFirstOffsetAtOrAfterTimestamp(tsLarge, 0, batches), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(
-            *FindFirstOffsetAtOrAfterTimestamp(tsSmall, 0, batches), 1u);
-        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(tsSmall + TDuration::Seconds(1), 0, batches).Defined());
-    }
-
-    auto waitResetOffsetBlobRequest = [&]() {
-        TAutoPtr<IEventHandle> handle;
-        auto* blobRequest = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvBlobRequest>(
-            handle,
-            [](const TEvPQ::TEvBlobRequest& ev) {
-                return ev.Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset);
-            },
-            TDuration::Seconds(5));
-        UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
-    };
-
-    auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
-        SendEvent(new TEvPQ::TEvResetOffsetRequest(
-            "topic", client, partition.OriginalPartitionId,
-            NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts.MilliSeconds(), cookie));
-
-        auto blobRequest = waitResetOffsetBlobRequest();
-        UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs[0].Count, 2u);
-        UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs[0].InternalPartsCount, 1u);
-        SendEvent(MakeResetOffsetBlobResponse(*blobRequest, packed).Release());
-
-        WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=expectedOffset}}}});
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetCookie(), cookie);
-
-        SendGetOffset(cookie + 100, client);
-        WaitProxyResponse({.Cookie=cookie + 100, .Status=NMsgBusProxy::MSTATUS_OK, .Offset=expectedOffset});
-    };
-
-    runAt(tsLarge, 1, 0);
-    runAt(tsSmall, 2, 1);
-    runAt(tsSmall + TDuration::Seconds(1), 3, 2);
-}
-
-// Large message split across two blobs: first key is incomplete (Count=0),
-// last part completes the message on a second key with the same offset.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtLargeMessagePartsAcrossBlobs, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-    constexpr ui32 largeMessageSize = 600_KB;
-
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=1});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-
-    const auto tsLarge = TInstant::Seconds(100);
-    const auto packed0 = PackResetOffsetBatch(0, {
-        MakeResetOffsetTestPart("p0", 1, tsLarge, 0, 2, largeMessageSize),
-    });
-    const auto packed1 = PackResetOffsetBatch(0, {
-        MakeResetOffsetTestPart("p1", 1, tsLarge, 1, 2, largeMessageSize),
-    });
-
-    TDataKey first = cz.DataKeysBody[0];
-    first.Key = TKey::ForBody(TKeyPrefix::TypeData, partition, 0, 0, 0, 1);
-    first.Timestamp = tsLarge;
-    first.Size = Max<ui32>(first.Size, packed0.size());
-
-    TDataKey last = first;
-    last.Key = TKey::ForBody(TKeyPrefix::TypeData, partition, 0, 1, 1, 0);
-    last.Timestamp = tsLarge;
-    last.Size = Max<ui32>(last.Size, packed1.size());
-    last.BlobKeyToken = std::make_shared<TBlobKeyToken>();
-    last.BlobKeyToken->NeedDelete = false;
-
-    cz.DataKeysBody.clear();
-    cz.DataKeysBody.push_back(std::move(first));
-    cz.DataKeysBody.push_back(std::move(last));
-
-    CreateSession(client, session);
-
-    {
-        auto batches = GetUnpackedBatches(cz.DataKeysBody[0].Key, packed0);
-        UNIT_ASSERT_VALUES_EQUAL(
-            *FindFirstOffsetAtOrAfterTimestamp(tsLarge, 0, batches), 0u);
-        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(tsLarge + TDuration::Seconds(1), 0, batches).Defined());
-    }
-
-    auto waitResetOffsetBlobRequest = [&]() {
-        TAutoPtr<IEventHandle> handle;
-        auto* blobRequest = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvBlobRequest>(
-            handle,
-            [](const TEvPQ::TEvBlobRequest& ev) {
-                return ev.Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset);
-            },
-            TDuration::Seconds(5));
-        UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
-    };
-
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, tsLarge.MilliSeconds(), 1));
-
-    auto blobRequest = waitResetOffsetBlobRequest();
-    UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs[0].PartNo, 0u);
-    UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs[0].Count, 0u);
-    UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs[0].InternalPartsCount, 1u);
-    SendEvent(MakeResetOffsetBlobResponse(*blobRequest, packed0).Release());
-
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=0}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    {
-        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetCookie(), 1u);
-    }
 
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
-        (tsLarge + TDuration::Seconds(1)).MilliSeconds(), 2));
+    WaitCommitTxDone({.TxId=txId2, .Partition=TPartitionId(partition)});
+}
 
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=1}}}});
+Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
+{
+    const TPartitionId partition{3};
+    const ui64 begin = 0;
+    const ui64 end = 10;
+    const TString client = "client";
+    const TString session = "session";
+
+    const ui64 step = 12345;
+    ui64 txId = 67890;
+
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    CreateSession(client, session);
+
+    SendCalcPredicate(step, txId, client, 4, 2);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
+    SendRollbackTx(step, txId);
+
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    {
-        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response->GetCookie(), 2u);
-    }
+
+    ++txId;
+
+    SendCalcPredicate(step, txId, client, 2, 4);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
+    SendRollbackTx(step, txId);
+
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    ++txId;
+
+    SendCalcPredicate(step, txId, client, 0, 11);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
 }
 
-// FROM_WRITTEN_AT must see messages that exist only in NewHead (accepted write,
-// not yet synced to Head / HeadKeys). Body is older and Count==1, so it is not
-// read from KV. EndOffset still points at the start of NewHead (persist has
-// not moved it yet); the matching message is the second NewHead blob.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSeesNewHead, TPartitionFixture)
+Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
 {
-    const TPartitionId partition{0};
+    const TPartitionId partition{3};
+    const ui64 begin = 0;
+    const ui64 end = 10;
     const TString client = "client";
     const TString session = "session";
 
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=1});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody[0].Key.GetCount(), 1u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(100);
+    const ui64 step = 12345;
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
 
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
     CreateSession(client, session);
 
-    UNIT_ASSERT(fwz.Head.GetBatches().empty());
-    UNIT_ASSERT(fwz.HeadKeys.empty());
-    UNIT_ASSERT_VALUES_EQUAL(fwz.NewHeadKey.Size, 0u);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*actor), 1u);
+    SendCalcPredicate(step, txId_1, client, 0, 2);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
 
-    PutMessagesInNewHead(fwz.NewHead, 1, {
-        MakeResetOffsetTestBlob("newhead-old", 1, TInstant::Seconds(100)),
-        MakeResetOffsetTestBlob("newhead-match", 2, TInstant::Seconds(200)),
-    }, /*pack=*/true);
-    UNIT_ASSERT(!fwz.NewHead.GetBatches().empty());
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*actor), 1u);
+    SendCalcPredicate(step, txId_2, client, 0, 5);
+    SendRollbackTx(step, txId_1);
 
-    ui32 resetOffsetBlobReads = 0;
-    auto observer = Ctx->Runtime->AddObserver<TEvPQ::TEvBlobRequest>([&](TEvPQ::TEvBlobRequest::TPtr& ev) {
-        if (ev->Get()->Cookie == static_cast<ui64>(TPartition::ERequestCookie::ReadBlobForResetOffset)) {
-            ++resetOffsetBlobReads;
-        }
-    });
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
-        TInstant::Seconds(150).MilliSeconds(), 1));
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=2}}}});
-    UNIT_ASSERT_VALUES_EQUAL(resetOffsetBlobReads, 0u);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=true});
 }
 
-// Live writes land in NewHead with the last batch still unpacked until PackLastBatch.
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSeesUnpackedNewHead, TPartitionFixture)
+Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
 {
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
+    const TPartitionId partition{3};
+    const ui64 begin = 0;
+    const ui64 end = 10;
 
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=1});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(100);
-
-    CreateSession(client, session);
-
-    PutMessagesInNewHead(fwz.NewHead, 1, {
-        MakeResetOffsetTestBlob("newhead-old", 1, TInstant::Seconds(100)),
-        MakeResetOffsetTestBlob("newhead-match", 2, TInstant::Seconds(200)),
-    }, /*pack=*/false);
-    UNIT_ASSERT(!fwz.NewHead.GetBatches().empty());
-    UNIT_ASSERT(!fwz.NewHead.GetBatches().front().Packed);
-
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
-        TInstant::Seconds(150).MilliSeconds(), 1));
-
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=2}}}});
-}
-
-// Messages in NewHead are older than the target: skip them all, including past
-// EndOffset (still pointing at the start of NewHead).
-Y_UNIT_TEST_F(ResetOffsetFromWrittenAtPastNewHeadUsesAcceptedEnd, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-
-    auto* actor = CreatePartition({.Partition=partition, .Begin=0, .End=1});
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*actor);
-    UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 1u);
-    cz.DataKeysBody[0].Timestamp = TInstant::Seconds(100);
-
-    CreateSession(client, session);
-
-    PutMessagesInNewHead(fwz.NewHead, 1, {
-        MakeResetOffsetTestBlob("newhead-old-1", 1, TInstant::Seconds(100)),
-        MakeResetOffsetTestBlob("newhead-old-2", 2, TInstant::Seconds(200)),
-    }, /*pack=*/false);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*actor), 1u);
-
-    SendEvent(new TEvPQ::TEvResetOffsetRequest(
-        "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
-        TInstant::Seconds(250).MilliSeconds(), 1));
-
-    WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=3}}}});
-}
-
-// Compactification replies with IsInternal=true. Those must not be treated as timestamp-read
-// completions: otherwise ReadingTimestamp/ReadScheduled get out of sync and the next
-// TEvProxyResponse hits PQ_ENSURE(userInfo->ReadScheduled) (issue #49357).
-Y_UNIT_TEST_F(InternalErrorDoesNotBreakTimestampRead, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
+    const ui64 step = 12345;
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
 
     CreatePartition({
-        .Partition = partition,
-        .Begin = 0,
-        .End = 10,
-        .Config = {.Consumers = {{.Consumer = client, .Offset = 0, .Session = session}}},
+                    .Partition=partition, .Begin=begin, .End=end,
+                    .Config={.Consumers={
+                    {.Consumer="client-1", .Offset=0, .Session="session-1"},
+                    {.Consumer="client-2", .Offset=0, .Session="session-2"},
+                    {.Consumer="client-3", .Offset=0, .Session="session-3"},
+                    }}
     });
 
-    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT_C(blobRequest != nullptr, "expected timestamp-read blob request");
+    SendCalcPredicate(step, txId_1, "client-1", 0, 2);
+    Cerr << "Send change config\n";
+    SendChangePartitionConfig({.Version=2,
+                              .Consumers={
+                              {.Consumer="client-1", .Generation=0},
+                              {.Consumer="client-3", .Generation=7}
+                              }});
+    //
+    // consumer 'client-2' will be deleted
+    //
+    SendCalcPredicate(step, txId_2, "client-2", 0, 2);
 
-    SendEvent(new TEvPQ::TEvError(
-        NPersQueue::NErrorCode::ERROR,
-        "compaction internal error",
-        /*cookie=*/0,
-        /*isInternal=*/true));
-    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(200));
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
+    SendCommitTx(step, txId_1);
+    Cerr << "Wait cmd write (initial)\n";
+    WaitCmdWrite({.Count=8,
+                 .PlanStep=step, .TxId=txId_1,
+                 .UserInfos={
+                    {1, {.Consumer="client-1", .Session="session-1", .Offset=0}},
+                 },
+                 });
 
-    auto restartedBlobRequest =
-        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::MilliSeconds(200));
-    UNIT_ASSERT_C(
-        restartedBlobRequest == nullptr,
-        "IsInternal TEvError must not restart an in-flight timestamp read");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitCmdWrite({.Count=8,
+                 .PlanStep=step, .TxId=txId_1,
+                 .UserInfos={
+                    {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
+                 },
+                 });
 
-    // Partition stays responsive with the original timestamp read still in flight.
-    SendGetOffset(1, client);
-    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = 0});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    Cerr << "Wait commit 1 done\n";
+    WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
+
+    //
+    // update config
+    //
+    // WaitCmdWrite({.Count=8,
+    //              .PlanStep=step, .TxId=txId_1,
+    //              .UserInfos={
+    //              {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
+    //              },
+    // });
+    Cerr << "Wait cmd write (change config)\n";
+    WaitCmdWrite({.Count=8,
+                 .PlanStep=step, .TxId=txId_1,
+                 .UserInfos={
+                 {1, {.Consumer="client-1", .Session="session-1", .Offset=2, .ReadRuleGeneration=0}},
+                 {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
+                 },
+                 .DeleteRanges={
+                 {0, {.Partition=3, .Consumer="client-2"}}
+                 }});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    Cerr << "Wait config changed\n";
+    WaitPartitionConfigChanged({.Partition=TPartitionId(partition)});
+
+    //
+    // consumer 'client-2' was deleted
+    //
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
+    SendRollbackTx(step, txId_2);
 }
 
-namespace {
-
-THolder<TEvPQ::TEvRead> MakeTestRead(
-    ui64 cookie,
-    ui64 offset,
-    ui32 count,
-    const TString& client = "client",
-    const TActorId& replyTo = {})
+Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
 {
-    return MakeHolder<TEvPQ::TEvRead>(
-        cookie,
-        offset,
-        /*lastOffset=*/0,
-        /*partNo=*/0,
-        count,
-        /*sessionId=*/"",
-        client,
-        /*timeout=*/0,
-        /*size=*/100,
-        /*readToBlobEnd=*/false,
-        /*maxTimeLagMs=*/0,
-        /*readTimestampMs=*/0,
-        /*clientDC=*/"",
-        /*externalOperation=*/false,
-        /*pipeClient=*/TActorId{},
-        replyTo);
-}
+    CreatePartition({
+                    .Partition=TPartitionId{3},
+                    .Begin=0, .End=10,
+                    //
+                    // конфиг партиции
+                    //
+                    .Config={.Version=1, .Consumers={{.Consumer="client-1", .Offset=3}}}
+                    },
+                    //
+                    // конфиг таблетки
+                    //
+                    {.Version=2, .Consumers={{.Consumer="client-2"}}});
 
-} // namespace
+    WaitCmdWrite({.Count=5,
+                 .UserInfos={
+                 {0, {.Consumer="client-2", .Session="", .Offset=0, .ReadRuleGeneration=0}}
+                 },
+                 .DeleteRanges={
+                 {0, {.Partition=3, .Consumer="client-1"}}
+                 }});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+}
 
 Y_UNIT_TEST_F(WriteAssignsOffsetAfterMirroredOffset, TPartitionFixture)
 {
@@ -3682,646 +3401,6 @@ Y_UNIT_TEST_F(ReplicationDataRetriesMirroredOffsetAfterUnrelatedPersist, TPartit
     WaitForReplicationDataPersisted(*partition);
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 200);
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 200);
-}
-
-// ReplyError uses !!replyTo as IsInternal (same as TEvRead::IsInternal). Call sites must pass the
-// original ReplyTo override, not ReplyTo(cookie, …): the resolved id is always non-empty and would
-// mark every external error as internal.
-Y_UNIT_TEST_F(ExternalReadErrorIsNotMarkedInternal, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-
-    CreatePartition({
-        .Partition = partition,
-        .Begin = 0,
-        .End = 10,
-        .Config = {.Consumers = {{.Consumer = client, .Offset = 0}}},
-    });
-    // Drain the timestamp-read blob request from CreatePartition.
-    Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-
-    // External read (empty ReplyTo), cookie != 0 → error must go to TabletActorId (Edge)
-    // with IsInternal=false. Passing a resolved ReplyTo() into ReplyError would set IsInternal.
-    SendEvent(MakeTestRead(/*cookie=*/42, /*offset=*/0, /*count=*/0, client).Release());
-    WaitErrorResponse({
-        .Cookie = 42,
-        .ErrorCode = NPersQueue::NErrorCode::BAD_REQUEST,
-        .IsInternal = false,
-    });
-
-    SendEvent(MakeTestRead(/*cookie=*/43, /*offset=*/11, /*count=*/1, client).Release());
-    WaitErrorResponse({
-        .Cookie = 43,
-        .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
-        .IsInternal = false,
-    });
-}
-
-Y_UNIT_TEST_F(InternalReadErrorIsMarkedInternal, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-
-    CreatePartition({
-        .Partition = partition,
-        .Begin = 0,
-        .End = 10,
-        .Config = {.Consumers = {{.Consumer = client, .Offset = 0}}},
-    });
-    Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-
-    TMaybe<bool> observedIsInternal;
-    auto prevObserver = Ctx->Runtime->SetObserverFunc(
-        [&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->Recipient == ActorId) {
-                if (auto* error = ev->CastAsLocal<TEvPQ::TEvError>()) {
-                    if (error->Cookie == 7) {
-                        observedIsInternal = error->IsInternal;
-                    }
-                }
-            }
-            return TTestActorRuntimeBase::EEventAction::PROCESS;
-        });
-
-    // Compaction-style read: ReplyTo = SelfId ⇒ IsInternal must be true, reply stays on Self.
-    SendEvent(MakeTestRead(/*cookie=*/7, /*offset=*/0, /*count=*/0, client, ActorId).Release());
-
-    TDispatchOptions options;
-    options.CustomFinalCondition = [&]() {
-        return observedIsInternal.Defined();
-    };
-    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
-    Ctx->Runtime->SetObserverFunc(prevObserver);
-
-    UNIT_ASSERT(observedIsInternal.Defined());
-    UNIT_ASSERT_VALUES_EQUAL(*observedIsInternal, true);
-
-    auto leakedToTablet =
-        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::MilliSeconds(200));
-    UNIT_ASSERT_C(
-        leakedToTablet == nullptr,
-        "internal read error must be sent to SelfId, not TabletActorId");
-}
-
-// cookie==0 + empty ReplyTo resolves to SelfId (same destination as timestamp reads). IsInternal
-// must still be false: otherwise Handle(TEvError) takes the compaction early-return and leaves
-// ReadingTimestamp stuck.
-Y_UNIT_TEST_F(ExternalCookieZeroReadErrorRestartsTimestampRead, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-
-    CreatePartition({
-        .Partition = partition,
-        .Begin = 0,
-        .End = 10,
-        .Config = {.Consumers = {{.Consumer = client, .Offset = 0, .Session = session}}},
-    });
-
-    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT_C(blobRequest != nullptr, "expected timestamp-read blob request");
-
-    TMaybe<bool> observedIsInternal;
-    auto prevObserver = Ctx->Runtime->SetObserverFunc(
-        [&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->Recipient == ActorId) {
-                if (auto* error = ev->CastAsLocal<TEvPQ::TEvError>()) {
-                    if (error->Cookie == 0 &&
-                        error->ErrorCode == NPersQueue::NErrorCode::BAD_REQUEST)
-                    {
-                        observedIsInternal = error->IsInternal;
-                    }
-                }
-            }
-            return TTestActorRuntimeBase::EEventAction::PROCESS;
-        });
-
-    // External read with cookie 0 (empty ReplyTo): destination is SelfId, but not internal.
-    SendEvent(MakeTestRead(/*cookie=*/0, /*offset=*/0, /*count=*/0, client).Release());
-
-    TDispatchOptions options;
-    options.CustomFinalCondition = [&]() {
-        return observedIsInternal.Defined();
-    };
-    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
-    Ctx->Runtime->SetObserverFunc(prevObserver);
-
-    UNIT_ASSERT(observedIsInternal.Defined());
-    UNIT_ASSERT_VALUES_EQUAL_C(
-        *observedIsInternal,
-        false,
-        "empty ReplyTo must not mark ReplyError as IsInternal even when cookie==0");
-
-    auto restartedBlobRequest =
-        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT_C(
-        restartedBlobRequest != nullptr,
-        "non-internal cookie==0 TEvError must clear ReadingTimestamp and restart timestamp read");
-}
-
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
-Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionTxTestHelper)
-{
-    const TPartitionId partition{0};
-    //const ui64 begin = 0;
-    const ui64 end = 2'000;
-    const TString client = "client";
-    const TString session = "session";
-    Init(TTxBatchingTestParams{.EndOffset=end});
-
-    CreateSession(client, session);
-    auto txTmp = MakeAndSendWriteTx({});
-
-    for (ui64 txId = 1; txId <= 1'002; ++txId) {
-        SendProposeTransactionRequest(partition.InternalPartitionId,
-                                      txId - 1, txId, // range
-                                      client,
-                                      "topic-path",
-                                      true,
-                                      txId);
-    }
-
-    WaitWriteInfoRequest(txTmp, true);
-    SendTxRollback(txTmp);
-
-    // //
-    // // the first command in the queue will start writing
-    // //
-    // WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1}}}});
-
-    //
-    // messages from 2 to 1001 will be queued and the OVERLOADED error will be returned to the last one
-    //
-    WaitProposeTransactionResponse({.TxId=1'001, .Status=NKikimrPQ::TEvProposeTransactionResult::OVERLOADED});
-    WaitProposeTransactionResponse({.TxId=1'002, .Status=NKikimrPQ::TEvProposeTransactionResult::OVERLOADED});
-
-    //
-    // the writing has ended
-    //
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-
-    //
-    // the commands from the queue will be executed as one
-    //
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'000}}}});
-
-    //
-    // while the writing is in progress, another command has arrived
-    //
-    SendProposeTransactionRequest(partition.InternalPartitionId,
-                                  1'000, 1'002, // range
-                                  client,
-                                  "topic-path",
-                                  true,
-                                  1'003);
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    //
-    // it will be processed
-    //
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'002}}}});
-}
-
-Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString client = "client";
-    const TString session = "session";
-
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
-
-    //
-    // create session
-    //
-    CreateSession(client, session);
-
-    SendProposeTransactionRequest(partition.InternalPartitionId,
-                                  0, 2,  // 0 --> 2
-                                  client,
-                                  "topic-path",
-                                  true,
-                                  1);
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=2}}}});
-
-    SendProposeTransactionRequest(partition.InternalPartitionId,
-                                  2, 0,          // begin > end
-                                  client,
-                                  "topic-path",
-                                  true,
-                                  2);
-    SendProposeTransactionRequest(partition.InternalPartitionId,
-                                  4, 6,          // begin > client.end
-                                  client,
-                                  "topic-path",
-                                  true,
-                                  3);
-    SendProposeTransactionRequest(partition.InternalPartitionId,
-                                  1, 4,          // begin < client.end
-                                  client,
-                                  "topic-path",
-                                  true,
-                                  4);
-    SendProposeTransactionRequest(partition.InternalPartitionId,
-                                  2, 4,          // begin == client.end
-                                  client,
-                                  "topic-path",
-                                  true,
-                                  5);
-    SendProposeTransactionRequest(partition.InternalPartitionId,
-                                  4, 13,         // end > partition.end
-                                  client,
-                                  "topic-path",
-                                  true,
-
-                                  6);
-
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=4}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitProposeTransactionResponse({.TxId=2, .Status=NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
-    WaitProposeTransactionResponse({.TxId=3, .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
-    WaitProposeTransactionResponse({.TxId=4, .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
-    WaitProposeTransactionResponse({.TxId=5, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-    WaitProposeTransactionResponse({.TxId=6, .Status=NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
-
-    SendGetOffset(6, client);
-    WaitProxyResponse({.Cookie=6, .Offset=4});
-}
-
-Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString client = "client";
-    const TString session = "session";
-
-    const ui64 step = 12345;
-    const ui64 txId = 67890;
-
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
-    CreateSession(client, session);
-
-    SendCalcPredicate(step, txId, client, 0, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
-
-    SendCommitTx(step, txId);
-
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=0}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
-}
-
-Y_UNIT_TEST_F(ExpiredHasDataDeadlineIsAnsweredImmediately, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const ui64 end = 10;
-    const ui64 hasDataCookie = 42;
-
-    CreatePartition({.Partition=partition, .Begin=0, .End=end});
-
-    auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
-    event->Record.SetPartition(partition.InternalPartitionId);
-    event->Record.SetOffset(end);
-    event->Record.SetDeadline(0);
-    event->Record.SetCookie(hasDataCookie);
-    ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
-    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
-
-    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(2));
-    UNIT_ASSERT_C(response, "Expired HasData deadline must not wait for the periodic partition wakeup");
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetEndOffset(), end);
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSizeLag(), 0);
-}
-
-Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString client = "client";
-    const TString session = "session";
-
-    const ui64 step = 12345;
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = 67891;
-    const ui64 txId_3 = 67892;
-
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
-    CreateSession(client, session);
-
-    SendCalcPredicate(step, txId_1, client, 0, 1);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
-
-    SendCalcPredicate(step, txId_2, client, 0, 2);
-    SendCalcPredicate(step, txId_3, client, 0, 2);
-
-    SendCommitTx(step, txId_1);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Session=session, .Offset=0}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Session=session, .Offset=1}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
-
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
-    SendRollbackTx(step, txId_2);
-
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=TPartitionId(partition), .Predicate=false});
-    SendRollbackTx(step, txId_3);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_2, .UserInfos={{1, {.Session=session, .Offset=1}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session=session, .Offset=1}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-}
-
-Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-
-    const ui64 step = 12345;
-    const ui64 txId = 67890;
-
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
-    CreateSession("client-1", "session-1");
-    CreateSession("client-2", "session-2");
-
-    SendSetOffset(1, "client-1", 3, "session-1");
-    SendCalcPredicate(step, txId, "client-2", 0, 1);
-    SendSetOffset(2, "client-1", 6, "session-1");
-
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-1", .Offset=3}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitProxyResponse({.Cookie=1, .Status=NMsgBusProxy::MSTATUS_OK});
-
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
-    SendCommitTx(step, txId);
-
-    WaitCmdWrite({.Count=5, .UserInfos={
-                 {1, {.Session="session-2", .Offset=0}},
-                 {3, {.Session="session-1", .Offset=0}}
-                 }});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCmdWrite({.Count=5, .UserInfos={
-                 {1, {.Session="session-2", .Offset=1}},
-                 {3, {.Session="session-1", .Offset=6}}
-                 }});
-}
-
-Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
-{
-    // Partition meta is ahead of the commit (stale replay). Tablet always sends SerializedTx on commit;
-    // partition must persist tx KV before TEvTxDone (stable-25-4 -> stable-26-1).
-    const TPartitionId partition{3};
-    const ui64 step = 12345;
-    const ui64 txId = 67890;
-
-    CreatePartitionStaleReplayAhead(partition, 0, 10);
-
-    auto serializedTxBody = MakeStaleSerializedTxBody(partition, step, txId);
-    SendCommitTx(step, txId, {.SerializedTx = std::move(serializedTxBody)});
-
-    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not precede KV response for stale commit with SerializedTx");
-
-    auto kv = GrabStaleMetaKvRequest("expected KV request with stale tx meta persist");
-    AssertStaleMetaKvHasTxKey(*kv, txId, partition.OriginalPartitionId, "first KV");
-
-    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not arrive before SendCmdWriteResponse");
-
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
-}
-
-Y_UNIT_TEST_F(OldPlanStep_SecondStaleCommitWhileKvInflight, TPartitionFixture)
-{
-    // Two stale commits: second arrives while first KV response is still pending — must not crash
-    // (TryAppendStaleTxMetaWrites runs again only after InFlight is cleared on write complete).
-    const TPartitionId partition{3};
-    const ui64 step = 12345;
-    const ui64 txId1 = 67890;
-    const ui64 txId2 = 67891;
-
-    CreatePartitionStaleReplayAhead(partition, 0, 10);
-
-    auto body = MakeStaleSerializedTxBody(partition, step, txId1);
-    SendCommitTx(step, txId1, {.SerializedTx = std::move(body)});
-
-    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone before first KV");
-
-    auto kv = GrabStaleMetaKvRequest("expected first stale-meta KV request");
-    AssertStaleMetaKvHasTxKey(*kv, txId1, partition.OriginalPartitionId, "first KV");
-
-    body = MakeStaleSerializedTxBody(partition, step, txId2);
-    SendCommitTx(step, txId2, {.SerializedTx = std::move(body)});
-
-    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not appear while first KV unanswered");
-
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCommitTxDone({.TxId=txId1, .Partition=TPartitionId(partition)});
-
-    kv = GrabStaleMetaKvRequest("expected second stale-meta KV after first completes");
-    AssertStaleMetaKvHasTxKey(*kv, txId2, partition.OriginalPartitionId, "second KV");
-
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCommitTxDone({.TxId=txId2, .Partition=TPartitionId(partition)});
-}
-
-Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString client = "client";
-    const TString session = "session";
-
-    const ui64 step = 12345;
-    ui64 txId = 67890;
-
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
-    CreateSession(client, session);
-
-    SendCalcPredicate(step, txId, client, 4, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
-    SendRollbackTx(step, txId);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    ++txId;
-
-    SendCalcPredicate(step, txId, client, 2, 4);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
-    SendRollbackTx(step, txId);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    ++txId;
-
-    SendCalcPredicate(step, txId, client, 0, 11);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
-}
-
-Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString client = "client";
-    const TString session = "session";
-
-    const ui64 step = 12345;
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = 67891;
-
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
-    CreateSession(client, session);
-
-    SendCalcPredicate(step, txId_1, client, 0, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
-
-    SendCalcPredicate(step, txId_2, client, 0, 5);
-    SendRollbackTx(step, txId_1);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=true});
-}
-
-Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-
-    const ui64 step = 12345;
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = 67891;
-
-    CreatePartition({
-                    .Partition=partition, .Begin=begin, .End=end,
-                    .Config={.Consumers={
-                    {.Consumer="client-1", .Offset=0, .Session="session-1"},
-                    {.Consumer="client-2", .Offset=0, .Session="session-2"},
-                    {.Consumer="client-3", .Offset=0, .Session="session-3"},
-                    }}
-    });
-
-    SendCalcPredicate(step, txId_1, "client-1", 0, 2);
-    Cerr << "Send change config\n";
-    SendChangePartitionConfig({.Version=2,
-                              .Consumers={
-                              {.Consumer="client-1", .Generation=0},
-                              {.Consumer="client-3", .Generation=7}
-                              }});
-    //
-    // consumer 'client-2' will be deleted
-    //
-    SendCalcPredicate(step, txId_2, "client-2", 0, 2);
-
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
-    SendCommitTx(step, txId_1);
-    Cerr << "Wait cmd write (initial)\n";
-    WaitCmdWrite({.Count=8,
-                 .PlanStep=step, .TxId=txId_1,
-                 .UserInfos={
-                    {1, {.Consumer="client-1", .Session="session-1", .Offset=0}},
-                 },
-                 });
-
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitCmdWrite({.Count=8,
-                 .PlanStep=step, .TxId=txId_1,
-                 .UserInfos={
-                    {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
-                 },
-                 });
-
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    Cerr << "Wait commit 1 done\n";
-    WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
-
-    //
-    // update config
-    //
-    // WaitCmdWrite({.Count=8,
-    //              .PlanStep=step, .TxId=txId_1,
-    //              .UserInfos={
-    //              {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
-    //              },
-    // });
-    Cerr << "Wait cmd write (change config)\n";
-    WaitCmdWrite({.Count=8,
-                 .PlanStep=step, .TxId=txId_1,
-                 .UserInfos={
-                 {1, {.Consumer="client-1", .Session="session-1", .Offset=2, .ReadRuleGeneration=0}},
-                 {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
-                 },
-                 .DeleteRanges={
-                 {0, {.Partition=3, .Consumer="client-2"}}
-                 }});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    Cerr << "Wait config changed\n";
-    WaitPartitionConfigChanged({.Partition=TPartitionId(partition)});
-
-    //
-    // consumer 'client-2' was deleted
-    //
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
-    SendRollbackTx(step, txId_2);
-}
-
-Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
-{
-    CreatePartition({
-                    .Partition=TPartitionId{3},
-                    .Begin=0, .End=10,
-                    //
-                    // конфиг партиции
-                    //
-                    .Config={.Version=1, .Consumers={{.Consumer="client-1", .Offset=3}}}
-                    },
-                    //
-                    // конфиг таблетки
-                    //
-                    {.Version=2, .Consumers={{.Consumer="client-2"}}});
-
-    WaitCmdWrite({.Count=5,
-                 .UserInfos={
-                 {0, {.Consumer="client-2", .Session="", .Offset=0, .ReadRuleGeneration=0}}
-                 },
-                 .DeleteRanges={
-                 {0, {.Partition=3, .Consumer="client-1"}}
-                 }});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 }
 
 //
@@ -5536,8 +4615,6 @@ Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
     EmulateKVTablet();
     WaitImmediateTxComplete(immTx2, true);
 }
-
-
 
 Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
     auto* actor = CreatePartition({
@@ -6851,8 +5928,6 @@ private:
     std::function<void(const TActorContext&)> Body;
 };
 
-<<<<<<< HEAD
-=======
 Y_UNIT_TEST_F(InitRestoresEmptyPartitionOffsetsFromMirroredOffset, TPartitionFixture) {
     constexpr ui64 mirroredOffset = 300000000001;
     const TConfigParams config{.Consumers = {{.Consumer = "reader"}}};
@@ -6953,115 +6028,6 @@ Y_UNIT_TEST_F(InitWithMirroredOffsetPreservesExistingDataOffsets, TPartitionFixt
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 10);
 }
 
-Y_UNIT_TEST_F(InitWithMetaOffsetsButNoDataKeysNormalizesEmptyPartition, TPartitionFixture) {
-    // Regression for #49507: meta says [0, 3804) but data range is NODATA.
-    // Without normalization InitComplete → ReportCounters → GetWriteTimeEstimate crashes.
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 metaEnd = 3804;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = 0,
-        .End = metaEnd,
-        .Config = {
-            // Offset within stale meta range: before normalize AnyCommits would be true
-            // (Offset > BlobEncoder.StartOffset == 0); after normalize StartOffset == metaEnd.
-            .Consumers = {{.Consumer = "user", .Offset = 100}},
-        },
-        .EndWriteTimestamp = TInstant::Seconds(1),
-        .NoDataKeys = true,
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
-
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
-    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.Head.Offset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.Head.Offset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.NewHead.Offset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.NewHead.Offset, metaEnd);
-    UNIT_ASSERT(cz.IsEmpty());
-    UNIT_ASSERT(fwz.IsEmpty());
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, metaEnd), TInstant::Zero());
-    UNIT_ASSERT(!TPartitionTestWrapper::GetAnyCommits(*partition, "user"));
-}
-
-Y_UNIT_TEST_F(InitWithMetaOffsetsEmptyOkDataRangeNormalizesEmptyPartition, TPartitionFixture) {
-    // Same inconsistent meta as #49507, but data range returns OK with zero pairs —
-    // hits FormHeadAndProceed empty-keys → NormalizeOffsetsForEmptyData.
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 metaEnd = 3804;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = 0,
-        .End = metaEnd,
-        .EndWriteTimestamp = TInstant::Seconds(1),
-        .EmptyDataRangeOk = true,
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
-    UNIT_ASSERT(TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty());
-    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
-}
-
-Y_UNIT_TEST_F(InitWithNonZeroMetaStartAndNoDataKeysNormalizesToEnd, TPartitionFixture) {
-    // Retention advanced StartOffset; meta [100, 3804) but blobs are gone.
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 metaStart = 100;
-    constexpr ui64 metaEnd = 3804;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = metaStart,
-        .End = metaEnd,
-        .EndWriteTimestamp = TInstant::Seconds(1),
-        .NoDataKeys = true,
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
-
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
-    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
-}
-
-Y_UNIT_TEST_F(GetWriteTimeEstimateReturnsTimestampFromBodyKeys, TPartitionFixture) {
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 begin = 0;
-    constexpr ui64 end = 10;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = begin,
-        .End = end,
-        .EndWriteTimestamp = TInstant::Seconds(1),
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), begin);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), end);
-    UNIT_ASSERT(!TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty() ||
-                !TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
-
-    const TInstant ts = TPartitionTestWrapper::GetWriteTimeEstimate(*partition, begin);
-    UNIT_ASSERT_GT(ts, TInstant::Zero());
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, end), TInstant::Zero());
-}
-
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
 Y_UNIT_TEST_F(GetWriteTimeEstimateEmptyCompactionZoneUsesFastWriteHead, TPartitionFixture) {
     // YDBBUGS-824: compacted zone reports [0, End) with no keys after body compaction,
     // fast-write zone keeps data only in HeadKeys. GetWriteTimeEstimate used to pick the

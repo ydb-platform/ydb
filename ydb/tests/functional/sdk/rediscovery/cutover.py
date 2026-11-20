@@ -2,9 +2,13 @@
 
 import argparse
 import asyncio
+import http.client
+import json
 import os
+import re
 from contextlib import AsyncExitStack, suppress
 from pathlib import Path
+from urllib.parse import urlencode, urlsplit
 
 import grpc
 from ydb._grpc.v6 import ydb_discovery_v1_pb2_grpc as discovery
@@ -24,10 +28,30 @@ CLIENTS = {
 }
 
 
+def disconnect(monitor, database, token):
+    url = urlsplit(monitor)
+    if url.scheme not in {"http", "https"} or not url.hostname or url.username is not None or url.query or url.fragment:
+        raise ValueError("expected a node monitoring URL")
+    protocol = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
+    path = url.path.rstrip("/") + "/actors/grpc_disconnect?" + urlencode({"database": database})
+    # Do not forward the Authorization header to a redirect target.
+    connection = protocol(url.hostname, url.port, timeout=5)
+    try:
+        connection.request("POST", path, body=b"", headers={"Authorization": token})
+        response = connection.getresponse()
+        if response.status != 200:
+            raise RuntimeError(f"disconnect returned HTTP {response.status} on {url.netloc}")
+        if json.load(response) != {"status": "OK"}:
+            raise RuntimeError(f"unexpected disconnect response on {url.netloc}")
+    finally:
+        connection.close()
+
+
 class Relay:
     """Observe client HTTP/2 request headers and sever a real TCP transport mid-call."""
 
     def __init__(self, upstream, route):
+        self.endpoint = upstream
         self.host, port = upstream.rsplit(":", 1)
         self.port = int(port)
         self.route = route
@@ -63,9 +87,22 @@ class Relay:
                         await backend.drain()
 
                 async def responses():
-                    while data := await upstream.read(65536):
-                        writer.write(data)
-                        await writer.drain()
+                    if self.route.node_disconnect and self in self.route.sources:
+                        while True:
+                            try:
+                                header = await upstream.readexactly(9)
+                                data = await upstream.readexactly(int.from_bytes(header[:3], "big"))
+                            except (OSError, asyncio.IncompleteReadError):
+                                self.route.backend_loss("socket closed")
+                                return
+                            writer.write(header + data)
+                            if header[3] == 7:  # HTTP/2 GOAWAY
+                                self.route.backend_loss("GOAWAY")
+                            await writer.drain()
+                    else:
+                        while data := await upstream.read(65536):
+                            writer.write(data)
+                            await writer.drain()
 
                 tasks = [asyncio.create_task(coro()) for coro in (requests, responses)]
                 try:
@@ -86,12 +123,17 @@ class Relay:
 class Route(discovery.DiscoveryServiceServicer):
     def __init__(self, args):
         self.database = args.database
-        self.sources = [Relay(args.source, self) for _ in range(2)]
+        self.node_disconnect = bool(args.source_admin)
+        self.sources = [Relay(endpoint, self) for endpoint in (args.source, args.source_peer or args.source)]
         self.target = Relay(args.destination, self)
         self.bootstrap = None
         self.last_source = None
         self.armed = False
+        self.published = False
         self.cut = asyncio.Event()
+        self.loss_reason = None
+        self.loss_at = None
+        self.recovered_ms = None
         self.discovered = False
         self.reached = False
         self.stale = False
@@ -104,7 +146,15 @@ class Route(discovery.DiscoveryServiceServicer):
         else:
             self.before_peak = max(self.before_peak, count)
 
+    def backend_loss(self, reason):
+        if self.published and not self.cut.is_set():
+            self.loss_reason = reason
+            self.loss_at = asyncio.get_running_loop().time()
+            self.cut.set()
+            self.count_connections()
+
     def switch(self, source):
+        self.published = True
         self.cut.set()
         self.count_connections()
         source.close()  # Keep the other advertised source address healthy.
@@ -127,7 +177,7 @@ class Route(discovery.DiscoveryServiceServicer):
         if request.database != self.database:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unexpected database")
         endpoints = self.sources
-        if self.cut.is_set():
+        if self.published:
             endpoints = [self.target]
             self.discovered = True
         result = proto.ListEndpointsResult()
@@ -148,24 +198,38 @@ async def run(args):
     }
     if args.probe not in modes.get(args.client, {"scheme"}):
         raise ValueError(f"{args.client} probe does not implement {args.probe}")
-    if args.source == args.destination:
+    if args.source_admin or args.source_peer:
+        if not args.source_peer or args.source_peer == args.source or len(set(args.source_admin or [])) != 2:
+            raise ValueError("node disconnect needs a distinct --source-peer and two --source-admin URLs")
+    if args.destination in (args.source, args.source_peer):
         raise ValueError("provide distinct source and destination backends")
+    env = os.environ.copy()
+    token = env.pop("YDB_CUTOVER_ADMIN_TOKEN", None)
+    if args.source_admin and (not token or not re.fullmatch(r"[ -~]+", token)):
+        raise ValueError("set YDB_CUTOVER_ADMIN_TOKEN to a valid Authorization header value")
     route = Route(args)
     async with AsyncExitStack() as stack:
         for relay in [*route.sources, route.target]:
             await relay.start(stack)
         # Use the real ID for direct Topic partition lookups. The extra source
         # address models a still-reachable peer in a cached discovery response.
-        for endpoint, relays in ((args.source, route.sources), (args.destination, [route.target])):
-            async with grpc.aio.insecure_channel(endpoint) as channel:
+        for relay in [*route.sources, route.target]:
+            async with grpc.aio.insecure_channel(relay.endpoint) as channel:
                 reply = await discovery.DiscoveryServiceStub(channel).ListEndpoints(
                     proto.ListEndpointsRequest(database=args.database), timeout=5
                 )
                 topology = proto.ListEndpointsResult()
                 if not reply.operation.result.Unpack(topology) or not topology.endpoints:
                     raise RuntimeError(f"backend discovery failed: {reply.operation}")
-                for index, relay in enumerate(relays):
-                    relay.node_id = topology.endpoints[0].node_id + index
+                if route.node_disconnect:
+                    candidates = [ep for ep in topology.endpoints if ep.port == relay.port]
+                    if len(candidates) != 1:
+                        candidates = [ep for ep in candidates if ep.address == relay.host]
+                    if len(candidates) != 1:
+                        raise ValueError(f"cannot identify {relay.endpoint} in backend discovery")
+                    relay.node_id = candidates[0].node_id
+                else:
+                    relay.node_id = topology.endpoints[0].node_id + (relay is route.sources[1])
 
         server = grpc.aio.server()
         discovery.add_DiscoveryServiceServicer_to_server(route, server)
@@ -177,7 +241,7 @@ async def run(args):
         client = await asyncio.create_subprocess_exec(
             *CLIENTS[args.client],
             cwd=Path(__file__).resolve().parent / "clients" / args.client,
-            env={**os.environ, "YDB_ENDPOINT": f"127.0.0.1:{route.bootstrap.address}",
+            env={**env, "YDB_ENDPOINT": f"127.0.0.1:{route.bootstrap.address}",
                  "YDB_DATABASE": args.database, "YDB_PROBE": args.probe},
             stdout=asyncio.subprocess.PIPE,
         )
@@ -192,18 +256,31 @@ async def run(args):
             await asyncio.wait_for(success(args.source), timeout=40)
             if route.last_source is None:
                 raise AssertionError("warm operation bypassed the discovered endpoints")
-            if args.probe.startswith("topic-"):
+            if route.node_disconnect:
+                route.published = True
+                # Leave every relay and source listener open. Only ydbd cuts connections.
+                await asyncio.gather(*(asyncio.to_thread(disconnect, url, args.database, token)
+                                       for url in args.source_admin))
+            elif args.probe.startswith("topic-"):
                 route.switch(route.last_source)
             else:
                 route.armed = True  # Cut the next unary RPC while it is in flight.
             await asyncio.wait_for(route.cut.wait(), timeout=10)
-            async with asyncio.timeout(args.timeout):
+            deadline = (route.loss_at or asyncio.get_running_loop().time()) + args.timeout
+            async with asyncio.timeout_at(deadline):
                 while True:
                     await success(args.destination)
                     if route.stale:
                         raise AssertionError("SDK sent a new RPC to a cached source endpoint")
                     if route.discovered and route.reached:
+                        if route.loss_at is not None:
+                            route.recovered_ms = round((asyncio.get_running_loop().time() - route.loss_at) * 1000)
                         break
+            if route.node_disconnect:
+                # Observe additional RPCs after the first destination success.
+                await asyncio.sleep(0.6)
+                if route.stale:
+                    raise AssertionError("SDK sent a new RPC to a cached source endpoint")
             if route.after_peak > route.before_peak:
                 raise AssertionError(f"peak connections increased: {route.before_peak} -> {route.after_peak}")
         finally:
@@ -213,13 +290,16 @@ async def run(args):
             await client.wait()
             print(f"{args.client} {args.probe}: rediscovered={route.discovered}, "
                   f"destination_rpc={route.reached}, stale_rpc={route.stale}, "
-                  f"peak_connections={route.before_peak}/{route.after_peak}", flush=True)
+                  f"peak_connections={route.before_peak}/{route.after_peak}, "
+                  f"backend_loss={route.loss_reason}, recovered_ms={route.recovered_ms}", flush=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--client", required=True, choices=sorted(CLIENTS))
     parser.add_argument("--source", required=True, help="disposable source ydbd host:port")
+    parser.add_argument("--source-peer", help="second source data node host:port for a node-admin cutover")
+    parser.add_argument("--source-admin", nargs=2, metavar=("URL1", "URL2"), help="source node monitoring URLs")
     parser.add_argument("--destination", required=True, help="disposable destination ydbd host:port")
     parser.add_argument("--database", default="/local")
     parser.add_argument("--probe", choices=["scheme", "bulk-upsert", "topic-read", "topic-write"], default="scheme")

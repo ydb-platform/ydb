@@ -38,3 +38,15 @@ done
 ```
 
 Swap the two backend arguments to test cutover in the opposite direction. For cross-version coverage, run the backends with the two server versions under test.
+
+### Disconnect through the source nodes
+
+With two distinct tenant nodes serving the source database, the fixture can use the node-admin operation. Supply each source gRPC address and its monitoring URL. Both source nodes must implement `POST /actors/grpc_disconnect` and allow the supplied administrator. Set `YDB_CUTOVER_ADMIN_TOKEN` in the fixture environment. The fixture removes this variable from the SDK probe environment.
+
+```sh
+python cutover.py --client cpp --source localhost:2136 --source-peer localhost:2137 \
+    --source-admin http://localhost:8765 http://localhost:8766 \
+    --destination localhost:3136 --database /local/tenant
+```
+
+After the first successful source operation, the fixture publishes the destination and posts to both source nodes. Both source addresses continue accepting connections. The recovery timer and stale-RPC check start when a source relay observes gRPC's HTTP/2 GOAWAY or the server socket closing. The fixture records the first destination success, watches for stale RPCs for another 600 ms and reports peak concurrent SDK connections across discovery and data relays. Run probes sequentially against a shared source because each POST disconnects every client on its node.

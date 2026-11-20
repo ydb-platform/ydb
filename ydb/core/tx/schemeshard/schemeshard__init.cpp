@@ -864,7 +864,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString, TString, TString, TString> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString, TString, TString, TMaybe<TString>> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -883,7 +883,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::FSSettings>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::EncryptionSettings>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::Compression>(""),
-            rowSet.template GetValueOrDefault<typename SchemaTable::IndexExportPrefixes>("")
+            rowSet.template HaveValue<typename SchemaTable::IndexExportPrefixes>()
+                ? TMaybe<TString>(rowSet.template GetValue<typename SchemaTable::IndexExportPrefixes>())
+                : Nothing()
         );
     }
 
@@ -4563,7 +4565,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString fsSerializedSettings = std::get<11>(rec);
                 TString encryptionSettings = std::get<12>(rec);
                 TString compression = std::get<13>(rec);
-                TString indexExportPrefixes = std::get<14>(rec);
+                const auto& indexExportPrefixes = std::get<14>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -4617,7 +4619,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (indexExportPrefixes) {
                         auto settings = tableInfo->BackupSettings.MutableIndexExportPrefixes();
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, indexExportPrefixes));
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, *indexExportPrefixes));
                     }
                 };
 

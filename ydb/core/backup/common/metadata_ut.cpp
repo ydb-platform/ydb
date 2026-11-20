@@ -81,6 +81,13 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
             index.mutable_global_async_index();
         }
         {
+            // A schema-only export may describe HNSW, which has no supported backup layout.
+            auto& index = *indexes.Add();
+            index.set_name("hnsw");
+            index.add_index_columns("embedding");
+            index.mutable_global_hnsw_index();
+        }
+        {
             auto& index = *indexes.Add();
             index.set_name("global");
             index.add_index_columns("value");

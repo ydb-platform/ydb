@@ -1,0 +1,23 @@
+syntax = "proto2";
+package NKikimrReplicationController;
+
+import "ydb/core/scheme/protos/pathid.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+
+message TCdcTarget {
+    enum EPhase {
+        RUNNING = 0;
+        STOPPING = 1;
+        STOPPING_PRESERVE = 2;
+        RESETTING = 3;
+        PREPARED = 4;
+        FINISHED = 5;
+    }
+    optional uint64 ParentTargetId = 1;
+    optional bool ActivateOnDetach = 2;
+    optional NKikimrProto.TPathID StreamPathId = 3;
+    optional NKikimrProto.TPathID TablePathId = 4;
+    optional EPhase Phase = 5 [default = RUNNING];
+    optional uint64 ResetCreateTxId = 6;
+    optional NKikimrSchemeOp.TCreateCdcStream Definition = 7;
+}

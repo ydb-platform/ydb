@@ -21,6 +21,7 @@ void DoAlterStream(
     const NKikimrSchemeOp::TAlterCdcStream& op,
     const TOperationId& opId,
     const TPath& workingDirPath,
-    const TPath& tablePath);
+    const TPath& tablePath,
+    bool activateDisabled = false);
 
 } // namespace NKikimr::NSchemesShard::NCdc

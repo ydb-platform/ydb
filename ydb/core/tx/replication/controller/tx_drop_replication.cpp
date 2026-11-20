@@ -1,4 +1,7 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
+
+#include <util/generic/hash_set.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -110,6 +113,15 @@ public:
             NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
         );
 
+        THashSet<ui64> cdcParents;
+        if (!record.GetCascade()) {
+            for (const auto* target : Replication->GetTargets()) {
+                if (const auto* child = GetCdcTarget(target)) {
+                    cdcParents.insert(child->GetCdc().GetParentTargetId());
+                }
+            }
+        }
+
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
@@ -129,7 +141,24 @@ public:
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            if (record.GetCascade() || target->GetKind() == TReplication::ETargetKind::Topic) {
+            auto* child = GetCdcTarget(target);
+            if (!record.GetCascade() && (child || cdcParents.contains(tid))) {
+                if (child && child->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::RUNNING) {
+                    child->GetCdc().SetPhase(NKikimrReplicationController::TCdcTarget::STOPPING_PRESERVE);
+                    db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                        NIceDb::TUpdate<Schema::Targets::Cdc>(child->GetCdc().SerializeAsString()));
+                }
+                if (target->GetDstState() != TReplication::EDstState::Done) {
+                    target->SetDstState(TReplication::EDstState::Alter);
+                    db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                        NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                }
+            } else if (record.GetCascade() && child) {
+                // The owned parent-table DROP removes its CDC children.
+                target->SetDstState(TReplication::EDstState::Done);
+                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+            } else if (record.GetCascade() || target->GetKind() == TReplication::ETargetKind::Topic) {
                 if (!record.GetCascade() && target->GetKind() == TReplication::ETargetKind::Topic) {
                     target->SetDstState(TReplication::EDstState::Alter);
                 } else {

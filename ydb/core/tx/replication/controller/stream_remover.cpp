@@ -1,6 +1,7 @@
 #include "logging.h"
 #include "private_events.h"
 #include "stream_remover.h"
+#include "target_cdc.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
@@ -47,6 +48,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 0,
                 ProxyGeneration);
             break;
+        case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(SrcPath,
                 NYdb::NTopic::TAlterTopicSettings().AppendDropConsumers(StreamName)), 0, ProxyGeneration);
@@ -65,6 +67,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, HandleResult);
             hFunc(TEvYdbProxy::TEvAlterTopicResponse, HandleResult);
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -79,7 +82,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
-        if (Kind == TReplication::ETargetKind::Topic && result.GetStatus() == NYdb::EStatus::NOT_FOUND) {
+        if (IsTopicTarget(Kind) && result.GetStatus() == NYdb::EStatus::NOT_FOUND) {
             result = NYdb::TStatus(NYdb::EStatus::SUCCESS, {});
         }
 
@@ -94,8 +97,11 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 {"issues", result.GetIssues().ToOneLineString()});
 
             // Keep cleanup pending: the important consumer still retains source data.
-            if (Kind == TReplication::ETargetKind::Topic) {
+            if (IsTopicTarget(Kind)) {
                 if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
+                    if (!CdcTablePath.empty()) {
+                        return CheckSourceTable();
+                    }
                     return CheckParentDirectory(SrcPath);
                 }
                 return Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
@@ -106,6 +112,30 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         }
 
         Reply(std::move(result));
+    }
+
+    void CheckSourceTable() {
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(CdcTablePath, {}), 0, ProxyGeneration);
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
+
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            const auto streams = result.GetTableDescription().GetChangefeedDescriptions();
+            const auto name = ExtractBase(SrcPath);
+            if (!AnyOf(streams, [&](const auto& stream) { return TStringBuf(stream.GetName()) == name; })) {
+                return Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+            }
+        } else if (EqualToOneOf(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, NYdb::EStatus::NOT_FOUND)) {
+            // Check the table's directory, never enumerate the table as if its CDCs were ordinary topics.
+            return CheckParentDirectory(CdcTablePath);
+        }
+
+        Schedule(RetryInterval, new TEvents::TEvWakeup(ProxyGeneration));
     }
 
     void CheckParentDirectory(TString childPath) {
@@ -196,7 +226,8 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TString& srcPath,
-            const TString& streamName)
+            const TString& streamName,
+            const TString& cdcTablePath = {})
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -204,6 +235,7 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , StreamName(streamName)
+        , CdcTablePath(cdcTablePath)
         , LogPrefix(CreateActorLogPrefix("StreamRemover", ReplicationId, TargetId))
     {
     }
@@ -213,6 +245,7 @@ public:
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             return RequestPermission();
         case TReplication::ETargetKind::Transfer:
@@ -238,6 +271,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString StreamName;
+    const TString CdcTablePath;
     TString ChildPath;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -245,10 +279,23 @@ private:
 
 }; // TStreamRemover
 
+IActor* CreateCdcStreamConsumerRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
+        const TString& sourceTablePath, const TString& streamName, const TString& consumerName)
+{
+    const TString streamPath = TStringBuilder() << sourceTablePath << "/" << streamName;
+    return new TStreamRemover(parent, proxy, rid, tid, TReplication::ETargetKind::Topic,
+        streamPath, consumerName, sourceTablePath);
+}
+
 IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     auto srcPath = target->GetSrcPath();
+    if (const auto* cdc = GetCdcTarget(target)) {
+        return CreateCdcStreamConsumerRemover(ctx.SelfID, replication->GetYdbProxy(),
+            replication->GetId(), targetId, TString(ExtractParent(target->GetSrcPath())),
+            cdc->GetCdc().GetDefinition().GetStreamDescription().GetName(), target->GetStreamConsumerName());
+    }
     if (target->GetKind() == TReplication::ETargetKind::Topic) {
         srcPath = CanonizePath(IsStartWithSlash(srcPath) ? srcPath
             : replication->GetConfig().GetSrcConnectionParams().GetDatabase() + "/" + srcPath);

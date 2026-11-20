@@ -283,12 +283,13 @@ public:
             const TDataShardId& dataShard,
             ui32 partitionId,
             ui64 shardId,
-            const TUserTable::TCdcStream& stream)
+            const TUserTable::TCdcStream& stream,
+            const TString& sourceId)
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
-        , SourceId(ToString(DataShard.TabletId))
+        , SourceId(sourceId)
         , Serializer(CreateCdcStreamSerializer(stream, DataShard.TabletId))
     {
     }
@@ -590,10 +591,10 @@ class TCdcChangeSenderMain
             return Become(&TThis::StateMain);
         }
 
-        TopicVersion = topicVersion;
-
         const auto& pqDesc = entry.PQGroupInfo->Description;
         const auto& pqConfig = pqDesc.GetPQTabletConfig();
+        const auto& replicationConsumer = pqConfig.GetReplicationSourceConsumer();
+        SourceId = MakeCdcSourceId(DataShard.TabletId, replicationConsumer);
 
         PartitionToShard.clear();
         for (const auto& partition : pqDesc.GetPartitions()) {
@@ -603,13 +604,29 @@ class TCdcChangeSenderMain
         }
 
         const bool topicAutoPartitioning = IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());
-        if (!topicAutoPartitioning && !entry.PQGroupInfo->Schema) {
+        const bool replicatedJson = !replicationConsumer.empty() && Stream.Format != NKikimrSchemeOp::ECdcStreamFormatProto;
+        if (!topicAutoPartitioning && !replicatedJson && !entry.PQGroupInfo->Schema) {
             return LogWarnAndRetry("Empty schema and disabled auto-partitioning");
         }
 
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
-        Y_ENSURE(entry.PQGroupInfo->Partitioning);
-        KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
+        if (replicatedJson && !topicAutoPartitioning) {
+            if (PartitionToShard.empty()) {
+                return LogWarnAndRetry("Replicated CDC topic has no active partitions");
+            }
+            TVector<TKeyDesc::TPartitionInfo> partitions;
+            partitions.reserve(PartitionToShard.size());
+            for (ui32 id = 0; id < PartitionToShard.size(); ++id) {
+                if (!PartitionToShard.contains(id)) {
+                    return LogWarnAndRetry("Replicated CDC topic partitions must be contiguous");
+                }
+                partitions.emplace_back(id);
+            }
+            KeyDesc->Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+        } else {
+            Y_ENSURE(entry.PQGroupInfo->Partitioning);
+            KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
+        }
 
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
@@ -620,6 +637,7 @@ class TCdcChangeSenderMain
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));
         }
 
+        TopicVersion = topicVersion;
         CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
         Become(&TThis::StateMain);
     }
@@ -645,7 +663,7 @@ class TCdcChangeSenderMain
     IActor* CreateSender(ui64 partitionId) const override {
         Y_ENSURE(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
-        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
+        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream, SourceId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -788,6 +806,7 @@ private:
     const TDataShardId DataShard;
 
     TUserTable::TCdcStream Stream;
+    TString SourceId;
     TPathId TopicPathId;
     ui64 TopicVersion;
     THolder<NKikimr::TKeyDesc> KeyDesc;

@@ -175,7 +175,10 @@ public:
             break;
         case NKikimrSchemeOp::TAlterCdcStream::kGetReady:
             requiredState = TCdcStreamInfo::EState::ECdcStreamStateReady;
-            if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
+            if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan
+                || (Transaction.GetInternal() && !op.GetGetReady().HasLockTxId()
+                    && stream->State == TCdcStreamInfo::EState::ECdcStreamStateDisabled))
+            {
                 newState = requiredState;
             }
             break;
@@ -556,12 +559,15 @@ void DoAlterStream(
         const NKikimrSchemeOp::TAlterCdcStream& op,
         const TOperationId& opId,
         const TPath& workingDirPath,
-        const TPath& tablePath)
+        const TPath& tablePath,
+        bool activateDisabled)
 {
+    const bool dropSnapshot = op.HasGetReady() && !activateDisabled;
     {
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
         outTx.MutableAlterCdcStream()->CopyFrom(op);
-        if (op.HasGetReady()) {
+        outTx.SetInternal(activateDisabled);
+        if (dropSnapshot) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
         }
 
@@ -570,11 +576,12 @@ void DoAlterStream(
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
         outTx.MutableAlterCdcStream()->CopyFrom(op);
-        if (op.HasGetReady()) {
+        outTx.SetInternal(activateDisabled);
+        if (dropSnapshot) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
         }
 
-        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
+        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, dropSnapshot));
     }
 }
 
@@ -631,9 +638,11 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    DoAlterStream(result, op, opId, workingDirPath, tablePath);
+    const bool activateDisabled = tx.GetInternal() && op.HasGetReady() && !op.GetGetReady().HasLockTxId()
+        && context.SS->CdcStreams.at(streamPath.Base()->PathId)->State == TCdcStreamInfo::EState::ECdcStreamStateDisabled;
+    DoAlterStream(result, op, opId, workingDirPath, tablePath, activateDisabled);
 
-    if (op.HasGetReady()) {
+    if (op.HasGetReady() && !activateDisabled) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
         outTx.SetFailOnExist(true);
         outTx.SetInternal(true);

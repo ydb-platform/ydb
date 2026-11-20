@@ -21,7 +21,8 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool internal = false);
+    bool internal = false,
+    bool allowAsyncReplica = false);
 
 void DoCreateStreamImpl(
     TVector<ISubOperation::TPtr>& result,
@@ -30,7 +31,8 @@ void DoCreateStreamImpl(
     const TPath& tablePath,
     const bool acceptExisted,
     const bool initialScan,
-    const bool internal = false);
+    const bool internal = false,
+    const TPathId& expectedReplicationOwner = {});
 
 void DoCreateStream(
     TVector<ISubOperation::TPtr>& result,
@@ -40,7 +42,8 @@ void DoCreateStream(
     const TPath& tablePath,
     const bool acceptExisted,
     const bool initialScan,
-    const bool internal = false);
+    const bool internal = false,
+    const TPathId& expectedReplicationOwner = {});
 
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
@@ -91,6 +94,7 @@ void DoCreatePqPart(
     const TString& streamName,
     TTableInfo::TCPtr table,
     const TVector<TString>& boundaries,
-    const bool acceptExisted);
+    const bool acceptExisted,
+    const NKikimrPQ::TPQTabletConfig& consumers = {});
 
 } // namespace NKikimr::NSchemesShard::NCdc

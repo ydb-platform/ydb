@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -63,7 +64,22 @@ public:
             return true;
         }
 
-        if (Ev->Get()->IsSuccess()) {
+        NIceDb::TNiceDb db(txc.DB);
+        auto* cdc = GetCdcTarget(target);
+        if (Ev->Get()->IsSuccess() && cdc) {
+            auto& state = cdc->GetCdc();
+            if (state.GetPhase() != NKikimrReplicationController::TCdcTarget::RESETTING) {
+                Replication.Reset();
+                return true;
+            }
+            target->SetDstPathId(Ev->Get()->DstPathId);
+            Ev->Get()->CdcStreamPathId.ToProto(state.MutableStreamPathId());
+            state.ClearResetCreateTxId();
+            state.SetPhase(NKikimrReplicationController::TCdcTarget::PREPARED);
+            cdc->Shutdown(ctx);
+            db.Table<Schema::Targets>().Key(rid, tid).Update(
+                NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()));
+        } else if (Ev->Get()->IsSuccess()) {
             const bool wasAltering = dstState == TReplication::EDstState::Alter;
             target->SetDstPathId(Ev->Get()->DstPathId);
             if (target->GetKind() == TReplication::ETargetKind::Topic) {
@@ -109,7 +125,6 @@ public:
                 {"error", Ev->Get()->Error});
         }
 
-        NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())

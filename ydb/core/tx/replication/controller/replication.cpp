@@ -6,6 +6,7 @@
 #include "target_discoverer.h"
 #include "target_table.h"
 #include "target_topic.h"
+#include "target_cdc.h"
 #include "target_transfer.h"
 #include "tenant_resolver.h"
 #include "util.h"
@@ -97,6 +98,8 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::Transfer:
             return new TTargetTransfer(self, id, std::forward<Args>(args)...);
+        case ETargetKind::CdcTopic:
+            return new TTargetCdc(self, id, std::forward<Args>(args)...);
         case ETargetKind::Topic:
             return new TTargetTopic(self, id, std::forward<Args>(args)...);
         }
@@ -473,6 +476,21 @@ TVector<TReplication::ITarget*> TReplication::GetTargets() const {
 
 TVector<TString> TReplication::GetTargetTablePaths() const {
     return Impl->GetTargetTablePaths();
+}
+
+bool TReplication::AreCdcChildrenPrepared(ui64 parentId) const {
+    for (const auto* child : GetCdcChildren(*this, parentId)) {
+        if (child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::PREPARED
+            && child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::FINISHED)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsTopicTarget(TReplication::ETargetKind kind) {
+    return kind == TReplication::ETargetKind::Topic || kind == TReplication::ETargetKind::CdcTopic;
 }
 
 void TReplication::Progress(const TActorContext& ctx) {

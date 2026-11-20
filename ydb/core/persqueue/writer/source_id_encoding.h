@@ -24,6 +24,8 @@ TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
 TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration = ESourceIdTableGeneration::SrcIdMeta2);
 TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGeneration = ESourceIdTableGeneration::SrcIdMeta2);
 
+TString MakeCdcSourceId(ui64 tabletId, const TString& replicationConsumer);
+
 namespace NSourceIdEncoding {
 
 TString EncodeSimple(const TString& sourceId);

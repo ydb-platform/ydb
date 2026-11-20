@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -61,9 +62,17 @@ public:
             return true;
         }
 
+        NIceDb::TNiceDb db(txc.DB);
         if (Ev->Get()->IsSuccess()) {
             const bool removing = Replication->GetState() == TReplication::EState::Removing;
-            if (removing) {
+            if (auto* cdc = GetCdcTarget(target); cdc
+                && (removing || Replication->GetDesiredState() == TReplication::EState::Done))
+            {
+                if (!cdc->OnMirrorStopped(db, ctx)) {
+                    Replication.Reset();
+                    return true;
+                }
+            } else if (removing) {
                 target->SetDstState(TReplication::EDstState::Done);
             } else {
                 target->SetDstState(NextState(Replication->GetDesiredState()));
@@ -73,6 +82,10 @@ public:
             YDB_LOG_NOTICE_CTX(ctx, "Target dst altered",
                 {"rid", rid},
                 {"tid", tid});
+
+            if (target->GetDstState() == TReplication::EDstState::Done) {
+                FinishCdcChildren(*Replication, tid, db);
+            }
 
             if (!removing && Replication->CheckAlterDone()) {
                 YDB_LOG_NOTICE_CTX(ctx, "Replication altered",
@@ -95,7 +108,6 @@ public:
                 {"error", Ev->Get()->Error});
         }
 
-        NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
@@ -105,7 +117,9 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready
+        const bool continueCdcHandoff = GetCdcTarget(target) && Ev->Get()->IsSuccess()
+            && Replication->GetDesiredState() == TReplication::EState::Done;
+        if (!continueCdcHandoff && Replication->GetState() != TReplication::EState::Ready
             && Replication->GetState() != TReplication::EState::Removing)
         {
             Replication.Reset();

@@ -41,6 +41,7 @@ void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
     const TPath& path,
     TTxId op = InvalidTxId,
-    bool internal = false);
+    bool internal = false,
+    bool allowAsyncReplica = false);
 
 } // namespace NKikimr::NSchemeShard::NCdcStreamAtTable

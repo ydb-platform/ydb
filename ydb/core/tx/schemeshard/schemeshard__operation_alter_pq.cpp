@@ -152,6 +152,7 @@ public:
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             TTopicInfo::TPtr topic,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
+            bool managedCdcTopic,
             TString& errStr)
     {
         bool splitMergeEnabled = NPQ::SplitMergeEnabled(*tabletConfig)
@@ -329,6 +330,17 @@ public:
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
+            }
+
+            if (managedCdcTopic) {
+                const auto& consumer = tabletConfig->GetReplicationSourceConsumer();
+                if (alterConfig.HasReplicationSourceConsumer()
+                    && alterConfig.GetReplicationSourceConsumer() != consumer)
+                {
+                    errStr = "Cannot change the replication source consumer of a managed CDC topic";
+                    return nullptr;
+                }
+                alterConfig.SetReplicationSourceConsumer(consumer);
             }
 
             if (tabletConfig->HasId()) {
@@ -695,11 +707,37 @@ public:
         NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
         NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
-        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, errStr);
+        const auto streamPath = path.Parent();
+        const bool managedCdcTopic = streamPath.IsCdcStream()
+            && !tabletConfig.GetReplicationSourceConsumer().empty();
+        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, managedCdcTopic, errStr);
 
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
+        }
+
+        if (managedCdcTopic && newTabletConfig.GetPartitionConfig().HasMirrorFrom()) {
+            const auto tablePath = streamPath.Parent();
+            const auto checks = tablePath.Check();
+            checks.NotEmpty().IsResolved().IsAtLocalSchemeShard().NotDeleted().IsTable().NotUnderOperation();
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
+            const auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
+            const auto expectedOwner = TPathId::FromProto(Transaction.GetExpectedReplicationOwnerPathId());
+            if (!Transaction.GetInternal() || !expectedOwner.OwnerId || !expectedOwner.LocalPathId
+                || !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) != expectedOwner
+                || config.GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                || stream->State != NKikimrSchemeOp::ECdcStreamStateDisabled)
+            {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Managed CDC mirroring requires a Disabled stream and the current replica table owner");
+                return result;
+            }
         }
 
         // do not change if not set

@@ -441,12 +441,16 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
+        NKikimrPQ::TPQTabletConfig config;
+        ParsePQTabletConfig(config, *pqGroup);
+
         for (const auto* p : table->GetPartitions()) {
             const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
             Y_ABORT_UNLESS(shardInfo != nullptr);
 
             auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
-            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
+            const auto sourceId = NPQ::MakeCdcSourceId(ui64(shardInfo->TabletID), config.GetReplicationSourceConsumer());
+            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
             //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
             // Routing is datashard-side over the topic partitioning, split continuity is

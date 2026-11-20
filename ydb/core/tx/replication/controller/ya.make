@@ -50,6 +50,7 @@ SRCS(
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp
+    target_cdc.cpp
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp

@@ -94,12 +94,13 @@ public:
     }
 
     explicit TCdcPartitionWorker(const TActorId& parent, ui32 partitionId, ui64 tabletId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const TString& replicationConsumer)
         : Parent(parent)
         , PartitionId(partitionId)
         , TabletId(tabletId)
         , SrcTabletId(srcTabletId)
         , DstTabletIds(dstTabletIds)
+        , ReplicationConsumer(replicationConsumer)
     {
     }
 
@@ -125,11 +126,13 @@ public:
         auto& cmd = *request.MutableCmdSplitMessageGroup();
         {
             auto& group = *cmd.AddDeregisterGroups();
-            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(SrcTabletId)));
+            const auto sourceId = NPQ::MakeCdcSourceId(SrcTabletId, ReplicationConsumer);
+            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
         }
         for (const auto dstTabletId : DstTabletIds) {
             auto& group = *cmd.AddRegisterGroups();
-            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(dstTabletId)));
+            const auto sourceId = NPQ::MakeCdcSourceId(dstTabletId, ReplicationConsumer);
+            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
         }
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
@@ -152,6 +155,7 @@ private:
     const ui64 TabletId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
+    const TString ReplicationConsumer;
 
     TActorId PipeClient;
 
@@ -357,7 +361,9 @@ class TCdcWorker
 
         THashMap<ui32, TActorId> workers;
 
-        for (const auto& partition : entry.PQGroupInfo->Description.GetPartitions()) {
+        const auto& topic = entry.PQGroupInfo->Description;
+        const auto& replicationConsumer = topic.GetPQTabletConfig().GetReplicationSourceConsumer();
+        for (const auto& partition : topic.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
             const auto tabletId = partition.GetTabletId();
 
@@ -373,7 +379,8 @@ class TCdcWorker
                 YDB_LOG_TRACE("Registering CDC partition split worker",
                     {"partitionId", partitionId});
 
-                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
+                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId,
+                    SrcTabletId, DstTabletIds, replicationConsumer));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }

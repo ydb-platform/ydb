@@ -1487,7 +1487,7 @@ namespace {
             const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
             const auto& config = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
             UNIT_ASSERT(config.HasWriteMode());
-            UNIT_ASSERT_VALUES_EQUAL(config.GetWriteMode(), mode);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetWriteMode()), static_cast<int>(mode));
         }
 
 >>>>>>> 8c7975308c1 (better)

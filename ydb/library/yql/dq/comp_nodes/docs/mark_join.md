@@ -41,40 +41,45 @@ For a left value that is not null, the check is:
 Lookup: O(1). A hit is one hash lookup. A miss checks two booleans.
 
 
-## One mark column, with a group
+## One mark column and regular keys
 
 ```sql
 SELECT x IN (SELECT y FROM t2 WHERE t2.k = t1.k) FROM t1;
 ```
 
-A null in one group does not affect another group. Rows with the same `k` go into the same bucket.
+The right rows are stored once in the main hash table, under the full key `(k, y)`.
 
-The rows are stored once, in the main hash table, under the full key `(k, y)`. A second index points at those same rows and is searched by `k` only. The slot holds the hash of `k` and the row number. The row is not copied. The index has two parts:
+`NullRows` and `OtherRows` are two more hash tables. Their key is only the regular key `k`. They do not store the row again. A lookup of `k` returns row numbers in the main table:
 
-- rows whose `y` is null;
-- the other rows, and only when the left side can contain null.
+- `NullRows` returns the numbers of rows with this `k` whose `y` is null
+- `OtherRows` returns the numbers of rows with this `k` whose `y` is not null. This table is built only when the left side can contain null
 
-Finding any row of the group is enough. `y` is not compared again.
+In this case one returned row number is enough. `y` is not read again.
+
+For a left value that is not null, the check is:
+
+- look up the full key `(k, x)` in the main hash table. A hit is `true`
+- if there is no hit, look up `k` in `NullRows`. If it returns a row number, the answer is `null`
+- otherwise the answer is `false`
+
+A left `null` is not looked up in the main hash table. If `NullRows` or `OtherRows` returns a row number for `k`, the answer is `null`. If both return nothing, the answer is `false`.
 
 Right side: `(1, 10)`, `(1, null)`, `(2, 20)`.
 
 | left `(k, x)` | answer |
 |---|---|
 | `(1, 10)` | `true`, the full key matches |
-| `(1, 30)` | `null`, group 1 has a null |
-| `(1, null)` | `null`, group 1 exists |
-| `(2, 10)` | `false`, group 2 has no null |
-| `(3, null)` | `false`, group 3 does not exist |
+| `(1, 30)` | `null`, `NullRows` returns a row number for `k = 1` |
+| `(1, null)` | `null`, `NullRows` or `OtherRows` returns a row number for `k = 1` |
+| `(2, 10)` | `false`, `NullRows` returns nothing for `k = 2` |
+| `(3, null)` | `false`, both tables return nothing for `k = 3` |
 
-A missing group is `false` even when `x` is null. The subquery for that `k` returned nothing.
+If the mark column cannot be null on either side, the second index is not built. A miss is `false`. If only the right side can contain null, only `NullRows` is filled.
 
-If the mark column cannot be null on either side, the second index is not built. A miss is `false`. If only the right side can contain null, the index keeps groups that have a null `y`.
+`NullRows` and `OtherRows` are not spilled. When they are built and dropped is described in [Buckets and spilling](#buckets-and-spilling).
 
-The second index is not spilled. One group always sits in one bucket. When that index is built and dropped is described in [Buckets and spilling](#buckets-and-spilling).
-
-Lookup: O(1). One lookup by the full key, and on a miss one lookup by `k`. The lookup by `k` stops at the first row of the group, so a large group does not make it slower.
-
-Whole join: O(L + R). The main table and the second index are built in one pass over the right side, then each left row does the lookup above. Extra memory is one hash and one row number per indexed right row of the buckets that are in memory. The row itself is not copied.
+#### Complexity
+Lookup: O(1). One lookup by the full key, and on a miss one lookup by the regular key. The second lookup stops at the first row with that key.
 
 ## Several mark columns, with a group
 

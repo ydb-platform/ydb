@@ -5,6 +5,11 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <grpcpp/server_builder.h>
+#if defined(_unix_)
+#include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
+#include <util/network/socket.h>
+#include <util/system/file.h>
+#endif
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -21,9 +26,61 @@ namespace {
         return "127.0.0.1:" + std::to_string(port);
     }
 
-    std::unique_ptr<grpc::Server> StartServer(ui16 port, grpc::Service& service) {
+#if defined(_unix_)
+    // Retain a descriptor for each accepted connection so a test can cut the
+    // existing transports while leaving the very same listener in service.
+    struct TAcceptedSockets : grpc_socket_mutator {
+        TAcceptedSockets() {
+            static const grpc_socket_mutator_vtable vtable = {
+                nullptr,
+                [](auto* a, auto* b) { return a == b ? 0 : std::less<>{}(a, b) ? -1 : 1; },
+                [](auto* self) { delete static_cast<TAcceptedSockets*>(self); },
+                [](const grpc_mutate_socket_info* info, grpc_socket_mutator* mutator) {
+                    if (info->usage == GRPC_FD_SERVER_CONNECTION_USAGE) {
+                        auto* self = static_cast<TAcceptedSockets*>(mutator);
+                        std::lock_guard lock(self->Mutex);
+                        self->Connections.push_back(Duplicate(info->fd));
+                    }
+                    return true;
+                },
+            };
+            grpc_socket_mutator_init(this, &vtable);
+        }
+
+        void Disconnect() {
+            std::lock_guard lock(Mutex);
+            UNIT_ASSERT(!Connections.empty());
+            for (const auto& connection : Connections) {
+                ShutDown(connection.GetHandle(), SHUT_RDWR);
+            }
+            Connections.clear();
+        }
+
+        std::mutex Mutex;
+        std::vector<TFile> Connections;
+    };
+
+    class TSocketOption : public grpc::ServerBuilderOption {
+    public:
+        explicit TSocketOption(TAcceptedSockets* sockets)
+            : Sockets(sockets) {}
+
+        void UpdateArguments(grpc::ChannelArguments* args) override {
+            args->SetSocketMutator(Sockets);
+        }
+        void UpdatePlugins(std::vector<std::unique_ptr<grpc::ServerBuilderPlugin>>*) override {}
+
+    private:
+        TAcceptedSockets* Sockets;
+    };
+#endif
+
+    std::unique_ptr<grpc::Server> StartServer(ui16 port, grpc::Service& service, std::unique_ptr<grpc::ServerBuilderOption> option = {}) {
         grpc::ServerBuilder builder;
         builder.AddListeningPort("0.0.0.0:" + ToString(port), grpc::InsecureServerCredentials());
+        if (option) {
+            builder.SetOption(std::move(option));
+        }
         builder.RegisterService(&service);
         return builder.BuildAndStart();
     }
@@ -41,15 +98,19 @@ namespace {
             ++Calls;
             Ydb::Discovery::ListEndpointsResult result;
             const auto port = Port.load();
+            if (Calls.load() > 1) {
+                RefreshStarted.TrySetValue();
+                ReleaseDiscovery.GetFuture().Wait(TDuration::Seconds(10));
+            }
             if (port == SourcePort) {
                 // Losing one selected address is below the periodic pessimization threshold.
                 for (const auto* host : {"127.0.0.1", "127.0.0.2", "127.0.0.3"}) {
                     auto* endpoint = result.add_endpoints();
                     endpoint->set_address(host);
                     endpoint->set_port(port);
+                    endpoint->set_load_factor(std::string_view(host) == "127.0.0.1" ? 0 : 1);
                 }
             } else {
-                ReleaseDiscovery.GetFuture().Wait(TDuration::Seconds(10));
                 if (!port) {
                     return grpc::Status(grpc::StatusCode::UNAVAILABLE, "bootstrap unavailable");
                 }
@@ -67,21 +128,26 @@ namespace {
         const ui16 SourcePort;
         std::atomic_uint Port;
         std::atomic_uint Calls = 0;
+        NThreading::TPromise<void> RefreshStarted = NThreading::NewPromise<void>();
         NThreading::TPromise<void> ReleaseDiscovery = NThreading::NewPromise<void>();
     };
 
     template <class TService>
     struct TSwitch {
+        explicit TSwitch(std::unique_ptr<grpc::ServerBuilderOption> option = {})
+            : SourceServer(StartServer(SourcePort, Source, std::move(option)))
+        {}
+
         TPortManager Ports;
         const ui16 SourcePort = Ports.GetPort();
         const ui16 DestinationPort = Ports.GetPort();
         const ui16 DiscoveryPort = Ports.GetPort();
         TService Source, Destination;
         TDiscovery Discovery{SourcePort};
-        std::unique_ptr<grpc::Server> SourceServer = StartServer(SourcePort, Source);
+        std::unique_ptr<grpc::Server> SourceServer;
         std::unique_ptr<grpc::Server> DestinationServer = StartServer(DestinationPort, Destination);
         std::unique_ptr<grpc::Server> DiscoveryServer = StartServer(DiscoveryPort, Discovery);
-        TDriver Driver{TDriverConfig().SetEndpoint(Address(DiscoveryPort)).SetDatabase("/Root")};
+        TDriver Driver{TDriverConfig().SetEndpoint(Address(DiscoveryPort)).SetDatabase("/Root").SetMaxQueuedRequests(1)};
     };
 
     class TTableService: public Ydb::Table::V1::TableService::Service {
@@ -89,6 +155,11 @@ namespace {
         grpc::Status BulkUpsert(grpc::ServerContext*, const Ydb::Table::BulkUpsertRequest*,
                                 Ydb::Table::BulkUpsertResponse* response) override {
             ++Calls;
+            if (HoldNext.exchange(false)) {
+                Held.TrySetValue();
+                ReleaseHeld.GetFuture().Wait(TDuration::Seconds(10));
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "in-flight data connection lost");
+            }
             if (FailNext.exchange(false)) {
                 return grpc::Status(grpc::StatusCode::UNAVAILABLE, "data connection lost");
             }
@@ -100,6 +171,9 @@ namespace {
 
         std::atomic_uint Calls = 0;
         std::atomic_bool FailNext = false;
+        std::atomic_bool HoldNext = false;
+        NThreading::TPromise<void> Held = NThreading::NewPromise<void>();
+        NThreading::TPromise<void> ReleaseHeld = NThreading::NewPromise<void>();
     };
 
     class TTopicService: public Ydb::Topic::V1::TopicService::Service {
@@ -167,7 +241,7 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT(upsert().GetValueSync().IsSuccess());
         const auto initialDiscoveries = servers.Discovery.Calls.load();
         servers.Discovery.Port = servers.DestinationPort;
-        servers.SourceServer->Shutdown();
+        servers.Source.FailNext = true;
         UNIT_ASSERT_VALUES_EQUAL(upsert().GetValueSync().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
 
         auto shortRequest = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {},
@@ -186,7 +260,7 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
         UNIT_ASSERT_VALUES_EQUAL(servers.Discovery.Calls.load(), initialDiscoveries + 1);
-        UNIT_ASSERT_VALUES_EQUAL(servers.Source.Calls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(servers.Source.Calls.load(), 2);
         UNIT_ASSERT_VALUES_EQUAL(servers.Destination.Calls.load(), next.size());
     }
 
@@ -208,6 +282,78 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         UNIT_ASSERT_UNEQUAL(status.GetEndpoint(), failed.GetEndpoint());
         UNIT_ASSERT_VALUES_EQUAL(servers.Discovery.Calls.load(), initialDiscoveries + 1);
+    }
+
+
+#if defined(_unix_)
+    Y_UNIT_TEST(IdleSourceTransportClosesWhileListenerKeepsServing) {
+        auto* sockets = new TAcceptedSockets;
+        TSwitch<TTableService> servers(std::make_unique<TSocketOption>(sockets));
+        NTable::TTableClient client(servers.Driver);
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        const auto upsert = [&] { return client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings); };
+
+        UNIT_ASSERT(upsert().GetValueSync().IsSuccess());
+        servers.Discovery.Port = servers.DestinationPort;
+        sockets->Disconnect();
+        UNIT_ASSERT_C(servers.Discovery.RefreshStarted.GetFuture().Wait(TDuration::Seconds(3)),
+                      "An idle data connection closed, but the driver never queried bootstrap");
+        TDriver direct(TDriverConfig().SetEndpoint(Address(servers.SourcePort)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::Off));
+        NTable::TTableClient directClient(direct);
+        UNIT_ASSERT(directClient.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings).GetValueSync().IsSuccess());
+
+        auto next = upsert();
+        servers.Discovery.ReleaseDiscovery.SetValue();
+        UNIT_ASSERT(next.GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(servers.Source.Calls.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(servers.Destination.Calls.load(), 1);
+    }
+#endif
+
+    Y_UNIT_TEST(SecondFailureAfterUnchangedDiscovery) {
+        TSwitch<TTableService> servers;
+        NTable::TTableClient client(servers.Driver);
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        const auto upsert = [&] { return client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings); };
+
+        servers.Source.FailNext = true;
+        const auto first = upsert().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(first.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        servers.Discovery.ReleaseDiscovery.SetValue();
+        const auto peer = upsert().GetValueSync();
+        UNIT_ASSERT(peer.IsSuccess());
+        UNIT_ASSERT_UNEQUAL(first.GetEndpoint(), peer.GetEndpoint());
+
+        servers.Discovery.Port = servers.DestinationPort;
+        servers.Source.FailNext = true;
+        UNIT_ASSERT_VALUES_EQUAL(upsert().GetValueSync().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT(upsert().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(servers.Destination.Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST(DiscoverySampledBeforeLastFailure) {
+        TSwitch<TTableService> servers;
+        NTable::TTableClient client(servers.Driver);
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        const auto upsert = [&] { return client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings); };
+
+        servers.Source.HoldNext = true;
+        const auto oldRequest = upsert();
+        UNIT_ASSERT(servers.Source.Held.GetFuture().Wait(TDuration::Seconds(3)));
+        servers.Source.FailNext = true;
+        UNIT_ASSERT_VALUES_EQUAL(upsert().GetValueSync().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT(servers.Discovery.RefreshStarted.GetFuture().Wait(TDuration::Seconds(3)));
+        servers.Discovery.Port = servers.DestinationPort;
+        servers.Source.ReleaseHeld.SetValue();
+        UNIT_ASSERT_VALUES_EQUAL(oldRequest.GetValueSync().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+
+        const auto next = upsert();
+        servers.Discovery.ReleaseDiscovery.SetValue();
+        UNIT_ASSERT(next.GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(servers.Destination.Calls.load(), 1);
     }
 
     Y_UNIT_TEST(EstablishedTopicReader) {

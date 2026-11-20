@@ -581,8 +581,10 @@ public:
     TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6), bool tcpNoDelay = true);
     //Allows to CreateStub from TStubsHolder under lock
     //The callback will be called just during GetStubsHolderLocked call
-    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb);
+    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb,
+                              std::function<void(TStubsHolder&)> onBroken = {});
     void DeleteChannel(const std::string& channelId);
+    void Clear();
     void DeleteExpiredStubsHolders();
 private:
     std::shared_mutex RWMutex_;

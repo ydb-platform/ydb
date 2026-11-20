@@ -31,7 +31,7 @@ class TEndpointPool {
 public:
     enum class EUpdateReason { Regular, TransportFailure };
 
-    TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
+    TEndpointPool(TListEndpointsResultProvider&& provider, IInternalClient* client);
     ~TEndpointPool();
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync(EUpdateReason reason = EUpdateReason::Regular);
     NThreading::TFuture<TEndpointUpdateResult> GetPendingTransportUpdate();
@@ -50,6 +50,8 @@ public:
     static constexpr std::int32_t GetLocalityShift();
 
 private:
+    NThreading::TFuture<void> RunUpdates();
+    std::vector<std::string> Install(const Ydb::Discovery::ListEndpointsResult& result, TEndpointElectorSafe::EPenalties penalties);
     bool IsPreferredEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
                              const std::string& selfLocation,
                              const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const;
@@ -57,10 +59,12 @@ private:
 
 private:
     TListEndpointsResultProvider Provider_;
+    IInternalClient* const Client_;
     std::mutex Mutex_;
     TEndpointElectorSafe Elector_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
     std::atomic_bool TransportUpdatePending_ = false;
+    std::uint64_t TransportGeneration_ = 0;
     TDeadline NextTransportUpdate_;
     std::atomic_uint64_t LastUpdateTime_;
     const TBalancingPolicy::TImpl BalancingPolicy_;

@@ -76,7 +76,7 @@ public:
     NThreading::TFuture<bool> ScheduleFuture(
         TDuration timeout,
         IQueueClientContextPtr token = nullptr
-    );
+    ) override;
     void ScheduleCallback(
         TDuration timeout,
         std::function<void(bool)> callback,
@@ -138,19 +138,21 @@ public:
     template<typename TService>
     static void OnEndpointError(const TDbDriverStatePtr& state, const TEndpointKey& endpoint,
             TRpcRequestSettings::TEndpointPolicy policy, const NYdbGrpc::TGrpcStatus& status) {
-        if (!UsesDiscoveredEndpoint<TService>(*state, policy)) {
-            return;
-        }
         state->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
-        if (status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE && state->EndpointPool.GetEndpoint(endpoint, true)) {
+        if (status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE && UsesDiscoveredEndpoint<TService>(*state, policy)) {
             state->UpdateEndpoints(TEndpointPool::EUpdateReason::TransportFailure);
         }
     }
 
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    NThreading::TFuture<TEndpointUpdateResult> WithPooledChannel(const TDbDriverStatePtr& discoveredState,
+        const NYdbGrpc::TGRpcClientConfig& config, std::function<void(NYdbGrpc::TStubsHolder&)> makeConnection);
+#endif
+
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
         TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
-        TRpcRequestSettings::TEndpointPolicy endpointPolicy)
+        TRpcRequestSettings::TEndpointPolicy endpointPolicy, NThreading::TFuture<TEndpointUpdateResult>& pending)
     {
         auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         const auto& sslCredentials = dbState->SslCredentials;
@@ -193,11 +195,13 @@ public:
 
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-        ChannelPool_.GetStubsHolderLocked(
-            clientConfig.Locator, clientConfig, [&conn, this](NYdbGrpc::TStubsHolder& holder) mutable {
-            conn.reset(GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder).release());
-        });
+        pending = WithPooledChannel(UsesDiscoveredEndpoint<TService>(*dbState, endpointPolicy) ? dbState : nullptr,
+            clientConfig, [&](NYdbGrpc::TStubsHolder& holder) { conn = GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder); });
+        if (pending.Initialized()) {
+            return {nullptr, TEndpointKey{}};
+        }
 #else
+        Y_UNUSED(pending);
         conn = std::move(GRpcClientLow_.CreateGRpcServiceConnection<TService>(clientConfig));
 #endif
         return {std::move(conn), TEndpointKey(clientConfig.Locator, 0)};
@@ -825,7 +829,7 @@ private:
             pending = dbState->EndpointPool.GetPendingTransportUpdate();
         }
         if (!pending.Initialized()) {
-            std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy);
+            std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy, pending);
         }
         if (!serviceConnection) {
             if (dbState->DiscoveryMode == EDiscoveryMode::Off) {
@@ -865,22 +869,24 @@ private:
                     TEndpointKey{},
                     DriverScope_);
             } else {
-                int64_t newVal;
-                int64_t val;
-                do {
-                    val = QueuedRequests_.load();
-                    if (val >= MaxQueuedRequests_) {
-                        dbState->StatCollector.IncReqFailQueueOverflow();
-                        RunServiceConnectionCallback<TService>(
-                            callback,
-                            TPlainStatus(EStatus::CLIENT_LIMITS_REACHED, "Requests queue limit reached"),
-                            TConnection{nullptr},
-                            TEndpointKey{},
-                            DriverScope_);
-                        return;
-                    }
-                    newVal = val + 1;
-                } while (!QueuedRequests_.compare_exchange_weak(val, newVal));
+                if (dbState->DiscoveryMode == EDiscoveryMode::Async) {
+                    int64_t newVal;
+                    int64_t val;
+                    do {
+                        val = QueuedRequests_.load();
+                        if (val >= MaxQueuedRequests_) {
+                            dbState->StatCollector.IncReqFailQueueOverflow();
+                            RunServiceConnectionCallback<TService>(
+                                callback,
+                                TPlainStatus(EStatus::CLIENT_LIMITS_REACHED, "Requests queue limit reached"),
+                                TConnection{nullptr},
+                                TEndpointKey{},
+                                DriverScope_);
+                            return;
+                        }
+                        newVal = val + 1;
+                    } while (!QueuedRequests_.compare_exchange_weak(val, newVal));
+                }
 
                 // UpdateAsync guarantees one update in progress for state.
                 const bool refreshing = pending.Initialized();
@@ -890,7 +896,9 @@ private:
                                update, started, refreshing, driverScope = DriverScope_](TWaitResult waitError) mutable {
                     driverScope->RunGuarded(
                         [&] {
-                            --QueuedRequests_;
+                            if (dbState->DiscoveryMode == EDiscoveryMode::Async) {
+                                --QueuedRequests_;
+                            }
                             if (waitError) {
                                 callback(std::move(*waitError), TConnection{}, TEndpointKey{});
                                 return;
@@ -904,6 +912,10 @@ private:
                             Y_UNUSED(started);
 #endif
                             auto status = result.DiscoveryStatus;
+                            if (refreshing && dbState->EndpointPool.GetPendingTransportUpdate().Initialized()) {
+                                WithServiceConnection<TService>(std::move(callback), dbState, settings, context);
+                                return;
+                            }
                             if (!refreshing) {
                                 if (status.Ok()) {
                                     WithServiceConnection<TService>(std::move(callback), dbState, settings, context);
@@ -915,7 +927,12 @@ private:
 
                             // If a refresh fails, the last discovered endpoints are still usable.
                             // Reselect with the same affinity, including strict session pinning.
-                            auto [connection, selected] = GetServiceConnection<TService>(dbState, settings.PreferredEndpoint, settings.EndpointPolicy);
+                            NThreading::TFuture<TEndpointUpdateResult> nextUpdate;
+                            auto [connection, selected] = GetServiceConnection<TService>(dbState, settings.PreferredEndpoint, settings.EndpointPolicy, nextUpdate);
+                            if (nextUpdate.Initialized()) {
+                                WithServiceConnection<TService>(std::move(callback), dbState, settings, context);
+                                return;
+                            }
                             if (connection) {
                                 callback(TPlainStatus{}, std::move(connection), std::move(selected));
                                 return;

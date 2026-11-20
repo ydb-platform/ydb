@@ -118,7 +118,7 @@ void TDbDriverState::SignalDiscoveryCompleted() {
     DiscoveryCompletedPromise.TrySetValue();
 }
 
-void TDbDriverState::UpdateEndpoints(TEndpointPool::EUpdateReason reason) {
+NThreading::TFuture<TEndpointUpdateResult> TDbDriverState::UpdateEndpoints(TEndpointPool::EUpdateReason reason) {
     auto [future, started] = EndpointPool.UpdateAsync(reason);
     if (started) {
         future.Subscribe([self = shared_from_this()](const auto& completed) {
@@ -132,6 +132,7 @@ void TDbDriverState::UpdateEndpoints(TEndpointPool::EUpdateReason reason) {
             }
         });
     }
+    return future;
 }
 
 TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {

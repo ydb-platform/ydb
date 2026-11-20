@@ -1,4 +1,4 @@
-* The driver refreshes discovered endpoints when a data RPC or stream loses its transport, so new requests and Topic reconnects can follow a database switchover.
+* The driver refreshes discovered endpoints when a data RPC loses its transport or a previously ready data channel loses connectivity between calls, so new requests and Topic reconnects can follow a database switchover.
 
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 

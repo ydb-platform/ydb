@@ -1,10 +1,13 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "endpoint_pool.h"
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 namespace NYdb::inline Dev {
 
-TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client)
-    : Provider_(provider)
+TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, IInternalClient* client)
+    : Provider_(std::move(provider))
+    , Client_(client)
     , LastUpdateTime_(TInstant::Zero().MicroSeconds())
     , BalancingPolicy_(client->GetBalancingSettings())
 {}
@@ -31,16 +34,8 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
     {
         std::lock_guard guard(Mutex_);
         if (reason == EUpdateReason::TransportFailure) {
-            // Share an in-flight discovery, including a periodic update. During a
-            // persistent outage, bound new bootstrap RPCs even if they fail fast.
-            const auto now = TDeadline::Now();
-            if (now < NextTransportUpdate_ && !DiscoveryPromise_.Initialized()) {
-                return {};
-            }
-            if (!TransportUpdatePending_) {
-                NextTransportUpdate_ = now + std::chrono::seconds(1);
-                TransportUpdatePending_ = true;
-            }
+            ++TransportGeneration_;
+            TransportUpdatePending_ = true;
         }
         if (DiscoveryPromise_.Initialized()) {
             return {DiscoveryPromise_.GetFuture(), false};
@@ -49,95 +44,142 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             future = DiscoveryPromise_.GetFuture();
         }
     }
-    auto handler = [this](const TAsyncListEndpointsResult& future) {
-        TListEndpointsResult result = future.GetValue();
-        std::vector<std::string> removed;
-        if (result.DiscoveryStatus.Status == EStatus::SUCCESS) {
-            std::vector<TEndpointRecord> records;
-            // Is used to convert float to integer load factor
-            // same integer values will be selected randomly.
-            const float multiplicator = 10.0;
-            std::string selfLocation = result.Result.self_location();
-            std::unordered_map<std::string, Ydb::Bridge::PileState> pileStates;
-            for (const auto& pile : result.Result.pile_states()) {
-                pileStates[pile.pile_name()] = pile;
-            }
+    RunUpdates();
+    return {future, true};
+}
 
-            for (const auto& endpoint : result.Result.endpoints()) {
-                std::int32_t loadFactor = static_cast<std::int32_t>(multiplicator * std::min(LoadMax, std::max(LoadMin, endpoint.load_factor())));
-                std::uint64_t nodeId = endpoint.node_id();
-                std::string location = endpoint.location();
-                if (!IsPreferredEndpoint(endpoint, selfLocation, pileStates)) {
-                    // Location mismatch, shift this endpoint
-                    loadFactor += GetLocalityShift();
-                }
-
-                std::string sslTargetNameOverride = endpoint.ssl_target_name_override();
-                auto getIpSslTargetNameOverride = [&]() -> std::string {
-                    if (!sslTargetNameOverride.empty()) {
-                        return sslTargetNameOverride;
-                    }
-                    if (endpoint.ssl()) {
-                        return endpoint.address();
-                    }
-                    return std::string();
-                };
-
-                bool addDefault = true;
-                for (const auto& addr : endpoint.ip_v6()) {
-                    if (addr.empty()) {
-                        continue;
-                    }
-                    TStringBuilder endpointBuilder;
-                    endpointBuilder << "ipv6:";
-                    if (addr[0] != '[') {
-                        endpointBuilder << "[";
-                    }
-                    endpointBuilder << addr;
-                    if (addr[addr.size()-1] != ']') {
-                        endpointBuilder << "]";
-                    }
-                    endpointBuilder << ":" << endpoint.port();
-                    std::string endpointString = std::move(endpointBuilder);
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId, location);
-                    addDefault = false;
-                }
-                for (const auto& addr : endpoint.ip_v4()) {
-                    if (addr.empty()) {
-                        continue;
-                    }
-                    std::string endpointString =
-                        TStringBuilder()
-                            << "ipv4:"
-                            << addr
-                            << ":"
-                            << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId, location);
-                    addDefault = false;
-                }
-                if (addDefault) {
-                    std::string endpointString =
-                        TStringBuilder()
-                            << endpoint.address()
-                            << ":"
-                            << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride), nodeId, std::move(location));
+NThreading::TFuture<void> TEndpointPool::RunUpdates() {
+    TEndpointUpdateResult update;
+    for (;;) {
+        std::uint64_t generation;
+        TDeadline::Duration delay{};
+        auto penalties = TEndpointElectorSafe::EPenalties::Reset;
+        {
+            std::lock_guard guard(Mutex_);
+            generation = TransportGeneration_;
+            if (TransportUpdatePending_) {
+                penalties = TEndpointElectorSafe::EPenalties::Retain;
+                const auto now = TDeadline::Now();
+                if (now < NextTransportUpdate_) {
+                    delay = NextTransportUpdate_.GetTimePoint() - now.GetTimePoint();
+                } else {
+                    NextTransportUpdate_ = now + std::chrono::seconds(1);
                 }
             }
-            LastUpdateTime_ = TInstant::Now().MicroSeconds();
-            removed = Elector_.SetNewState(std::move(records));
         }
+
+        try {
+            if (delay > TDeadline::Duration::zero()) {
+                if (co_await Client_->ScheduleFuture(TDuration::MicroSeconds(std::chrono::ceil<std::chrono::microseconds>(delay).count()), nullptr)) {
+                    continue; // include every loss received while the timer was armed
+                }
+                update.DiscoveryStatus = TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
+            } else {
+                const auto result = co_await Provider_();
+                update.DiscoveryStatus = result.DiscoveryStatus;
+                if (result.DiscoveryStatus.Ok()) {
+                    {
+                        std::lock_guard guard(Mutex_);
+                        if (generation != TransportGeneration_) {
+                            continue; // discovery could have sampled the old routes
+                        }
+                    }
+                    auto removed = Install(result.Result, penalties);
+                    update.Removed.insert(update.Removed.end(), removed.begin(), removed.end());
+                }
+            }
+        } catch (const std::exception& e) {
+            update.DiscoveryStatus = TPlainStatus(EStatus::CLIENT_INTERNAL_ERROR, e.what());
+        }
+
         NThreading::TPromise<TEndpointUpdateResult> promise;
         {
             std::lock_guard guard(Mutex_);
+            if (generation != TransportGeneration_) {
+                continue;
+            }
             DiscoveryPromise_.Swap(promise);
             TransportUpdatePending_ = false;
         }
-        promise.SetValue({std::move(removed), result.DiscoveryStatus});
-    };
+        promise.SetValue(std::move(update));
+        co_return;
+    }
+}
 
-    Provider_().Subscribe(handler);
-    return {future, true};
+std::vector<std::string> TEndpointPool::Install(const Ydb::Discovery::ListEndpointsResult& result, TEndpointElectorSafe::EPenalties penalties) {
+    std::vector<TEndpointRecord> records;
+    // Is used to convert float to integer load factor
+    // same integer values will be selected randomly.
+    const float multiplicator = 10.0;
+    std::string selfLocation = result.self_location();
+    std::unordered_map<std::string, Ydb::Bridge::PileState> pileStates;
+    for (const auto& pile : result.pile_states()) {
+        pileStates[pile.pile_name()] = pile;
+    }
+
+    for (const auto& endpoint : result.endpoints()) {
+        std::int32_t loadFactor = static_cast<std::int32_t>(multiplicator * std::min(LoadMax, std::max(LoadMin, endpoint.load_factor())));
+        std::uint64_t nodeId = endpoint.node_id();
+        std::string location = endpoint.location();
+        if (!IsPreferredEndpoint(endpoint, selfLocation, pileStates)) {
+            // Location mismatch, shift this endpoint
+            loadFactor += GetLocalityShift();
+        }
+
+        std::string sslTargetNameOverride = endpoint.ssl_target_name_override();
+        auto getIpSslTargetNameOverride = [&]() -> std::string {
+            if (!sslTargetNameOverride.empty()) {
+                return sslTargetNameOverride;
+            }
+            if (endpoint.ssl()) {
+                return endpoint.address();
+            }
+            return std::string();
+        };
+
+        bool addDefault = true;
+        for (const auto& addr : endpoint.ip_v6()) {
+            if (addr.empty()) {
+                continue;
+            }
+            TStringBuilder endpointBuilder;
+            endpointBuilder << "ipv6:";
+            if (addr[0] != '[') {
+                endpointBuilder << "[";
+            }
+            endpointBuilder << addr;
+            if (addr[addr.size()-1] != ']') {
+                endpointBuilder << "]";
+            }
+            endpointBuilder << ":" << endpoint.port();
+            std::string endpointString = std::move(endpointBuilder);
+            records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId, location);
+            addDefault = false;
+        }
+        for (const auto& addr : endpoint.ip_v4()) {
+            if (addr.empty()) {
+                continue;
+            }
+            std::string endpointString =
+                TStringBuilder()
+                    << "ipv4:"
+                    << addr
+                    << ":"
+                    << endpoint.port();
+            records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId, location);
+            addDefault = false;
+        }
+        if (addDefault) {
+            std::string endpointString =
+                TStringBuilder()
+                    << endpoint.address()
+                    << ":"
+                    << endpoint.port();
+            records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride), nodeId, std::move(location));
+        }
+    }
+    LastUpdateTime_ = TInstant::Now().MicroSeconds();
+    return Elector_.SetNewState(std::move(records), penalties);
 }
 
 NThreading::TFuture<TEndpointUpdateResult> TEndpointPool::GetPendingTransportUpdate() {

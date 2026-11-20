@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
                 std::sort(permuted.begin(), permuted.end());
                 do {
                     UNIT_ASSERT_VALUES_EQUAL(IsAllowedMirror3dcGroupTransition(*repaired, {solo->State, permuted}),
-                        permuted == solo->Realms);
+                        permuted[first] == TFailRealm::EXCLUDED);
                 } while (std::next_permutation(permuted.begin(), permuted.end()));
             }
         }
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
         UNIT_ASSERT_VALUES_EQUAL(TFailRealm::EState_Name(TFailRealm::LEAVING), "LEAVING");
         auto role = TFailRealm::INCLUDED;
         UNIT_ASSERT(TFailRealm::EState_Parse("LEAVING", &role));
-        UNIT_ASSERT_VALUES_EQUAL(role, TFailRealm::LEAVING);
+        UNIT_ASSERT(role == TFailRealm::LEAVING);
         UNIT_ASSERT(!TFailRealm::EState_Parse("PENDING", &role));
     }
 

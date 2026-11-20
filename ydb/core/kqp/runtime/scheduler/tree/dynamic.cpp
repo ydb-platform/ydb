@@ -167,7 +167,7 @@ ui32 TQuery::ResumeTasks(ui32 count) {
 // TPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
+TPool::TPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
     , TTreeElement(id)
     , NHdrf::TPool<ETreeType::DYNAMIC>(id)
@@ -176,7 +176,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
         return;
     }
 
-    auto group = counters->GetKqpCounters()->GetSubgroup("schedulerPool", id);
+    auto group = counters->GetSubgroup("schedulerPool", id);
 
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
@@ -268,7 +268,7 @@ NSnapshot::TPool* TPool::CreateSnapshot(const NStatic::TPoolPtr& pool) const {
 // TDefaultPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TDefaultPool::TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters)
+TDefaultPool::TDefaultPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id)
     , TPool(id, counters)
 {
@@ -301,12 +301,12 @@ NSnapshot::TDatabase* TDatabase::TakeSnapshot() {
 // TRoot
 ///////////////////////////////////////////////////////////////////////////////
 
-TRoot::TRoot(const TIntrusivePtr<TKqpCounters>& counters)
+TRoot::TRoot(const NMonitoring::TDynamicCounterPtr& counters)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>("(ROOT)")
     , TPool("(ROOT)", {})
 {
     Y_ASSERT(counters);
-    auto group = counters->GetKqpCounters();
+    auto group = counters;
     Counters.TotalCpuLimit = group->GetCounter("scheduler/TotalLimit", false);
     Counters.TotalMemoryLimit = group->GetCounter("scheduler/TotalMemoryLimit", false);
 }

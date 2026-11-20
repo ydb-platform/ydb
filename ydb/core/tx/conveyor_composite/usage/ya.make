@@ -7,13 +7,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/runtime
+    ydb/core/kqp/runtime/scheduler
+    ydb/core/protos
+    ydb/core/tx/conveyor/usage
     ydb/core/tx/conveyor_composite/common
     ydb/core/tx/conveyor_composite/common/config
     ydb/library/actors/core
     ydb/services/metadata/request
-    ydb/core/protos
-    ydb/core/tx/conveyor/usage
 )
 
 END()

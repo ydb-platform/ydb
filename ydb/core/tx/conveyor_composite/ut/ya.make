@@ -17,8 +17,10 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
     ydb/core/cms/console
+    ydb/core/kqp/common/simple
     ydb/core/kqp/predictor
-    ydb/core/kqp/runtime
+    ydb/core/kqp/runtime/scheduler
+    ydb/core/kqp/runtime/scheduler/service
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/testlib/default

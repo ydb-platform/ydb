@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/runtime/scheduler/service/service.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/snapshot.h>
@@ -152,7 +153,7 @@ namespace NKikimr::NConveyorComposite {
                 .AttemptBonus = TDuration::Zero(),
                 .MaxRandomDelay = TDuration::MicroSeconds(1),
             });
-            auto counters = MakeIntrusive<NKqp::TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto root = std::make_shared<NHdrf::NDynamic::TRoot>(counters);
             auto database = std::make_shared<NHdrf::NDynamic::TDatabase>("database");
             auto pool = std::make_shared<NHdrf::NDynamic::TPool>("pool", counters);
@@ -274,7 +275,7 @@ namespace NKikimr::NConveyorComposite {
                 auto& scheduler = Runtime.GetAppData().KqpComputeScheduler;
                 if (!scheduler) {
                     scheduler = std::make_shared<NKqp::NScheduler::TComputeScheduler>(
-                        MakeIntrusive<NKqp::TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), NKqp::NScheduler::TOptions{});
+                        MakeIntrusive<NMonitoring::TDynamicCounters>(), NKqp::NScheduler::TOptions{});
                 }
                 scheduler->ToggleEnabled(enabled);
             }
@@ -1222,7 +1223,7 @@ namespace NKikimr::NConveyorComposite {
             TSchedulerRuntimeFixture fixture(proto);
             const auto identity = MakeIdentity(1);
 
-            auto counters = MakeIntrusive<NKqp::TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             NKqp::NScheduler::TOptions options{
                 .DelayParams = {
                     .MaxDelay = TDuration::MilliSeconds(10),

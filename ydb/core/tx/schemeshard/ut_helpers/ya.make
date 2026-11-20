@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    library/cpp/http/fetch
     library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blockstore/core
@@ -8,6 +9,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/filestore/core
+    ydb/core/kqp/runtime/scheduler
     ydb/core/metering
     ydb/core/persqueue/ut/common
     ydb/core/protos
@@ -20,14 +22,13 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_proxy
-    ydb/public/lib/scheme_types
-    yql/essentials/public/issue
-    ydb/public/lib/deprecated/kicli
-    ydb/public/sdk/cpp/src/client/driver
-    ydb/public/sdk/cpp/src/client/table
     ydb/library/actors/core
     ydb/library/actors/http
-    library/cpp/http/fetch
+    ydb/public/lib/deprecated/kicli
+    ydb/public/lib/scheme_types
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/table
+    yql/essentials/public/issue
 )
 
 SRCS(

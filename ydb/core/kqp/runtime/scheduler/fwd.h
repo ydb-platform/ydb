@@ -5,8 +5,10 @@
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
 
+#include <atomic>
 #include <list>
 #include <memory>
+#include <variant>
 
 namespace NKikimr::NKqp::NScheduler {
 

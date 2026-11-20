@@ -1,12 +1,12 @@
-#include "kqp_compute_scheduler_service.h"
-#include "kqp_compute_scheduler_ut_helpers.h"
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_ut_helpers.h>
 
-#include "kqp_schedulable_base.h"
-#include "kqp_schedulable_memory.h"
-#include "kqp_schedulable_read.h"
-#include "kqp_schedulable_task.h"
-#include "tree/dynamic.h"
-#include "tree/snapshot.h"
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_base.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_memory.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_task.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/snapshot.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/testlib/helpers.h>
@@ -60,7 +60,7 @@ namespace {
 Y_UNIT_TEST_SUITE(KqpReadQuotaRegression) {
     struct TFixture {
         TComputeSchedulerPtr Scheduler = std::make_shared<TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             TOptions{.DelayParams = kDefaultDelayParams});
         TSchedulableReadFactory Factory{Scheduler};
 
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpReadQuotaRegression) {
 Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
     Y_UNIT_TEST(TakeSnapshotDispatchesThroughDynamicElementBase) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto root = std::make_shared<NHdrf::NDynamic::TRoot>(counters);
         auto config = std::make_unique<NHdrf::NStatic::TRoot>(4, 1000);
         config->GetOrCreateDatabase("db").GetOrCreatePool("pool").CpuLimit = 2;
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(SnapshotUsesOnlyRuntimePathsAndPreservesThemAfterConfigRemoval) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto root = std::make_shared<NHdrf::NDynamic::TRoot>(counters);
         auto config = std::make_unique<NHdrf::NStatic::TRoot>(4, 1000);
         auto& database = config->GetOrCreateDatabase("db");
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(StaticPoolReferenceOwnsItsTreeVersion) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NScheduler::TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         NHdrf::NStatic::TRoot config(8);
         config.GetOrCreateDatabase("db").GetOrCreatePool("pool").SetAttributes({.Weight = 3, .CpuLimit = 6});
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST_TWIN(LiveReadZeroQuotaRetryPolicy, MemoryEnabled) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(counters,
             TOptions{.DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
         TSchedulableReadFactory factory(scheduler);
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(FullConfigurationReplacesAllAttributesAndPreservesRuntime) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NScheduler::TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         NHdrf::NStatic::TRoot config(8, 1000);
         config.GetOrCreateDatabase("db").SetAttributes({.Weight = 2, .MemoryLimit = 800});
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(FullConfigurationValidationIsAtomicAndIndependentOfOldReservations) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NScheduler::TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         NHdrf::NStatic::TRoot config(8, 1000);
         config.GetOrCreateDatabase("db").GetOrCreatePool("a").SetAttributes({.CpuGuarantee = 6});
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(SnapshotCapturesOneCompleteConfiguration) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NScheduler::TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         NHdrf::NStatic::TRoot config(4, 400);
         config.GetOrCreateDatabase("db").GetOrCreatePool("pool").SetAttributes({.CpuLimit = 4, .MemoryLimit = 400});
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             - Register query ID 0 several times; reuse the same pointer.
             - Remove only after the last release; a subsequent Add creates a new query.
          */
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         scheduler.AddOrUpdateDatabase("db", {});
         scheduler.AddOrUpdatePool("db", "pool", {});
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             - Force-remove a query with multiple registrations.
             - Unknown removes are no-ops; a subsequent Add starts with one registration.
          */
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         scheduler.AddOrUpdateDatabase("db", {});
         scheduler.AddOrUpdatePool("db", "pool", {});
@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             - Reject the reserved query ID, a missing pool and a different database/pool.
             - Failed adds preserve the original pool and do not acquire registrations.
          */
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         scheduler.AddOrUpdateDatabase("db", {});
         scheduler.AddOrUpdateDatabase("other", {});
@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 2;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 5;
         constexpr ui64 kQueryDemand = 1;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 4;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -687,7 +687,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 12;
         const std::vector<ui64> kFairShares = {3, 3, 6};
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         const std::vector<ui64> kFairShares = {3, 3, 6};
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -802,7 +802,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 8;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -838,7 +838,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 8;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -875,7 +875,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 8;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -927,7 +927,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     Y_UNIT_TEST(MultipleDatabasesPoolsQueries) {
         constexpr ui64 kCpuLimit = 20;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 12;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1063,7 +1063,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 2;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1112,7 +1112,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 2;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1156,7 +1156,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1182,7 +1182,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 10;
         constexpr ui64 kPoolLimit = 4;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1216,7 +1216,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 10;
         constexpr ui64 kDatabaseGuarantee = 6;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1247,7 +1247,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1281,7 +1281,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1329,7 +1329,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 8;
         constexpr ui64 kGuarantee = 4;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1378,7 +1378,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 8;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 8;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1448,7 +1448,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         Sleep(TDuration::MilliSeconds(1));
         scheduler.UpdateFairShare();
 
-        auto group = counters->GetKqpCounters()->GetSubgroup("schedulerPool", "pool1");
+        auto group = counters->GetSubgroup("schedulerPool", "pool1");
         const auto actualDemand = group->GetCounter("ActualDemand", true)->Val();
         UNIT_ASSERT_GT(actualDemand, 0);
         UNIT_ASSERT_VALUES_EQUAL_C(group->GetCounter("Guarantee", false)->Val(), 6'000'000, "The configured guarantee");
@@ -1465,7 +1465,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1502,7 +1502,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kGuarantee = 6;
         constexpr ui64 kDemand = 6;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1552,7 +1552,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1613,7 +1613,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 10;
         constexpr ui64 kQueryDemand = 3;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1674,7 +1674,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 3;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1757,7 +1757,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 12;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1791,7 +1791,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 2;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1810,7 +1810,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler.UpdateFairShare();
         auto satisfaction = [&](const TString& poolId) {
-            return counters->GetKqpCounters()->GetSubgroup("schedulerPool", poolId)->GetCounter("AdjustedSatisfaction", true)->Val();
+            return counters->GetSubgroup("schedulerPool", poolId)->GetCounter("AdjustedSatisfaction", true)->Val();
         };
         // Registration snapshots already accounted the idle time before the tasks appeared.
         const auto previous1 = satisfaction("pool1");
@@ -1834,7 +1834,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1867,7 +1867,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1900,7 +1900,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1936,7 +1936,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -1983,7 +1983,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2034,7 +2034,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 12;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2072,7 +2072,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 8;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2104,7 +2104,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2136,7 +2136,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2176,7 +2176,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             TLimits{8, 8, 0, 8, 0},
             TLimits{8, 8, 8, 0, 0}})
         {
-            auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             NScheduler::TComputeScheduler scheduler(counters, {
                 .DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
             auto config = std::make_unique<NHdrf::NStatic::TRoot>(limits.Node);
@@ -2204,7 +2204,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST_TWIN(InitialCpuDemandIsReplacedByRealTasks, MemoryEnabled) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NScheduler::TComputeScheduler scheduler(counters, {
             .DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
         auto config = std::make_unique<NHdrf::NStatic::TRoot>(8);
@@ -2237,7 +2237,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
     Y_UNIT_TEST_TWIN(InitialCpuDemandSharesBudgetWithExistingWork, MemoryEnabled) {
         for (const bool guaranteed : {false, true}) {
-            auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             NScheduler::TComputeScheduler scheduler(counters, {
                 .DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
             auto config = std::make_unique<NHdrf::NStatic::TRoot>(8);
@@ -2272,7 +2272,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(DetachedSnapshotConsumesInitialCpuDemand) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         scheduler.SetTotalCpuLimit(4);
         scheduler.AddOrUpdatePool("db", "pool", {});
@@ -2289,7 +2289,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(InitialCpuDemandRetainsLimitsWithoutStaticLeaf) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NScheduler::TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         auto config = std::make_unique<NHdrf::NStatic::TRoot>(8);
         config->GetOrCreateDatabase("db").CpuLimit = 2;
@@ -2301,7 +2301,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(InitialCpuDemandIsConsumedByFirstCapture) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto root = std::make_shared<NHdrf::NDynamic::TRoot>(counters);
         auto config = std::make_unique<NHdrf::NStatic::TRoot>(8);
         auto& databaseConfig = config->GetOrCreateDatabase("db");
@@ -2328,7 +2328,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
     Y_UNIT_TEST_TWIN(ReadQueryInitialSnapshotUsesPoolBudget, MemoryEnabled) {
         for (const bool readFirst : {false, true}) {
-            auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             NScheduler::TComputeScheduler scheduler(counters, {
                 .DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
             auto config = std::make_unique<NHdrf::NStatic::TRoot>(4, 1000);
@@ -2384,7 +2384,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     Y_UNIT_TEST_TWIN(ReadQueryWithoutPoolSnapshotKeepsMinimumAdmission, MemoryEnabled) {
         // No root snapshot, a snapshot without this database, or one without this pool.
         for (ui32 publishedPath : {0u, 1u, 2u}) {
-            auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             NScheduler::TComputeScheduler scheduler(counters, {
                 .DelayParams = kDefaultDelayParams, .MemoryEnabled = MemoryEnabled});
             auto config = std::make_unique<NHdrf::NStatic::TRoot>(4);
@@ -2416,7 +2416,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(ReadQueryDoesNotReserveInitialCpuDemand) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         scheduler.SetTotalCpuLimit(8);
         scheduler.AddOrUpdatePool("db", "pool", {});
@@ -2428,7 +2428,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     }
 
     Y_UNIT_TEST(UnboundedInitialCpuDemandUsesFiniteMinimum) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
         scheduler.AddOrUpdatePool("db", "pool", {});
         auto query = scheduler.AddOrUpdateQuery("db", "pool", 1);
@@ -2445,7 +2445,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2496,7 +2496,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 10;
         constexpr ui64 kQueries = 3;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2548,7 +2548,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 10;
         constexpr auto kThrottleTime = TDuration::MilliSeconds(10);
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2575,7 +2575,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     Y_UNIT_TEST(StressTest) {
         constexpr ui64 kCpuLimit = 100;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2657,7 +2657,7 @@ namespace {
     //
     struct THierarchy {
         explicit THierarchy(ui64 totalCpuLimit, const NHdrf::TStaticAttributes& poolAttrs = {})
-            : Root(std::make_shared<NHdrf::NDynamic::TRoot>(MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>())))
+            : Root(std::make_shared<NHdrf::NDynamic::TRoot>(MakeIntrusive<NMonitoring::TDynamicCounters>()))
         {
             auto configuration = std::make_unique<NHdrf::NStatic::TRoot>(totalCpuLimit);
             configuration->GetOrCreateDatabase("db").GetOrCreatePool("poolA").SetAttributes(poolAttrs);
@@ -2694,7 +2694,7 @@ namespace {
 
     private:
         static NHdrf::NDynamic::TPoolPtr AddPool(const NHdrf::NDynamic::TPoolPtr& parent, const TString& poolId) {
-            auto pool = std::make_shared<NHdrf::NDynamic::TPool>(poolId, TIntrusivePtr<TKqpCounters>()); // no counters
+            auto pool = std::make_shared<NHdrf::NDynamic::TPool>(poolId, NMonitoring::TDynamicCounterPtr()); // no counters
             parent->AddPool(pool);
             return pool;
         }
@@ -2876,7 +2876,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         constexpr ui64 kDatabase2Limit = 500;
         constexpr ui64 kPool3Limit = 700;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2932,7 +2932,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         constexpr ui64 kMemoryLimit = 1'000;
         constexpr ui64 kPoolLimit = 300;
 
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         const TOptions options{
             .DelayParams = kDefaultDelayParams,
         };
@@ -2986,7 +2986,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
 Y_UNIT_TEST_SUITE(KqpComputeSchedulerMemory) {
 
     TComputeSchedulerPtr MakeScheduler(ui64 totalMemoryLimit) {
-        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto scheduler = std::make_shared<TComputeScheduler>(counters, TOptions{.DelayParams = kDefaultDelayParams});
         scheduler->SetTotalCpuLimit(12);
         scheduler->SetTotalMemoryLimit(totalMemoryLimit);

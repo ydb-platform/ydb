@@ -2,7 +2,12 @@
 
 #include "snapshot.h"
 
-#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/system/mutex.h>
+#include <util/system/spinlock.h>
+
+#include <array>
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
@@ -92,7 +97,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::DYNAMIC> {
     public:
-        TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters);
+        TPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters);
 
         NSnapshot::TPool* TakeSnapshot() override;
 
@@ -114,7 +119,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     // The memory of the default pool is accounted, but not limited by the pool itself
     class TDefaultPool : public TPool {
     public:
-        TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters);
+        TDefaultPool(const TPoolId& id, const NMonitoring::TDynamicCounterPtr& counters);
 
     protected:
         NSnapshot::TPool* CreateSnapshot(const NStatic::TPoolPtr& pool) const override;
@@ -129,7 +134,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     class TRoot : public TPool, public TSnapshotSwitch<NSnapshot::TRootPtr> {
     public:
-        explicit TRoot(const TIntrusivePtr<TKqpCounters>& counters);
+        explicit TRoot(const NMonitoring::TDynamicCounterPtr& counters);
 
         void AddDatabase(const TDatabasePtr& database);
         void RemoveDatabase(const TDatabaseId& databaseId);

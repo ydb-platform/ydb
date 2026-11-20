@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/kqp/federated_query
     ydb/core/kqp/federated_query/actors/lookup_actor
     ydb/core/kqp/runtime
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/tracing
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache

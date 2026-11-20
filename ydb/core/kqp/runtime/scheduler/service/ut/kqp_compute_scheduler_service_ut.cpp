@@ -1,9 +1,11 @@
-#include "kqp_compute_scheduler_service.h"
-#include "kqp_schedulable_memory.h"
+#include <ydb/core/kqp/runtime/scheduler/service/service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_memory.h>
 
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
@@ -30,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         TTestBasicRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NScheduler::TOptions{.MemoryEnabled = true});
         runtime.GetAppData().KqpComputeScheduler = scheduler;
         const auto memory = runtime.AllocateEdgeActor();
@@ -72,7 +74,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         TTestBasicRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), NScheduler::TOptions{});
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), NScheduler::TOptions{});
         runtime.GetAppData().KqpComputeScheduler = scheduler;
         const auto memory = runtime.AllocateEdgeActor();
         runtime.RegisterService(NMemory::MakeMemoryControllerId(), memory);
@@ -98,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         TTestBasicRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NScheduler::TOptions{.MemoryEnabled = false});
         runtime.GetAppData().KqpComputeScheduler = scheduler;
         const auto wm = runtime.AllocateEdgeActor();
@@ -143,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
             TTestBasicRuntime runtime;
             runtime.Initialize(TAppPrepare().Unwrap());
             auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-                MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+                MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 NScheduler::TOptions{.MemoryEnabled = MemoryEnabled});
             auto configuration = std::make_unique<NScheduler::NHdrf::NStatic::TRoot>(4, 1000);
             auto& database = configuration->GetOrCreateDatabase("db");
@@ -230,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
             const auto schedulerActor = runtime.AllocateEdgeActor();
             runtime.RegisterService(MakeKqpSchedulerServiceId(runtime.GetNodeId(0)), schedulerActor);
             auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
-            NScheduler::TComputeScheduler scheduler(counters, {});
+            NScheduler::TComputeScheduler scheduler(counters->GetKqpCounters(), {});
             auto configuration = std::make_unique<NScheduler::NHdrf::NStatic::TRoot>();
             configuration->GetOrCreateDatabase("database").GetOrCreatePool("pool");
             scheduler.UpdateConfiguration(std::move(configuration));
@@ -306,7 +308,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         const auto schedulerActor = runtime.AllocateEdgeActor();
         runtime.RegisterService(MakeKqpSchedulerServiceId(runtime.GetNodeId(0)), schedulerActor);
         auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
-        NScheduler::TComputeScheduler scheduler(counters, {});
+        NScheduler::TComputeScheduler scheduler(counters->GetKqpCounters(), {});
         auto configuration = std::make_unique<NScheduler::NHdrf::NStatic::TRoot>();
         configuration->GetOrCreateDatabase("database").GetOrCreatePool("pool");
         scheduler.UpdateConfiguration(std::move(configuration));
@@ -391,7 +393,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         runtime.Initialize(TAppPrepare().Unwrap());
 
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NScheduler::TOptions{
                 .DelayParams = NScheduler::TDelayParams{
                     .MaxDelay = TDuration::MicroSeconds(3'000'000),
@@ -446,7 +448,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         runtime.Initialize(TAppPrepare().Unwrap());
 
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NScheduler::TOptions{
                 .DelayParams = NScheduler::TDelayParams{
                     .MaxDelay = TDuration::MicroSeconds(3'000'000),
@@ -513,7 +515,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         runtime.Initialize(TAppPrepare().Unwrap());
 
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NScheduler::TOptions{
                 .DelayParams = NScheduler::TDelayParams{
                     .MaxDelay = TDuration::MicroSeconds(3'000'000),
@@ -557,7 +559,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         runtime.Initialize(TAppPrepare().Unwrap());
 
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NScheduler::TOptions{
                 .Enabled = CpuEnabled,
                 .DelayParams = NScheduler::TDelayParams{
@@ -616,7 +618,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         runtime.Initialize(TAppPrepare().Unwrap());
 
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NScheduler::TOptions{
                 .DelayParams = NScheduler::TDelayParams{
                     .MaxDelay = TDuration::MicroSeconds(3'000'000),

@@ -660,21 +660,24 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ui64 count = 5u;
 
         TString messageBase = "message----";
-        TVector<TString> sentMessages;
-        std::unordered_set<TString> sentSet;
+        struct TReadState {
+            TVector<TString> SentMessages;
+            std::unordered_set<TString> SentSet;
+            size_t TotalReceived = 0;
+            TAtomic Check = 1;
+        };
+        auto state = std::make_shared<TReadState>();
 
         for (auto i = 0u; i < count; i++) {
-            sentMessages.emplace_back(messageBase * (10 * i + 1));
-            sentSet.emplace(sentMessages.back() + "-from-dc1");
-            sentSet.emplace(sentMessages.back() + "-from-dc2");
-            sentSet.emplace(sentMessages.back() + "-from-dc3");
+            state->SentMessages.emplace_back(messageBase * (10 * i + 1));
+            state->SentSet.emplace(state->SentMessages.back() + "-from-dc1");
+            state->SentSet.emplace(state->SentMessages.back() + "-from-dc2");
+            state->SentSet.emplace(state->SentMessages.back() + "-from-dc3");
         }
 
         NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
-        auto totalReceived = 0u;
 
         auto f = checkedPromise.GetFuture();
-        TAtomic check = 1;
 
         // Create read session.
         NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
@@ -684,24 +687,27 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(16_MB)
             .AppendTopics(setup->GetTestTopic());
 
-        readSettings.FederatedEventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+        // SetValue() may wake the test thread before the handler returns.
+        // Keep all callback state alive independently of the test scope.
+        const TString expectedTopicPath = "/" + setup->GetTestTopic();
+        readSettings.FederatedEventHandlers_.SimpleDataHandlers([state, checkedPromise, expectedTopicPath](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
             Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;
-            Y_VERIFY_S(AtomicGet(check) != 0, "check is false");
+            Y_VERIFY_S(AtomicGet(state->Check) != 0, "check is false");
             auto& messages = ev.GetMessages();
             Cerr << ">>> get " << messages.size() << " messages in this event" << Endl;
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
                 UNIT_ASSERT(message.GetFederatedPartitionSession()->GetReadSourceDatabaseName() == "dc1");
                 // With /Root, the server returns account/topic; this test topic has an empty account.
-                UNIT_ASSERT_VALUES_EQUAL(message.GetFederatedPartitionSession()->GetTopicPath(), "/" + setup->GetTestTopic());
+                UNIT_ASSERT_VALUES_EQUAL(message.GetFederatedPartitionSession()->GetTopicPath(), expectedTopicPath);
                 UNIT_ASSERT(message.GetData().ends_with(message.GetFederatedPartitionSession()->GetTopicOriginDatabaseName()));
 
-                UNIT_ASSERT(!sentSet.empty());
-                UNIT_ASSERT_C(sentSet.erase(TString{message.GetData()}), "no such element is sentSet: " + message.GetData());
-                totalReceived++;
+                UNIT_ASSERT(!state->SentSet.empty());
+                UNIT_ASSERT_C(state->SentSet.erase(TString{message.GetData()}), "no such element is sentSet: " + message.GetData());
+                state->TotalReceived++;
             }
-            if (totalReceived == 3 * sentMessages.size()) {
-                UNIT_ASSERT(sentSet.empty());
+            if (state->TotalReceived == 3 * state->SentMessages.size()) {
+                UNIT_ASSERT(state->SentSet.empty());
                 checkedPromise.SetValue();
             }
         });
@@ -728,7 +734,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
             for (auto i = 0u; i < count; i++) {
-                auto res = session->Write(sentMessages[i] + "-from-dc1");
+                auto res = session->Write(state->SentMessages[i] + "-from-dc1");
                 UNIT_ASSERT(res);
             }
 
@@ -748,7 +754,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
             for (auto i = 0u; i < count; i++) {
-                auto res = session->Write(sentMessages[i] + "-from-dc2");
+                auto res = session->Write(state->SentMessages[i] + "-from-dc2");
                 UNIT_ASSERT(res);
             }
 
@@ -768,7 +774,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
             for (auto i = 0u; i < count; i++) {
-                auto res = session->Write(sentMessages[i] + "-from-dc3");
+                auto res = session->Write(state->SentMessages[i] + "-from-dc3");
                 UNIT_ASSERT(res);
             }
 
@@ -779,7 +785,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         f.GetValueSync();
         ReadSession->Close();
-        AtomicSet(check, 0);
+        AtomicSet(state->Check, 0);
     }
 
     Y_UNIT_TEST(BasicWriteSession) {

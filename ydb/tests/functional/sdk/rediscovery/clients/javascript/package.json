@@ -1,0 +1,12 @@
+{
+  "name": "ydb-rediscovery-probe",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@ydbjs/api": "6.0.7",
+    "@ydbjs/core": "6.3.1"
+  }
+}

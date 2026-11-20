@@ -1,0 +1,5 @@
+{
+    "require": {
+        "ydb-platform/ydb-php-sdk": "1.16.3"
+    }
+}

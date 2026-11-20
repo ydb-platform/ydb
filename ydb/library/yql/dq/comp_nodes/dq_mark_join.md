@@ -27,7 +27,9 @@ While the hash table is built, the join remembers two facts: the right side is n
 | `3` | `1`, `2` | `false` |
 | null | empty | `false` |
 
-One null on the right answers every miss the same way. The right side is not read again. Each side is read once. The two facts are two booleans.
+One null on the right answers every miss the same way, so the right side is not read again.
+
+Cost: each side is read once, O(L + R). L is the number of left rows, R is the number of right rows. A miss checks two booleans, which is O(1). Extra memory is those two booleans.
 
 ## One mark column, with a group
 
@@ -60,6 +62,8 @@ If the mark column cannot be null on either side, the second index is not built.
 
 The second index is not spilled. It lives only while its bucket is in memory, and it is freed before the next bucket. One group always sits in one bucket, so spilling does not cut it apart.
 
+Cost: the main table and the second index are built in one pass over the right side. Each left row does one lookup by the full key and one lookup by `k`. The lookup by `k` stops at the first row of the group, so a large group does not make it slower. The total is O(L + R). Extra memory is one hash and one row number per indexed right row of the buckets that are in memory. The row itself is not copied.
+
 ## Several mark columns, with a group
 
 ```sql
@@ -87,7 +91,7 @@ Group `k = 1` contains `(10, null)` and `(20, 30)`. Group `k = 2` contains `(5, 
 | `(2, 5, null)` | `null` | `(5, 5)` agrees on `5` |
 | `(4, 1, 1)` | `false` | there is no such group |
 
-Both tables are built in one pass. A miss then looks at the rows of its own group. DuckDB does not run this query.
+Cost: building both indexes is the same as above, O(L + R). If every mark column on the left is null, one group lookup is enough. Otherwise a miss reads rows of its group until it finds a null answer or the rows run out. A false answer has read every relevant row of the group. The worst case is O(L × G), where G is the number of rows in that group. Extra memory is the same as above: a hash and a row number per indexed row, not a copy of the row. DuckDB does not run this query.
 
 ## Several mark columns, no group
 
@@ -110,6 +114,8 @@ Some misses are answered at once.
 | `(4, 5)` | `(1, 2)`, `(3, 4)` | `false`, nobody has a null |
 
 The other misses are compared later, in blocks that fit in memory. The comparison is the same as in the previous section.
+
+Cost: the exact lookup and the answers that are known at once are O(L + R). The later comparison reads every postponed left row against every saved right row, O(D × S). D is the number of postponed left rows, S is the number of saved right rows. Both can be as large as the whole side, so the worst case is O(L × R). Extra memory is a copy of those rows, and the copies spill. One comparison step holds only a block that fits in memory, but it still visits every saved row.
 
 - `(10, 30)` against `(10, null)`: `10` equals `10`, and the second column is null. The answer is `null`.
 - `(30, 50)` matches nothing. The answer is `false`.

@@ -2756,6 +2756,46 @@ void PutMessagesInNewHead(THead& newHead, ui64 offset, TVector<TClientBlob> mess
 
 } // namespace
 
+Y_UNIT_TEST_F(ShouldPreserveSourceKeyRangeWhenSplitRegistrationIsConfirmed, TPartitionFixture)
+{
+    // given
+    CreatePartition();
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(1, "parent", Nothing(), 0, false));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1});
+
+    const ui64 boundary = 50;
+    const TString upperBound = TSerializedCellVec::Serialize({TCell::Make(boundary)});
+    TMaybe<NKikimrPQ::TPartitionKeyRange> childRange;
+    childRange.ConstructInPlace().SetToBound(upperBound);
+    TVector<TEvPQ::TEvSplitMessageGroup::TDeregisterBody> parents;
+    parents.emplace_back("parent");
+    TVector<TEvPQ::TEvSplitMessageGroup::TRegisterBody> children;
+    children.emplace_back("child", std::move(childRange), 0, false);
+    SendEvent(new TEvPQ::TEvSplitMessageGroup(2, std::move(parents), std::move(children)));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 2});
+
+    // when
+    SendEvent(new TEvPQ::TEvRegisterMessageGroup(3, "child", Nothing(), 0, true));
+
+    // then
+    auto write = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+    const auto* group = FindIfPtr(write->Record.GetCmdWrite(), [](const auto& cmd) {
+        const auto& key = cmd.GetKey();
+        return key.size() > TKeyPrefix::MarkedSize() && key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId
+            && key.substr(TKeyPrefix::MarkedSize()) == "child";
+    });
+    UNIT_ASSERT(group);
+    NKikimrPQ::TMessageGroupInfo info;
+    UNIT_ASSERT(info.ParseFromString(group->GetValue()));
+    UNIT_ASSERT_VALUES_EQUAL(info.GetKeyRange().GetToBound(), upperBound);
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 3});
+}
+
 // FROM_WRITTEN_AT must read a multi-message blob and commit to the first message
 // whose WriteTimestamp is >= target — not to the blob start.
 Y_UNIT_TEST_F(ResetOffsetFromWrittenAtCommitsInsideBlob, TPartitionFixture)

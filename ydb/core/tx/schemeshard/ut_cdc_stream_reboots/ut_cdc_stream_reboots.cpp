@@ -233,6 +233,46 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithKeyRangeHeartbeats, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCdcKeyRangeHeartbeats(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeUpdate
+                  Format: ECdcStreamFormatJson
+                  VirtualTimestamps: true
+                  ResolvedTimestampsIntervalMs: 1000
+                  UserAttributes {
+                    Key: "__async_replication"
+                    Value: "{\"id\":\"1\",\"path\":\"/Root/replica\",\"supports_key_range_autopartitioning\":true}"
+                  }
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+                });
+            }
+        });
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithSchemaChanges, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -838,6 +878,79 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         if (initialTablePartitions) {
             UNIT_ASSERT(CheckRegistrations(runtime, NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN, *initialTablePartitions, topicPartitions));
         }
+    }
+
+    bool CheckKeyRangeRegistrations(TTestActorRuntime& runtime,
+            const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTablePartition>& tablePartitions,
+            const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition>& topicPartitions)
+    {
+        for (const auto& topicPartition : topicPartitions) {
+            google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> partition;
+            *partition.Add() = topicPartition;
+
+            for (int i = 0; i < tablePartitions.size(); ++i) {
+                google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTablePartition> source;
+                *source.Add() = tablePartitions.Get(i);
+
+                const auto expectedState = static_cast<ui32>(i) == topicPartition.GetPartitionId()
+                    ? NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED
+                    : NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN;
+                if (!CheckRegistrations(runtime, expectedState, source, partition)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldRegisterDataShardsOnlyInPartitionsOfTheirRangeWhenKeyRangeHeartbeats, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCdcKeyRangeHeartbeats(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Uint32" }
+                    KeyColumnNames: ["key"]
+                    UniformPartitionsCount: 3
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeUpdate
+                  Format: ECdcStreamFormatJson
+                  VirtualTimestamps: true
+                  ResolvedTimestampsIntervalMs: 1000
+                  UserAttributes {
+                    Key: "__async_replication"
+                    Value: "{\"id\":\"1\",\"path\":\"/Root/replica\",\"supports_key_range_autopartitioning\":true}"
+                  }
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                const auto tableDesc = DescribePath(runtime, "/MyRoot/Table", true, true);
+                const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+                UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 3);
+
+                const auto topicDesc = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+                const auto& topicPartitions = topicDesc.GetPathDescription().GetPersQueueGroup().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(topicPartitions.size(), 3);
+
+                while (!CheckKeyRangeRegistrations(runtime, tablePartitions, topicPartitions)) {
+                    runtime.SimulateSleep(TDuration::Seconds(1));
+                }
+            }
+        });
     }
 
     void SplitTable(TTestWithReboots& t, const TString& cdcStreamDesc) {

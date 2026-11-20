@@ -47,7 +47,8 @@ dstool
 │     ├─ create                         Create virtual group backed by BlobDepot
 │     ├─ cancel                         Cancel virtual group 
 │     │                                 creation/decommission
-│     └─ reconfigure                    Create virtual group backed by BlobDepot
+│     └─ reconfigure                    Reconfigure a virtual group backed by 
+│                                       BlobDepot
 ├─ pool
 │  ├─ list                              List pools
 │  ├─ set                               Set storage pool settings that are not 

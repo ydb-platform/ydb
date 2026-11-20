@@ -27,7 +27,7 @@ void TPQDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
 
 
 void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    YDB_LOG_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }

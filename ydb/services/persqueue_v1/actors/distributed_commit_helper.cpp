@@ -57,7 +57,7 @@ bool TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TP
     }
 
     KqpSessionId = record.GetResponse().GetSessionId();
-    AFL_ENSURE(!KqpSessionId.empty());
+    YDB_LOG_ENSURE(!KqpSessionId.empty());
     BeginTransaction(ctx);
     return true;
 }
@@ -85,7 +85,7 @@ THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeClos
 void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     TxId = record.GetResponse().GetTxMeta().id();
-    AFL_ENSURE(!TxId.empty());
+    YDB_LOG_ENSURE(!TxId.empty());
 
     auto offsets = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     offsets->Record.MutableRequest()->SetDatabase(DataBase);

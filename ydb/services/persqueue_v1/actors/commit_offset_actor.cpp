@@ -46,7 +46,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
-    AFL_ENSURE(request);
+    YDB_LOG_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
     PartitionId = request->partition_id();
 
@@ -124,7 +124,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
-    AFL_ENSURE(TopicAndTablets.size() == 1);
+    YDB_LOG_ENSURE(TopicAndTablets.size() == 1);
     auto& [_, topicInitInfo] = *TopicAndTablets.begin();
 
     if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
@@ -229,7 +229,7 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     // Convert to correct response.
 
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
-    AFL_ENSURE(!partitionResult.HasCmdReadResult());
+    YDB_LOG_ENSURE(!partitionResult.HasCmdReadResult());
 
     LOG_D("CommitOffset, commit done");
 
@@ -256,7 +256,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
     request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
 
-    AFL_ENSURE(PipeClient);
+    YDB_LOG_ENSURE(PipeClient);
 
     auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
     commit->SetClientId(ClientId);

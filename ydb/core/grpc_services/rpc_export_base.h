@@ -50,9 +50,6 @@ struct TExportConv: public TOperationConv<NKikimrExport::TExport> {
         if (in.HasCancelRequestedBy()) {
             operation.set_cancel_requested_by(in.GetCancelRequestedBy());
         }
-        if (in.HasCancelRequestTime()) {
-            *operation.mutable_cancel_request_time() = in.GetCancelRequestTime();
-        }
 
         if (operation.status() == Ydb::StatusIds::SUCCESS) {
             operation.set_ready(in.GetProgress() == Ydb::Export::ExportProgress::PROGRESS_DONE);

@@ -92,10 +92,6 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     if (exportInfo.CancelRequestedBy) {
         exprt.SetCancelRequestedBy(*exportInfo.CancelRequestedBy);
     }
-    if (exportInfo.CancelRequestTime) {
-        // Match EndTime precision so same-second cancellations preserve timestamp order.
-        *exprt.MutableCancelRequestTime() = SecondsToProtoTimeStamp(exportInfo.CancelRequestTime->Seconds());
-    }
 
     switch (exportInfo.State) {
     case TExportInfo::EState::CreateExportDir:
@@ -230,11 +226,6 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& ex
     if (exportInfo.CancelRequestedBy) {
         db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
             NIceDb::TUpdate<Schema::Exports::CancelRequestedBy>(*exportInfo.CancelRequestedBy)
-        );
-    }
-    if (exportInfo.CancelRequestTime) {
-        db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
-            NIceDb::TUpdate<Schema::Exports::CancelRequestTime>(exportInfo.CancelRequestTime->Seconds())
         );
     }
 }

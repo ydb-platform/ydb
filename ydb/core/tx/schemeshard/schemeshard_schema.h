@@ -1301,7 +1301,6 @@ struct Schema : NIceDb::Schema {
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
         struct IncludeIndexData : Column<21, NScheme::NTypeIds::Bool> {};
         struct CancelRequestedBy : Column<22, NScheme::NTypeIds::Utf8> {};
-        struct CancelRequestTime : Column<23, NScheme::NTypeIds::Uint64> {}; // Seconds since epoch.
 
         struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
 
@@ -1328,8 +1327,7 @@ struct Schema : NIceDb::Schema {
             ExportMetadata,
             SanitizedToken,
             IncludeIndexData,
-            CancelRequestedBy,
-            CancelRequestTime
+            CancelRequestedBy
         >;
     };
 

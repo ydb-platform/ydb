@@ -73,7 +73,6 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         );
 
         exportInfo->Issue = "Cancelled manually";
-        exportInfo->CancelRequestTime = TAppData::TimeProvider->Now();
         if (request.HasUserSID()) {
             exportInfo->CancelRequestedBy = request.GetUserSID();
         }

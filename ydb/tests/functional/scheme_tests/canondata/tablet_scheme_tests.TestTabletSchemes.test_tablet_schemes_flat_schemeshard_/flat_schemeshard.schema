@@ -3344,11 +3344,6 @@
                 "ColumnId": 22,
                 "ColumnName": "CancelRequestedBy",
                 "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 23,
-                "ColumnName": "CancelRequestTime",
-                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -3376,8 +3371,7 @@
                     19,
                     20,
                     21,
-                    22,
-                    23
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,

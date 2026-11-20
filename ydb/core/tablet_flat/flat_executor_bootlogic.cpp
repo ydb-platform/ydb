@@ -342,8 +342,8 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
                     }
                 }
                 if (const auto* partStore = part.As<const NTable::TPartStore>()) {
-                    for (const auto& pageCollection : partStore->PageCollections) {
-                        SeenBlob(pageCollection->PageCollection->Label());
+                    for (ui32 slot : xrange(partStore->GetPageCollectionCount())) {
+                        SeenBlob(partStore->GetPageCollection(slot)->Label());
                     }
                 }
             }

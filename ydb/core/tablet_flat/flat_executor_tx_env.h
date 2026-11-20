@@ -1,38 +1,98 @@
 #pragma once
 #include "defs.h"
 #include "flat_exec_seat.h"
+#include "flat_transaction_pages.h"
 #include "flat_table_misc.h"
 #include "flat_part_store.h"
-#include "flat_store_hotdog.h"
-#include "flat_store_solid.h"
 #include "flat_sausagecache.h"
+#include <util/generic/hash_set.h>
 #include "tablet_flat_executor.h"
 #include "flat_executor_snapshot.h"
 #include "flat_direct_part_writer.h"
+#include "flat_store_hotdog.h"
+#include "flat_store_solid.h"
 #include <ydb/core/util/pb.h>
-#include <util/generic/hash_set.h>
 #include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
+#include <optional>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    struct TPageCollectionReadEnv : public NTable::IPages {
-        TPageCollectionReadEnv(TPrivatePageCache& cache, TSeat& seat)
-            : Cache(cache)
-            , Seat(seat)
-        { }
-
+    struct TPrivatePageCacheAccess {
+        using TBackend = TPrivatePageCache;
+        using TSeat = NTabletFlatExecutor::TSeat;
         using TPageCollection = TPrivatePageCache::TPageCollection;
 
-        struct TStats {
-            size_t NewlyPinnedPages = 0;
-            ui64 NewlyPinnedBytes = 0;
-    
-            size_t ToLoadPages = 0;
-            ui64 ToLoadBytes = 0;
-        };
+        TPrivatePageCacheAccess(TPrivatePageCache& cache, TSeat& seat)
+            : Cache(cache)
+            , Seat(seat)
+        {}
 
-        const TStats& GetStats() const { return Stats; }
+        static TPageCollection* Locate(const NTable::TPartStore* partStore, NTable::ELargeObj lob, ui64 ref) {
+            return partStore->Locate(lob, ref);
+        }
+
+        static TPageCollection* GetPageCollection(const NTable::TPartStore* partStore, ui32 slot) {
+            return partStore->PageCollections.at(slot).Get();
+        }
+
+        static const TLogoBlobID& GetCollectionId(const TPageCollection* pageCollection) noexcept {
+            return pageCollection->Id;
+        }
+
+        static void CheckMissingPage(
+            const NTable::TPageLocation& location, const TPageCollection* pageCollection) noexcept {
+            Y_ASSERT(!pageCollection->IsStickyPage(location.Offset));
+        }
+
+        template <class TEnv>
+        const TSharedData* TryGetPage(const NTable::TPageLocation& location, TPageCollection* pageCollection, TEnv& env)
+        {
+            auto& pinnedCollection = Seat.Pinned[pageCollection->Id];
+            auto* pinnedPage = pinnedCollection.FindPtr(location.Offset);
+            if (pinnedPage) {
+                // pinned pages do not need to be counted again
+                return &pinnedPage->PinnedBody;
+            }
+
+            auto sharedBody = Cache.TryGetPage(location.Offset, pageCollection);
+
+            if (!sharedBody) {
+                env.ToLoadPage(location, pageCollection);
+                return nullptr;
+            }
+
+            sharedBody.IncrementFrequency();
+            auto emplaced = pinnedCollection.emplace(location.Offset, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
+            Y_ENSURE(emplaced.second);
+            auto& pinnedBody = emplaced.first->second.PinnedBody;
+
+            env.Stats.NewlyPinnedPages++;
+            if (!pageCollection->IsStickyPage(location.Offset)) {
+                env.Stats.NewlyPinnedBytes += pinnedBody.size();
+            }
+
+            return &pinnedBody;
+        }
+
+    private:
+        TPrivatePageCache& Cache;
+        TSeat& Seat;
+    };
+
+    template <class TPageAccess>
+    struct TPageCollectionReadEnvImpl : public ITransactionPages {
+        TPageCollectionReadEnvImpl(typename TPageAccess::TBackend& cache, typename TPageAccess::TSeat& seat)
+            : Cache(cache, seat)
+        {}
+
+        using TPageCollection = typename TPageAccess::TPageCollection;
+
+        using TStats = TPageReadStats;
+
+        const TStats& GetStats() const override {
+            return Stats;
+        }
 
     protected: /* NTable::IPages, page collection backend implementation */
         TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
@@ -44,7 +104,7 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            auto *info = partStore->Locate(lob, ref);
+            auto *info = Cache.Locate(partStore, lob, ref);
             const TSharedData* page = TryGetPage(info->GetLocation(ref), info);
 
             if (!page && ReadMissingReferences) {
@@ -61,7 +121,7 @@ namespace NTabletFlatExecutor {
 
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return TryGetPage(location, partStore->PageCollections.at(part->DataSlot(groupId)).Get());
+            return TryGetPage(location, Cache.GetPageCollection(partStore, part->DataSlot(groupId)));
         }
 
         const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
@@ -71,19 +131,19 @@ namespace NTabletFlatExecutor {
 
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return TryGetPage(location, partStore->PageCollections.at(part->IndexSlot(groupId)).Get());
+            return TryGetPage(location, Cache.GetPageCollection(partStore, part->IndexSlot(groupId)));
         }
 
-        void EnableReadMissingReferences() {
+        void EnableReadMissingReferences() override {
             ReadMissingReferences = true;
         }
 
-        void DisableReadMissingReferences() {
+        void DisableReadMissingReferences() override {
             ReadMissingReferences = false;
             MissingReferencesSize_ = 0;
         }
 
-        ui64 MissingReferencesSize() const
+        ui64 MissingReferencesSize() const override
         {
             return MissingReferencesSize_;
         }
@@ -92,10 +152,10 @@ namespace NTabletFlatExecutor {
         using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash>;
 
         void ToLoadPage(const TPageLocation& location, TPageCollection *pageCollection) {
-            auto res = ToLoad[pageCollection->Id].insert(location);
+            auto res = ToLoad[Cache.GetCollectionId(pageCollection)].insert(location);
             if (res.second) {
                 Stats.ToLoadPages++;
-                Y_ASSERT(!pageCollection->IsStickyPage(location.Offset));
+                Cache.CheckMissingPage(location, pageCollection);
                 Stats.ToLoadBytes += location.Size;
             } else {
                 Y_ASSERT(res.first->Type == location.Type && res.first->Size == location.Size && res.first->Crc32 == location.Crc32);
@@ -104,35 +164,11 @@ namespace NTabletFlatExecutor {
 
         const TSharedData* TryGetPage(const TPageLocation& location, TPageCollection *pageCollection)
         {
-            auto& pinnedCollection = Seat.Pinned[pageCollection->Id];
-            auto* pinnedPage = pinnedCollection.FindPtr(location.Offset);
-            if (pinnedPage) {
-                // pinned pages do not need to be counted again
-                return &pinnedPage->PinnedBody;
-            }
-
-            auto sharedBody = Cache.TryGetPage(location.Offset, pageCollection);
-
-            if (!sharedBody) {
-                ToLoadPage(location, pageCollection);
-                return nullptr;
-            }
-
-            sharedBody.IncrementFrequency();
-            auto emplaced = pinnedCollection.emplace(location.Offset, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
-            Y_ENSURE(emplaced.second);
-            auto& pinnedBody = emplaced.first->second.PinnedBody;
-
-            Stats.NewlyPinnedPages++;
-            if (!pageCollection->IsStickyPage(location.Offset)) {
-                Stats.NewlyPinnedBytes += pinnedBody.size();
-            }
-
-            return &pinnedBody;
+            return Cache.TryGetPage(location, pageCollection, *this);
         }
 
     public:
-        auto ObtainToLoad() {
+        TPageRequests ObtainToLoad() override {
             THashMap<TLogoBlobID, TVector<TPageLocation>> result;
             for (auto& [pageCollectionId, pages_] : ToLoad) {
                 TVector<TPageLocation> pages(pages_.begin(), pages_.end());
@@ -143,9 +179,11 @@ namespace NTabletFlatExecutor {
             return result;
         }
 
+    protected:
+        TPageAccess Cache;
+
     private:
-        TPrivatePageCache& Cache;
-        TSeat& Seat;
+        friend TPageAccess;
 
         THashMap<TLogoBlobID, THashSetOfLocation> ToLoad;
 
@@ -155,11 +193,14 @@ namespace NTabletFlatExecutor {
         TStats Stats;
     };
 
-    struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
-        TPageCollectionTxEnv(NTable::TDatabase& db, TPrivatePageCache& cache, TSeat& seat)
-            : TPageCollectionReadEnv(cache, seat)
-            , DB(db)
-        { }
+    struct TPageCollectionReadEnv : public TPageCollectionReadEnvImpl<TPrivatePageCacheAccess> {
+        using TPageCollectionReadEnvImpl<TPrivatePageCacheAccess>::TPageCollectionReadEnvImpl;
+    };
+
+    struct TTransactionEnv : public IExecuting {
+        TTransactionEnv(NTable::TDatabase& db)
+            : DB(db)
+        {}
 
         using TLogoId = TLogoBlobID;
 
@@ -215,8 +256,6 @@ namespace NTabletFlatExecutor {
             std::optional<NTable::TEpoch> Epoch;
         };
 
-        using TPageCollectionReadEnv::TPageCollectionReadEnv;
-
         bool HasChanges() const
         {
             return
@@ -229,8 +268,7 @@ namespace NTabletFlatExecutor {
                 || AttachedParts;
         }
 
-    protected:
-        void OnRollbackChanges() override {
+        void Clear() {
             MakeSnap.clear();
             DropSnap.Reset();
             BorrowUpdates.clear();
@@ -301,20 +339,6 @@ namespace NTabletFlatExecutor {
             LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
         }
 
-        void EnableReadMissingReferences() override
-        {
-            TPageCollectionReadEnv::EnableReadMissingReferences();
-        }
-
-        void DisableReadMissingReferences() override
-        {
-            TPageCollectionReadEnv::DisableReadMissingReferences();
-        }
-
-        ui64 MissingReferencesSize() const override
-        {
-            return TPageCollectionReadEnv::MissingReferencesSize();
-        }
     protected:
         NTable::TDatabase& DB;
 
@@ -338,6 +362,35 @@ namespace NTabletFlatExecutor {
             THolder<TDirectPartResult> Result;
         };
         TVector<TAttachedPart> AttachedParts;
+    };
+
+    struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public TTransactionEnv {
+        TPageCollectionTxEnv(NTable::TDatabase& db, TPrivatePageCache& cache, TSeat& seat)
+            : TPageCollectionReadEnv(cache, seat)
+            , TTransactionEnv(db)
+        {}
+
+        using TPageCollectionReadEnv::TPageCollectionReadEnv;
+
+    protected:
+        void OnRollbackChanges() override {
+            Clear();
+        }
+
+        void EnableReadMissingReferences() override
+        {
+            TPageCollectionReadEnv::EnableReadMissingReferences();
+        }
+
+        void DisableReadMissingReferences() override
+        {
+            TPageCollectionReadEnv::DisableReadMissingReferences();
+        }
+
+        ui64 MissingReferencesSize() const override
+        {
+            return TPageCollectionReadEnv::MissingReferencesSize();
+        }
     };
 
 }

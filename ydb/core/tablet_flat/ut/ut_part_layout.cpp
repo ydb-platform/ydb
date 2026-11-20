@@ -497,7 +497,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL_C(part->Stat.Rows, HistoryKeys, message);
 
         // Outer values are in the last page collection, frames and globs of large values are in the descriptor
-        UNIT_ASSERT_VALUES_EQUAL_C(part->PageCollections.size(), part->Slots.SlotsCount() + 1, message);
+        UNIT_ASSERT_VALUES_EQUAL_C(part->GetPageCollectionCount(), part->Slots.SlotsCount() + 1, message);
         UNIT_ASSERT_VALUES_EQUAL_C(part->OuterSlot(), part->Slots.SlotsCount(), message);
         UNIT_ASSERT_C(part->Small && part->Large && part->Blobs && part->Pseudo, message);
 

@@ -1370,7 +1370,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
     // TStatsPartGroupBtreeIndexIter on a part built with the given conf.
     // Returns (rowCount, dataSize) accumulated over the full scan.
     static std::pair<ui64, ui64> StatsScanBtreeIndex(
-            TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) {
+        TIntrusiveConstPtr<NTest::TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) {
         TDataStats stats = { };
         TTestEnv env;
         TStatsScreenedPartIterator idxIter(TPartView{part, nullptr, nullptr}, &env,

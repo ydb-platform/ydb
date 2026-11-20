@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "tablet_flat_executor.h"
 #include "flat_database.h"
+#include "flat_transaction_pages.h"
 #include "flat_dbase_change.h"
 #include "flat_sausagecache.h"
 #include "flat_part_store.h"
@@ -61,8 +62,7 @@ class TCommitManager;
 class TScans;
 class TMemory;
 struct TIdEmitter;
-struct TPageCollectionReadEnv;
-struct TPageCollectionTxEnv;
+struct TTransactionEnv;
 struct TProdCompact;
 struct TProdBackup;
 struct TSeat;
@@ -455,6 +455,7 @@ class TExecutor
     ui64 BootAttempt = 0;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
+    TPrivatePageCacheBackend PageCache{ PrivatePageCache };
 
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
@@ -556,11 +557,14 @@ class TExecutor
     std::unique_ptr<TSeat> RemoveTransaction(ui64 id);
     void FinishCancellation(TSeat* seat, bool activateMore = true);
     void ExecuteTransaction(TSeat* seat);
-    void CommitTransactionLog(std::unique_ptr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>,
-                              THPTimer &bookkeepingTimer);
+    void ExecuteTransaction(TSeat* seat, ITransactionPages& pages, TTransactionEnv& txEnv, THPTimer& cpuTimer,
+        TActiveTransactionZone& activeTransaction);
+    void CommitTransactionLog(std::unique_ptr<TSeat>, ITransactionPages&, TTransactionEnv&, TAutoPtr<NTable::TChange>,
+        THPTimer& bookkeepingTimer);
     void UnpinTransactionPages(TSeat &seat);
     void ReleaseTxData(TSeat &seat, ui64 requested);
-    void PostponeTransaction(TSeat*, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, THPTimer &bookkeepingTimer);
+    void PostponeTransaction(
+        TSeat*, ITransactionPages&, TTransactionEnv&, TAutoPtr<NTable::TChange>, THPTimer& bookkeepingTimer);
     void EnqueueActivation(TSeat* seat, bool activate);
     void PlanTransactionActivation();
     void MakeLogSnapshot();

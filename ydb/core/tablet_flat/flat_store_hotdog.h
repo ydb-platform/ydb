@@ -1,7 +1,6 @@
 #pragma once
 
 #include "flat_sausage_packet.h"
-#include "flat_sausagecache.h"
 #include "flat_part_outset.h"
 #include "flat_part_laid.h"
 #include "flat_store_bundle.h"
@@ -45,7 +44,8 @@ namespace NTabletFlatExecutor {
         static TPartComponents MakePageCollectionComponents(const TBundle &proto, bool unsplit = false);
 
     private:
-        void Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TPageCollection &pageCollection);
+        void Bundle(NKikimrExecutorFlat::TPageCollection* pageCollectionProto,
+            const NPageCollection::IPageCollection& pageCollection);
         void Bundle(
                 NKikimrExecutorFlat::TPageCollection *pageCollectionProto,
                 const TLargeGlobId &largeGlobId,

@@ -8,6 +8,8 @@
 
 namespace NKikimr::NTable::NPage {
 
+using NTest::TPartStore;
+
 namespace {
     using namespace NTest;
     using TShortChild = TBtreeIndexNode::TShortChild;

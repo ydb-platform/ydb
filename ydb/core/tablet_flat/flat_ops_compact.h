@@ -914,7 +914,7 @@ namespace NTabletFlatExecutor {
                         auto grow = NTable::TScreen::Sum(result.Growth);
 
                         logl
-                            << " Part{ " << part->PageCollections.size() << " pk"
+                            << " Part{ " << part->GetPageCollectionCount() << " pk"
                             << ", lobs " << (lobs - grow) << " +" << grow
                             << ", (" << part->DataSize()
                                 << " " << small << " " << large <<")b"

@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             UNIT_ASSERT_VALUES_EQUAL(stats.SelectSieved, 5);
             UNIT_ASSERT_VALUES_EQUAL(stats.SelectNoKey, 0);
 
-            DumpPart(static_cast<const TPartStore&>(*subset->Flatten[0]), 10);
+            DumpPart(static_cast<const NTest::TPartStore&>(*subset->Flatten[0]), 10);
         }
 
         /*_ 40: Disable filter then check that is really gone */

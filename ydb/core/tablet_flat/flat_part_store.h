@@ -82,6 +82,14 @@ public:
         return cache->PageCollection->Page(ref).Size;
     }
 
+    ui32 GetPageCollectionCount() const noexcept {
+        return PageCollections.size();
+    }
+
+    const TIntrusiveConstPtr<NPageCollection::IPageCollection>& GetPageCollectionRef(ui32 slot) const {
+        return PageCollections.at(slot)->PageCollection;
+    }
+
     const NPageCollection::IPageCollection* GetPageCollection(ui32 slot) const override
     {
         Y_ENSURE(slot < PageCollections.size());

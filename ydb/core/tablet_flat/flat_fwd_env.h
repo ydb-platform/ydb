@@ -372,13 +372,14 @@ namespace NFwd {
 
             const ui32 dataSlot = part->DataSlot(groupId);
             const ui32 indexSlot = part->IndexSlot(groupId);
-            Y_ENSURE(Max(dataSlot, indexSlot) < partStore->PageCollections.size(), "Got part without enough page collections");
+            Y_ENSURE(Max(dataSlot, indexSlot) < partStore->GetPageCollectionCount(),
+                "Got part without enough page collections");
 
             return {CreateCache(part, PartIndexPageLocators[part][groupId], groupId, slices,
-                    partStore->PageCollections[dataSlot]->PageCollection,
-                    partStore->PageCollections[indexSlot]->PageCollection),
-                partStore->PageCollections[indexSlot]->PageCollection,
-                partStore->PageCollections[dataSlot]->PageCollection};
+                    partStore->GetPageCollectionRef(dataSlot),
+                    partStore->GetPageCollectionRef(indexSlot)),
+                partStore->GetPageCollectionRef(indexSlot),
+                partStore->GetPageCollectionRef(dataSlot)};
         }
 
         TGroupPages MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const
@@ -417,7 +418,7 @@ namespace NFwd {
 
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
 
-                auto pageCollection = partStore->PageCollections.at(partStore->OuterSlot())->PageCollection;
+                auto pageCollection = partStore->GetPageCollectionRef(partStore->OuterSlot());
 
                 return {MakeHolder<TBlobs>(small, std::move(bounds), edge, false, pageCollection), nullptr, pageCollection};
             } else {

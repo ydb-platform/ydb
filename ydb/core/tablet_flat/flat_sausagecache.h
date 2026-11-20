@@ -1,6 +1,7 @@
 #pragma once
 #include "flat_sausage_gut.h"
 #include "flat_page_iface.h"
+#include "flat_transaction_pages.h"
 #include "shared_handle.h"
 #include "shared_cache_events.h"
 #include <ydb/core/util/page_map.h>
@@ -166,4 +167,19 @@ private:
     TStats Stats;
 };
 
+// The holder stays stable when boot recreates the private cache
+class TPrivatePageCacheBackend final : public IExecutorPageCache {
+public:
+    explicit TPrivatePageCacheBackend(const THolder<TPrivatePageCache>& cache) noexcept
+        : Cache_(cache)
+    {}
+
+    std::unique_ptr<TSeat> MakeSeat(ui64 uniqueId, TAutoPtr<ITransaction> transaction) override;
+    void WithTransactionPages(NTable::TDatabase& database, TSeat& seat,
+        TFunctionRef<void(ITransactionPages&, TTransactionEnv&)> execute) override;
+    void ReleasePins(TSeat& seat) override;
+
+private:
+    const THolder<TPrivatePageCache>& Cache_;
+};
 }}

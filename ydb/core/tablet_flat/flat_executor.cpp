@@ -793,8 +793,8 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
             continue;
         }
         seeds.push_back({
-            .IndexCollectionId = partStore.PageCollections[indexSlot]->Id,
-            .DataCollectionId = partStore.PageCollections[dataSlot]->Id,
+            .IndexCollectionId = partStore.GetPageCollection(indexSlot)->Label(),
+            .DataCollectionId = partStore.GetPageCollection(dataSlot)->Label(),
             .Root = meta.RootV2,
             .LevelCount = meta.LevelCount(),
             .QueueDataPages = keepDataPages || sticky,
@@ -845,7 +845,7 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
     }
 
     // B-tree seeds of a group are attached with the page collection of its data pages
-    TVector<TVector<NSharedCache::TEvAttach::TBtreeSeed>> slotSeeds(partStore->PageCollections.size());
+    TVector<TVector<NSharedCache::TEvAttach::TBtreeSeed>> slotSeeds(partStore->GetPageCollectionCount());
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         auto& seeds = slotSeeds.at(partStore->DataSlot(NTable::NPage::TGroupId(groupIndex)));
         for (auto& seed : MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)) {
@@ -2064,7 +2064,7 @@ bool TExecutor::CanExecuteTransaction() const {
 
 ui64 TExecutor::DoExecute(TAutoPtr<ITransaction> self, ETxMode mode) {
     ui64 uniqId = ++TransactionUniqCounter;
-    TSeat* seat = (Transactions[uniqId] = std::make_unique<TSeat>(uniqId, self)).get();
+    TSeat* seat = (Transactions[uniqId] = PageCache.MakeSeat(uniqId, self)).get();
     seat->LowPriority = mode == ETxMode::LowPriority;
     seat->Self->SetupTxSpanName();
 
@@ -2226,12 +2226,19 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
 
     THPTimer cpuTimer;
 
-    TPageCollectionTxEnv env(*Database, *PrivatePageCache, *seat);
+    PageCache.WithTransactionPages(*Database, *seat, [&](ITransactionPages& pages, TTransactionEnv& txEnv) {
 
-    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId, seat->Self->TxSpan);
+        ExecuteTransaction(seat, pages, txEnv, cpuTimer, activeTransaction);
+    });
+}
+
+void TExecutor::ExecuteTransaction(TSeat* seat, ITransactionPages& pages, TTransactionEnv& txEnv, THPTimer& cpuTimer,
+    TActiveTransactionZone& activeTransaction) {
+    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, txEnv, seat->CurrentTxDataLimit,
+        seat->TaskId, seat->Self->TxSpan);
     txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
 
-    Database->Begin(Stamp(), env);
+    Database->Begin(Stamp(), pages);
 
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
 
@@ -2308,14 +2315,14 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
         Y_ENSURE(!txc.IsRescheduled());
         Y_ENSURE(!seat->RequestedMemory);
         seat->OnPersistent = std::move(prod.OnPersistent);
-        CommitTransactionLog(RemoveTransaction(seat->UniqID), env, prod.Change, cpuTimer);
+        CommitTransactionLog(RemoveTransaction(seat->UniqID), pages, txEnv, prod.Change, cpuTimer);
     } else {
         Y_ENSURE(!seat->CapturedMemory);
-        if (!env.GetStats().ToLoadPages && !seat->RequestedMemory && !txc.IsRescheduled()) {
+        if (!pages.GetStats().ToLoadPages && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_TABLET_ERROR(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
                     << NFmt::Do(*seat->Self) << " postponed w/o demands");
         }
-        PostponeTransaction(seat, env, prod.Change, cpuTimer);
+        PostponeTransaction(seat, pages, txEnv, prod.Change, cpuTimer);
     }
 
     if (CompactionLogic) {
@@ -2334,7 +2341,7 @@ void TExecutor::UnpinTransactionPages(TSeat &seat) {
     Y_ENSURE(TransactionPagesMemory >= seat.MemoryTouched);
     TransactionPagesMemory -= seat.MemoryTouched;
 
-    seat.Pinned.clear();
+    PageCache.ReleasePins(seat);
     seat.MemoryTouched = 0;
 
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
@@ -2357,17 +2364,16 @@ void TExecutor::ReleaseTxData(TSeat &seat, ui64 requested)
     Memory->ReleaseTxData(seat);
 }
 
-void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
-                                    TAutoPtr<NTable::TChange> change,
-                                    THPTimer &bookkeepingTimer)
+void TExecutor::PostponeTransaction(TSeat* seat, ITransactionPages& pages, TTransactionEnv& txEnv,
+    TAutoPtr<NTable::TChange> change, THPTimer& bookkeepingTimer)
 {
     TTxType txType = seat->TxType;
 
-    seat->MemoryTouched += env.GetStats().NewlyPinnedBytes;
-    TransactionPagesMemory += env.GetStats().NewlyPinnedBytes;
+    seat->MemoryTouched += pages.GetStats().NewlyPinnedBytes;
+    TransactionPagesMemory += pages.GetStats().NewlyPinnedBytes;
 
-    seat->MemoryTouched += env.GetStats().ToLoadBytes;
-    TransactionPagesMemory += env.GetStats().ToLoadBytes;
+    seat->MemoryTouched += pages.GetStats().ToLoadBytes;
+    TransactionPagesMemory += pages.GetStats().ToLoadBytes;
 
     if (seat->AttachedMemory)
         Memory->AttachMemory(*seat);
@@ -2378,10 +2384,10 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " " << NFmt::Do(*seat)
-            << " pin " << env.GetStats().NewlyPinnedPages
-            << " (" << env.GetStats().NewlyPinnedBytes << " b)"
-            << " load " << env.GetStats().ToLoadPages
-            << " (" << env.GetStats().ToLoadBytes << " b)";
+            << " pin " << pages.GetStats().NewlyPinnedPages
+            << " (" << pages.GetStats().NewlyPinnedBytes << " b)"
+            << " load " << pages.GetStats().ToLoadPages
+            << " (" << pages.GetStats().ToLoadBytes << " b)";
     }
 
     // Check if additional resources should be requested.
@@ -2397,7 +2403,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         }
 
         seat->TerminationReason = ETerminationReason::MemoryLimitExceeded;
-        CommitTransactionLog(RemoveTransaction(seat->UniqID), env, change, bookkeepingTimer);
+        CommitTransactionLog(RemoveTransaction(seat->UniqID), pages, txEnv, change, bookkeepingTimer);
         return;
     } else if (totalMemory > seat->CurrentMemoryLimit) {
 
@@ -2434,7 +2440,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 
     // If memory was allocated and there is nothing to load
     // then tx may be re-activated.
-    if (!env.GetStats().ToLoadPages) {
+    if (!pages.GetStats().ToLoadPages) {
         EnqueueActivation(seat, CanExecuteTransaction());
         return;
     }
@@ -2444,7 +2450,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     auto waitPad = MakeIntrusive<TTransactionWaitPad>(seat);
     TransactionWaitPads[waitPad.Get()] = waitPad;
 
-    auto toLoad = env.ObtainToLoad();
+    auto toLoad = pages.ObtainToLoad();
     for (auto &[pageCollectionId, locations] : toLoad) {
         Y_DEBUG_ABORT_UNLESS(locations);
 
@@ -2464,8 +2470,8 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " postponed"
-            << ", loading " << env.GetStats().ToLoadPages << " pages, " << env.GetStats().ToLoadBytes << " bytes"
-            << ", newly pinned " << env.GetStats().NewlyPinnedPages << " pages, " << env.GetStats().NewlyPinnedBytes << " bytes";
+            << ", loading " << pages.GetStats().ToLoadPages << " pages, " << pages.GetStats().ToLoadBytes << " bytes"
+            << ", newly pinned " << pages.GetStats().NewlyPinnedPages << " pages, " << pages.GetStats().NewlyPinnedBytes << " bytes";
     }
 
     seat->CPUBookkeepingTime += bookkeepingTimer.PassedReset();
@@ -2475,36 +2481,36 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         AppTxCounters->TxCumulative(txType, COUNTER_TT_POSTPONED).Increment(1);
 
     // Note: previously counted non-unique cache hits for all retries
-    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(env.GetStats().NewlyPinnedPages);
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(env.GetStats().NewlyPinnedBytes);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(pages.GetStats().NewlyPinnedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(pages.GetStats().NewlyPinnedBytes);
     if (seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_RETRIED].Increment(1);
     }
 
-    Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(env.GetStats().ToLoadPages);
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(env.GetStats().ToLoadBytes);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(pages.GetStats().ToLoadPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(pages.GetStats().ToLoadBytes);
     if (AppTxCounters && txType != UnknownTxType) {
-        AppTxCounters->TxCumulative(txType, COUNTER_TT_LOADED_BLOCKS).Increment(env.GetStats().ToLoadPages);
-        AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(env.GetStats().ToLoadBytes);
+        AppTxCounters->TxCumulative(txType, COUNTER_TT_LOADED_BLOCKS).Increment(pages.GetStats().ToLoadPages);
+        AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(pages.GetStats().ToLoadBytes);
     }
 
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
 }
 
-void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectionTxEnv &env,
-                    TAutoPtr<NTable::TChange> change, THPTimer &bookkeepingTimer) {
-    const bool isReadOnly = !(change->HasAny() || env.HasChanges());
+void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, ITransactionPages& pages, TTransactionEnv& txEnv,
+    TAutoPtr<NTable::TChange> change, THPTimer& bookkeepingTimer) {
+    const bool isReadOnly = !(change->HasAny() || txEnv.HasChanges());
     const TTxType txType = seat->TxType;
 
     // Note: previously counted count (not size), but it requires an additional counter
-    size_t touchedBlocks = env.GetStats().NewlyPinnedBytes + seat->MemoryTouched;
+    size_t touchedBlocks = pages.GetStats().NewlyPinnedBytes + seat->MemoryTouched;
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_TOUCHED_BLOCKS].IncrementFor(touchedBlocks);
     if (AppTxCounters && txType != UnknownTxType)
         AppTxCounters->TxCumulative(txType, COUNTER_TT_TOUCHED_BLOCKS).Increment(touchedBlocks);
 
     // Note: previously counted non-unique cache hits for all retries
-    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(env.GetStats().NewlyPinnedPages);
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(env.GetStats().NewlyPinnedBytes);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(pages.GetStats().NewlyPinnedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(pages.GetStats().NewlyPinnedBytes);
 
     UnpinTransactionPages(*seat);
 
@@ -2534,20 +2540,20 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             || change->Annex  /* Required for replication to followers */
             || change->RemovedRowVersions  /* Required for replication to followers */
             || change->Truncated
-            || env.MakeSnap
-            || env.DropSnap
-            || env.LoanBundle
-            || env.LoanTxStatus
-            || env.LoanConfirmation
-            || env.BorrowUpdates
-            || env.AttachedParts;
+            || txEnv.MakeSnap
+            || txEnv.DropSnap
+            || txEnv.LoanBundle
+            || txEnv.LoanTxStatus
+            || txEnv.LoanConfirmation
+            || txEnv.BorrowUpdates
+            || txEnv.AttachedParts;
 
         auto commitResult = LogicRedo->CommitRWTransaction(std::move(seat), *change, force);
 
         Y_ENSURE(!force || commitResult.Commit);
         auto *commit = commitResult.Commit.Get(); // could be nullptr
 
-        for (auto& pr : env.MakeSnap) {
+        for (auto& pr : txEnv.MakeSnap) {
             const ui32 table = pr.first;
             auto& snap = pr.second;
 
@@ -2666,7 +2672,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
         NKikimrExecutorFlat::TFollowerPartSwitchAux aux;
 
-        if (auto *snap = env.DropSnap.Get()) {
+        if (auto *snap = txEnv.DropSnap.Get()) {
             auto result = snap->SnapContext->Impl->Release();
 
             if (result.Step != commit->Step && result.Bundles) {
@@ -2864,8 +2870,8 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
         bool hadPendingPartSwitches = bool(PendingPartSwitches);
 
-        aux.MutableBySwitchAux()->Reserve(aux.BySwitchAuxSize() + env.LoanBundle.size() + env.LoanTxStatus.size());
-        for (auto &loaned : env.LoanBundle) {
+        aux.MutableBySwitchAux()->Reserve(aux.BySwitchAuxSize() + txEnv.LoanBundle.size() + txEnv.LoanTxStatus.size());
+        for (auto &loaned : txEnv.LoanBundle) {
             auto& partSwitch = PendingPartSwitches.emplace_back();
             partSwitch.TableId = loaned->LocalTableId;
             partSwitch.Step = commit->Step;
@@ -2911,7 +2917,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
             PrepareExternalPart(partSwitch, std::move(loaned->PartComponents));
         }
-        for (auto &loaned : env.LoanTxStatus) {
+        for (auto &loaned : txEnv.LoanTxStatus) {
             auto& partSwitch = PendingPartSwitches.emplace_back();
             partSwitch.TableId = loaned->LocalTableId;
             partSwitch.Step = commit->Step;
@@ -2966,7 +2972,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             PrepareExternalTxStatus(partSwitch, loaned->DataId, loaned->Epoch, loaned->Data);
         }
 
-        for (auto &attached : env.AttachedParts) {
+        for (auto &attached : txEnv.AttachedParts) {
             const ui32 attachTableId = attached.TableId;
             auto &result = attached.Result;
 
@@ -3064,9 +3070,9 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             commit->FollowerAux = NPageCollection::TSlicer::Lz4()->Encode(aux.SerializeAsString());
         }
 
-        if (env.BorrowUpdates) {
+        if (txEnv.BorrowUpdates) {
             commit->WaitFollowerGcAck = true;
-            for (auto &borrowUpdate : env.BorrowUpdates) {
+            for (auto &borrowUpdate : txEnv.BorrowUpdates) {
                 BorrowLogic->UpdateBorrow(
                     borrowUpdate.first,
                     borrowUpdate.second,
@@ -3074,9 +3080,9 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        if (env.LoanConfirmation) {
+        if (txEnv.LoanConfirmation) {
             commit->WaitFollowerGcAck = true;
-            for (auto &xupd : env.LoanConfirmation) {
+            for (auto &xupd : txEnv.LoanConfirmation) {
                 BorrowLogic->ConfirmUpdateLoan(
                     xupd.first,
                     xupd.second.BorrowId,

@@ -4,7 +4,9 @@ import os
 
 import pytest
 
+from ydb.tests.library.fixtures.json import JsonPredicateGenerator
 from ydb.tests.library.stress.fixtures import StressFixture
+from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 from ydb.tests.stress.oltp_workload.workload import WorkloadRunner
 
@@ -42,6 +44,34 @@ class TestFeatureIndexSoak(StressFixture):
                 "enable_index_stream_write": True,
             },
         )
+
+    @pytest.mark.parametrize("json_type", ["Json", "JsonDocument"])
+    def test_json_index_predicates(self, setup_soak, json_type):
+        with ydb.QuerySessionPool(self.driver) as pool:
+            pool.execute_with_retries(f"""
+                CREATE TABLE docs (
+                    pk Uint64 NOT NULL,
+                    json {json_type},
+                    PRIMARY KEY (pk),
+                    INDEX json_idx GLOBAL USING json ON (json)
+                );
+            """)
+            pool.execute_with_retries(f"""
+                UPSERT INTO docs (pk, json) VALUES
+                    (1, {json_type}('{{"items":["hit"]}}')),
+                    (2, {json_type}('{{"common_type":"base","region":"west"}}')),
+                    (3, {json_type}('{{"common_type":"extended","tenant":"a"}}')),
+                    (4, {json_type}('{{"common_type":"compact"}}'));
+            """)
+
+            def select_keys(predicate, view):
+                result = pool.execute_with_retries(f"SELECT pk FROM docs {view} WHERE {predicate} ORDER BY pk;")
+                return [row["pk"] for row in result[0].rows]
+
+            wildcard = 'JSON_VALUE(`json`, \'strict $.*[0]\' RETURNING Utf8) != ""'
+            assert select_keys(wildcard, "") == select_keys(wildcard, "VIEW PRIMARY KEY") == [1]
+            for predicate in JsonPredicateGenerator().explicit_index_predicates:
+                assert select_keys(predicate, "VIEW json_idx") == select_keys(predicate, "VIEW PRIMARY KEY"), predicate
 
     def test_feature_index_soak(self, setup_soak):
         total_duration = int(os.getenv("YDB_FEATURE_INDEX_SOAK_DURATION", "1800"), 0)

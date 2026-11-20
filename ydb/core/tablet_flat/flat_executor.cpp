@@ -145,6 +145,11 @@ static TActorActivityType DetectOwnerActivityType(NFlatExecutorSetup::ITablet* o
     return TActorActivityType();
 }
 
+static bool IsDiskOnlyCompactionBehindHead(const NTable::TSubset& subset) {
+    return subset.Head > NTable::TEpoch::Zero() && subset.Frozen.empty()
+        && (subset.Flatten || subset.ColdParts) && subset.Epoch() < subset.Head - 1;
+}
+
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -1362,6 +1367,7 @@ void TExecutor::AddFollowerPartSwitch(
     partSwitch.FollowerUpdateStep = updateStep;
     partSwitch.TableId = switchProto.GetTableId();
     partSwitch.Step = step;
+    partSwitch.DiskOnlyCompaction = switchProto.GetDiskOnlyCompaction();
 
     if (switchProto.HasIntroducedParts() && switchProto.GetIntroducedParts().BundlesSize()) {
         Y_ENSURE(aux && aux->HotBundlesSize() == switchProto.GetIntroducedParts().BundlesSize());
@@ -1804,6 +1810,10 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
 
         if (partSwitch.Head != subset->Head) {
             Y_TABLET_ERROR("Follower table epoch head has diverged from leader");
+        } else if (partSwitch.DiskOnlyCompaction) {
+            if (!IsDiskOnlyCompactionBehindHead(*subset)) {
+                Y_TABLET_ERROR("Follower table replace subset does not match a disk-only compaction behind head");
+            }
         } else if (*subset && !subset->IsStickedToHead()) {
             Y_TABLET_ERROR("Follower table replace subset isn't sticked to head");
         }
@@ -3718,7 +3728,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         if (*subset) {
             // A tier-managed forced request may include disk parts even when
             // no memory remains to flush. Their epoch can lag the log head.
-            Y_ENSURE(subset->IsStickedToHead() || (params->Tiering && subset->Frozen.empty()),
+            Y_ENSURE(subset->IsStickedToHead() || (params->Tiering && IsDiskOnlyCompactionBehindHead(*subset)),
                 "Got table subset with unexpected head " << subset->Head
                 << " and epoch " << subset->Epoch());
         }
@@ -4034,6 +4044,9 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         sx->SetGeneration(ExpandGenStepPair(snapStamp).first);
         sx->SetStep(ExpandGenStepPair(snapStamp).second);
         sx->SetHead(ops->Subset->Head.ToProto());
+        if (msg->Params->Tiering && IsDiskOnlyCompactionBehindHead(*ops->Subset)) {
+            proto.SetDiskOnlyCompaction(true);
+        }
     } else {
         Y_ENSURE(!hadFrozen, "Compacted frozen parts without correct head epoch");
     }

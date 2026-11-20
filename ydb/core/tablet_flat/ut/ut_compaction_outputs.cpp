@@ -812,18 +812,51 @@ Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "Cannot find tier family 100");
     }
 
-    Y_UNIT_TEST(IndexPlacementRequiresSeparateDescriptor) {
-        for (bool sameChannel : {false, true}) {
-            TOutputConfigFixture env;
-            if (sameChannel) {
-                env.Table.Rooms[TOutputConfigFixture::ColdTier].Main = 1;
-            } else {
-                env.Settings.WriteBTreeIndexV1 = false;
-            }
-            TCompactCfg conf(MakeHolder<TCompactionParams>());
-            conf.Params->TierId = TOutputConfigFixture::ColdTier;
-            UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "requires a separate descriptor collection");
+    Y_UNIT_TEST(TierAwareIndexPlacementOnSharedChannel) {
+        TOutputConfigFixture env;
+        auto& cold = env.Table.Families[TOutputConfigFixture::ColdTier];
+        cold.Room = TScheme::DefaultRoom;
+        cold.KeyIndexInDescriptor = false;
+
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Mode = TCompactionParams::EMode::TierAware;
+        env.Prepare(conf);
+
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 3);
+        UNIT_ASSERT(!conf.Outputs[0].Layout.Layout.SeparateDescriptorCollection);
+        const auto& output = conf.Outputs[1];
+        UNIT_ASSERT_VALUES_EQUAL(output.TierId, TOutputConfigFixture::ColdTier);
+        UNIT_ASSERT(output.Layout.Layout.SeparateDescriptorCollection);
+        UNIT_ASSERT(!output.Layout.Layout.KeyIndexInDescriptor);
+        UNIT_ASSERT(!output.Layout.Layout.GroupIndexesInDescriptor);
+        UNIT_ASSERT(!output.Layout.WriteFlatIndex);
+
+        const TPartSlots slots(output.Layout.Groups.size(), output.Layout.Layout);
+        UNIT_ASSERT_VALUES_EQUAL(output.Writer.Groups.size(), slots.SlotsCount());
+        const auto descriptorSlot = slots.DescriptorSlot();
+        const auto channel = env.Table.Rooms.at(TScheme::DefaultRoom).Main;
+        UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[descriptorSlot].Channel), ui32(channel));
+        for (ui32 group = 0; group < output.Layout.Groups.size(); ++group) {
+            const NPage::TGroupId groupId(group);
+            const auto dataSlot = slots.DataSlot(groupId);
+            UNIT_ASSERT_UNEQUAL(dataSlot, descriptorSlot);
+            UNIT_ASSERT_VALUES_EQUAL(slots.IndexSlot(groupId), dataSlot);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[dataSlot].Channel), ui32(channel));
         }
+
+        TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+            MakeHolder<TDefaultCompactionRouter>());
+        outputs.Start(*env.RowLayout);
+        TWriteStats stats;
+        UNIT_ASSERT(outputs.Finish(stats).empty());
+    }
+
+    Y_UNIT_TEST(IndexPlacementRequiresBTree) {
+        TOutputConfigFixture env;
+        env.Settings.WriteBTreeIndexV1 = false;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->TierId = TOutputConfigFixture::ColdTier;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "requires a separate descriptor collection");
     }
 
     Y_UNIT_TEST(TierAwareFulltextIsRejected) {

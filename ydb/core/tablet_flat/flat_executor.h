@@ -270,6 +270,7 @@ struct TPendingPartSwitch {
     TVector<TLogoBlobID> LeavingTxStatus;
     TVector<TBundleMove> Moves;
     NTable::TEpoch Head = NTable::TEpoch::Zero();
+    bool DiskOnlyCompaction = false;
 
     ui32 FollowerUpdateStep = 0;
 

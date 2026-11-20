@@ -319,6 +319,81 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
         CheckRows(env, {{1, 0, "old", 10}}, TRowVersion(1, 15), true);
     }
 
+    Y_UNIT_TEST(FollowerAppliesForcedDiskCompactionWithAnEpochGap) {
+        TEnv env;
+        const TVector<TReadRow> rows{{1, 0, "old", 10}};
+        const auto input = env.FlushPart({{1, 0, "old", 10}});
+        env.FireDummyFollower(1);
+
+        // Erasing a key beyond the existing part advances the head on flush,
+        // but the erase marker is discarded and leaves no newer part.
+        env.Write({{2, std::nullopt, {}, 0, TRowVersion::Min(), true}});
+        env.Flush();
+        const auto parts = env.Parts();
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(parts.front()->Label, input->Label);
+
+        CheckRows(env, rows, TRowVersion::Max(), true);
+        env.Enable();
+
+        NActors::TBlockEvents<NOps::TEvResult> blocked(env.Env, [](const auto& ev) {
+            const auto* compact = dynamic_cast<const TProdCompact*>(ev->Get()->Result.Get());
+            return compact && compact->Params && compact->Params->Table == TableId
+                && compact->Params->Tiering
+                && static_cast<const NTable::NCompGen::TGenCompactionParams&>(*compact->Params).TieringForced;
+        });
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env->WaitFor("forced disk compaction result",
+            [&] { return !blocked.empty(); }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
+        const auto* result = blocked.front()->Get();
+        const auto* compact = static_cast<const TProdCompact*>(result->Result.Get());
+        UNIT_ASSERT(compact->Success);
+        UNIT_ASSERT(compact->Params->Mode == NTable::TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(result->Subset->Frozen.empty());
+        UNIT_ASSERT(result->Subset->TxStatus.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result->Subset->Epoch(), input->Epoch);
+        UNIT_ASSERT(result->Subset->Head > input->Epoch + 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Subset->Flatten.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Subset->Flatten.front()->Label, input->Label);
+        UNIT_ASSERT_VALUES_EQUAL(compact->Results.size(), 1);
+        const auto output = compact->Results.front().Part->Label;
+
+        // Match the ack to the commit that introduces our output, rather than
+        // accepting an ack for another snapshot or part switch.
+        std::optional<TTxStamp> switchStamp;
+        auto commit = env.Env.AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+            const auto* msg = ev->Get();
+            if (msg->TabletID == env.Tablet && msg->WaitFollowerGcAck
+                    && std::find(msg->GcDiscovered.begin(), msg->GcDiscovered.end(), output)
+                        != msg->GcDiscovered.end()) {
+                switchStamp.emplace(msg->Generation, msg->Step);
+            }
+        });
+        bool acknowledged = false;
+        auto ack = env.Env.AddObserver<TEvTablet::TEvFGcAck>([&](auto& ev) {
+            const auto* msg = ev->Get();
+            if (msg->TabletID == env.Tablet && switchStamp
+                    && msg->Generation == switchStamp->Gen() && msg->Step == switchStamp->Step()) {
+                acknowledged = true;
+            }
+        });
+        blocked.Stop().Unblock();
+        env->WaitFor("follower acknowledgement of forced disk compaction",
+            [&] { return acknowledged; }, TDuration::Seconds(10));
+
+        const auto levels = env.Levels();
+        UNIT_ASSERT(!levels.contains(input->Label));
+        UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(output)), ColdTier);
+        env.Exec([&](TTransactionContext& txc) {
+            const auto subset = txc.DB.Subset(TableId, NTable::TEpoch::Max(), {}, {});
+            UNIT_ASSERT_VALUES_EQUAL(subset->Flatten.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(subset->Flatten.front()->Label, output);
+            return true;
+        }, true);
+        CheckRows(env, rows, TRowVersion::Max(), true);
+    }
+
     Y_UNIT_TEST(EqualEpochPeersAtTheUpperBoundAreCompactedTogether) {
         CheckEqualEpochBoundary(false);
     }

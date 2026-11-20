@@ -911,17 +911,17 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         f.Start();
         const auto id = f.RunPending();
         UNIT_ASSERT(f.Backend.Started.at(id)->Mode == TCompactionParams::EMode::TierAware);
-        const auto changes = f.Complete(id, {0, ColdTier, ArchiveTier});
+        const auto changes = f.Complete(id, {0, ColdTier, ArchiveTier, ColdTier, 0});
 
-        UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 3);
-        THashSet<ui32> tiers;
-        for (const auto& [label, level] : changes.NewPartLevels) {
+        const TVector<ui32> expectedLevels{2, 3, 5, 3, 2};
+        UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), expectedLevels.size());
+        UNIT_ASSERT_VALUES_EQUAL(f.Parts.size(), expectedLevels.size());
+        for (size_t index = 0; index < expectedLevels.size(); ++index) {
+            const auto& label = f.Parts[index]->Label;
+            const ui32 level = changes.NewPartLevels.at(label);
+            UNIT_ASSERT_VALUES_EQUAL(level, expectedLevels[index]);
             UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(label), level);
-            tiers.insert(f.Tier(level));
         }
-        UNIT_ASSERT(tiers.contains(0));
-        UNIT_ASSERT(tiers.contains(ColdTier));
-        UNIT_ASSERT(tiers.contains(ArchiveTier));
         const auto before = f.State.PartLevels;
         f.Strategy->Stop();
         f.Strategy->Start(f.State);

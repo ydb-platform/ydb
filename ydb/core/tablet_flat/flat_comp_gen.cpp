@@ -2055,24 +2055,27 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
         Y_ENSURE(output != result.PartOutputIds.end(), "Missing compaction part output id");
         const auto tier = params.Tiering->OutputTiers.find(output->second);
         Y_ENSURE(tier != params.Tiering->OutputTiers.end(), "Missing compaction output tier");
-        statsByTier[tier->second] += TStats(part);
-    }
-    ui32 sourcePreferred = params.PreferredLevel;
-    const ui32 sourceTier = TierForLevel(params.Generation);
-    if (const auto* sourceStats = statsByTier.FindPtr(sourceTier)) {
-        sourcePreferred = UpliftTierLevel(sourceTier, result.Epoch, *sourceStats, sourcePreferred);
-    }
-    TCompactionChanges changes;
-    for (const auto& part : result.Parts) {
-        const auto output = result.PartOutputIds.find(part->Label);
-        Y_ENSURE(output != result.PartOutputIds.end(), "Missing compaction part output id");
-        const auto tier = params.Tiering->OutputTiers.find(output->second);
-        Y_ENSURE(tier != params.Tiering->OutputTiers.end(), "Missing compaction output tier");
         Y_ENSURE(params.Context->Epochs && part->Epoch == params.Context->Epochs->Max
                 && result.Epoch == part->Epoch,
             "Tier-managed compaction result has an unexpected epoch");
-        const ui32 preferred = tier->second == sourceTier ? sourcePreferred : Max<ui32>();
-        const ui32 level = ChooseTierLevel(tier->second, part->Epoch, preferred);
+        statsByTier[tier->second] += TStats(part);
+    }
+
+    // All outputs share the same epoch. Choose each tier's level against the remaining parts.
+    const ui32 sourceTier = TierForLevel(params.Generation);
+    THashMap<ui32, ui32> levelsByTier;
+    for (const auto& [tierId, stats] : statsByTier) {
+        const ui32 preferred = tierId == sourceTier
+            ? UpliftTierLevel(tierId, result.Epoch, stats, params.PreferredLevel)
+            : Max<ui32>();
+        levelsByTier.emplace(tierId, ChooseTierLevel(tierId, result.Epoch, preferred));
+    }
+
+    TCompactionChanges changes;
+    for (const auto& part : result.Parts) {
+        const ui32 outputId = result.PartOutputIds.at(part->Label);
+        const ui32 tierId = params.Tiering->OutputTiers.at(outputId);
+        const ui32 level = levelsByTier.at(tierId);
         Y_ENSURE(!KnownParts.contains(part->Label), "Duplicate resulting compaction part");
         KnownParts[part->Label] = level;
         changes.NewPartLevels.emplace(part->Label, level);

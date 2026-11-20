@@ -291,7 +291,7 @@ public:
                         AuditLogConnectDbAccessDenied(
                             GrpcRequestBaseCtx_,
                             CheckedDatabaseName_,
-                            TBase::GetUserSID(),
+                            TBase::GetAuditUserSID(),
                             TBase::GetSanitizedToken(),
                             TStringBuilder() << "HTTP monitoring database access denied: " << ToString(HttpDatabaseAccessVerdict_));
                         // Actual HTTP denials never reach LogAuthorizedHttpRequest – count them here
@@ -315,7 +315,7 @@ public:
                 AuditLogConnectDbAccessDenied(
                     GrpcRequestBaseCtx_,
                     CheckedDatabaseName_,
-                    TBase::GetUserSID(),
+                    TBase::GetAuditUserSID(),
                     TBase::GetSanitizedToken(),
                     issue->GetMessage());
                 ReplyUnauthorizedAndDie(*issue);
@@ -653,7 +653,7 @@ private:
                 }
             }
             const TString sanitizedToken = TBase::GetSanitizedToken();
-            AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
+            AuditContextStart(requestBaseCtx, databaseName, TBase::GetAuditUserSID(), sanitizedToken, Attributes_);
             if (auditEnabledReceived) {
                 AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
             }

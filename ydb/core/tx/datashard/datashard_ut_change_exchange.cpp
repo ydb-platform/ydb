@@ -4027,14 +4027,21 @@ Y_UNIT_TEST_SUITE(Cdc) {
         InitRoot(server, edgeActor);
         CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
 
+        ui32 hidden = 0;
         auto hideTopic = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
             for (auto& entry : ev->Get()->Request->ResultSet) {
                 if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream && entry.ListNodeEntry) {
                     auto listNode = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TListNodeEntry>();
                     listNode->Kind = entry.ListNodeEntry->Kind;
                     entry.ListNodeEntry = listNode;
+                    ++hidden;
                 }
             }
+        });
+
+        size_t removed = 0;
+        auto countRemoved = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>([&](auto& ev) {
+            removed += ev->Get()->Records.size();
         });
 
         WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
@@ -4046,6 +4053,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (2, 20);
         )");
 
+        UNIT_ASSERT(hidden > 0);
+        runtime.WaitFor("dropped change records", [&] { return removed >= 2; });
+
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
@@ -4055,6 +4065,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (3, 30);
         )");
+
+        runtime.WaitFor("dropped change records after split", [&] { return removed >= 3; });
     }
 
     Y_UNIT_TEST(RenameTable) {

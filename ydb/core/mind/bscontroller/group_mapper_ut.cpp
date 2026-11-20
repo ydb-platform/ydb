@@ -644,7 +644,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                     .PDiskId = id,
                     .Location = TNodeLocation(location),
                     .Usable = true,
-                    .MaxSlots = 10,
+                    .ExpectedSlotCount = 10,
                     .Operational = true,
                     .BridgePileId = TBridgePileId::FromPileIndex(pile),
                 }));

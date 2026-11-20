@@ -14,5 +14,6 @@ RECURSE(
     stress_tool
     tsserver
     tstool
+    validate_indexes
     ydbd_slice
 )

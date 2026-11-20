@@ -51,6 +51,7 @@ RECURSE(
     tenants
     ttl
     udf_store
+    validate_indexes
     wardens
     ydb_cli
 )

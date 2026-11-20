@@ -2287,7 +2287,11 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
             """)
             assert [(row.id, row.amount) for row in result.rows] == expected_orders
             assert read_alice_orders(destination) == expected_orders
+
+            # A replacement preview must leave a local deletion in place.
+            pool.execute_with_retries(f"DELETE FROM `{destination}/orders` WHERE id = 2;")
             self.execute_ydb_cli_command(restore + ["--replace", "--dry-run"])
+            assert read_alice_orders(destination) == expected_orders[1:]
 
             self.execute_ydb_cli_command(["scheme", "rmdir", "--force", "--recursive", destination])
             for flags in (["--verify-existence", "--dry-run"], ["--verify-existence"], ["--dry-run"]):

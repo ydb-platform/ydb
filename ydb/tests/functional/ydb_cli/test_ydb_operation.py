@@ -182,7 +182,7 @@ class TestNfsTransferOperationCli(BaseCliTestWithDatabase):
                 "--item", "source=scratch,destination=scratch",
                 "--exclude", "/scratch$", "--compression", "zstd-3",
             ], "export/nfs")
-            assert (tmp_path / "orders").is_dir()
+            assert (tmp_path / "orders" / "data_00.csv.zst").is_file()
             assert not (tmp_path / "scratch").exists()
 
             # Restore under a different name to keep the staging table available.

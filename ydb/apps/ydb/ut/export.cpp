@@ -1,7 +1,6 @@
-#include "mock_env.h"
+#include "mock_table.h"
 
 #include <ydb/public/api/grpc/ydb_export_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 #include <type_traits>
 
@@ -248,35 +247,8 @@ public:
     TString BadRequestMessage;
 };
 
-class TTableImpl : public TMockGrpcServiceBase<Ydb::Table::V1::TableService::Service> {
+class TTableImpl : public TMockTableService {
 public:
-    grpc::Status CreateSession(grpc::ServerContext* context, const Ydb::Table::CreateSessionRequest* request, Ydb::Table::CreateSessionResponse* response) override {
-        Y_UNUSED(context);
-        Y_UNUSED(request);
-        Ydb::Table::CreateSessionResult res;
-        res.set_session_id("test-session-id");
-        FillOperation(response, res);
-        return grpc::Status();
-    }
-
-    grpc::Status DeleteSession(grpc::ServerContext* context, const Ydb::Table::DeleteSessionRequest* request, Ydb::Table::DeleteSessionResponse* response) override {
-        Y_UNUSED(context);
-        Y_UNUSED(request);
-        auto* operation = response->mutable_operation();
-        operation->set_ready(true);
-        operation->set_status(Ydb::StatusIds::SUCCESS);
-        return grpc::Status();
-    }
-
-    grpc::Status KeepAlive(grpc::ServerContext* context, const Ydb::Table::KeepAliveRequest* request, Ydb::Table::KeepAliveResponse* response) override {
-        Y_UNUSED(context);
-        Y_UNUSED(request);
-        Ydb::Table::KeepAliveResult res;
-        res.set_session_status(Ydb::Table::KeepAliveResult::SESSION_STATUS_READY);
-        FillOperation(response, res);
-        return grpc::Status();
-    }
-
     grpc::Status DescribeTable(grpc::ServerContext* context, const Ydb::Table::DescribeTableRequest* request, Ydb::Table::DescribeTableResponse* response) override {
         Y_UNUSED(context);
         Ydb::Table::DescribeTableResult res;
@@ -302,14 +274,6 @@ public:
 
 private:
     THashMap<TString, THashMap<TString, TString>> TableAttributes;
-
-    template <typename TResponse, typename TResult>
-    void FillOperation(TResponse* response, const TResult& result) {
-        auto* operation = response->mutable_operation();
-        operation->set_ready(true);
-        operation->set_status(Ydb::StatusIds::SUCCESS);
-        operation->mutable_result()->PackFrom(result);
-    }
 };
 
 class TExportFixture : public TCliTestFixture {

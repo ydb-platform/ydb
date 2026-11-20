@@ -269,11 +269,16 @@ namespace NKikimr::NStorage {
 
                     if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
                         throw TExRace() << "Configuration changed while collecting configs";
-                    } else if (!res->HasCollectConfigs()) {
+                    }
+                    if (!res->HasCollectConfigs()) {
                         throw TExError() << "Incorrect CollectConfigs response";
-                    } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+                    }
+                    auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt);
+                    if (r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
-                    } else if (r.IsDistconfDisabledQuorum) {
+                    }
+                    RequireNoPendingBridgeConfigs();
+                    if (r.IsDistconfDisabledQuorum) {
                         Self->ConfigRecoveryRequired = false;
                         Finish(TResult::OK, std::nullopt);
                     } else if (r.ConfigToPropose) {
@@ -376,6 +381,12 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TInvokeRequestHandlerActor::RequireNoPendingBridgeConfigs() const {
+        if (!Self->PendingBridgeConfigs.empty()) {
+            throw TExRace() << "Configuration is waiting for bridge session admission";
+        }
+    }
+
     void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
                                                  bool allowConflictingGenerationAdvance) {
         if (!Self->StorageConfig || !Self->Scepter) {
@@ -397,12 +408,14 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
+            RequireNoPendingBridgeConfigs();
             if (result.RequiresRecoveryProposition) {
                 return StartRecoveryProposition(result);
             }
             if (!result.RequiresGenerationAdvance) {
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+                RequireNoPendingBridgeConfigs();
             }
             callback(std::move(result));
         });
@@ -481,6 +494,7 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable bridge configuration");
             }
+            RequireNoPendingBridgeConfigs();
             if (result.RequiresRecoveryProposition) {
                 return StartRecoveryProposition(result);
             }
@@ -525,6 +539,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartPropositionImpl(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
+        RequireNoPendingBridgeConfigs();
         if (!Self->HasConnectedNodeQuorum(*config)) {
             // we won't be able to have quorum for this configuration if we start proposing now
             throw TExNoQuorum() << "No quorum to start propose/commit configuration";

@@ -13,6 +13,9 @@ ENDIF()
 PEERDIR(
     ydb/core/testlib/default
     ydb/core/util/actorsys_test
+    ydb/library/actors/interconnect/ut/lib
+    ydb/library/actors/interconnect/ut/lib/port_manager
+    ydb/library/actors/interconnect/ut/protos
 )
 
 SRCS(

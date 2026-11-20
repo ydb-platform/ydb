@@ -110,11 +110,11 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::CanSendConfigToPeer(ui32 peerFeatureLevel,
             const NKikimrBlobStorage::TStorageConfig& config) {
         const ui32 level = GetRequiredBridgeFeatureLevel(config);
-        return level < BridgeFeatureLevelSessionAdmission || peerFeatureLevel >= level;
+        return !GetBridgeAdmissionFloor(level) || peerFeatureLevel >= level;
     }
 
     bool TDistributedConfigKeeper::IsBridgeFeatureRequirementApplied(ui32 level) const {
-        return level < BridgeFeatureLevelSessionAdmission || !Cfg->UseBridgeSessionAdmission ||
+        return !GetBridgeAdmissionFloor(level) || !Cfg->UseBridgeSessionAdmission ||
             level <= AppliedBridgeFeatureRequirement;
     }
 
@@ -136,14 +136,20 @@ namespace NKikimr::NStorage {
         if (CurrentProposition) {
             include(CurrentProposition->StorageConfig);
         }
+        for (const auto& [_, record] : MetadataByPath) {
+            if (record.HasProposedStorageConfig()) {
+                const auto& proposal = record.GetProposedStorageConfig();
+                if (GetRequiredBridgeFeatureLevel(proposal) >= BridgeFeatureLevelSessionAdmission &&
+                        (!StorageConfig || !IsBridgeProposalSupersededByRollback(*StorageConfig, proposal))) {
+                    include(proposal);
+                }
+            }
+        }
         for (const auto& [_, task] : ScatterTasks) {
             required = Max(required, task.BridgeFeatureRequirement);
         }
         for (const auto& pending : PendingBridgeConfigs) {
             include(pending.Config);
-        }
-        if (required < BridgeFeatureLevelSessionAdmission) {
-            required = 0;
         }
         if (required == RequestedBridgeFeatureRequirement) {
             return;

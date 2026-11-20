@@ -22,6 +22,8 @@ namespace NInterconnect::NRdma {
 }
 
 namespace NActors {
+    constexpr const char* ConnectionAdmissionErrorMessage = "Peer is incompatible with current connection admission";
+
     enum class EEncryptionMode {
         DISABLED, // no encryption is required at all
         OPTIONAL, // encryption is enabled when supported by both peers

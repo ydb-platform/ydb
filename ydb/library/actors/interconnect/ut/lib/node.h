@@ -45,7 +45,7 @@ public:
           bool withRdma = true,
           std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {},
           TLogBackendFactory logBackendFactory = {},
-          TVector<ui32> interconnectSessionPoolIds = {0}, bool trackAdmission = false) {
+          TVector<ui32> interconnectSessionPoolIds = {0}, bool trackAdmission = false, void* appData = nullptr) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -200,7 +200,7 @@ public:
         }
 
         auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
-        ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));
+        ActorSystem.Reset(new TActorSystem(sp, appData, loggerSettings));
         ActorSystem->Start();
         // The v2 io_uring engine (shared, off-actor, with its own reaper threads) was created above and
         // published in Common; the interconnect proxy binds it to the actor system on start and it is
@@ -238,12 +238,22 @@ public:
         ActorSystem->RegisterLocalService(serviceId, actorId);
     }
 
+    void RegisterConnectionChecker(const TActorId& serviceId,
+            const std::function<IActor*(std::shared_ptr<std::atomic<ui32>>)>& factory) {
+        RegisterServiceActor(serviceId, factory(Common->ConnectionAdmissionLevel));
+        Common->ConnectionCheckerActorIds.push_back(serviceId);
+    }
+
     TActorSystem *GetActorSystem() const {
         return ActorSystem.Get();
     }
 
     TInterconnectSettings& MutableInterconnectSettings() {
         return Common->Settings;
+    }
+
+    TActorId GetConnectionCheckerActorId(size_t index = 0) const {
+        return Common->ConnectionCheckerActorIds.at(index);
     }
 
     std::atomic<ui32>& GetConnectionAdmissionLevel() const {

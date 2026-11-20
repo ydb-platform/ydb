@@ -144,6 +144,7 @@ message TEvNodeConfigGather {
         repeated TDiskIdentifier NoMetadata = 4;
         repeated TDiskIdentifier Errors = 5;
         bool MetadataOnly = 6;
+        bool Incompatible = 7; // a persistent configuration cannot be delivered to the requesting parent
     }
 
     message TProposeStorageConfig {

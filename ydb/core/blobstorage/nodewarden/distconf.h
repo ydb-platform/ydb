@@ -487,6 +487,9 @@ namespace NKikimr::NStorage {
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
+        using TEvUpdateBridgeFeatureRequirement = TEvPrivate::TEvUpdateBridgeFeatureRequirement;
+        using TEvBridgeFeatureRequirementApplied = TEvPrivate::TEvBridgeFeatureRequirementApplied;
+
         class TDistconfBridgeConnectionCheckerActor;
 
     public:
@@ -1069,6 +1072,17 @@ namespace NKikimr::NStorage {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
         return Max<ui32>(registry.GetRequiredFeatureLevel(),
             registry.GetPileListChanged() ? BridgeFeatureLevelPileList : 0);
+    }
+
+    inline ui32 GetBridgeAdmissionFloor(ui32 requiredLevel) {
+        return requiredLevel >= BridgeFeatureLevelSessionAdmission ? requiredLevel : 0;
+    }
+
+    inline bool IsBridgeProposalSupersededByRollback(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrBlobStorage::TStorageConfig& proposal) {
+        return !config.HasClusterState() && config.HasBridgeRollback() && proposal.HasClusterState() &&
+            config.GetGeneration() > proposal.GetGeneration() &&
+            config.GetBridgeRollback().GetClusterStateGeneration() >= proposal.GetClusterState().GetGeneration();
     }
 
     // bridge feature level of the node from its report (older versions report only PileListChangeCapable flag)

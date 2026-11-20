@@ -48,12 +48,12 @@ namespace NKikimr::NStorage {
 
         if (task.Request.HasProposeStorageConfig()) {
             const ui32 level = GetRequiredBridgeFeatureLevel(task.Request.GetProposeStorageConfig().GetConfig());
+            task.BridgeFeatureRequirement = level;
             if (level >= BridgeFeatureLevelSessionAdmission) {
                 if (!Cfg->BridgeConfig) {
                     CheckCompleteScatterTask(it);
                     return;
                 }
-                task.BridgeFeatureRequirement = level;
                 if (!IsBridgeFeatureRequirementApplied(level)) {
                     task.WaitingForBridgeFeatureRequirement = true;
                     task.TargetedNodes.assign(targetedNodes.begin(), targetedNodes.end());
@@ -61,6 +61,7 @@ namespace NKikimr::NStorage {
                     return;
                 }
             }
+            RefreshBridgeFeatureRequirement();
         }
         StartScatterTask(it, targetedNodes);
     }
@@ -196,6 +197,10 @@ namespace NKikimr::NStorage {
         }
 
         PerformScatterTask(task); // do the local part
+        const bool incompatible = task.Response.GetCollectConfigs().GetIncompatible();
+        if (incompatible) {
+            task.Response.SetAborted(true);
+        }
 
         std::visit(TOverloaded{
             [&](const TBinding& binding) {
@@ -220,6 +225,9 @@ namespace NKikimr::NStorage {
                 TActivationContext::Send(handle.release());
             }
         }, task.Origin);
+        if (incompatible && std::holds_alternative<TBinding>(task.Origin)) {
+            AbortBinding("incompatible configuration recovery");
+        }
     }
 
     void TDistributedConfigKeeper::AbortScatterTask(ui64 cookie, ui32 nodeId) {

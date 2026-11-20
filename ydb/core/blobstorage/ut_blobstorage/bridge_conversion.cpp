@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -341,7 +342,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     }
 
     Y_UNIT_TEST(PartitionedStaticNodeCannotAffectConvertedCluster) {
-        TEnvironmentSetup env(MakeUnbridgedSettings());
+        TEnvironmentSetup env(MakeUnbridgedSettings(/*setupHive=*/ false, /*nodeCount=*/ 9,
+            /*useBridgeSessionAdmission=*/ true));
         const ui32 groupId = CreatePoolAndGetGroup(env);
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -351,7 +353,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         const ui32 partitionedNodeId = nodeIds.back();
         nodeIds.pop_back();
         env.Runtime->FilterFunction = [&](ui32 recipientNodeId, std::unique_ptr<IEventHandle>& ev) {
-            return recipientNodeId != partitionedNodeId && ev->Sender.NodeId() != partitionedNodeId;
+            return !ev->InterconnectSession ||
+                (recipientNodeId != partitionedNodeId && ev->Sender.NodeId() != partitionedNodeId);
         };
         RollingRestartWithSinglePileBridgeConfig(env, checker, groupId, nodeIds);
 
@@ -360,14 +363,54 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         env.Sim(TDuration::Minutes(1));
         UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
         checker.Write(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(env.BridgeAdmissionFloors.at(1)->load(), static_cast<ui32>(NStorage::BridgeFeatureLevelSessionAdmission));
 
         env.Runtime->FilterFunction = {};
         env.Sim(TDuration::Seconds(30));
         checker.Write(groupId);
         checker.CheckAll(1);
 
+        const TActorId staleEdge = env.Runtime->AllocateEdgeActor(partitionedNodeId, __FILE__, __LINE__);
+        const TString staleData = "write attempted by a partitioned node";
+        env.Runtime->WrapInActorContext(staleEdge, [&] {
+            SendToBSProxy(staleEdge, groupId, new TEvBlobStorage::TEvPut(
+                TLogoBlobID(100501, 1, 1, 0, staleData.size(), 0), staleData, TInstant::Max()));
+        });
+        const auto stalePut = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(staleEdge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(stalePut->Get()->Status, NKikimrProto::ERROR, stalePut->Get()->ToString());
+        UNIT_ASSERT_STRING_CONTAINS(stalePut->Get()->ErrorReason, "BridgeConfig");
+
+        std::optional<ui64> committedGeneration;
+        TActorId readEdge;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == partitionedNodeId && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType &&
+                    ev->Recipient == readEdge) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenReadMetadataResult>();
+                if (msg->Outcome == NPDisk::EPDiskMetadataOutcome::OK && msg->Record.HasCommittedStorageConfig()) {
+                    committedGeneration = Max(committedGeneration.value_or(0),
+                        msg->Record.GetCommittedStorageConfig().GetGeneration());
+                }
+                return false;
+            }
+            return true;
+        };
         env.RestartNode(partitionedNodeId);
         env.Sim(TDuration::Seconds(30));
+        const auto recovered = QueryStorageConfig(env, partitionedNodeId);
+        UNIT_ASSERT(recovered.HasClusterState());
+        WaitUntil(env, [&] {
+            return env.BridgeAdmissionFloors.at(partitionedNodeId)->load() == NStorage::BridgeFeatureLevelSessionAdmission;
+        }, "returning node did not enforce bridge session admission");
+
+        readEdge = env.Runtime->AllocateEdgeActor(partitionedNodeId, __FILE__, __LINE__);
+        NStorage::EnumerateConfigDrives(recovered, partitionedNodeId, [&](const auto&, const auto& drive) {
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(partitionedNodeId), readEdge,
+                new NStorage::TEvNodeWardenReadMetadata(drive.GetPath())), partitionedNodeId);
+        });
+        WaitUntil(env, [&] {
+            return committedGeneration && *committedGeneration == recovered.GetGeneration();
+        }, "returning node did not read the recovered configuration back from disk");
+        env.Runtime->FilterFunction = {};
         checker.Write(groupId, partitionedNodeId);
         checker.CheckAll(partitionedNodeId);
         checker.CheckAll();

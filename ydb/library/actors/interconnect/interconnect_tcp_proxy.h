@@ -255,8 +255,7 @@ namespace NActors {
             Y_ABORT_UNLESS(PassAwayScheduled);
             const TMonotonic now = TActivationContext::Monotonic();
             if (now >= PassAwayTimestamp && !QuiescingConnections.empty()) {
-                TActivationContext::Schedule(now + TDuration::Seconds(1), new IEventHandle(EvPassAwayIfNeeded, 0,
-                    SelfId(), {}, nullptr, 0));
+                return;
             } else if (now >= PassAwayTimestamp) {
                 PassAway();
             } else if (PassAwayTimestamp != TMonotonic::Max()) {
@@ -402,6 +401,7 @@ namespace NActors {
         void ConfigureTimeout(TEvents::TEvWakeup::TPtr& ev);
         void ProcessConfigured();
 
+        bool TerminateIfAdmissionDenied(const TSessionParams& params);
         void HandleHandshakeStatus(TEvHandshakeDone::TPtr& ev);
         void HandleHandshakeStatus(TEvHandshakeFail::TPtr& ev);
         void Handle(TEvInterconnect::TEvRecheckConnectionAdmission::TPtr& ev);

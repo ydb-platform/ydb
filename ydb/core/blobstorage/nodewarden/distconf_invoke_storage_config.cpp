@@ -707,6 +707,7 @@ namespace NKikimr::NStorage {
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;
                 }
+                RequireNoPendingBridgeConfigs();
                 if (result.RequiresRecoveryProposition) {
                     return StartRecoveryProposition(result);
                 }
@@ -732,9 +733,13 @@ namespace NKikimr::NStorage {
 
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect CollectConfigs response";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, IsDryRun); r.ErrorReason) {
+            }
+            auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, IsDryRun);
+            if (r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
-            } else if (r.ConfigToPropose) {
+            }
+            RequireNoPendingBridgeConfigs();
+            if (r.ConfigToPropose) {
                 throw TExError() << "Unexpected config proposition";
             } else if (r.IsDistconfDisabledQuorum) {
                 // distconf is disabled on the majority of nodes; we have just to replace configs
@@ -1028,9 +1033,13 @@ namespace NKikimr::NStorage {
 
             if (Self->StorageConfig->GetGeneration()) {
                 throw TExRace() << "Storage config generation regenerated while collecting configs";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
+            }
+            auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID);
+            if (r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
-            } else if (r.RequiresRecoveryProposition) {
+            }
+            RequireNoPendingBridgeConfigs();
+            if (r.RequiresRecoveryProposition) {
                 return StartRecoveryProposition(r);
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console

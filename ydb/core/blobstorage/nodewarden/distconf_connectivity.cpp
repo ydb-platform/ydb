@@ -32,7 +32,7 @@ namespace NKikimr::NStorage {
         struct TAdmissionRecheck {
             ui64 Cookie;
             size_t Pending;
-            std::vector<std::pair<TActorId, ui64>> Waiters;
+            std::optional<std::pair<TActorId, ui64>> Waiter;
         };
         ui64 NextAdmissionRecheckCookie = 0;
         std::optional<TAdmissionRecheck> AdmissionRecheck;
@@ -196,29 +196,29 @@ namespace NKikimr::NStorage {
 
         void CompleteAdmissionRecheck() {
             auto recheck = std::exchange(AdmissionRecheck, std::nullopt);
-            for (const auto& [actorId, cookie] : recheck->Waiters) {
+            if (recheck->Waiter) {
+                const auto& [actorId, cookie] = *recheck->Waiter;
                 Send(actorId, new TEvPrivate::TEvBridgeFeatureRequirementApplied, 0, cookie);
             }
         }
 
         void ApplyAdmissionRequirement(TActorId requester = {}, ui64 cookie = 0) {
-            const ui32 required = GetRequiredFeatureLevel();
-            const ui32 floor = required >= BridgeFeatureLevelSessionAdmission ? required : 0;
+            const ui32 floor = GetBridgeAdmissionFloor(GetRequiredFeatureLevel());
             if (AdmissionFloor && AdmissionFloor->exchange(floor) != floor) {
                 auto previous = std::exchange(AdmissionRecheck, std::nullopt);
-                const auto peers = floor ? AdmissionLevels.PeersBelow(floor) : std::vector<ui32>{};
-                if (!peers.empty() || previous) {
+                const auto peers = AdmissionLevels.PeersBelow(floor);
+                if (!peers.empty()) {
                     AdmissionRecheck.emplace(TAdmissionRecheck{++NextAdmissionRecheckCookie, peers.size(), {}});
                     if (previous) {
-                        AdmissionRecheck->Waiters = std::move(previous->Waiters);
+                        AdmissionRecheck->Waiter = previous->Waiter;
                     }
                     for (const ui32 peerId : peers) {
                         Send(TActivationContext::InterconnectProxy(peerId), new TEvInterconnect::TEvRecheckConnectionAdmission,
                             0, AdmissionRecheck->Cookie);
                     }
-                    if (peers.empty()) {
-                        CompleteAdmissionRecheck();
-                    }
+                } else if (previous) {
+                    AdmissionRecheck = std::move(previous);
+                    CompleteAdmissionRecheck();
                 }
             }
             if (!AdmissionFloor || !floor) {
@@ -226,7 +226,7 @@ namespace NKikimr::NStorage {
             }
             if (cookie) {
                 if (AdmissionRecheck) {
-                    AdmissionRecheck->Waiters.emplace_back(requester, cookie);
+                    AdmissionRecheck->Waiter.emplace(requester, cookie);
                 } else {
                     Send(requester, new TEvPrivate::TEvBridgeFeatureRequirementApplied, 0, cookie);
                 }
@@ -483,7 +483,7 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!error) {
-                RegisterPeer(request.PeerNodeId, incoming);
+                TrackAdmissionPeer(request.PeerNodeId, GetPeerAdmissionLevel(incoming));
             }
             Send(ev->Sender, new TEvInterconnect::TEvCheckOutgoingConnectionResult(std::move(error),
                 GetPeerAdmissionLevel(incoming)), 0, ev->Cookie);

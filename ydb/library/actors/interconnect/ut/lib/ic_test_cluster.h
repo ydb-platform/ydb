@@ -49,7 +49,8 @@ public:
                    TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2), ui32 inflight = TNode::DefaultInflight(),
                    std::function<void(ui32, NActors::TInterconnectSettings&)> settingsCustomizer = {},
                    TNode::TLogBackendFactory logBackendFactory = {}, ui32 numThreads = 1,
-                   TVector<ui32> interconnectSessionPoolIds = {0})
+                   TVector<ui32> interconnectSessionPoolIds = {0},
+                   std::function<void*(ui32)> appDataFactory = {})
         : NumNodes(numNodes)
         , DeadPeerTimeout(deadPeerTimeout)
         , Counters(new NMonitoring::TDynamicCounters)
@@ -93,9 +94,14 @@ public:
                 !(flags & DISABLE_RDMA),
                 settingsCustomizer,
                 LogBackendFactory,
-                interconnectSessionPoolIds, flags & TRACK_ADMISSION));
+                interconnectSessionPoolIds, flags & TRACK_ADMISSION, appDataFactory ? appDataFactory(i) : nullptr));
         }
     }
+
+    TTestICCluster(ui32 numNodes, Flags flags, const std::function<void*(ui32)>& appDataFactory)
+        : TTestICCluster(numNodes, {}, nullptr, nullptr, flags, {}, TDuration::Seconds(2), TNode::DefaultInflight(),
+            {}, {}, 1, {0}, appDataFactory)
+    {}
 
     TNode* GetNode(ui32 id) {
         return Nodes[id].Get();

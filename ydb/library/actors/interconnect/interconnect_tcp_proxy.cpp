@@ -208,6 +208,18 @@ namespace NActors {
         PrepareNewSessionHandshake();
     }
 
+    bool TInterconnectProxyTCP::TerminateIfAdmissionDenied(const TSessionParams& params) {
+        if (Common->AllowsConnection(params.AdmissionLevel)) {
+            return false;
+        }
+        if (Session) {
+            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::HandshakeFailPermanent());
+        } else {
+            TransitToErrorState(ConnectionAdmissionErrorMessage);
+        }
+        return true;
+    }
+
     void TInterconnectProxyTCP::StartResumeHandshake(ui64 inputCounter) {
         ICPROXY_PROFILED;
 
@@ -216,8 +228,7 @@ namespace NActors {
 
         // ensure that we have session
         Y_ABORT_UNLESS(Session);
-        if (!Common->AllowsConnection(Session->GetParams().AdmissionLevel)) {
-            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::HandshakeFailPermanent());
+        if (TerminateIfAdmissionDenied(Session->GetParams())) {
             return;
         }
 
@@ -297,8 +308,7 @@ namespace NActors {
                 {"sender", ev->Sender},
                 {"self", msg->Self},
                 {"peer", msg->Peer});
-        } else if (!Common->AllowsConnection(Session->GetParams().AdmissionLevel)) {
-            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::HandshakeFailPermanent());
+        } else if (TerminateIfAdmissionDenied(Session->GetParams())) {
         } else if (SessionVirtualId != ev->Get()->Peer || RemoteSessionVirtualId != ev->Get()->Self) {
             // check session virtual ids for continuation
             YDB_LOG_NOTICE("(actor virtual id mismatch with existing session",
@@ -456,12 +466,7 @@ namespace NActors {
         ConnectionSubscriptions.clear();
 
         Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor);
-        if (!Common->AllowsConnection(msg->Params.AdmissionLevel)) {
-            if (Session) {
-                InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::HandshakeFailPermanent());
-            } else {
-                TransitToErrorState("Peer is incompatible with current connection admission");
-            }
+        if (TerminateIfAdmissionDenied(msg->Params)) {
             return;
         }
         SwitchToState(__LINE__, "StateWork", &TThis::StateWork);
@@ -1295,8 +1300,12 @@ namespace NActors {
 
     void TInterconnectProxyTCP::Handle(TEvInterconnect::TEvRecheckConnectionAdmission::TPtr& ev) {
         const ui32 required = Common->GetConnectionAdmissionLevel();
-        if (Session && Session->GetParams().AdmissionLevel < required) {
-            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::HandshakeFailPermanent());
+        if (Session) {
+            TerminateIfAdmissionDenied(Session->GetParams());
+        }
+        DropHandshakes();
+        if (!Session) {
+            TransitToErrorState(ConnectionAdmissionErrorMessage);
         }
         AdmissionWaiters.push_back({ev->Sender, ev->Cookie, required});
         ProcessAdmissionWaiters();
@@ -1311,6 +1320,9 @@ namespace NActors {
     void TInterconnectProxyTCP::Handle(TEvConnectionQuiesced::TPtr& ev) {
         QuiescingConnections.erase(ev->Cookie);
         ProcessAdmissionWaiters();
+        if (PassAwayScheduled && TActivationContext::Monotonic() >= PassAwayTimestamp) {
+            HandlePassAwayIfNeeded();
+        }
     }
 
     void TInterconnectProxyTCP::ProcessAdmissionWaiters() {

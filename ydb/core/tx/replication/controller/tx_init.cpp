@@ -219,7 +219,8 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::TxIds::VersionTxId>()
             );
 
-            auto res = Self->AssignedTxIds.emplace(version, txId);
+            const ui64 firstEndStep = rowset.GetValueOrDefault<Schema::TxIds::FirstEndStep>(0);
+            auto res = Self->AssignedTxIds.emplace(version, TAssignedTxId{txId, firstEndStep});
             Y_VERIFY_S(res.second, "Duplicate version: " << version);
 
             if (!rowset.Next()) {

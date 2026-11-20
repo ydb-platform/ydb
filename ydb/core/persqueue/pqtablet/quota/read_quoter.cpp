@@ -45,7 +45,7 @@ bool TReadQuoter::CanExaust(TInstant now) {
 }
 
 void TReadQuoter::CheckConsumerPerPartitionQuota(TRequestContext&& context) {
-    AFL_ENSURE(context.Request->Request);
+    YDB_LOG_ENSURE(context.Request->Request);
     auto consumerQuota = GetOrCreateConsumerQuota(
             context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId,
             ActorContext()
@@ -247,7 +247,9 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
-        AFL_ENSURE(TopicConverter)("tablet_id", TabletId)("partition_id", Partition);
+        YDB_LOG_ENSURE(TopicConverter,
+            {"tabletId", TabletId},
+            {"partitionId", Partition});
         if (quotingConfig.GetEnableReadQuoting()) {
             actorId = TActivationContext::RegisterWithSameMailbox(
                 new TAccountReadQuoter(
@@ -271,7 +273,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
-    AFL_ENSURE(!consumerStr.empty());
+    YDB_LOG_ENSURE(!consumerStr.empty());
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(

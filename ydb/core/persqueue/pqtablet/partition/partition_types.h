@@ -115,7 +115,9 @@ struct TMessage {
         case 5:
             return std::get<5>(Body).Cookie;
         default:
-            AFL_ENSURE(false)("reason", "unreachable")("index", Body.index());
+            YDB_LOG_ENSURE(false,
+                {"reason", "unreachable"},
+                {"index", Body.index()});
         }
     }
 
@@ -124,11 +126,11 @@ struct TMessage {
             return Body.index() == i; \
         } \
         const auto& Get##name() const { \
-            AFL_ENSURE(Is##name()); \
+            YDB_LOG_ENSURE(Is##name()); \
             return std::get<i>(Body); \
         } \
         auto& Get##name() { \
-            AFL_ENSURE(Is##name()); \
+            YDB_LOG_ENSURE(Is##name()); \
             return std::get<i>(Body); \
         }
 

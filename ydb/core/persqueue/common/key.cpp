@@ -62,7 +62,8 @@ void TKey::SetOffsetDelta(const TMaybe<ui64>& offsetDelta)
     EnsureValidBodySize();
     if (offsetDelta.Defined()) {
         // Preserve the existing on-disk range and 10-digit representation.
-        AFL_ENSURE(*offsetDelta <= Max<ui32>())("offsetDelta", *offsetDelta);
+        YDB_LOG_ENSURE(*offsetDelta <= Max<ui32>(),
+            {"offsetDelta", *offsetDelta});
     }
     OffsetDelta = offsetDelta;
     const TMaybe<char> suffix = GetSuffix();
@@ -129,7 +130,9 @@ void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)
             c = ServiceTypeTxMeta;
             break;
         default:
-            AFL_ENSURE(false)("type", static_cast<int>(type))("type_char", c);
+            YDB_LOG_ENSURE(false,
+                {"type", static_cast<int>(type)},
+                {"typeChar", c});
         }
     }
 

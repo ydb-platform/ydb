@@ -38,7 +38,8 @@ public:
     {
         DisableTimestamp = TInstant::Zero();
         const auto* partition = partitionGraph.GetPartition(partitionId);
-        AFL_ENSURE(partition)("partitionId", partitionId);
+        YDB_LOG_ENSURE(partition,
+            {"partitionId", partitionId});
         ParentPartitions.reserve(partition->AllParents.size());
         for (const TPartitionGraph::Node* parentPartition : partition->AllParents) {
             TParentPartitionInfo info{
@@ -331,9 +332,13 @@ private:
             TWriteRequest* ptr = req.RequestPtr;
             ptr->UnresolvedDeduplicationIds.erase(deduplicateMessageId);
             auto& evWrite = *ptr->Event->Get();
-            AFL_ENSURE(req.MessageIndex < evWrite.Msgs.size())("index", req.MessageIndex)("size", evWrite.Msgs.size());
+            YDB_LOG_ENSURE(req.MessageIndex < evWrite.Msgs.size(),
+                {"index", req.MessageIndex},
+                {"size", evWrite.Msgs.size()});
             auto& msg = evWrite.Msgs[req.MessageIndex];
-            AFL_ENSURE(msg.MessageDeduplicationId == deduplicateMessageId)("msg", msg.MessageDeduplicationId)("info", deduplicateMessageId);
+            YDB_LOG_ENSURE(msg.MessageDeduplicationId == deduplicateMessageId,
+                {"msg", msg.MessageDeduplicationId},
+                {"info", deduplicateMessageId});
             msg.ExternalDeduplicationInfo = messageExternalDeduplicationInfo;
             if (messageExternalDeduplicationInfo.Status == EMessageExternalDeduplicationStatus::Error) {
                 // propagate error to the whole evWrite
@@ -387,7 +392,7 @@ private:
 
     void SendEvent(TEvPQ::TEvReserveBytes::TPtr ev) {
         bool prevFromDeduplicatedQueue = std::exchange(ev->Get()->FromDeduplicatedQueue, true);
-        AFL_ENSURE(prevFromDeduplicatedQueue == false);
+        YDB_LOG_ENSURE(prevFromDeduplicatedQueue == false);
         LOG_D(
             "Forward event",
             {"typeRewrite", ev->GetTypeRewrite()},
@@ -430,8 +435,10 @@ private:
             TryFinalizeDeduplicationInfo(it++);
         }
         ProcessQueue();
-        AFL_VERIFY_DEBUG(Queue.empty())("size", Queue.size());
-        AFL_VERIFY_DEBUG(DeduplicationInfo.empty())("size", DeduplicationInfo.size());
+        YDB_LOG_VERIFY_DEBUG(Queue.empty(),
+            {"size", Queue.size()});
+        YDB_LOG_VERIFY_DEBUG(DeduplicationInfo.empty(),
+            {"size", DeduplicationInfo.size()});
     }
 
     void PassAway() override {
@@ -460,7 +467,9 @@ private:
         if (!newMode.Defined()) {
             return;
         }
-        AFL_ENSURE(newMode != BypassMode)("BypassMode", BypassMode)("NewMode", newMode);
+        YDB_LOG_ENSURE(newMode != BypassMode,
+            {"bypassMode", BypassMode},
+            {"newMode", newMode});
         LOG_D(
             "SwitchToBypassMode",
             {"newMode", *newMode},
@@ -488,7 +497,8 @@ private:
                     "Unexpected",
                     {"event", EventStr("StateWork", ev)}
                 );
-                AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
+                YDB_LOG_VERIFY_DEBUG(false,
+                    {"Unexpected", EventStr("StateInit", ev)});
         }
     }
 };

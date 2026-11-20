@@ -25,7 +25,7 @@ static TString MakeReadSetData(bool commit)
     data.SetDecision(commit ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
 
     TString encoded;
-    AFL_ENSURE(data.SerializeToString(&encoded));
+    YDB_LOG_ENSURE(data.SerializeToString(&encoded));
 
     return encoded;
 }

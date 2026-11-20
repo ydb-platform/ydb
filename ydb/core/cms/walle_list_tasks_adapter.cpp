@@ -33,8 +33,9 @@ public:
             auto &info = *response->Record.AddTasks();
 
             info.SetTaskId(task.TaskId);
-            if (State->ScheduledRequests.contains(task.RequestId)) {
-                auto &req = State->ScheduledRequests.find(task.RequestId)->second;
+            auto request = State->ScheduledRequests.find(task.RequestId);
+            if (request != State->ScheduledRequests.end() && request->second.Request.ActionsSize()) {
+                auto &req = request->second;
                 for (auto &action : req.Request.GetActions()) {
                     *info.AddHosts() = action.GetHost();
                     for (auto &device : action.GetDevices())

@@ -73,6 +73,11 @@ message TEvLoadTestRequest {
             optional double RequestsPerSecondOnFinish = 2;
         }
         message TPerTabletProfile {
+            enum ECrcMode {
+                CrcModeNone = 0;
+                CrcModeWholePart = 1;
+            }
+
             repeated TTabletInfo Tablets = 1;
             repeated TSizeInfo WriteSizes = 2;
             repeated TIntervalInfo WriteIntervals = 3;
@@ -100,6 +105,7 @@ message TEvLoadTestRequest {
             optional uint32 NumberOfRandomGroupsToPick = 20 [default = 0];
             optional TContentType.E ContentType = 21;
             optional uint32 RdmaMode = 22 [default = 0];
+            optional ECrcMode CrcMode = 23 [default = CrcModeNone];
         };
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;

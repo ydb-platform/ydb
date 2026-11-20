@@ -262,7 +262,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ui32 blobSize = SizeGenerator.Generate();
             const TLogoBlobID id(tabletId, gen, step, channel, blobSize, BlobCookie++);
             TRcBuf buffer = GenerateBuffer(id, contentType, nullptr, false, ctx);
-            
+
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), TInstant::Max(),
                 PutHandleClass, TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::GroupWriteLoadActor);
             InFlightTracker.Request(blobSize);
@@ -322,7 +322,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         ui32 BlobsToWrite = 0;
         ui64 ConfirmedDataSize = 0;
         TVector<TLogoBlobID> ConfirmedBlobs;
-        ui32 CollectedBlobsPerMille = 0; 
+        ui32 CollectedBlobsPerMille = 0;
 
         TInFlightTracker InFlightTracker;
 
@@ -451,6 +451,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             TInFlightTracker InFlightTracker;
             const ui64 MaxTotalBytes;
             const ui32 RdmaMode;
+            const ui32 CrcMode;
         };
 
     private:
@@ -996,7 +997,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 size = WriteSettings.SizeGen->Generate();
                 putHandleClass = PutHandleClass;
             }
-            const TLogoBlobID id(TabletId, Generation, WriteStep, Channel, size, Cookie);
+            const auto id =
+                TLogoBlobID::Make(TabletId, Generation, WriteStep, Channel,
+                                  size, Cookie, WriteSettings.CrcMode);
             TRcBuf buffer = GenerateBuffer(id, ContentType, &Self.BlobData, WriteSettings.RdmaMode > 0, ctx);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), TInstant::Max(),
                 putHandleClass, TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::GroupWriteLoadActor);
@@ -1129,7 +1132,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             // just as we have sent this request, we have to trim all confirmed blobs which are going to be deleted
             const auto it = std::lower_bound(ConfirmedBlobIds.begin(), ConfirmedBlobIds.end(),
                 TLogoBlobID(TabletId, Generation, GarbageCollectStep, Channel, TLogoBlobID::MaxBlobSize,
-                TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId));
+                TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode));
             ConfirmedBlobIds.erase(ConfirmedBlobIds.begin(), it);
 
             ++GarbageCollectStep;
@@ -1335,6 +1338,7 @@ public:
                 .InFlightTracker = TInFlightTracker(profile.GetMaxInFlightWriteRequests(), profile.GetMaxInFlightWriteBytes()),
                 .MaxTotalBytes = profile.GetMaxTotalBytesWritten(),
                 .RdmaMode = profile.GetRdmaMode(),
+                .CrcMode = static_cast<ui32>(profile.GetCrcMode()),
             };
 
             maxBlobSize = std::max(maxBlobSize, writeSettings.SizeGen->GetMax());

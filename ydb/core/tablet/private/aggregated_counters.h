@@ -42,7 +42,8 @@ public:
     TAggregatedSimpleCounters(
         ::NMonitoring::TDynamicCounterPtr counterGroup,
         ::NMonitoring::TCountableBase::EVisibility visibility
-            = ::NMonitoring::TCountableBase::EVisibility::Public);
+            = ::NMonitoring::TCountableBase::EVisibility::Public,
+        bool memOnly = false);
 
     void Reserve(size_t hint);
 
@@ -63,6 +64,7 @@ public:
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
     ::NMonitoring::TCountableBase::EVisibility Visibility;
+    bool MemOnly;
 
     TCountersVector MaxSimpleCounters;
     TCountersVector SumSimpleCounters;
@@ -80,7 +82,8 @@ public:
     TAggregatedCumulativeCounters(
         ::NMonitoring::TDynamicCounterPtr counterGroup,
         ::NMonitoring::TCountableBase::EVisibility visibility
-            = ::NMonitoring::TCountableBase::EVisibility::Public);
+            = ::NMonitoring::TCountableBase::EVisibility::Public,
+        bool memOnly = false);
 
     void Reserve(size_t hint);
 
@@ -98,6 +101,7 @@ public:
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
     ::NMonitoring::TCountableBase::EVisibility Visibility;
+    bool MemOnly;
 
     TCountersVector MaxCumulativeCounters;
     THistogramVector HistCumulativeCounters;
@@ -114,7 +118,8 @@ public:
     TAggregatedHistogramCounters(
         ::NMonitoring::TDynamicCounterPtr counterGroup,
         ::NMonitoring::TCountableBase::EVisibility visibility
-            = ::NMonitoring::TCountableBase::EVisibility::Public);
+            = ::NMonitoring::TCountableBase::EVisibility::Public,
+        bool memOnly = false);
 
     void Reserve(size_t hint);
 
@@ -147,6 +152,7 @@ private:
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
     ::NMonitoring::TCountableBase::EVisibility Visibility;
+    bool MemOnly;
 
     // monitoring counters holders, updated only during recalculation
     TVector<NMonitoring::THistogramPtr> Histograms;

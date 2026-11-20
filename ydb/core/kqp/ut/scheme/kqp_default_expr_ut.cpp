@@ -40,8 +40,12 @@ public:
         bool indexStreamWrite = true,
         bool generatedStored = false,
         bool compileTimeDefaults = true)
-        : Kikimr(TKikimrSettings(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored, compileTimeDefaults))
-              .SetWithSampleTables(false))
+        : TTestFixture(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored, compileTimeDefaults))
+    {
+    }
+
+    explicit TTestFixture(const NKikimrConfig::TAppConfig& appConfig)
+        : Kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false))
         , Db(Kikimr.GetQueryClient())
         , Session(Db.GetSession().GetValueSync().GetSession())
     {
@@ -650,6 +654,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         for (const auto* expression : {
             "Length(Yql::HostRuntimeSetting('test'))",
             "Length(Yql::UdfRuntimeSetting('String', 'test'))",
+            // The ordinary KQP runner does not install the common DQ transform
+            // needed to lower CurrentActorId; this case checks its metadata only.
             "Length(Yql::CurrentActorId())"})
         {
             fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Int64 DEFAULT " << expression));
@@ -900,6 +906,39 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
+    }
+
+    Y_UNIT_TEST(OptionalDefaultAfterSetNotNull) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        TTestFixture fixture(appConfig);
+        const TString expression = R"(CAST("invalid" || CAST(RandomNumber(1) AS String) AS Uint64))";
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression));
+        const auto before = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT(!before.GetNotNull());
+        AssertFromExpression(before, expression);
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul);");
+
+        // Exec waits for the Query API operation, including validation of stored rows.
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET NOT NULL;");
+        const auto after = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT(after.GetNotNull());
+        UNIT_ASSERT(!after.GetSetNotNullInProgress());
+        AssertFromExpression(after, expression);
+        UNIT_ASSERT_VALUES_EQUAL(before.GetDefaultFromExpression().SerializeAsString(),
+            after.GetDefaultFromExpression().SerializeAsString());
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;7u]]");
+
+        // An omitted write compiles the saved optional expression against the new
+        // non-optional column type; explicit non-NULL values bypass that expression.
+        const TString diagnostic = "The DEFAULT expression of column v is not convertible to the column type";
+        fixture.Rejects("INSERT INTO TestTable (k) VALUES (2);", diagnostic);
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;7u]]");
+        fixture.Rejects("REPLACE INTO TestTable (k) VALUES (1);", diagnostic);
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;7u]]");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 8ul);");
+        fixture.Exec("REPLACE INTO TestTable (k, v) VALUES (1, 9ul);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;9u];[2;8u]]");
     }
 
     Y_UNIT_TEST(DefaultAndGeneratedRejected) {
@@ -1360,6 +1399,57 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         CompareYson(returned, fixture.QueryYson("SELECT k, a, v FROM TestTable;"));
         CompareYson(returned, fixture.QueryYson("SELECT k, a, v FROM TestTable VIEW idx_a;"));
         fixture.Check("SELECT a FROM TestTable;", "[[10]]");
+    }
+
+    Y_UNIT_TEST(CachedRandomDefaultConsistentWithReturningAndIndex) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(1),
+                PRIMARY KEY (k),
+                INDEX idx_a GLOBAL SYNC ON (a) COVER (v)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "RandomNumber(1)");
+
+        auto tableClient = fixture.Runner().GetTableClient();
+        auto session = tableClient.CreateSession().ExtractValueSync().GetSession();
+        auto prepareResult = session.PrepareDataQuery(R"(
+            DECLARE $k AS Int32;
+            INSERT INTO `/Root/TestTable` (k, a)
+            VALUES ($k, $k * 10), ($k + 1, $k * 10 + 1)
+            RETURNING k, a, v;
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        auto prepared = prepareResult.GetQuery();
+        NYdb::NTable::TExecDataQuerySettings settings;
+        settings.KeepInQueryCache(true).CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
+
+        for (i32 key : {1, 3}) {
+            auto params = prepared.GetParamsBuilder().AddParam("$k").Int32(key).Build().Build();
+            auto result = prepared.Execute(
+                NYdb::NTable::TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStats());
+            if (key == 3) {
+                UNIT_ASSERT(NYdb::TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 2u);
+            const TString returned = FormatResultSetYson(result.GetResultSet(0));
+            const TString predicate = TStringBuilder() << "k IN (" << key << ", " << key + 1 << ")";
+            // Each execution's actual draws must reach every consumer unchanged.
+            // No equality or distinctness is required across rows or executions.
+            CompareYsonUnordered(returned, fixture.QueryYson(
+                TStringBuilder() << "SELECT k, a, v FROM TestTable WHERE " << predicate << ";"));
+            CompareYsonUnordered(returned, fixture.QueryYson(
+                TStringBuilder() << "SELECT k, a, v FROM TestTable VIEW idx_a WHERE " << predicate << ";"));
+        }
+        fixture.Check("SELECT k, a FROM TestTable ORDER BY k;", "[[1;10];[2;11];[3;30];[4;31]]");
+        CompareYsonUnordered(fixture.QueryYson("SELECT k, a, v FROM TestTable;"),
+            fixture.QueryYson("SELECT k, a, v FROM TestTable VIEW idx_a;"));
     }
 
     Y_UNIT_TEST_TWIN(ExplicitNullBypassesFailingDefault, StreamWrite) {

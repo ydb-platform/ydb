@@ -1929,16 +1929,10 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
             pipeIter->second.ClientId = cmd.GetClientId();
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
-<<<<<<< HEAD
-<<<<<<< HEAD
+			pipeIter->second.ClientActor = sender;
+
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Created session",
                 {"logPrefix", LogPrefix()},
-=======
-            pipeIter->second.ClientActor = sender;
-=======
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
-            LOG_D("Created session",
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
                 {"sessionId", cmd.GetSessionId()},
                 {"onPipe", pipeIter->first});
             ctx.Send(MakePQDReadCacheServiceActorId(),

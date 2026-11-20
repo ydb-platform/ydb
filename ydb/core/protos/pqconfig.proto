@@ -549,7 +549,13 @@ message TPQTabletConfig {
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
 
-    optional bool WriteEnabled = 51 [default = true];
+    enum EWriteMode {
+        WRITE_AVAILABLE = 0;
+        WRITE_UNAVAILABLE = 1;
+        WRITE_PROHIBITED = 2;
+    };
+
+    optional EWriteMode WriteMode = 51 [default = WRITE_AVAILABLE];
 }
 
 message THeartbeat {

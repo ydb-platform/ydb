@@ -18,6 +18,19 @@ TString ExtractAddress(const TString& peer) {
     return TString(buf);
 }
 
+TString ExtractIPAddress(const TString& peer) {
+    TStringBuf address(peer);
+    if (!address.SkipPrefix("ipv4:")) {
+        address.SkipPrefix("ipv6:");
+    }
+    bool ok = false;
+    const auto [hostAddress, hostname, port] = ParseHostAndMayBePortFromString(address, 0, ok);
+    if (!ok || !hostname.empty() || hostAddress.Ip.Type() == TIpv6Address::LAST) {
+        return {};
+    }
+    return hostAddress.Ip.ToString(false);
+}
+
 TString ParseAddress(const TString& address, TString& hostname, ui32& port) {
     size_t first_colon_pos = address.find(':');
     if (first_colon_pos != TString::npos) {

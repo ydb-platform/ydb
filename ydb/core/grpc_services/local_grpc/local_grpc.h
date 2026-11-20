@@ -87,7 +87,7 @@ public:
     }
 
     TString GetPeer() const override {
-        return {};
+        return BaseRequest_->GetPeerName();
     }
 
     bool SslServer() const override {

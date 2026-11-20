@@ -17,11 +17,12 @@ static const TString EmptyValue = "{none}";
 void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
 {
     static const TString GrpcConnComponentName = "grpc-conn";
+    const TString remoteAddress = NKikimr::NAddressClassifier::ExtractIPAddress(ctx->GetPeerName());
 
     AUDIT_LOG(
         AUDIT_PART("component", GrpcConnComponentName)
 
-        AUDIT_PART("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()))
+        AUDIT_PART("remote_address", (!remoteAddress.empty() ? remoteAddress : EmptyValue))
         AUDIT_PART("subject", userSID)
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         AUDIT_PART("database", database)
@@ -69,7 +70,7 @@ void AuditLogConnectDbAccessDenied(
 ) {
     if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {
         AuditLog(Ydb::StatusIds::UNAUTHORIZED, {
-            {"remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName())},
+            {"remote_address", NKikimr::NAddressClassifier::ExtractIPAddress(ctx->GetPeerName())},
             {"subject", userSID},
             {"sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue)},
             {"database", database},

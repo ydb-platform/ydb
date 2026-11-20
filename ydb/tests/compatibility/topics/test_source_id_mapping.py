@@ -4,7 +4,11 @@ import time
 
 import pytest
 
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, current_binary_path
+from ydb.tests.library.compatibility.fixtures import (
+    RestartToAnotherVersionFixture,
+    current_binary_path,
+    wait_driver,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -218,8 +222,10 @@ def create_federation_topic(fixture, attributes=None):
     fixture.cluster.register_and_start_slots(FED_ACCOUNT_DB, count=1)
     fixture.cluster.wait_tenant_up(FED_ACCOUNT_DB, token=token)
 
-    driver = ydb.Driver(ydb.DriverConfig(database=FED_ACCOUNT_DB, endpoint=fixture.endpoint))
-    driver.wait(timeout=60)
+    driver = wait_driver(
+        ydb.Driver(ydb.DriverConfig(database=FED_ACCOUNT_DB, endpoint=fixture.endpoint)),
+        timeout=60,
+    )
     try:
         create_topic(driver, FED_TOPIC_NAME, attributes)
     finally:
@@ -227,7 +233,7 @@ def create_federation_topic(fixture, attributes=None):
 
     fixture.database_path = FED_ACCOUNT_DB
     fixture.stop_driver()
-    fixture.driver = fixture.create_driver()
+    fixture._wait_for_readiness(probe_data=True)
 
 
 def run_scenario(fixture, topic, aliases, attributes=None, skip_create=False):

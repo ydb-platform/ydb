@@ -706,8 +706,7 @@ def set_aggressive_topic_compaction(config):
 def restart_cluster_with_current_config(fixture):
     fixture.stop_driver()
     fixture.cluster.update_configurator_and_restart(fixture.config)
-    fixture.driver = fixture.create_driver()
-    time.sleep(60)
+    fixture._wait_for_readiness(probe_data=True)
 
 
 def run_offset_delta_toggle_workload(fixture, topic_name, consumer, message_count=1000, timeout=180):

@@ -113,6 +113,15 @@ all_binary_combinations_ids_restart = [
 ]
 
 
+def wait_driver(driver, timeout=60):
+    try:
+        driver.wait(timeout=timeout)
+    except Exception:
+        driver.stop()
+        raise
+    return driver
+
+
 class CompatibilityReadinessMixin:
     def _new_readiness_table_name(self):
         self._readiness_seq = getattr(self, "_readiness_seq", 0) + 1
@@ -244,8 +253,19 @@ class CompatibilityReadinessMixin:
                         table_name = self._new_readiness_table_name()
                     time.sleep(min(interval, max(0.0, deadline - time.time())))
         finally:
-            for name in abandoned:
-                self._drop_readiness_table(name, settings, best_effort=True)
+            if abandoned:
+                if self.driver is None:
+                    try:
+                        self.driver = self.create_driver(timeout=30)
+                    except Exception as e:
+                        logger.warning(
+                            "Leaving readiness tables behind (no driver): %s: %r",
+                            abandoned,
+                            e,
+                        )
+                        abandoned = []
+                for name in abandoned:
+                    self._drop_readiness_table(name, settings, best_effort=True)
 
         raise last_exception or RuntimeError("readiness check timed out")
 
@@ -263,18 +283,15 @@ class RestartToAnotherVersionFixture(CompatibilityReadinessMixin):
             self.driver = None
 
     def create_driver(self, timeout=60):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoint,
-            )
+        return wait_driver(
+            ydb.Driver(
+                ydb.DriverConfig(
+                    database=self.database_path,
+                    endpoint=self.endpoint,
+                )
+            ),
+            timeout=timeout,
         )
-        try:
-            driver.wait(timeout=timeout)
-        except Exception:
-            driver.stop()
-            raise
-        return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -344,15 +361,16 @@ class MixedClusterFixture:
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoint
-            )
+    def create_driver(self, timeout=60):
+        return wait_driver(
+            ydb.Driver(
+                ydb.DriverConfig(
+                    database=self.database_path,
+                    endpoint=self.endpoint,
+                )
+            ),
+            timeout=timeout,
         )
-        driver.wait(timeout=60)
-        return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -415,18 +433,15 @@ class RollingUpgradeAndDowngradeFixture(CompatibilityReadinessMixin):
             self.driver = None
 
     def create_driver(self, timeout=60):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoints[0]
-            )
+        return wait_driver(
+            ydb.Driver(
+                ydb.DriverConfig(
+                    database=self.database_path,
+                    endpoint=self.endpoints[0],
+                )
+            ),
+            timeout=timeout,
         )
-        try:
-            driver.wait(timeout=timeout)
-        except Exception:
-            driver.stop()
-            raise
-        return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))

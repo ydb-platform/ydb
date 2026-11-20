@@ -7,9 +7,12 @@
 
 #include <util/generic/maybe.h>
 
+#include <optional>
+
 // forward declarations
 namespace NKikimrPQ {
     class TPartitionKeyRange;
+    class TPQTabletConfig;
 }
 
 namespace NKikimr {
@@ -131,6 +134,7 @@ struct TPartitionKeyRange {
     TMaybe<TSerializedCellVec> ToBound;   // exclusive
 
     static TPartitionKeyRange Parse(const NKikimrPQ::TPartitionKeyRange& proto);
+    static std::optional<TPartitionKeyRange> TryParse(const NKikimrPQ::TPartitionKeyRange& proto);
     void Serialize(NKikimrPQ::TPartitionKeyRange& proto) const;
 
 private:
@@ -139,6 +143,16 @@ private:
 }; // TPartitionKeyRange
 
 bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes);
+
+TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig);
+
+struct TWeightedKey {
+    TString Key;
+    ui64 Weight = 0;
+};
+
+std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKey> keys, const TPartitionKeyRange& range,
+    TConstArrayRef<NScheme::TTypeInfo> keyTypes);
 
 } // namespace NKikimr::NPQ
 

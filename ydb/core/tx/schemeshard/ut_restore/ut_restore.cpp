@@ -8153,7 +8153,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         }
         const auto strategy = expectedMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange
-            ? NKikimrPQ::TPQTabletConfig::PAUSED : NKikimrPQ::TPQTabletConfig::DISABLED;
+            ? NKikimrPQ::TPQTabletConfig::CAN_SPLIT : NKikimrPQ::TPQTabletConfig::DISABLED;
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()), static_cast<int>(strategy));
         UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetName(), "application");

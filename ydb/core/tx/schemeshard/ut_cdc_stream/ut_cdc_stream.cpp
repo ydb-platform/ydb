@@ -1953,7 +1953,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.PartitionKeySchemaSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()),
-            static_cast<int>(NKikimrPQ::TPQTabletConfig::PAUSED));
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::CAN_SPLIT));
     }
 
     void AlterStreamTopic(TTestBasicRuntime& runtime, ui64& txId,

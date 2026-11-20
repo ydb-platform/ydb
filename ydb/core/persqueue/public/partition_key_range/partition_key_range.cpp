@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_borders.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -134,6 +136,26 @@ TPartitionKeyRange TPartitionKeyRange::Parse(const NKikimrPQ::TPartitionKeyRange
     return result;
 }
 
+std::optional<TPartitionKeyRange> TPartitionKeyRange::TryParse(const NKikimrPQ::TPartitionKeyRange& proto) {
+    auto tryParseBound = [](const TString& data, TMaybe<TSerializedCellVec>& bound) {
+        TSerializedCellVec cells;
+        if (!TSerializedCellVec::TryParse(data, cells)) {
+            return false;
+        }
+        bound.ConstructInPlace(std::move(cells));
+        return true;
+    };
+
+    TPartitionKeyRange result;
+    if (proto.HasFromBound() && !tryParseBound(proto.GetFromBound(), result.FromBound)) {
+        return std::nullopt;
+    }
+    if (proto.HasToBound() && !tryParseBound(proto.GetToBound(), result.ToBound)) {
+        return std::nullopt;
+    }
+    return result;
+}
+
 void TPartitionKeyRange::Serialize(NKikimrPQ::TPartitionKeyRange& proto) const {
     if (FromBound) {
         proto.SetFromBound(FromBound->GetBuffer());
@@ -166,6 +188,89 @@ bool IsBefore(const TMaybe<TSerializedCellVec>& fromBound, const TMaybe<TSeriali
 
 bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
     return IsBefore(lhs.FromBound, rhs.ToBound, keyTypes) && IsBefore(rhs.FromBound, lhs.ToBound, keyTypes);
+}
+
+TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
+    TVector<NScheme::TTypeInfo> keyTypes;
+    keyTypes.reserve(tabletConfig.PartitionKeySchemaSize());
+    for (const auto& component : tabletConfig.GetPartitionKeySchema()) {
+        const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(component.GetTypeId(),
+            component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
+        keyTypes.push_back(typeInfoMod.TypeInfo);
+    }
+    return keyTypes;
+}
+
+std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKey> keys, const TPartitionKeyRange& range,
+    TConstArrayRef<NScheme::TTypeInfo> keyTypes)
+{
+    struct TParsedKey {
+        TMaybe<TSerializedCellVec> Cells;
+        ui64 Weight = 0;
+    };
+
+    TVector<TParsedKey> parsed;
+    parsed.reserve(keys.size());
+    ui64 total = 0;
+    for (const auto& key : keys) {
+        TSerializedCellVec cells;
+        if (!TSerializedCellVec::TryParse(key.Key, cells) || cells.GetCells().size() != keyTypes.size()) {
+            continue;
+        }
+        bool validSizes = true;
+        for (size_t i = 0; i < keyTypes.size() && validSizes; ++i) {
+            validSizes = !NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i]);
+        }
+        if (!validSizes) {
+            continue;
+        }
+
+        TMaybe<TSerializedCellVec> bound = std::move(cells);
+        if ((range.FromBound && IsBefore(bound, range.FromBound, keyTypes)) || !IsBefore(bound, range.ToBound, keyTypes)) {
+            continue;
+        }
+
+        total += key.Weight;
+        parsed.push_back({std::move(bound), key.Weight});
+    }
+
+    auto compare = [&](const TParsedKey& lhs, const TParsedKey& rhs) {
+        return CompareTypedCellVectors(lhs.Cells->GetCells().data(), rhs.Cells->GetCells().data(), keyTypes.data(), keyTypes.size());
+    };
+
+    Sort(parsed.begin(), parsed.end(), [&](const TParsedKey& lhs, const TParsedKey& rhs) {
+        return compare(lhs, rhs) < 0;
+    });
+
+    std::optional<size_t> boundary;
+    ui64 left = 0;
+    for (size_t i = 1; i < parsed.size(); ++i) {
+        left += parsed[i - 1].Weight;
+        if (compare(parsed[i - 1], parsed[i]) == 0) {
+            continue;
+        }
+
+        boundary = i;
+        if (2 * left >= total) {
+            break;
+        }
+    }
+
+    if (!boundary) {
+        return std::nullopt;
+    }
+
+    const auto lower = parsed[*boundary - 1].Cells->GetCells();
+    const auto upper = parsed[*boundary].Cells->GetCells();
+    for (size_t prefixSize = 1; prefixSize < keyTypes.size(); ++prefixSize) {
+        TVector<TCell> prefix(upper.begin(), upper.begin() + prefixSize);
+        prefix.resize(keyTypes.size());
+        if (CompareTypedCellVectors(prefix.data(), lower.data(), keyTypes.data(), keyTypes.size()) > 0) {
+            return TSerializedCellVec::Serialize(prefix);
+        }
+    }
+
+    return parsed[*boundary].Cells->GetBuffer();
 }
 
 } // namespace NKikimr::NPQ

@@ -25,7 +25,6 @@
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -96,48 +95,18 @@ struct TPartitionKeyRangeFilter {
     TPartitionKeyRange PartitionKeyRange;
 };
 
-TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
-    TVector<NScheme::TTypeInfo> keyTypes;
-    keyTypes.reserve(tabletConfig.PartitionKeySchemaSize());
-    for (const auto& component : tabletConfig.GetPartitionKeySchema()) {
-        const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(component.GetTypeId(),
-            component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
-        keyTypes.push_back(typeInfoMod.TypeInfo);
-    }
-    return keyTypes;
-}
-
-bool TryParseKeyBound(const TString& data, TMaybe<TSerializedCellVec>& bound) {
-    TSerializedCellVec cells;
-    if (!TSerializedCellVec::TryParse(data, cells)) {
-        return false;
-    }
-    bound = std::move(cells);
-    return true;
-}
-
-std::optional<TPartitionKeyRangeFilter> MakePartitionKeyRangeFilter(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
-    if (!tabletConfig.PartitionKeySchemaSize()) {
-        return std::nullopt;
-    }
-
-    const auto* partition = FindIfPtr(tabletConfig.GetPartitions(), [&](const auto& p) {
-        return p.GetPartitionId() == partitionId;
-    });
+std::optional<TPartitionKeyRangeFilter> MakePartitionKeyRangeFilter(const NKikimrPQ::TPQTabletConfig& tabletConfig,
+                                                                   const NKikimrPQ::TPQTabletConfig::TPartition* partition) {
     if (!partition) {
         return std::nullopt;
     }
 
-    TPartitionKeyRange partitionKeyRange;
-    const auto& keyRange = partition->GetKeyRange();
-    if (keyRange.HasFromBound() && !TryParseKeyBound(keyRange.GetFromBound(), partitionKeyRange.FromBound)) {
-        return std::nullopt;
-    }
-    if (keyRange.HasToBound() && !TryParseKeyBound(keyRange.GetToBound(), partitionKeyRange.ToBound)) {
+    auto partitionKeyRange = TPartitionKeyRange::TryParse(partition->GetKeyRange());
+    if (!partitionKeyRange) {
         return std::nullopt;
     }
 
-    return TPartitionKeyRangeFilter{MakePartitionKeyTypes(tabletConfig), std::move(partitionKeyRange)};
+    return TPartitionKeyRangeFilter{MakePartitionKeyTypes(tabletConfig), std::move(*partitionKeyRange)};
 }
 
 } // anonymous
@@ -145,21 +114,26 @@ std::optional<TPartitionKeyRangeFilter> MakePartitionKeyRangeFilter(const NKikim
 TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPQTabletConfig& tabletConfig, const TPartitionGraph& graph, ui32 partitionId) {
     TEvPQ::TMessageGroupsPtr explicitMessageGroups = std::make_shared<TEvPQ::TMessageGroups>();
 
-    const bool hasKeyRanges = AnyOf(bootstrapCfg.GetExplicitMessageGroups(), [](const auto& mg) {
-        return mg.HasKeyRange();
-    });
-    const auto keyRangeFilter = hasKeyRanges ? MakePartitionKeyRangeFilter(tabletConfig, partitionId) : std::nullopt;
+    const auto* partition = tabletConfig.PartitionKeySchemaSize() ? GetPartitionConfig(tabletConfig, partitionId) : nullptr;
+    const auto keyRangeFilter = MakePartitionKeyRangeFilter(tabletConfig, partition);
+    auto intersectsPartition = [&](const TPartitionKeyRange& keyRange) {
+        return !keyRangeFilter || Intersects(keyRange, keyRangeFilter->PartitionKeyRange, keyRangeFilter->KeyTypes);
+    };
 
     for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
         TPartitionKeyRange keyRange;
         if (mg.HasKeyRange()) {
             keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
-            if (keyRangeFilter && !Intersects(keyRange, keyRangeFilter->PartitionKeyRange, keyRangeFilter->KeyTypes)) {
+            if (!intersectsPartition(keyRange)) {
                 continue;
             }
         }
 
         (*explicitMessageGroups)[mg.GetId()] = {0, std::move(keyRange)};
+    }
+
+    if (partition && partition->GetCreateVersion() && partition->GetCreateVersion() < tabletConfig.GetVersion()) {
+        return explicitMessageGroups;
     }
 
     if (graph) {
@@ -168,8 +142,19 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
         for (const auto& p : partitionsData.GetPartition()) {
             if (node->IsParent(p.GetPartitionId())) {
                 for (const auto& g : p.GetMessageGroup()) {
+                    TMaybe<TPartitionKeyRange> keyRange;
+                    if (g.HasKeyRange()) {
+                        keyRange = TPartitionKeyRange::Parse(g.GetKeyRange());
+                        if (!intersectsPartition(*keyRange)) {
+                            continue;
+                        }
+                    }
+
                     auto& group = (*explicitMessageGroups)[g.GetId()];
                     group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+                    if (keyRange) {
+                        group.KeyRange = std::move(*keyRange);
+                    }
                 }
             }
         }

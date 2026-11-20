@@ -2235,6 +2235,9 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                 auto* m = result->Data.AddMessageGroup();
                 m->SetId(id);
                 m->SetSeqNo(v.SeqNo);
+                if (v.KeyRange) {
+                    v.KeyRange->Serialize(*m->MutableKeyRange());
+                }
             }
         }
         Send(TabletActorId, result.Release());

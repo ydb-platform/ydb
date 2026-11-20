@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
@@ -125,6 +126,22 @@ const TResult& GetResult(const std::shared_ptr<TResultHolder<TResponse>>& result
     return *typed;
 }
 
+class TDescribeTopicTestActor : public NActors::TActorBootstrapped<TDescribeTopicTestActor> {
+public:
+    explicit TDescribeTopicTestActor(NGRpcService::IRequestOpCtx* request)
+        : Request(request)
+    {}
+
+    void Bootstrap() {
+        // The stable DescribeTopic actor accesses AppData() in its constructor.
+        Register(new TDescribeTopicActor(Request.Release()));
+        PassAway();
+    }
+
+private:
+    THolder<NGRpcService::IRequestOpCtx> Request;
+};
+
 Ydb::Topic::DescribeTopicResult DescribeTopic(
     NActors::TTestActorRuntime& runtime,
     const TString& path)
@@ -132,7 +149,9 @@ Ydb::Topic::DescribeTopicResult DescribeTopic(
     Ydb::Topic::DescribeTopicRequest request;
     request.set_path(path);
     auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
-        runtime, request, +[](NGRpcService::IRequestOpCtx* ctx) -> NActors::IActor* { return new TDescribeTopicActor(ctx); }, path);
+        runtime, request, +[](NGRpcService::IRequestOpCtx* ctx) -> NActors::IActor* {
+            return new TDescribeTopicTestActor(ctx);
+        }, path);
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
     return GetResult<Ydb::Topic::DescribeTopicResult>(result);
 }

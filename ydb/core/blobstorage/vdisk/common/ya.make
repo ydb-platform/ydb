@@ -4,11 +4,13 @@ PEERDIR(
     ydb/core/blobstorage/contracts
     ydb/library/actors/protos
     library/cpp/monlib/service/pages
+    library/cpp/time_provider
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/protos
     ydb/core/protos
+    ydb/library/lockfree_bucket
 )
 
 SRCS(

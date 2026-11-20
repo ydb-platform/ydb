@@ -1,6 +1,7 @@
 UNITTEST()
 
 SRCS(
+    light_bucket_ut.cpp
     main.cpp
 )
 PEERDIR(

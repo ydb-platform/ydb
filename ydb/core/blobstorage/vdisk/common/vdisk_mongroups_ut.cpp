@@ -225,10 +225,11 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
                 "ReplTotalBlobsWithProblems", "SyncerUnsyncedDisks", "FreshSatisfactionRankPercent",
                 "LevelSatisfactionRankPercent", "ThrottlingIsActive", "ThrottlingCurrentSpeedLimit",
                 "DiskTimeAvailableCtr", "DiskTimeFairShareNs", "UserDiskCost", "CompactionDiskCost",
-                "ScrubDiskCost", "DefragDiskCost", "InternalDiskCost"}) {
+                "ScrubDiskCost", "DefragDiskCost", "InternalDiskCost", "BurstDetector_greenMs",
+                "BurstDetector_redMs"}) {
             UNIT_ASSERT_C(exported.Contains(TString(name) + "{"), name);
         }
-        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 36);
+        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 38);
     }
 
     Y_UNIT_TEST(CapacityAlertRegistersEnteredColorsOnly) {

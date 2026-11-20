@@ -6,6 +6,7 @@ REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
+    library/cpp/time_provider
     ydb/core/base
     ydb/core/blobstorage/groupinfo
     ydb/core/erasure

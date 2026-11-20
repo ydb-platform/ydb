@@ -102,6 +102,7 @@ namespace {
             Env.Sim(TDuration::Seconds(5));
             Info = Env.GetGroupInfo(groupId);
             UNIT_ASSERT(Info->GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::DC_FAILURE);
+            UNIT_ASSERT(Info->GetFailRealmState(leavingRealm) == R::LEAVING);
         }
 
         void PutLocalPart(ui32 subgroupIdx, ui32 partId) {

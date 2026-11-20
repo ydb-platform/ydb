@@ -3337,6 +3337,62 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleRemoveTask("eviction");
     }
 
+    Y_UNIT_TEST(WalleDrainDataCleanupAfterRestart)
+    {
+        const auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        const auto nodeId = env.GetNodeId(0);
+        SetVDisksMoved(env, opts, nodeId, true);
+
+        // Stop before storing the Walle task, after its permission has been saved.
+        bool storeTaskDropped = false;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCms::EvStoreWalleTask) {
+                storeTaskDropped = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return prev(ev);
+        });
+
+        TFakeMonHttpRequest httpRequest(HTTP_METHOD_POST, "/api/walle/v11/tasks", {},
+            MakeWalleDrainDataJson(nodeId));
+        const auto edge = env.AllocateEdgeActor();
+        NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+            TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+        env.Register(CreateWalleApiHandler(event));
+
+        TDispatchOptions dispatchOpts;
+        dispatchOpts.FinalEvents.emplace_back([&](IEventHandle&) { return storeTaskDropped; });
+        env.DispatchEvents(dispatchOpts);
+        env.SetObserverFunc(prev);
+        UNIT_ASSERT(storeTaskDropped);
+
+        env.CheckListPermissions(WALLE_CMS_USER, 1);
+        const auto requests = env.CheckListRequests(WALLE_CMS_USER, 1);
+        UNIT_ASSERT_VALUES_EQUAL(requests.GetRequests(0).ActionsSize(), 0);
+        env.CheckWalleListTasks(0);
+
+        // The HTTP handler retries the original POST after CMS restarts.
+        // Cleanup must remove the old host marker so that this retry can succeed.
+        env.RestartCms();
+        TAutoPtr<IEventHandle> handle;
+        const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(response);
+        CheckWalleHttpTask(response->Answer, "ok", nodeId);
+        env.CheckListRequests(WALLE_CMS_USER, 1);
+        env.CheckListPermissions(WALLE_CMS_USER, 1);
+        env.CheckWalleListTasks("eviction", "ok", nodeId);
+
+        // Removing the retried task must allow another evacuation request.
+        env.CheckWalleRemoveTask("eviction");
+        env.CheckListRequests(WALLE_CMS_USER, 0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckWalleListTasks(0);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "ok", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+    }
+
     Y_UNIT_TEST(WalleDrainDataRequiresSentinel)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());

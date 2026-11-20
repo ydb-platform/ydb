@@ -93,7 +93,7 @@ EDstState TTargetBase::GetDstState() const {
 }
 
 void TTargetBase::SetDstState(const EDstState value) {
-    DstState = value;
+    DstState = value == EDstState::Ready && HasMissingIndexStream() ? EDstState::Error : value;
     switch (DstState) {
     case EDstState::Alter:
         Replication->AddPendingAlterTarget(Id);
@@ -272,7 +272,7 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             // Restart this read-only actor so both its proxy and settings refresh.
             Reset(WorkerRegistar);
         }
-        if (Replication->GetState() == TReplication::EState::Ready && !WorkerRegistar) {
+        if (Replication->GetOperationalState() == TReplication::EState::Ready && !WorkerRegistar) {
             WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
             WorkerRegistarProxy = Replication->GetYdbProxy();
         }

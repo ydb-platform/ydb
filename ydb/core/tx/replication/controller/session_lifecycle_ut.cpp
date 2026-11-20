@@ -22,6 +22,7 @@
 
 #include <util/string/printf.h>
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -1016,8 +1017,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 });
             auto describes = runtime.AddObserver<TEvYdbProxy::TEvDescribeTableRequest>(
                 [&](TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
-                    if (ev->GetRecipientRewrite() == candidateProxy) {
-                        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(ev->Get()->GetArgs()), "/Root/table");
+                    if (ev->GetRecipientRewrite() == candidateProxy && std::get<0>(ev->Get()->GetArgs()) == "/Root/table") {
                         tableCookie = ev->Cookie;
                     }
                 });
@@ -1087,6 +1087,118 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         } else {
             UNIT_ASSERT(s.Describe().GetState().HasError());
         }
+    }
+
+    Y_UNIT_TEST_TWIN(MissingIndexFeedDuringSecretRefresh, RecreateIndex) {
+        TSetup s(1, false, true, ESecretCredentials::Static, ESourceSchema::IndexedTableWithSchemaChanges);
+        auto& runtime = s.Env.GetRuntime();
+        const auto second = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
+        UNIT_ASSERT(second);
+        const auto initial = s.Describe();
+        UNIT_ASSERT_VALUES_EQUAL(initial.TargetsSize(), 2);
+        const auto& oldIndex = initial.GetTargets(initial.GetTargets(0).GetSrcPath() == "/Root/table" ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(oldIndex.GetSrcPath(), "/Root/table/idx");
+        UNIT_ASSERT(!oldIndex.GetSrcStreamName().empty());
+        if (s.Worker.TargetId() == oldIndex.GetId()) {
+            s.Worker = TWorkerId::Parse(second->Get()->Record.GetWorker());
+        }
+        UNIT_ASSERT_UNEQUAL(s.Worker.TargetId(), oldIndex.GetId());
+        s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
+
+        s.Env.RunCall([&] {
+            NYdb::NTable::TTableClient client(s.Env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            if (RecreateIndex) {
+                const auto drop = session.ExecuteSchemeQuery("ALTER TABLE `/Root/table` DROP INDEX idx;").GetValueSync();
+                UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+                const auto add = session.ExecuteSchemeQuery(
+                    "ALTER TABLE `/Root/table` ADD INDEX idx GLOBAL SYNC ON (value);").GetValueSync();
+                UNIT_ASSERT_C(add.IsSuccess(), add.GetIssues().ToString());
+            } else {
+                const auto drop = session.AlterTable(oldIndex.GetSrcPath(),
+                    NYdb::NTable::TAlterTableSettings().AppendDropChangefeeds(oldIndex.GetSrcStreamName())).GetValueSync();
+                UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+            }
+        });
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+
+        // The service has not read either DDL. Hold its first recovered base command
+        // to check that a missing changefeed alone cannot clear the public error.
+        auto openReads = std::make_shared<std::atomic<ui32>>(0);
+        auto reads = runtime.AddObserver<NGRpcService::TEvStreamTopicReadRequest>(
+            [openReads](NGRpcService::TEvStreamTopicReadRequest::TPtr& ev) {
+                ++*openReads;
+                ev->Get()->SetAuditLogHook([openReads](auto, const auto&) { --*openReads; });
+            });
+        const auto service = runtime.Register(CreateReplicationService());
+        TEvService::TEvRunWorker::TPtr recovered;
+        auto hold = runtime.AddObserver<TEvService::TEvRunWorker>([&](TEvService::TEvRunWorker::TPtr& ev) {
+            if (ev->Sender == s.Controller && TWorkerId::Parse(ev->Get()->Record.GetWorker()) == s.Worker
+                && ev->Get()->Record.GetCommand().GetRemoteTopicReader().GetConnectionParams()
+                    .GetCredentialInstanceId() != s.CredentialInstanceId)
+            {
+                recovered = std::move(ev);
+            }
+        });
+        s.Disconnect(0);
+        const auto node = s.Edges[0].NodeId();
+        runtime.RegisterService(MakeReplicationServiceId(node), service);
+        s.Env.SendAsync(s.Controller, new TEvPrivate::TEvRestoreSession(node));
+        ++s.Secret->Revision->Version;
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        if (RecreateIndex) {
+            runtime.WaitFor("base worker restarted with refreshed credentials", [&] { return bool(recovered); },
+                TDuration::Minutes(2));
+        }
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+        hold.Remove();
+        if (recovered) {
+            runtime.Send(recovered.Release());
+        }
+
+        if (RecreateIndex) {
+            runtime.WaitFor("base CDC replaced the dropped index target and changefeed", [&] {
+                const auto state = s.Describe();
+                for (const auto& target : state.GetTargets()) {
+                    if (target.GetDstPath() == oldIndex.GetDstPath()
+                        && target.GetId() != oldIndex.GetId()
+                        && !target.GetSrcStreamName().empty() && target.GetSrcStreamName() != oldIndex.GetSrcStreamName())
+                    {
+                        return state.TargetsSize() == 2 && state.GetState().HasStandBy();
+                    }
+                }
+                return false;
+            }, TDuration::Minutes(5));
+            s.Env.RunCall([&] {
+                NYdb::NTable::TTableClient client(s.Env.GetDriver());
+                auto session = client.CreateSession().GetValueSync().GetSession();
+                const auto tx = NYdb::NTable::TTxControl::BeginTx().CommitTx();
+                const auto write = session.ExecuteDataQuery(
+                    "UPSERT INTO `/Root/table` (key, value) VALUES (42u, 'recovered')", tx).GetValueSync();
+                UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+                for (const auto deadline = TInstant::Now() + TDuration::Seconds(30); TInstant::Now() < deadline;) {
+                    const auto row = session.ExecuteDataQuery(
+                        "SELECT key FROM `/Root/replica` VIEW idx WHERE value = 'recovered' AND key = 42u", tx).GetValueSync();
+                    if (row.IsSuccess() && row.GetResultSet(0).RowsCount() == 1) {
+                        return;
+                    }
+                    Sleep(TDuration::MilliSeconds(50));
+                }
+                UNIT_FAIL("Recovered index did not receive the new row");
+            });
+        } else {
+            runtime.SimulateSleep(TDuration::Minutes(2));
+            const auto state = s.Describe();
+            UNIT_ASSERT_C(state.GetState().HasError(), state.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(state.TargetsSize(), 2);
+            const auto& index = state.GetTargets(state.GetTargets(0).GetSrcPath() == "/Root/table" ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(index.GetId(), oldIndex.GetId());
+            UNIT_ASSERT_VALUES_EQUAL(index.GetSrcStreamName(), oldIndex.GetSrcStreamName());
+        }
+        runtime.Send(new IEventHandle(service, s.Controller, new TEvents::TEvPoison()), 0, true);
+        runtime.WaitFor("replication service and source reads stopped", [&] {
+            return !runtime.FindActor(service) && openReads->load() == 0;
+        }, TDuration::Seconds(30));
     }
 
     Y_UNIT_TEST(LagUnavailableAfterStopWhileWaitingInBootQueue) {

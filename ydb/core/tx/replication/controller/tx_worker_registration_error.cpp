@@ -22,7 +22,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         const auto& result = *Ev->Get();
         auto replication = Self->Find(result.ReplicationId);
-        if (!replication || replication->GetState() != TReplication::EState::Ready
+        if (!replication || replication->GetOperationalState() != TReplication::EState::Ready
             || replication->GetDesiredState() != TReplication::EState::Ready)
         {
             return true;

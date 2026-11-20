@@ -482,7 +482,7 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
     const auto& build = IndexBuilds.at(key);
     const bool cancelling = build.GetPhase() == TBuild::CANCELLING;
     const bool finishing = replication->GetDesiredState() == TReplication::EState::Done;
-    const auto state = replication->GetState();
+    const auto state = replication->GetOperationalState();
     if (state != TReplication::EState::Ready && !(finishing && state == TReplication::EState::Paused)) {
         return;
     }

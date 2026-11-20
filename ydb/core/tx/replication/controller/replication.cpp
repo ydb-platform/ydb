@@ -79,13 +79,16 @@ class TReplication::TImpl: public TLagProvider {
 
         TVector<TSecretProbeTopic> topics(::Reserve(Targets.size()));
         for (const auto& [_, target] : Targets) {
+            if (target->GetStreamState() == EStreamState::Removed) {
+                continue;
+            }
             auto& topic = topics.emplace_back();
             topic.Path = target->GetStreamPath();
             if (target->GetKind() == ETargetKind::IndexTable) {
                 const auto indexPath = target->GetSrcIndexPath();
                 auto base = CanonizePath(TString(ExtractParent(indexPath)));
-                if (basesWithSchemaChanges.contains(base)) {
-                    topic.SchemaManagedIndex = TSecretProbeTopic::TIndex{std::move(base), TString(ExtractBase(indexPath))};
+                if (basesWithSchemaChanges.contains(base) && target->GetStreamState() == EStreamState::Ready) {
+                    topic.SchemaManagedIndex = TSecretProbeTopic::TIndex{target->GetId(), std::move(base), TString(ExtractBase(indexPath))};
                 }
             }
         }
@@ -340,6 +343,16 @@ public:
         AuthenticationErrorRevision.clear();
         CancelSecretRefresh();
         State = state;
+        if (state == EState::Ready && DesiredState == EState::Ready) {
+            for (const auto& [id, target] : Targets) {
+                if (target->HasMissingIndexStream()) {
+                    AuthenticationErrorRevision = MissingIndexStreamRecoveryMarker;
+                    issue = TStringBuilder() << "Source changefeed is missing for index target #" << id
+                        << ". Waiting for the base table to report DROP INDEX.";
+                    break;
+                }
+            }
+        }
         Issue = TruncatedIssue(issue);
     }
 
@@ -371,7 +384,9 @@ public:
     }
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
-        AuthenticationErrorRevision.clear();
+        if (AuthenticationErrorRevision != MissingIndexStreamRecoveryMarker) {
+            AuthenticationErrorRevision.clear();
+        }
         CancelSecretRefresh();
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
@@ -607,7 +622,17 @@ void TReplication::SetState(EState state, TString issue) {
 }
 
 TReplication::EState TReplication::GetState() const {
+    // Error is also the on-disk state: on restart the credentials are checked
+    // again, and older controllers cannot run workers for an unknown marker.
+    return IsReconcilingIndexStreams() ? EState::Error : Impl->State;
+}
+
+TReplication::EState TReplication::GetOperationalState() const {
     return Impl->State;
+}
+
+bool TReplication::IsReconcilingIndexStreams() const {
+    return Impl->State == EState::Ready && Impl->AuthenticationErrorRevision == MissingIndexStreamRecoveryMarker;
 }
 
 const TString& TReplication::GetIssue() const {

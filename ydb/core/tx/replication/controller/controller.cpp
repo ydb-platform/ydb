@@ -841,7 +841,7 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
     }
 
     if (ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())
-        || replication->GetState() != TReplication::EState::Ready)
+        || replication->GetOperationalState() != TReplication::EState::Ready)
     {
         return false;
     }

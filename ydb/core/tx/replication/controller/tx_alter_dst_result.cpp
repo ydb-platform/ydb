@@ -112,7 +112,7 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready
+        if (Replication->GetOperationalState() != TReplication::EState::Ready
             && Replication->GetState() != TReplication::EState::Removing)
         {
             Replication.Reset();

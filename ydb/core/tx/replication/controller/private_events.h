@@ -260,8 +260,11 @@ struct TEvPrivate {
         const ui64 ReplicationId;
         const TString Value;
         const TString Revision;
-        TEvRefreshCredentials(ui64 rid, TString value, TString revision)
-            : ReplicationId(rid), Value(std::move(value)), Revision(std::move(revision)) {}
+        const THashSet<ui64> MissingIndexStreams;
+
+        TEvRefreshCredentials(ui64 rid, TString value, TString revision, THashSet<ui64> missingIndexStreams)
+            : ReplicationId(rid), Value(std::move(value)), Revision(std::move(revision))
+            , MissingIndexStreams(std::move(missingIndexStreams)) {}
     };
 
     struct TEvResolveResourceIdResult

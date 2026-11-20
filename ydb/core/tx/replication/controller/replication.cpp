@@ -69,6 +69,29 @@ class TReplication::TImpl: public TLagProvider {
         return false;
     }
 
+    TVector<TSecretProbeTopic> GetSecretProbeTopics() const {
+        THashSet<TString> basesWithSchemaChanges;
+        for (const auto& [_, target] : Targets) {
+            if (target->GetKind() == ETargetKind::Table && target->GetStreamSchemaChanges().value_or(false)) {
+                basesWithSchemaChanges.insert(CanonizePath(target->GetSrcPath()));
+            }
+        }
+
+        TVector<TSecretProbeTopic> topics(::Reserve(Targets.size()));
+        for (const auto& [_, target] : Targets) {
+            auto& topic = topics.emplace_back();
+            topic.Path = target->GetStreamPath();
+            if (target->GetKind() == ETargetKind::IndexTable) {
+                const auto indexPath = target->GetSrcIndexPath();
+                auto base = CanonizePath(TString(ExtractParent(indexPath)));
+                if (basesWithSchemaChanges.contains(base)) {
+                    topic.SchemaManagedIndex = TSecretProbeTopic::TIndex{std::move(base), TString(ExtractBase(indexPath))};
+                }
+            }
+        }
+        return topics;
+    }
+
     bool CanApplyResolvedCredentials() const {
         // DROP still needs source credentials to remove retained streams after DONE.
         return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing)
@@ -209,6 +232,19 @@ public:
             return ProgressTargets(ctx);
         }
 
+        // A persisted authentication error owns its secret lookups across restarts.
+        // The bootstrap resolver would turn a transient lookup failure into a generic error.
+        if (State == EState::Error && DesiredState == EState::Ready && !AuthenticationErrorRevision.empty()) {
+            if (!Database) {
+                return ResolveDatabase(ctx);
+            }
+            if (!SecretRefresh) {
+                SecretRefresh = ctx.Register(CreateSecretRefresh(ctx.SelfID, ReplicationId, PathId,
+                    Database, Config.GetSrcConnectionParams(), AuthenticationErrorRevision, GetSecretProbeTopics()));
+            }
+            return;
+        }
+
         if (!YdbProxy && !(State == EState::Removing && !HasSourceStreams())) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
@@ -275,15 +311,6 @@ public:
                 return ProgressTargets(ctx);
             }
         case EState::Error:
-            if (!SecretRefresh && !AuthenticationErrorRevision.empty() && DesiredState == EState::Ready) {
-                TVector<TString> topics;
-                for (const auto& [_, target] : Targets) {
-                    topics.push_back(target->GetStreamPath());
-                }
-                SecretRefresh = ctx.Register(CreateSecretRefresh(ctx.SelfID, ReplicationId, PathId,
-                    Database, Config.GetSrcConnectionParams(), AuthenticationErrorRevision, std::move(topics)));
-            }
-            return;
         case EState::Done:
             return;
         }
@@ -630,10 +657,10 @@ bool TReplication::IsCredentialsReady() const {
     }
 }
 
-void TReplication::UpdateSecret(const TString& secretValue, const TString& revision, const TString& generation) {
+void TReplication::UpdateSecret(const TString& secretValue, const TString& revision, const TString& credentialInstanceId) {
     Impl->SecretRevision = revision;
     auto& params = *Impl->Config.MutableSrcConnectionParams();
-    params.SetCredentialGeneration(generation);
+    params.SetCredentialInstanceId(credentialInstanceId);
     switch (params.GetCredentialsCase()) {
     case NKikimrReplication::TConnectionParams::kStaticCredentials:
         params.MutableStaticCredentials()->SetPassword(secretValue);

@@ -13,8 +13,6 @@
 #include <ydb/services/metadata/service.h>
 
 #include <util/generic/ptr.h>
-#include <library/cpp/openssl/crypto/sha.h>
-#include <util/string/hex.h>
 #include <util/string/cast.h>
 #include <util/generic/scope.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -88,9 +86,7 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             return Reply(false, secretValue.GetErrorMessage());
         }
 
-        auto value = secretValue.DetachResult();
-        const auto digest = NOpenSsl::NSha256::Calc(value.data(), value.size());
-        ReplyValue(value, TStringBuilder() << "legacy:" << HexEncode(digest.data(), digest.size()));
+        ReplyValue(secretValue.DetachResult(), LegacySecretRecoveryMarker);
     }
 
     void Handle(NKqp::TEvDescribeSecretsResponse::TPtr& ev) {
@@ -198,19 +194,20 @@ IActor* CreateSecretResolver(const TActorId& parent, ui64 rid,
     return new TSecretResolver(parent, rid, pathId, secretName, cookie, database, NSecret::MakeLongRetryPolicy());
 }
 
-bool IsNewSecretRevision(const TString& previous, const TString& next) {
-    if (previous.StartsWith("legacy:") && next.StartsWith("legacy:")) {
-        return previous != next;
+bool CanRefreshSecret(TStringBuf failed, TStringBuf resolved) {
+    if (failed == LegacySecretRecoveryMarker && resolved == LegacySecretRecoveryMarker) {
+        return true;
     }
-    if (!previous.StartsWith("schema:") || !next.StartsWith("schema:")) {
-        return false;
-    }
-    const auto oldEnd = previous.rfind(':');
-    const auto newEnd = next.rfind(':');
-    ui64 oldVersion = 0, newVersion = 0;
-    return previous.substr(0, oldEnd) == next.substr(0, newEnd)
-        && TryFromString(previous.substr(oldEnd + 1), oldVersion)
-        && TryFromString(next.substr(newEnd + 1), newVersion) && newVersion > oldVersion;
+    const auto parseSchemaRevision = [](TStringBuf marker, NKqp::TSecretRevision& revision) {
+        return marker.SkipPrefix("schema:")
+            && TryFromString(marker.NextTok(':'), revision.PathOwnerId)
+            && TryFromString(marker.NextTok(':'), revision.LocalPathId)
+            && TryFromString(marker, revision.Version);
+    };
+    NKqp::TSecretRevision previous, next;
+    return parseSchemaRevision(failed, previous) && parseSchemaRevision(resolved, next)
+        && previous.PathOwnerId == next.PathOwnerId && previous.LocalPathId == next.LocalPathId
+        && previous.Version < next.Version;
 }
 
 // Only an authentication Error owns this actor. It owns the retry cadence;
@@ -223,22 +220,50 @@ class TSecretRefresh: public TActorBootstrapped<TSecretRefresh> {
     const TString Database;
     const NKikimrReplication::TConnectionParams Params;
     const TString FailedRevision;
-    const TVector<TString> Topics;
+    const TVector<TSecretProbeTopic> Topics;
+
+    static NActors::async<NYdb::EStatus> ProbeTopic(const TActorId& proxy, const TSecretProbeTopic& topic) {
+        auto described = co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTopicResponse>(proxy,
+            new TEvYdbProxy::TEvDescribeTopicRequest(topic.Path, {}));
+        const auto status = described->Get()->Result.GetStatus();
+        if (status != NYdb::EStatus::SCHEME_ERROR || !topic.SchemaManagedIndex) {
+            co_return status;
+        }
+
+        // DescribeTopic conceals both missing paths and ACL denials as SCHEME_ERROR.
+        // The base worker can reconcile the stream only if this index was dropped.
+        const auto& index = *topic.SchemaManagedIndex;
+        auto table = co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTableResponse>(proxy,
+            new TEvYdbProxy::TEvDescribeTableRequest(index.TablePath, {}));
+        const auto& result = table->Get()->Result;
+        if (!result.IsSuccess()) {
+            co_return result.GetStatus();
+        }
+        for (const auto& present : result.GetTableDescription().GetIndexDescriptions()) {
+            if (TStringBuf(present.GetIndexName()) == index.Name) {
+                co_return status;
+            }
+        }
+        co_return NYdb::EStatus::SUCCESS;
+    }
 
 public:
     TSecretRefresh(TActorId parent, ui64 rid, TPathId pathId, TString database,
-            NKikimrReplication::TConnectionParams params, TString failedRevision, TVector<TString> topics)
+            NKikimrReplication::TConnectionParams params, TString failedRevision, TVector<TSecretProbeTopic> topics)
         : Parent(parent), ReplicationId(rid), PathId(pathId), Database(std::move(database))
         , Params(std::move(params)), FailedRevision(std::move(failedRevision)), Topics(std::move(topics)) {}
 
     void Bootstrap() {
         Become(&TThis::StateWork);
-        TString lastRejectedRevision = FailedRevision;
+        const auto& failedCredentials = Params.GetStaticCredentials();
+        TString rejectedRevision;
+        TDuration retryDelay = TDuration::Zero();
+        TMonotonic retryAt = TMonotonic::Zero();
         ui64 cookie = 0;
         for (;;) {
             co_await NActors::AsyncSleepFor(TDuration::Seconds(30));
             const auto resolver = Register(new TSecretResolver(SelfId(), ReplicationId, PathId,
-                Params.GetStaticCredentials().GetPasswordSecretName(), ++cookie, Database,
+                failedCredentials.GetPasswordSecretName(), ++cookie, Database,
                 IRetryPolicy<>::GetNoRetryPolicy()));
             Y_DEFER { SelfId().Send(resolver, new TEvents::TEvPoison()); };
             auto resolved = co_await NActors::WithTimeout(TDuration::Seconds(30), [&]() -> NActors::async<TEvPrivate::TEvResolveSecretResult::TPtr> {
@@ -249,32 +274,37 @@ public:
             }
             const auto response = std::move(*resolved);
             const auto& secret = *response->Get();
-            if (!secret.IsSuccess() || !IsNewSecretRevision(FailedRevision, secret.Revision)
-                || secret.Revision == lastRejectedRevision || Topics.empty())
+            if (!secret.IsSuccess() || !CanRefreshSecret(FailedRevision, secret.Revision)
+                || (secret.Revision == rejectedRevision && TActivationContext::Monotonic() < retryAt) || Topics.empty())
             {
                 continue;
             }
-            auto credentials = Params.GetStaticCredentials();
+            // DescribeTopic can succeed for credentials that the worker cannot use to read.
+            // The failed legacy password is known in memory until the controller restarts.
+            if (secret.Revision == LegacySecretRecoveryMarker && failedCredentials.HasPassword()
+                && secret.Value == failedCredentials.GetPassword())
+            {
+                continue;
+            }
+            auto credentials = failedCredentials;
             credentials.SetPassword(secret.Value);
             const auto proxy = Register(CreateYdbProxy(Params.GetEndpoint(), Params.GetDatabase(),
                 Params.GetEnableSsl(), Params.GetCaCert(), credentials));
             Y_DEFER { SelfId().Send(proxy, new TEvents::TEvPoison()); };
             bool authorized = true;
             for (const auto& topic : Topics) {
-                auto checked = co_await NActors::WithTimeout(TDuration::Seconds(30), [&]() -> NActors::async<TEvYdbProxy::TEvDescribeTopicResponse::TPtr> {
-                    co_return co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTopicResponse>(proxy,
-                        new TEvYdbProxy::TEvDescribeTopicRequest(topic, {}));
-                });
-                if (!checked || !(*checked)->Get()->Result.IsSuccess()) {
-                    authorized = false;
-                    if (checked) {
-                        const auto status = (*checked)->Get()->Result.GetStatus();
-                        if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
-                            lastRejectedRevision = secret.Revision;
-                        }
-                    }
-                    break;
+                const auto status = co_await NActors::WithTimeout(TDuration::Seconds(30), ProbeTopic(proxy, topic));
+                if (status == NYdb::EStatus::SUCCESS) {
+                    continue;
                 }
+                if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                    retryDelay = secret.Revision == rejectedRevision
+                        ? Min(retryDelay * 2, TDuration::Minutes(5)) : TDuration::Minutes(1);
+                    rejectedRevision = secret.Revision;
+                    retryAt = TActivationContext::Monotonic() + retryDelay;
+                }
+                authorized = false;
+                break;
             }
             if (authorized) {
                 Send(Parent, new TEvPrivate::TEvRefreshCredentials(ReplicationId, secret.Value, secret.Revision));
@@ -293,7 +323,7 @@ public:
 
 IActor* CreateSecretRefresh(const TActorId& parent, ui64 rid, const TPathId& pathId,
         const TString& database, const NKikimrReplication::TConnectionParams& params,
-        const TString& failedRevision, TVector<TString> topics)
+        const TString& failedRevision, TVector<TSecretProbeTopic> topics)
 {
     return new TSecretRefresh(parent, rid, pathId, database, params, failedRevision, std::move(topics));
 }

@@ -17,12 +17,12 @@ public:
         const auto& result = *Event->Get();
         auto replication = Self->Find(result.ReplicationId);
         if (!replication || !replication->IsExpectedSecretRefresh(Event->Sender)
-            || !IsNewSecretRevision(replication->GetAuthenticationErrorRevision(), result.Revision)
+            || !CanRefreshSecret(replication->GetAuthenticationErrorRevision(), result.Revision)
             || Self->ReplicationsWithSourceOffsetMismatch.contains(result.ReplicationId))
         {
             return true;
         }
-        // The refresh actor checked access to every source topic with a fresh
+        // The refresh actor verified the required source streams with a fresh
         // provider. Only auth-only Error retains the marker; generic state writes
         // and explicit lifecycle/config changes atomically clear it.
         Replication = replication;

@@ -63,8 +63,6 @@ message TIamCredentials {
 }
 
 message TConnectionParams {
-    // Opaque controller incarnation for a freshly resolved credential. Old nodes ignore it.
-    optional string CredentialGeneration = 8;
     optional string Endpoint = 1;
     optional string Database = 2;
     optional bool EnableSsl = 5;
@@ -75,6 +73,8 @@ message TConnectionParams {
         TOAuthToken OAuthToken = 4;
         TIamCredentials IamCredentials = 7;
     }
+    // Identifies one resolution of the source credential, even when its value is unchanged.
+    optional string CredentialInstanceId = 8;
 }
 
 message TConsistencySettings {
@@ -493,7 +493,7 @@ message TEvWorkerStatus {
         ERROR_KIND_SOURCE_AUTHENTICATION = 1;
     }
     optional EErrorKind ErrorKind = 8;
-    optional string CredentialGeneration = 9;
+    optional string CredentialInstanceId = 9;
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_RUNNING = 1;

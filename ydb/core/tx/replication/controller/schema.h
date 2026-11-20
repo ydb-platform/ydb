@@ -34,7 +34,7 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedStep: Column<11, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
-        // Empty means generic/old-written Error: never automatically clear it.
+        // Empty disables recovery. Auth-only errors store the schema revision or the fixed legacy marker.
         struct AuthenticationErrorRevision: Column<16, NScheme::NTypeIds::String> {};
         struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 

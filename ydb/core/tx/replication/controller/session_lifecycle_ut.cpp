@@ -14,6 +14,8 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/services/metadata/secret/snapshot.h>
+#include <ydb/services/metadata/service.h>
 #include <ydb/services/scheme_secret/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -37,6 +39,8 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
     public:
         bool Hold = false;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        ui32 FailedLookups = 0;
         TString Value = "root@builtin";
         std::optional<NKqp::TSecretRevision> Revision = NKqp::TSecretRevision{1, 2, 0};
         TAutoPtr<IEventHandle> Pending;
@@ -58,6 +62,13 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
                     using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
                     const std::vector<TString> values{Value};
+                    if (Status != Ydb::StatusIds::SUCCESS) {
+                        ++FailedLookups;
+                        Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                            new NKqp::TEvDescribeSecretsResponse(TDescription(Status, {}))));
+                        ev.Reset();
+                        return;
+                    }
                     auto* response = Revision
                         ? new NKqp::TEvDescribeSecretsResponse(TDescription(values, {*Revision}))
                         : new NKqp::TEvDescribeSecretsResponse(TDescription(values));
@@ -82,6 +93,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
     };
 
     enum class ESecretCredentials { OAuth, Static };
+    enum class ESourceSchema { Table, IndexedTable, IndexedTableWithSchemaChanges };
 
     struct TSetup {
         TEnv<> Env;
@@ -92,10 +104,10 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         TPathId PathId;
         TWorkerId Worker{0, 0, 0};
         const bool Transfer;
-        TString CredentialGeneration;
+        TString CredentialInstanceId;
 
         explicit TSetup(ui32 nodeCount = 2, bool transfer = false, bool secret = false,
-                ESecretCredentials credentials = ESecretCredentials::OAuth)
+                ESecretCredentials credentials = ESecretCredentials::OAuth, ESourceSchema schema = ESourceSchema::Table)
             : Env(true, ERuntimeMode::Simulated, nodeCount)
             , Transfer(transfer)
         {
@@ -115,6 +127,10 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                     runtime.Register(CreateReplicationMockService(Edges[node]), node), node);
             }
 
+            if (schema != ESourceSchema::Table) {
+                runtime.GetAppData(0).FeatureFlags.SetEnableAsyncReplicationSchemaChanges(
+                    schema == ESourceSchema::IndexedTableWithSchemaChanges);
+            }
             Env.RunCall([&] {
                 NYdb::NTable::TTableClient client(Env.GetDriver());
                 auto session = client.CreateSession().GetValueSync().GetSession();
@@ -140,9 +156,10 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                     return;
                 }
 
-                auto result = session.ExecuteSchemeQuery(R"(
-                    CREATE TABLE `/Root/table` (key Uint32, PRIMARY KEY (key));
-                )").GetValueSync();
+                const TString table = schema == ESourceSchema::Table
+                    ? "CREATE TABLE `/Root/table` (key Uint32, PRIMARY KEY (key));"
+                    : "CREATE TABLE `/Root/table` (key Uint32, value Utf8, PRIMARY KEY (key), INDEX idx GLOBAL SYNC ON (value));";
+                auto result = session.ExecuteSchemeQuery(table).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
                 if (credentials == ESecretCredentials::Static) {
@@ -159,8 +176,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 result = session.ExecuteSchemeQuery(Sprintf(R"(
                     CREATE ASYNC REPLICATION `replication` FOR
                         `/Root/table` AS `/Root/replica`
-                    WITH (CONNECTION_STRING = "grpc://%s/?database=/Root"%s);
-                )", Env.GetEndpoint().c_str(), secretSettings.c_str())).GetValueSync();
+                    WITH (CONNECTION_STRING = "grpc://%s/?database=/Root"%s%s);
+                )", Env.GetEndpoint().c_str(), secretSettings.c_str(),
+                    schema == ESourceSchema::Table ? "" : ", CONSISTENCY_LEVEL = \"GLOBAL\", COMMIT_INTERVAL = Interval(\"PT10S\")")).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             });
 
@@ -179,8 +197,8 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(Edges[0]);
             UNIT_ASSERT(run);
             Worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
-            CredentialGeneration = run->Get()->Record.GetCommand().GetRemoteTopicReader()
-                .GetConnectionParams().GetCredentialGeneration();
+            CredentialInstanceId = run->Get()->Record.GetCommand().GetRemoteTopicReader()
+                .GetConnectionParams().GetCredentialInstanceId();
 
             if (nodeCount > 1) {
                 Status(1, false);
@@ -192,6 +210,18 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 deadline = runtime.GetCurrentTime() + delay;
                 return false;
             });
+        }
+
+        void ReportSourceError(NKikimrReplication::TEvWorkerStatus::EErrorKind kind) {
+            auto failed = MakeHolder<TEvService::TEvWorkerStatus>(Worker,
+                NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+                NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "Source authentication failed");
+            failed->Record.SetErrorKind(kind);
+            failed->Record.SetCredentialInstanceId(CredentialInstanceId);
+            Env.GetRuntime().Send(new IEventHandle(Controller, Edges[0], failed.Release()));
+            Env.GetRuntime().WaitFor("worker failure persisted", [&] {
+                return Describe().GetState().HasError();
+            }, TDuration::Seconds(30));
         }
 
         void Reboot() {
@@ -397,6 +427,98 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT(result->Get()->Revision.empty());
     }
 
+    Y_UNIT_TEST(LegacySecretRecoveryAfterDigestMigration) {
+        TSetup s(1, false, true, ESecretCredentials::Static);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
+
+        // A previous controller stored the legacy password digest with the auth error.
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, s.ControllerId, Sprintf(R"((
+            (let key '('('Id (Uint64 '%lu))))
+            (let data '('('AuthenticationErrorRevision (String 'legacy:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef))))
+            (return (AsList (UpdateRow 'Replications key data)))
+        ))", s.Worker.ReplicationId()), result), NKikimrProto::OK);
+
+        s.Secret.reset();
+        runtime.GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(false);
+        runtime.GetAppData(0).FeatureFlags.SetDisableOldSecrets(false);
+        struct TLegacySnapshot : NMetadata::NSecret::TSnapshot {
+            TString Value;
+
+            TLegacySnapshot()
+                : TSnapshot(TInstant::Zero())
+            {}
+
+            TConclusion<TString> GetSecretValue(const NMetadata::NSecret::TSecretIdOrValue&) const override {
+                return Value;
+            }
+        };
+        const auto snapshot = std::make_shared<TLegacySnapshot>();
+        ui32 lookups = 0;
+        auto lookup = runtime.AddObserver<NMetadata::NProvider::TEvAskSnapshot>(
+            [&](NMetadata::NProvider::TEvAskSnapshot::TPtr& ev) {
+                const auto* actor = runtime.FindActor(ev->Sender);
+                if (actor && actor->GetActivityType() == NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER) {
+                    ++lookups;
+                    runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                        new NMetadata::NProvider::TEvRefreshSubscriberData(snapshot)));
+                    ev.Reset();
+                }
+            });
+        s.Reboot();
+        s.Status(0, false);
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, s.ControllerId, Sprintf(R"((
+            (let key '('('Id (Uint64 '%lu))))
+            (return (AsList (SetResult 'Row (SelectRow 'Replications key '('AuthenticationErrorRevision)))))
+        ))", s.Worker.ReplicationId()), result), NKikimrProto::OK);
+        const auto& row = result.GetValue().GetStruct(0).GetOptional().GetOptional();
+        UNIT_ASSERT_VALUES_EQUAL(row.GetStruct(0).GetOptional().GetBytes(), "legacy");
+
+        const auto edge = runtime.AllocateEdgeActor();
+        for (const char* value : {"first password", "AutoPassword27516"}) {
+            snapshot->Value = value;
+            runtime.Register(CreateSecretResolver(edge, 1, s.PathId, "/Root/source-token", 1, "/Root"));
+            const auto resolved = runtime.GrabEdgeEvent<TEvPrivate::TEvResolveSecretResult>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(resolved && resolved->Get()->IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(resolved->Get()->Value, value);
+            UNIT_ASSERT_VALUES_EQUAL(resolved->Get()->Revision, "legacy");
+        }
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        runtime.WaitFor("migrated legacy secret authorizes the source worker", [&] {
+            return s.Describe().GetState().HasStandBy();
+        }, TDuration::Seconds(30));
+
+        // The topic probe succeeded, but the worker can still be denied permission to read.
+        s.ProcessQueues();
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
+        UNIT_ASSERT(run);
+        s.CredentialInstanceId = run->Get()->Record.GetCommand().GetRemoteTopicReader()
+            .GetConnectionParams().GetCredentialInstanceId();
+        s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
+        const auto previousLookups = lookups;
+        ui32 probes = 0;
+        auto observeProbes = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
+            [&](TEvYdbProxy::TEvDescribeTopicRequest::TPtr&) { ++probes; });
+        runtime.SimulateSleep(TDuration::Minutes(2));
+        UNIT_ASSERT_GE(lookups, previousLookups + 2);
+        UNIT_ASSERT_VALUES_EQUAL(probes, 0);
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+
+        s.Env.RunCall([&] {
+            NYdb::NTable::TTableClient client(s.Env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto result = session.ExecuteSchemeQuery(
+                "ALTER USER sourceauto WITH PASSWORD 'RotatedPassword27516';").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        });
+        snapshot->Value = "RotatedPassword27516";
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        runtime.WaitFor("changed legacy password restores replication", [&] {
+            return s.Describe().GetState().HasStandBy();
+        }, TDuration::Seconds(30));
+    }
+
     Y_UNIT_TEST(SecretRefreshDoesNotLeaveDetachedResolutionRetries) {
         TSetup s(1);
         auto& runtime = s.Env.GetRuntime();
@@ -447,15 +569,18 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
     }
 
     Y_UNIT_TEST(SecretRevisionRequiresSameObjectAndNewerVersion) {
-        UNIT_ASSERT(IsNewSecretRevision("schema:1:2:3", "schema:1:2:4"));
-        UNIT_ASSERT(!IsNewSecretRevision("schema:1:2:3", "schema:1:2:3"));
-        UNIT_ASSERT(!IsNewSecretRevision("schema:1:2:3", "schema:1:2:2"));
-        UNIT_ASSERT(!IsNewSecretRevision("schema:1:2:3", "schema:9:2:4"));
-        UNIT_ASSERT(!IsNewSecretRevision("schema:1:2:3", "schema:1:9:4"));
-        UNIT_ASSERT(IsNewSecretRevision("legacy:digest1", "legacy:digest2"));
-        UNIT_ASSERT(!IsNewSecretRevision("legacy:digest1", "legacy:digest1"));
-        UNIT_ASSERT(!IsNewSecretRevision("", "schema:1:2:4"));
-        UNIT_ASSERT(!IsNewSecretRevision("schema:1:2:3", "legacy:digest1"));
+        UNIT_ASSERT(CanRefreshSecret("schema:1:2:3", "schema:1:2:4"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:1:2:3"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:1:2:2"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:9:2:4"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:1:9:4"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:3", "schema:4"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:invalid:2:3", "schema:invalid:2:4"));
+        UNIT_ASSERT(CanRefreshSecret("legacy", "legacy"));
+        UNIT_ASSERT(!CanRefreshSecret("legacy", "schema:1:2:4"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "legacy"));
+        UNIT_ASSERT(!CanRefreshSecret("", "schema:1:2:4"));
+        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "legacy:digest1"));
     }
 
     Y_UNIT_TEST(WorkerRegistrarStaticAndIamAuthenticationPolicy) {
@@ -738,7 +863,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
     Y_UNIT_TEST(AdoptedWorkerAuthenticationFailureRestartsWithCurrentCredentials) {
         TSetup s(1, false, true, ESecretCredentials::Static);
         auto& runtime = s.Env.GetRuntime();
-        const TString oldGeneration = s.CredentialGeneration;
+        const TString oldGeneration = s.CredentialInstanceId;
         s.Reboot();
         s.Status(0, true); // Adopt the still-running worker from before the reboot.
         s.ProcessQueues(true);
@@ -746,7 +871,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
             NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "Source authentication failed");
         failed->Record.SetErrorKind(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
-        failed->Record.SetCredentialGeneration(oldGeneration);
+        failed->Record.SetCredentialInstanceId(oldGeneration);
         runtime.Send(new IEventHandle(s.Controller, s.Edges[0], failed.Release()));
         s.Sync();
         s.ProcessQueues();
@@ -759,7 +884,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
         UNIT_ASSERT(run);
         UNIT_ASSERT(run->Get()->Record.GetCommand().GetRemoteTopicReader().GetConnectionParams()
-            .GetCredentialGeneration() != oldGeneration);
+            .GetCredentialInstanceId() != oldGeneration);
         UNIT_ASSERT(s.Describe().GetState().HasStandBy());
     }
 
@@ -768,16 +893,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         for (const auto test : {ECase::Recover, ECase::Reboot, ECase::OldBinaryGap, ECase::GenericError, ECase::Paused}) {
             TSetup s(1, false, true, ESecretCredentials::Static);
             auto& runtime = s.Env.GetRuntime();
-            auto failed = MakeHolder<TEvService::TEvWorkerStatus>(s.Worker,
-                NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
-                NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "Source authentication failed");
-            failed->Record.SetCredentialGeneration(s.CredentialGeneration);
-            if (test != ECase::GenericError) {
-                failed->Record.SetErrorKind(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
-            }
-            runtime.Send(new IEventHandle(s.Controller, s.Edges[0], failed.Release()));
-            s.Sync();
-            UNIT_ASSERT(s.Describe().GetState().HasError());
+            s.ReportSourceError(test == ECase::GenericError
+                ? NKikimrReplication::TEvWorkerStatus::ERROR_KIND_UNSPECIFIED
+                : NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
             if (test == ECase::Reboot || test == ECase::OldBinaryGap) {
                 if (test == ECase::OldBinaryGap) {
                     NKikimrMiniKQL::TResult result;
@@ -787,9 +905,17 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                         (return (AsList (UpdateRow 'SysParams key row)))
                     ))", result), NKikimrProto::OK);
                 }
+                if (test == ECase::Reboot) {
+                    s.Secret->Status = Ydb::StatusIds::UNAVAILABLE;
+                }
                 s.Reboot();
                 s.Status(0, false); // Complete the restarted controller's service handshake.
                 UNIT_ASSERT(s.Describe().GetState().HasError());
+                if (test == ECase::Reboot) {
+                    runtime.SimulateSleep(TDuration::Seconds(35));
+                    UNIT_ASSERT_GT(s.Secret->FailedLookups, 0);
+                    s.Secret->Status = Ydb::StatusIds::SUCCESS;
+                }
             } else if (test == ECase::Paused) {
                 CompleteRegistrarPause(s);
             }
@@ -814,16 +940,152 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
             UNIT_ASSERT(run);
             UNIT_ASSERT(run->Get()->Record.GetCommand().GetRemoteTopicReader().GetConnectionParams()
-                .GetCredentialGeneration() != s.CredentialGeneration);
+                .GetCredentialInstanceId() != s.CredentialInstanceId);
             // A late typed failure from the previous credentials cannot undo recovery.
             auto stale = MakeHolder<TEvService::TEvWorkerStatus>(s.Worker,
                 NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
                 NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "Source authentication failed");
             stale->Record.SetErrorKind(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
-            stale->Record.SetCredentialGeneration(s.CredentialGeneration);
+            stale->Record.SetCredentialInstanceId(s.CredentialInstanceId);
             runtime.Send(new IEventHandle(s.Controller, s.Edges[0], stale.Release()));
             s.Sync();
             UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectedSecretIsRetried, NewerRevision) {
+        TSetup s(1, false, true, ESecretCredentials::Static);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
+        s.Secret->Revision->Version = 1;
+        ui32 probes = 0;
+        TActorId refresh;
+        auto source = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
+            [&](TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+                if (refresh && ev->Sender != refresh) {
+                    return;
+                }
+                refresh = ev->Sender;
+                const auto status = ++probes == 1 ? NYdb::EStatus::UNAUTHORIZED : NYdb::EStatus::SUCCESS;
+                runtime.Send(new IEventHandle(refresh, ev->GetRecipientRewrite(),
+                    new TEvYdbProxy::TEvDescribeTopicResponse(NYdb::TStatus(status, {}), Ydb::Topic::DescribeTopicResult()),
+                    0, ev->Cookie));
+                ev.Reset();
+            });
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        UNIT_ASSERT_VALUES_EQUAL(probes, 1);
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+        if (NewerRevision) {
+            ++s.Secret->Revision->Version;
+        }
+        runtime.SimulateSleep(TDuration::Seconds(30));
+        if (!NewerRevision) {
+            UNIT_ASSERT_VALUES_EQUAL(probes, 1);
+            UNIT_ASSERT(s.Describe().GetState().HasError());
+            runtime.SimulateSleep(TDuration::Minutes(2));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(probes, 2);
+        UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+    }
+
+    Y_UNIT_TEST_TWIN(DroppedIndexDuringSecretRefresh, SchemaChanges) {
+        TSetup s(1, false, true, ESecretCredentials::Static,
+            SchemaChanges ? ESourceSchema::IndexedTableWithSchemaChanges : ESourceSchema::IndexedTable);
+        auto& runtime = s.Env.GetRuntime();
+        // The first worker was consumed by TSetup. Both streams are ready once the second starts.
+        const auto second = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
+        UNIT_ASSERT(second);
+        UNIT_ASSERT_UNEQUAL(TWorkerId::Parse(second->Get()->Record.GetWorker()), s.Worker);
+        s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
+        if (SchemaChanges) {
+            // DescribeTopic deliberately conceals ACL denials as SCHEME_ERROR. The source
+            // table still advertises idx, so the candidate cannot recover the replication.
+            ui64 tableCookie = 0;
+            TActorId candidateProxy;
+            bool confirmedExistingIndex = false;
+            auto conceal = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
+                [&](TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+                    if (!std::get<0>(ev->Get()->GetArgs()).Contains("/idx/")) {
+                        return;
+                    }
+                    candidateProxy = ev->GetRecipientRewrite();
+                    runtime.Send(new IEventHandle(ev->Sender, candidateProxy,
+                        new TEvYdbProxy::TEvDescribeTopicResponse(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, {}),
+                            Ydb::Topic::DescribeTopicResult()), 0, ev->Cookie));
+                    ev.Reset();
+                });
+            auto describes = runtime.AddObserver<TEvYdbProxy::TEvDescribeTableRequest>(
+                [&](TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
+                    if (ev->GetRecipientRewrite() == candidateProxy) {
+                        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(ev->Get()->GetArgs()), "/Root/table");
+                        tableCookie = ev->Cookie;
+                    }
+                });
+            auto tables = runtime.AddObserver<TEvYdbProxy::TEvDescribeTableResponse>(
+                [&](TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+                    if (tableCookie && ev->Cookie == tableCookie && ev->Get()->Result.IsSuccess()) {
+                        for (const auto& index : ev->Get()->Result.GetTableDescription().GetIndexDescriptions()) {
+                            confirmedExistingIndex |= index.GetIndexName() == "idx";
+                        }
+                    }
+                });
+            ++s.Secret->Revision->Version;
+            runtime.SimulateSleep(TDuration::Seconds(35));
+            runtime.WaitFor("candidate sees the concealed index on its source table", [&] {
+                return confirmedExistingIndex;
+            }, TDuration::Seconds(30));
+            UNIT_ASSERT(s.Describe().GetState().HasError());
+        }
+        s.Env.RunCall([&] {
+            NYdb::NTable::TTableClient client(s.Env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto drop = session.ExecuteSchemeQuery("ALTER TABLE `/Root/table` DROP INDEX idx;").GetValueSync();
+            UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+        });
+
+        ui32 baseDenials = 0;
+        auto denied = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
+            [&](TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+                if (std::get<0>(ev->Get()->GetArgs()).Contains("/idx/")) {
+                    return;
+                }
+                ++baseDenials;
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new TEvYdbProxy::TEvDescribeTopicResponse(NYdb::TStatus(NYdb::EStatus::UNAUTHORIZED, {}),
+                        Ydb::Topic::DescribeTopicResult()), 0, ev->Cookie));
+                ev.Reset();
+            });
+        ++s.Secret->Revision->Version;
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        if (SchemaChanges) {
+            runtime.WaitFor("base stream was probed", [&] { return baseDenials > 0; }, TDuration::Seconds(30));
+        }
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+        denied.Remove();
+
+        THashSet<ui64> indexProbes;
+        bool missingIndex = false;
+        auto requests = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
+            [&](TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+                if (std::get<0>(ev->Get()->GetArgs()).Contains("/idx/")) {
+                    indexProbes.insert(ev->Cookie);
+                }
+            });
+        auto responses = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicResponse>(
+            [&](TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+                if (indexProbes.contains(ev->Cookie) && ev->Get()->Result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
+                    missingIndex = true;
+                }
+            });
+        ++s.Secret->Revision->Version;
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        runtime.WaitFor("probe observed the dropped source index", [&] { return missingIndex; }, TDuration::Seconds(30));
+        if (SchemaChanges) {
+            runtime.WaitFor("base worker can resume DROP INDEX reconciliation", [&] {
+                return s.Describe().GetState().HasStandBy();
+            }, TDuration::Seconds(30));
+        } else {
+            UNIT_ASSERT(s.Describe().GetState().HasError());
         }
     }
 

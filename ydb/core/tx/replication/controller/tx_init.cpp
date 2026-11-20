@@ -1,9 +1,12 @@
 #include "controller_impl.h"
+#include "secret_resolver.h"
 #include "target_table.h"
 #include "target_topic.h"
 #include "target_transfer.h"
 
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
+
+#include <util/string/type.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -72,14 +75,25 @@ class TController::TTxInit: public TTxBase {
             // An intervening old binary cannot clear the new auth marker. A
             // generation gap therefore disables automatic recovery, fail closed.
             const ui64 generation = Self->Executor()->Generation();
+            const auto storedRevision = rowset.GetValueOrDefault<Schema::Replications::AuthenticationErrorRevision>(TString());
+            TString authRevision;
             if (generation > 1 && Self->SysParams.GetAuthenticationRecoveryGeneration() == generation - 1
                 && state == TReplication::EState::Error && desiredState == TReplication::EState::Ready)
             {
-                replication->SetAuthenticationErrorRevision(
-                    rowset.GetValueOrDefault<Schema::Replications::AuthenticationErrorRevision>(TString()));
-            } else {
+                TStringBuf digest;
+                if (TStringBuf(storedRevision).AfterPrefix("legacy:", digest)) {
+                    // Older controllers stored a hex-encoded SHA-256 digest here.
+                    if (digest.size() == 64 && IsHexNumber(digest)) {
+                        authRevision = LegacySecretRecoveryMarker;
+                    }
+                } else {
+                    authRevision = storedRevision;
+                }
+                replication->SetAuthenticationErrorRevision(authRevision);
+            }
+            if (authRevision != storedRevision) {
                 db.Table<Schema::Replications>().Key(rid).Update(
-                    NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(TString()));
+                    NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(authRevision));
             }
             Self->CommittedVersions[rid] = TRowVersion(
                 rowset.GetValueOrDefault<Schema::Replications::CommittedStep>(0),

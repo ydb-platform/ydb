@@ -194,7 +194,7 @@ public:
     ui64 GetNextTargetId() const;
 
     bool IsCredentialsReady() const;
-    void UpdateSecret(const TString& secretValue, const TString& revision = {}, const TString& generation = {});
+    void UpdateSecret(const TString& secretValue, const TString& revision = {}, const TString& credentialInstanceId = {});
     const TString& GetSecretRevision() const;
     const TString& GetAuthenticationErrorRevision() const;
     void SetAuthenticationErrorRevision(const TString& revision);

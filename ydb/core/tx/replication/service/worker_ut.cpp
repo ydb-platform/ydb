@@ -183,14 +183,14 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
     };
 
     // Missing final-user retirement must leave the real proxy actor alive.
-    Y_UNIT_TEST(UnusedRemoteCredentialGenerationIsReclaimed) {
+    Y_UNIT_TEST(UnusedRemoteCredentialInstanceIsReclaimed) {
         TCredentialCacheEnv env;
         NKikimrReplication::TConnectionParams credentials;
         credentials.MutableStaticCredentials()->SetUser("user");
         credentials.MutableStaticCredentials()->SetPassword("same-password");
         THashSet<TActorId> generations;
         for (const TString generation : {"resolve-1", "resolve-2", "resolve-3"}) {
-            credentials.SetCredentialGeneration(generation);
+            credentials.SetCredentialInstanceId(generation);
             const auto proxy = env.Start(1, credentials);
             UNIT_ASSERT(generations.insert(proxy).second);
             const auto reader = env.Stop(1);
@@ -229,16 +229,16 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         NKikimrReplication::TConnectionParams credentials;
         credentials.MutableStaticCredentials()->SetUser("user");
         credentials.MutableStaticCredentials()->SetPassword("same-password");
-        credentials.SetCredentialGeneration("first-resolve");
+        credentials.SetCredentialInstanceId("first-resolve");
         const auto originalCredentials = credentials;
         const auto original = env.Start(1, credentials);
         env.Handshake(43, 1);
         UNIT_ASSERT_VALUES_EQUAL(env.Start(2, credentials, 43), original);
-        credentials.SetCredentialGeneration("new-secret-version");
+        credentials.SetCredentialInstanceId("new-secret-version");
         const auto refreshed = env.Start(3, credentials);
         UNIT_ASSERT(refreshed != original);
         UNIT_ASSERT_VALUES_EQUAL(env.Start(4, credentials), refreshed);
-        credentials.SetCredentialGeneration("reused-value-new-resolve");
+        credentials.SetCredentialInstanceId("reused-value-new-resolve");
         const auto reusedValue = env.Start(5, credentials);
         UNIT_ASSERT(reusedValue != original && reusedValue != refreshed);
 
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         NKikimrReplication::TConnectionParams credentials;
         credentials.MutableStaticCredentials()->SetUser("user");
         credentials.MutableStaticCredentials()->SetPassword("password");
-        credentials.SetCredentialGeneration("resolved-generation");
+        credentials.SetCredentialInstanceId("resolved-generation");
         const auto proxy = env.Start(1, credentials);
         const auto reader = env.Blocked.back()->Sender;
         const auto adopted = env.Handshake(42, 2);

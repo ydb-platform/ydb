@@ -253,6 +253,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
         if (!ev->Get()->Result.IsSuccess()) {
+            if (LeaveOnAuthenticationFailure(ev->Get()->Result.GetStatus())) {
+                return;
+            }
             YDB_LOG_WARN("Handle",
                 {"ev", ev->Get()->ToString()});
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
@@ -285,19 +288,27 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         return std::make_unique<TEvYdbProxy::TEvCommitOffsetRequest>(topicName, partitionId, consumerName, CommittedOffset, std::move(settings));
     }
 
+    bool LeaveOnAuthenticationFailure(NYdb::EStatus status) {
+        if (status != NYdb::EStatus::UNAUTHORIZED && status != NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+            return false;
+        }
+
+        // Remote issues are untrusted and may contain credentials. Preserve
+        // the typed SDK cause, without logging or forwarding their text.
+        YDB_LOG_WARN("Source authentication failed", {"status", status});
+        if (Settings.ReportStats_) {
+            SendError();
+        }
+        const auto outcome = status == NYdb::EStatus::UNAUTHORIZED
+                || AuthFailurePolicy == EAuthFailurePolicy::StaticLoginInitialization
+            ? TEvWorker::TEvGone::AUTH_ERROR : TEvWorker::TEvGone::UNAVAILABLE;
+        Leave(outcome, TStringBuilder() << "Source authentication failed (" << status << ")");
+        return true;
+    }
+
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
-        const auto status = ev->Get()->Result.GetStatus();
-        if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
-            // Remote issues are untrusted and may contain credentials. Preserve
-            // the typed SDK cause, without logging or forwarding their text.
-            YDB_LOG_WARN("Source authentication failed", {"status", status});
-            if (Settings.ReportStats_) {
-                SendError();
-            }
-            const auto outcome = status == NYdb::EStatus::UNAUTHORIZED
-                    || AuthFailurePolicy == EAuthFailurePolicy::StaticLoginInitialization
-                ? TEvWorker::TEvGone::AUTH_ERROR : TEvWorker::TEvGone::UNAVAILABLE;
-            return Leave(outcome, TStringBuilder() << "Source authentication failed (" << status << ")");
+        if (LeaveOnAuthenticationFailure(ev->Get()->Result.GetStatus())) {
+            return;
         }
 
         YDB_LOG_DEBUG("Handle",

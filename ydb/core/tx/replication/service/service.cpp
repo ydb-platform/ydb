@@ -45,7 +45,7 @@ class TSessionInfo {
 
     public:
         const TActorId ActorId;
-        TString CredentialGeneration;
+        TString CredentialInstanceId;
         const TMetricsConfig::EMetricsLevel MetricsLevel;
         TRowVersion Heartbeat = TRowVersion::Min();
 
@@ -263,7 +263,7 @@ public:
     }
 
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
-        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel, const TString& credentialGeneration)
+        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel, const TString& credentialInstanceId)
     {
         auto res = Workers.emplace(id, TWorkerInfo{
             ops->Register(actor, TMailboxType::HTSwap, poolId),
@@ -271,7 +271,7 @@ public:
         });
 
         auto& worker = res.first->second;
-        worker.CredentialGeneration = credentialGeneration;
+        worker.CredentialInstanceId = credentialInstanceId;
         if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !worker.Location.GetPath().empty()) {
             PendingStatsValues[id];
         }
@@ -333,7 +333,7 @@ public:
     void SendWorkerStatus(IActorOps* ops, const TWorkerId& id, Args&&... args) {
         auto event = MakeHolder<TEvService::TEvWorkerStatus>(id, std::forward<Args>(args)...);
         if (const auto it = Workers.find(id); it != Workers.end()) {
-            event->Record.SetCredentialGeneration(it->second.CredentialGeneration);
+            event->Record.SetCredentialInstanceId(it->second.CredentialInstanceId);
         }
         ops->Send(ActorId, event.Release());
     }
@@ -617,9 +617,9 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentia
             const TString& database,
             bool ssl,
             const TString& caCert,
-            TCredentialsKey credentials, const TString& generation)
+            TCredentialsKey credentials, const TString& credentialInstanceId)
         : std::tuple<TString, TString, bool, TString, TCredentialsKey, TString>(
-            endpoint, database, ssl, caCert, std::move(credentials), generation)
+            endpoint, database, ssl, caCert, std::move(credentials), credentialInstanceId)
     {
     }
 
@@ -659,13 +659,13 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentia
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, TStaticCredentialsKey{
-                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())}, params.GetCredentialGeneration());
+                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())}, params.GetCredentialInstanceId());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             return TConnectionParams(endpoint, database, ssl, caCert, TOAuthCredentialsKey{
-                FingerprintCredential(params.GetOAuthToken().GetToken())}, params.GetCredentialGeneration());
+                FingerprintCredential(params.GetOAuthToken().GetToken())}, params.GetCredentialInstanceId());
         case NKikimrReplication::TConnectionParams::kIamCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, TIamCredentialsKey{
-                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()}, params.GetCredentialGeneration());
+                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()}, params.GetCredentialInstanceId());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -924,7 +924,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             poolId,
             cmd.GetReplicationLocation(),
             cmd.GetMetricsLevel(),
-            readerSettings.GetConnectionParams().GetCredentialGeneration()
+            readerSettings.GetConnectionParams().GetCredentialInstanceId()
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }

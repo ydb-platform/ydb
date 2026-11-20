@@ -547,6 +547,15 @@ Y_UNIT_TEST_SUITE(IScan) {
             edge, MakeBackupTask(bucketName), exportFactory.get(), MakeYdbColumns(), 0);
         auto exporter = runtime->Register(actor.release());
 
+        // A direct Send() is delivered synchronously, ahead of the queued Bootstrap: let the actor start first.
+        {
+            NActors::TDispatchOptions options;
+            options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+                return ev.GetTypeRewrite() == NActors::TEvents::TSystem::Bootstrap && ev.Recipient == exporter;
+            });
+            runtime->DispatchEvents(options);
+        }
+
         // The batch is queued until the S3 uploader accepts data, so the last part is flushed from Exhausted() itself.
         runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), true)));
 

@@ -100,6 +100,9 @@ protected:
             case NKikimrPQ::TMirrorPartitionConfig::TCredentials::CREDENTIALS_NOT_SET: {
                 return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
             }
+            case NKikimrPQ::TMirrorPartitionConfig::TCredentials::kOauthToken: {
+                return NThreading::MakeFuture(NYdb::CreateOAuthCredentialsProviderFactory(cred.GetOauthToken()));
+            }
             default: {
                 ythrow yexception() << "unsupported credentials type " << ui64(cred.GetCredentialsCase());
             }
@@ -126,12 +129,18 @@ public:
         ui64 maxMemoryUsageBytes,
         TMaybe<TLog> logger = Nothing()
     ) const override {
+
         NYdb::NTopic::TReadSessionSettings settings = NYdb::NTopic::TReadSessionSettings()
             .ConsumerName(config.GetConsumer())
             .MaxMemoryUsageBytes(maxMemoryUsageBytes)
             .Decompress(false)
             .AutoPartitioningSupport(true)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
+
+        if (config.GetMirrorConsumerOffsets()) {
+            settings.Header({{"x-ydb-supports-replication-messages", "true"}});
+        }
+
         if (logger) {
             settings.Log(logger.GetRef());
         }

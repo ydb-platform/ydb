@@ -80,6 +80,13 @@ TResult ProcessTopicAttributes(
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings // out parameter
 );
 
+// Apply after rebuilding consumers. An absent attribute preserves existing types;
+// an empty value removes the replication consumer designation.
+TResult ApplyReplicationConsumerAttribute(
+    const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes,
+    NKikimrPQ::TPQTabletConfig& config
+);
+
 TResult AddConsumer(
     NKikimrPQ::TPQTabletConfig* config,
     const Ydb::Topic::Consumer& consumerConfig,

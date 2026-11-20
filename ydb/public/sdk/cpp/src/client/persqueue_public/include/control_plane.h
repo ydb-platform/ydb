@@ -164,6 +164,8 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(std::optional<std::string>, FederationAccount);
         GETTER(std::optional<ui32>, MetricsLevel);
         GETTER(std::optional<std::string>, AdvancedMonitoringSettings);
+        GETTER(std::optional<std::string>, ReplicationConsumer);
+        GETTER(std::optional<bool>, MirrorConsumerOffsets);
 
         const std::vector<TReadRule>& ReadRules() const {
             return ReadRules_;
@@ -199,6 +201,8 @@ struct TDescribeTopicResult : public TStatus {
         std::string FederationAccount_;
         std::optional<ui32> MetricsLevel_;
         std::optional<std::string> AdvancedMonitoringSettings_;
+        std::optional<std::string> ReplicationConsumer_;
+        std::optional<bool> MirrorConsumerOffsets_;
 
         std::optional<uint64_t> MaxPartitionsCount_;
         std::optional<TDuration> StabilizationWindow_;
@@ -313,6 +317,8 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_OPTIONAL(std::string, FederationAccount);
     FLUENT_SETTING_OPTIONAL(ui32, MetricsLevel);
     FLUENT_SETTING_OPTIONAL(std::string, AdvancedMonitoringSettings);
+    FLUENT_SETTING_OPTIONAL(std::string, ReplicationConsumer);
+    FLUENT_SETTING_OPTIONAL(bool, MirrorConsumerOffsets);
 
     //TODO: FLUENT_SETTING_VECTOR
     FLUENT_SETTING_DEFAULT(std::vector<TReadRuleSettings>, ReadRules, {});
@@ -339,6 +345,8 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         FederationAccount_ = settings.FederationAccount();
         MetricsLevel_ = settings.MetricsLevel();
         AdvancedMonitoringSettings_ = settings.AdvancedMonitoringSettings();
+        ReplicationConsumer_ = settings.ReplicationConsumer();
+        MirrorConsumerOffsets_ = settings.MirrorConsumerOffsets();
         ReadRules_.clear();
         for (const auto& readRule : settings.ReadRules()) {
             ReadRules_.push_back({});

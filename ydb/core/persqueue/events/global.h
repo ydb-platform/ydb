@@ -63,6 +63,7 @@ namespace NKikimr::TEvPersQueue {
         EvPartitionUpdateReadMetrics,
         EvCheckMessageDeduplicationRequest,
         EvCheckMessageDeduplicationResponse,
+        EvReplicationData,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -193,6 +194,9 @@ namespace NKikimr::TEvPersQueue {
             NKikimrPQ::TStatusResponse, EvStatusResponse> {
         TEvStatusResponse() {}
     };
+
+    struct TEvReplicationData : public TEventPB<TEvReplicationData,
+            NKikimrPQ::TEvReplicationData, EvReplicationData> {};
 
     struct TEvHasDataInfo : public TEventPB<TEvHasDataInfo,
             NKikimrPQ::THasDataInfo, EvHasDataInfo> {

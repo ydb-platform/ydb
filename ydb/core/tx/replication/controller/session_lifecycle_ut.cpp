@@ -571,19 +571,19 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(navigations, 1);
     }
 
-    Y_UNIT_TEST(SecretRevisionRequiresSameObjectAndNewerVersion) {
-        UNIT_ASSERT(CanRefreshSecret("schema:1:2:3", "schema:1:2:4"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:1:2:3"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:1:2:2"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:9:2:4"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "schema:1:9:4"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:3", "schema:4"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:invalid:2:3", "schema:invalid:2:4"));
-        UNIT_ASSERT(CanRefreshSecret("legacy", "legacy"));
-        UNIT_ASSERT(!CanRefreshSecret("legacy", "schema:1:2:4"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "legacy"));
-        UNIT_ASSERT(!CanRefreshSecret("", "schema:1:2:4"));
-        UNIT_ASSERT(!CanRefreshSecret("schema:1:2:3", "legacy:digest1"));
+    Y_UNIT_TEST(SecretRefreshDelayPreservesObjectIdentityAndVersionOrder) {
+        UNIT_ASSERT(GetSecretRefreshDelay("schema:1:2:3", "schema:1:2:4") == TDuration::Zero());
+        UNIT_ASSERT(GetSecretRefreshDelay("schema:1:2:3", "schema:1:2:3") == TDuration::Minutes(5));
+        UNIT_ASSERT(!GetSecretRefreshDelay("schema:1:2:3", "schema:1:2:2"));
+        UNIT_ASSERT(!GetSecretRefreshDelay("schema:1:2:3", "schema:9:2:4"));
+        UNIT_ASSERT(!GetSecretRefreshDelay("schema:1:2:3", "schema:1:9:4"));
+        UNIT_ASSERT(!GetSecretRefreshDelay("schema:3", "schema:4"));
+        UNIT_ASSERT(!GetSecretRefreshDelay("schema:invalid:2:3", "schema:invalid:2:4"));
+        UNIT_ASSERT(GetSecretRefreshDelay("legacy", "legacy") == TDuration::Zero());
+        UNIT_ASSERT(!GetSecretRefreshDelay("legacy", "schema:1:2:4"));
+        UNIT_ASSERT(!GetSecretRefreshDelay("schema:1:2:3", "legacy"));
+        UNIT_ASSERT(!GetSecretRefreshDelay("", "schema:1:2:4"));
+        UNIT_ASSERT(!GetSecretRefreshDelay("schema:1:2:3", "legacy:digest1"));
     }
 
     Y_UNIT_TEST(WorkerRegistrarStaticAndIamAuthenticationPolicy) {
@@ -989,6 +989,91 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         }
         UNIT_ASSERT_VALUES_EQUAL(probes, 2);
         UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+    }
+
+    Y_UNIT_TEST(SecretRecoveryRetriesRevisionAfterConsumerAccessIsGranted) {
+        TSetup s(1, false, true, ESecretCredentials::Static);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
+        const auto scheme = [&](const TString& query) {
+            s.Env.RunCall([&] {
+                NYdb::NTable::TTableClient client(s.Env.GetDriver());
+                auto session = client.CreateSession().GetValueSync().GetSession();
+                const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            });
+        };
+        scheme(R"(
+            REVOKE ALL ON `/Root` FROM sourceauto;
+            GRANT 'ydb.database.connect', 'ydb.granular.describe_schema' ON `/Root` TO sourceauto;
+        )");
+
+        const auto service = runtime.Register(CreateReplicationService());
+        // Model a remote consumer ACL independently from DescribeTopic permissions.
+        bool consumerAccessGranted = false;
+        auto openReads = std::make_shared<std::atomic<ui32>>(0);
+        auto reads = runtime.AddObserver<NGRpcService::TEvStreamTopicReadRequest>(
+            [&](NGRpcService::TEvStreamTopicReadRequest::TPtr& ev) {
+                if (ev->Recipient != NGRpcProxy::V1::GetPQReadServiceActorID()) {
+                    return;
+                }
+                if (!consumerAccessGranted) {
+                    Ydb::Topic::StreamReadMessage::FromServer denied;
+                    denied.set_status(Ydb::StatusIds::UNAUTHORIZED);
+                    ev->Get()->Attach({});
+                    ev->Get()->WriteAndFinish(std::move(denied), Ydb::StatusIds::UNAUTHORIZED);
+                    ev.Reset();
+                    return;
+                }
+                ++*openReads;
+                ev->Get()->SetAuditLogHook([openReads](auto, const auto&) { --*openReads; });
+            });
+        const auto nodeService = MakeReplicationServiceId(s.Edges[0].NodeId());
+        s.Disconnect(0);
+        runtime.RegisterService(nodeService, service);
+        s.Env.SendAsync(s.Controller, new TEvPrivate::TEvRestoreSession(s.Edges[0].NodeId()));
+        TString deniedInstance;
+        auto errors = runtime.AddObserver<TEvService::TEvWorkerStatus>([&](TEvService::TEvWorkerStatus::TPtr& ev) {
+            const auto& status = ev->Get()->Record;
+            if (status.GetErrorKind() == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
+                && ev->GetRecipientRewrite() == s.Controller)
+            {
+                deniedInstance = status.GetCredentialInstanceId();
+            }
+        });
+        ++s.Secret->Revision->Version;
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        runtime.WaitFor("reader denied with rotated credentials", [&] {
+            return !deniedInstance.empty() && s.Describe().GetState().HasError();
+        }, TDuration::Minutes(2));
+        UNIT_ASSERT_UNEQUAL(deniedInstance, s.CredentialInstanceId);
+
+        scheme("GRANT 'ydb.generic.read' ON `/Root/table` TO sourceauto;");
+        consumerAccessGranted = true;
+        runtime.SimulateSleep(TDuration::Seconds(40));
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+        runtime.SimulateSleep(TDuration::Minutes(5));
+        UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+        s.Env.RunCall([&] {
+            NYdb::NTable::TTableClient client(s.Env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto tx = NYdb::NTable::TTxControl::BeginTx().CommitTx();
+            const auto written = session.ExecuteDataQuery("UPSERT INTO `/Root/table` (key) VALUES (42u)", tx).GetValueSync();
+            UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+            for (const auto deadline = TInstant::Now() + TDuration::Seconds(30); TInstant::Now() < deadline;) {
+                const auto row = session.ExecuteDataQuery("SELECT key FROM `/Root/replica` WHERE key = 42u", tx).GetValueSync();
+                UNIT_ASSERT_C(row.IsSuccess(), row.GetIssues().ToString());
+                if (row.GetResultSet(0).RowsCount() == 1) {
+                    return;
+                }
+                Sleep(TDuration::MilliSeconds(50));
+            }
+            UNIT_FAIL("reader did not deliver after the consumer permission was granted");
+        });
+        runtime.Send(new IEventHandle(service, s.Controller, new TEvents::TEvPoison()), 0, true);
+        runtime.WaitFor("replication service and source reads stopped", [&] {
+            return !runtime.FindActor(service) && openReads->load() == 0;
+        }, TDuration::Seconds(30));
     }
 
     Y_UNIT_TEST_TWIN(DroppedIndexDuringSecretRefresh, SchemaChanges) {

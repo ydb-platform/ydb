@@ -197,9 +197,11 @@ IActor* CreateSecretResolver(const TActorId& parent, ui64 rid,
     return new TSecretResolver(parent, rid, pathId, secretName, cookie, database, NSecret::MakeLongRetryPolicy());
 }
 
-bool CanRefreshSecret(TStringBuf failed, TStringBuf resolved) {
+static constexpr auto MaxSecretRetryDelay = TDuration::Minutes(5);
+
+std::optional<TDuration> GetSecretRefreshDelay(TStringBuf failed, TStringBuf resolved) {
     if (failed == LegacySecretRecoveryMarker && resolved == LegacySecretRecoveryMarker) {
-        return true;
+        return TDuration::Zero();
     }
     const auto parseSchemaRevision = [](TStringBuf marker, NKqp::TSecretRevision& revision) {
         return marker.SkipPrefix("schema:")
@@ -211,11 +213,20 @@ bool CanRefreshSecret(TStringBuf failed, TStringBuf resolved) {
     if (failed == MissingIndexStreamRecoveryMarker) {
         // After a controller restart, revalidate the current credentials on all
         // remaining streams before resuming the base workers.
-        return resolved == LegacySecretRecoveryMarker || parseSchemaRevision(resolved, next);
+        if (resolved == LegacySecretRecoveryMarker || parseSchemaRevision(resolved, next)) {
+            return TDuration::Zero();
+        }
+        return std::nullopt;
     }
-    return parseSchemaRevision(failed, previous) && parseSchemaRevision(resolved, next)
-        && previous.PathOwnerId == next.PathOwnerId && previous.LocalPathId == next.LocalPathId
-        && previous.Version < next.Version;
+    if (!parseSchemaRevision(failed, previous) || !parseSchemaRevision(resolved, next)
+        || previous.PathOwnerId != next.PathOwnerId || previous.LocalPathId != next.LocalPathId
+        || next.Version < previous.Version)
+    {
+        return std::nullopt;
+    }
+    // A read permission can be granted after DescribeTopic accepted this revision.
+    // A fresh refresh actor starts after each reader failure, including after reboot.
+    return next.Version == previous.Version ? MaxSecretRetryDelay : TDuration::Zero();
 }
 
 // Only an authentication Error owns this actor. It owns the retry cadence;
@@ -307,6 +318,7 @@ public:
     void Bootstrap() {
         Become(&TThis::StateWork);
         const auto& failedCredentials = Params.GetStaticCredentials();
+        const auto startedAt = TActivationContext::Monotonic();
         TString rejectedRevision;
         TDuration retryDelay = TDuration::Zero();
         TMonotonic retryAt = TMonotonic::Zero();
@@ -325,9 +337,12 @@ public:
             }
             const auto response = std::move(*resolved);
             const auto& secret = *response->Get();
-            if (!secret.IsSuccess() || !CanRefreshSecret(FailedRevision, secret.Revision)
-                || (secret.Revision == rejectedRevision && TActivationContext::Monotonic() < retryAt) || Topics.empty())
-            {
+            if (!secret.IsSuccess() || Topics.empty()) {
+                continue;
+            }
+            const auto delay = GetSecretRefreshDelay(FailedRevision, secret.Revision);
+            const auto now = TActivationContext::Monotonic();
+            if (!delay || now < startedAt + *delay || (secret.Revision == rejectedRevision && now < retryAt)) {
                 continue;
             }
             // DescribeTopic can succeed for credentials that the worker cannot use to read.
@@ -351,7 +366,7 @@ public:
                 }
                 if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
                     retryDelay = secret.Revision == rejectedRevision
-                        ? Min(retryDelay * 2, TDuration::Minutes(5)) : TDuration::Minutes(1);
+                        ? Min(retryDelay * 2, MaxSecretRetryDelay) : TDuration::Minutes(1);
                     rejectedRevision = secret.Revision;
                     retryAt = TActivationContext::Monotonic() + retryDelay;
                 }

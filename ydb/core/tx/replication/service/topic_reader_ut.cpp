@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
     }
 
-    Y_UNIT_TEST(AuthenticationPolicyPreservesRetriesAndSanitizesIssues) {
+    Y_UNIT_TEST_TWIN(AuthenticationPolicyPreservesRetriesAndSanitizesIssues, OffsetCommit) {
         struct TCase {
             NYdb::EStatus Status;
             EAuthFailurePolicy Policy;
@@ -196,7 +196,16 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
                 issue.AddSubIssue(MakeIntrusive<NYdb::NIssue::TIssue>("UntrustedTokenMarker27516"));
                 issues.AddIssue(issue);
             }
-            runtime.Send(reader, session, new TEvYdbProxy::TEvTopicReaderGone(NYdb::TStatus(test.Status, std::move(issues))));
+            NYdb::TStatus status(test.Status, std::move(issues));
+            if (OffsetCommit) {
+                runtime.Send(reader, session, new TEvYdbProxy::TEvStartTopicReadingSession("read-session", 0, std::nullopt));
+                UNIT_ASSERT(runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(worker, TDuration::Seconds(5)));
+                runtime.Send(reader, worker, new TEvWorker::TEvCommit(1));
+                UNIT_ASSERT(runtime.GrabEdgeEvent<TEvYdbProxy::TEvCommitOffsetRequest>(proxy, TDuration::Seconds(5)));
+                runtime.Send(reader, proxy, new TEvYdbProxy::TEvCommitOffsetResponse(std::move(status)));
+            } else {
+                runtime.Send(reader, session, new TEvYdbProxy::TEvTopicReaderGone(std::move(status)));
+            }
             const auto gone = runtime.GrabEdgeEvent<TEvWorker::TEvGone>(worker, TDuration::Seconds(5));
             UNIT_ASSERT(gone);
             UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, test.Expected);

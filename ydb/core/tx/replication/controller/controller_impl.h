@@ -272,7 +272,7 @@ private:
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
-    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing(), NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind = NKikimrReplication::TEvWorkerStatus::ERROR_KIND_UNSPECIFIED, const TString& credentialGeneration = {});
+    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing(), NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind = NKikimrReplication::TEvWorkerStatus::ERROR_KIND_UNSPECIFIED, const TString& credentialInstanceId = {});
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
     void RunTxIndexBuild(const TActorContext& ctx);

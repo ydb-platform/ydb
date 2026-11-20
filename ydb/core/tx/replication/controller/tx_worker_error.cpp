@@ -10,7 +10,7 @@ class TController::TTxWorkerError: public TTxBase {
     const bool SourceOffsetMismatch;
     const NKikimrReplication::TEvWorkerStatus::EErrorKind ErrorKind;
     TReplication::TPtr AuthenticationFailure;
-    const TString CredentialGeneration;
+    const TString CredentialInstanceId;
     const TMaybe<ui64> SourceCommittedOffset;
     TMaybe<ui32> RestartWorkerNode;
     bool StopWorkers = false;
@@ -18,13 +18,13 @@ class TController::TTxWorkerError: public TTxBase {
     bool StopReplicationWorkers = false;
 
 public:
-    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset, NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind, const TString& credentialGeneration)
+    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset, NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind, const TString& credentialInstanceId)
         : TTxBase("TxWorkerError", self)
         , WorkerId(id)
         , Error(error)
         , SourceOffsetMismatch(sourceOffsetMismatch)
         , ErrorKind(errorKind)
-        , CredentialGeneration(credentialGeneration)
+        , CredentialInstanceId(credentialInstanceId)
         , SourceCommittedOffset(sourceCommittedOffset)
     {
     }
@@ -55,7 +55,7 @@ public:
         }
 
         if (ErrorKind == NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
-            && CredentialGeneration != replication->GetConfig().GetSrcConnectionParams().GetCredentialGeneration())
+            && CredentialInstanceId != replication->GetConfig().GetSrcConnectionParams().GetCredentialInstanceId())
         {
             // An ALTER can run between event acceptance and this transaction.
             // Retire the assigned worker without attributing its old failure to
@@ -200,8 +200,8 @@ public:
 
 }; // TTxWorkerError
 
-void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset, NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind, const TString& credentialGeneration) {
-    Execute(new TTxWorkerError(this, id, error, sourceOffsetMismatch, sourceCommittedOffset, errorKind, credentialGeneration), ctx);
+void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset, NKikimrReplication::TEvWorkerStatus::EErrorKind errorKind, const TString& credentialInstanceId) {
+    Execute(new TTxWorkerError(this, id, error, sourceOffsetMismatch, sourceCommittedOffset, errorKind, credentialInstanceId), ctx);
 }
 
 }

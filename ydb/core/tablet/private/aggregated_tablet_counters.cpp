@@ -1,18 +1,21 @@
 #include "aggregated_tablet_counters.h"
 
+#include <ydb/core/mon/counters_memonly.h>
 #include <ydb/core/protos/sys_view.pb.h>
 
 namespace NKikimr::NPrivate {
 
 TAggregatedTabletCounters::TAggregatedTabletCounters(
     ::NMonitoring::TDynamicCounterPtr counterGroup,
-    ::NMonitoring::TCountableBase::EVisibility visibility)
+    ::NMonitoring::TCountableBase::EVisibility visibility,
+    bool memOnly)
     : IsInitialized(false)
-    , AggregatedSimpleCounters(counterGroup, visibility)
-    , AggregatedCumulativeCounters(counterGroup, visibility)
-    , AggregatedHistogramCounters(counterGroup, visibility)
+    , AggregatedSimpleCounters(counterGroup, visibility, memOnly)
+    , AggregatedCumulativeCounters(counterGroup, visibility, memOnly)
+    , AggregatedHistogramCounters(counterGroup, visibility, memOnly)
     , CounterGroup(counterGroup)
     , Visibility(visibility)
+    , MemOnly(memOnly)
 {}
 
 void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, const THashSet<TString>* nameFilter) {
@@ -77,7 +80,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, 
             } else {
                 AggregatedCumulativeCounters.AddCumulativeCounter(name);
             }
-            auto counter = CounterGroup->GetCounter(name, true, Visibility);
+            auto counter = NMonitoring::NMemOnlyShim::GetCounter(CounterGroup, name, true, Visibility, MemOnly);
             CumulativeCounters.push_back(counter);
         }
     }

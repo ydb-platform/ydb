@@ -184,10 +184,9 @@ namespace NKikimr {
 
         template <class TKey, class TIter, class TRecordMerger, class TPQueue>
         void PutToMerger(TRecordMerger *merger, TPQueue &pqueue) {
-            using TIterPtr = std::shared_ptr<TIter>;
             Y_DEBUG_ABORT_UNLESS(!pqueue.empty());
-            TStackVec<TIterPtr, 32> tmp;
-            TIterPtr it = pqueue.top();
+            TStackVec<TIter*, 32> tmp;
+            TIter* it = pqueue.top();
             pqueue.pop();
             tmp.push_back(it);
             TKey curKey = it->GetCurKey();
@@ -205,11 +204,10 @@ namespace NKikimr {
 
         template <class TKey, class TIter, class TPQueue>
         TString ToString(TPQueue &pqueue) {
-            using TIterPtr = std::shared_ptr<TIter>;
             TStringStream str;
             Y_DEBUG_ABORT_UNLESS(!pqueue.empty());
-            TStackVec<TIterPtr, 32> tmp;
-            TIterPtr it = pqueue.top();
+            TStackVec<TIter*, 32> tmp;
+            TIter* it = pqueue.top();
             Y_DEBUG_ABORT_UNLESS(it->Valid());
             pqueue.pop();
             tmp.push_back(it);
@@ -230,21 +228,21 @@ namespace NKikimr {
 
         template <class TPQueue, class TIter>
         void Copy(
-                TVector<std::shared_ptr<TIter>> &dstIters,
+                TVector<std::unique_ptr<TIter>> &dstIters,
                 TPQueue &dstPQueue,
-                const TVector<std::shared_ptr<TIter>> &srcIters)
+                const TVector<std::unique_ptr<TIter>> &srcIters)
         {
             // copy iterators
-            dstIters.clear();
             dstPQueue.clear();
+            dstIters.clear();
             dstIters.reserve(srcIters.size());
             for (const auto &x : srcIters) {
-                dstIters.push_back(std::make_shared<TIter>(*x));
+                dstIters.push_back(std::make_unique<TIter>(*x));
             }
             // set up PQueue
             for (auto &x : dstIters) {
                 if (x->Valid()) {
-                    dstPQueue.push(x);
+                    dstPQueue.push(x.get());
                 }
             }
         }
@@ -265,13 +263,16 @@ namespace NKikimr {
             NHullPrivate::Copy<TPQueue, TIter>(Iters, PQueue, c.Iters);
         }
         TGenericNWayForwardIterator &operator=(const TGenericNWayForwardIterator &c) {
-            NHullPrivate::Copy<TPQueue, TIter>(Iters, PQueue, c.Iters);
+            if (this != &c) {
+                NHullPrivate::Copy<TPQueue, TIter>(Iters, PQueue, c.Iters);
+            }
+            return *this;
         }
         TGenericNWayForwardIterator(const THullCtxPtr &hullCtx, const TVector<TIterContType*> &elements) {
             Iters.reserve(elements.size());
             for (const auto &x : elements) {
                 if (!x->Empty()) {
-                    Iters.push_back(std::make_shared<TIter>(hullCtx, x));
+                    Iters.push_back(std::make_unique<TIter>(hullCtx, x));
                 }
             }
         }
@@ -290,7 +291,7 @@ namespace NKikimr {
             for (auto &x : Iters) {
                 x->SeekToFirst();
                 if (x->Valid()) {
-                    PQueue.push(x);
+                    PQueue.push(x.get());
                 }
             }
         }
@@ -300,13 +301,13 @@ namespace NKikimr {
             for (auto &x : Iters) {
                 x->Seek(key);
                 if (x->Valid()) {
-                    PQueue.push(x);
+                    PQueue.push(x.get());
                 }
             }
         }
 
         void Next() {
-            TIterPtr it = PQueue.top();
+            TIter* it = PQueue.top();
             PQueue.pop();
             Y_DEBUG_ABORT_UNLESS(it->Valid());
             TKey curKey = it->GetCurKey();
@@ -315,7 +316,7 @@ namespace NKikimr {
                 PQueue.push(it);
             }
 
-            while (!PQueue.empty() && curKey == ((it = PQueue.top())->GetCurKey())) {
+            while (!PQueue.empty() && curKey == (it = PQueue.top())->GetCurKey()) {
                 PQueue.pop();
                 it->Next();
                 if (it->Valid()) {
@@ -340,17 +341,16 @@ namespace NKikimr {
             return NHullPrivate::ToString<TKey, TIter, TPQueue>(PQueue);
         }
 
-    protected:
-        using TIterPtr = std::shared_ptr<TIter>;
+    private:
         class TGreater {
         public:
-            bool operator () (const TIterPtr &c1, const TIterPtr &c2) const {
+            bool operator () (const TIter* c1, const TIter* c2) const {
                 return c2->GetCurKey() < c1->GetCurKey();
             }
         };
-        using TPQueue = TPriorityQueue<TIterPtr, TVector<TIterPtr>, TGreater>;
+        using TPQueue = TPriorityQueue<TIter*, TVector<TIter*>, TGreater>;
 
-        TVector<TIterPtr> Iters;
+        TVector<std::unique_ptr<TIter>> Iters;
         mutable TPQueue PQueue;
     };
 
@@ -368,13 +368,16 @@ namespace NKikimr {
             NHullPrivate::Copy<TPQueue, TIter>(Iters, PQueue, c.Iters);
         }
         TGenericNWayBackwardIterator &operator=(const TGenericNWayBackwardIterator &c) {
-            NHullPrivate::Copy<TPQueue, TIter>(Iters, PQueue, c.Iters);
+            if (this != &c) {
+                NHullPrivate::Copy<TPQueue, TIter>(Iters, PQueue, c.Iters);
+            }
+            return *this;
         }
         TGenericNWayBackwardIterator(const THullCtxPtr &hullCtx, const TVector<TIterContType*> &elements) {
             Iters.reserve(elements.size());
             for (const auto &x : elements) {
                 if (!x->Empty()) {
-                    Iters.push_back(std::make_shared<TIter>(hullCtx, x));
+                    Iters.push_back(std::make_unique<TIter>(hullCtx, x));
                 }
             }
         }
@@ -395,14 +398,14 @@ namespace NKikimr {
 
                 if (!x->Valid()) {
                     x->Prev();
-                    PQueue.push(x);
+                    PQueue.push(x.get());
                 } else {
                     if (x->GetCurKey() == key) {
-                        PQueue.push(x);
+                        PQueue.push(x.get());
                     } else {
                         x->Prev();
                         if (x->Valid()) {
-                            PQueue.push(x);
+                            PQueue.push(x.get());
                         }
                     }
                 }
@@ -410,7 +413,7 @@ namespace NKikimr {
         }
 
         void Prev() {
-            TIterPtr it = PQueue.top();
+            TIter* it = PQueue.top();
             PQueue.pop();
             Y_DEBUG_ABORT_UNLESS(it->Valid());
             TKey curKey = it->GetCurKey();
@@ -444,11 +447,10 @@ namespace NKikimr {
             return NHullPrivate::ToString<TKey, TIter, TPQueue>(PQueue);
         }
 
-    protected:
-        using TIterPtr = std::shared_ptr<TIter>;
+    private:
         class TLess {
         public:
-            bool operator () (const TIterPtr &c1, const TIterPtr &c2) const {
+            bool operator () (const TIter* c1, const TIter* c2) const {
                 if (!c1->Valid())
                     return false;
                 if (!c2->Valid())
@@ -456,9 +458,9 @@ namespace NKikimr {
                 return c1->GetCurKey() < c2->GetCurKey();
             }
         };
-        using TPQueue = TPriorityQueue<TIterPtr, TVector<TIterPtr>, TLess>;
+        using TPQueue = TPriorityQueue<TIter*, TVector<TIter*>, TLess>;
 
-        TVector<TIterPtr> Iters;
+        TVector<std::unique_ptr<TIter>> Iters;
         mutable TPQueue PQueue;
     };
 

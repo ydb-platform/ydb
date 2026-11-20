@@ -2712,7 +2712,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     if (req.CmdWriteSize() > 0 && IsWriteProhibited()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::PRECONDITION_FAILED,
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
                    "Write to topic is prohibited");
         return;
     }

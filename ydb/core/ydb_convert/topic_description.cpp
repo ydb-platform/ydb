@@ -179,13 +179,13 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     if (config.HasWriteMode()) {
         switch (config.GetWriteMode()) {
             case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
-                (*out.mutable_attributes())["_write_available"] = "true";
+                (*out.mutable_attributes())["_write_mode"] = "available";
                 break;
             case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
-                (*out.mutable_attributes())["_write_unavailable"] = "true";
+                (*out.mutable_attributes())["_write_mode"] = "unavailable";
                 break;
             case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
-                (*out.mutable_attributes())["_write_prohibited"] = "true";
+                (*out.mutable_attributes())["_write_mode"] = "prohibited";
                 break;
         }
     }

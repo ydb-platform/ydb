@@ -54,13 +54,13 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (config.HasWriteMode()) {
             switch (config.GetWriteMode()) {
                 case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
-                    (*settings->mutable_attributes())["_write_available"] = "true";
+                    (*settings->mutable_attributes())["_write_mode"] = "available";
                     break;
                 case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
-                    (*settings->mutable_attributes())["_write_unavailable"] = "true";
+                    (*settings->mutable_attributes())["_write_mode"] = "unavailable";
                     break;
                 case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
-                    (*settings->mutable_attributes())["_write_prohibited"] = "true";
+                    (*settings->mutable_attributes())["_write_mode"] = "prohibited";
                     break;
             }
         }

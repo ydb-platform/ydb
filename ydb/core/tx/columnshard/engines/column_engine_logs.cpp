@@ -311,8 +311,10 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
     if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
     }
-    if (ActualizationStarted && vIndex.GetLastCriticalSchema() != criticalSchemaBefore) {
-        // the new schema is the actualization target, or (SchemeNeedActualization set back to false) there is none now
+    // the refresh re-targets the scheme actualizer (or, SchemeNeedActualization set back to false, stops it) and makes the
+    // tiering actualizer pick up the new TieringNeedActualization; a schema change without either leaves the target set
+    // by ALTER TABLE ... COMPACT WITH (CASCADE = true) and its queue alone
+    if (isCriticalScheme || switchTieringActualization || (ActualizationStarted && vIndex.GetLastCriticalSchema() != criticalSchemaBefore)) {
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }

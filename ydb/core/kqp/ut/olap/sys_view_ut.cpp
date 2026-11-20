@@ -470,13 +470,28 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             helper.ExecuteSchemeQuery("ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(10));
+            // the rewrite materializes the added column (nulls, a chunk per page) in every portion; the delete flag stays
+            // as sparse as it was written
             ui64 rawBytes2;
             ui64 bytes2;
-            helper.GetVolumes(rawBytes2, bytes2, count2, false, { "new_column_ui64", NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
-            YDB_LOG_VERIFY(rawBytes2 == 0,
-                {"real", rawBytes2});
-            YDB_LOG_VERIFY(bytes2 == 0,
+            helper.GetVolumes(rawBytes2, bytes2, count2, false, { "new_column_ui64" });
+            ui64 rawBytesField;
+            ui64 bytesField;
+            ui64 countField;
+            helper.GetVolumes(rawBytesField, bytesField, countField, false, { "field" });
+            YDB_LOG_VERIFY(rawBytes2 > 0 && bytes2 > 0,
+                {"raw", rawBytes2},
                 {"b", bytes2});
+            YDB_LOG_VERIFY(count2 == countField,
+                {"new_column_portions", count2},
+                {"field_portions", countField});
+            ui64 rawBytesDeleteFlag;
+            ui64 bytesDeleteFlag;
+            ui64 countDeleteFlag;
+            helper.GetVolumes(rawBytesDeleteFlag, bytesDeleteFlag, countDeleteFlag, false, { NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
+            YDB_LOG_VERIFY(rawBytesDeleteFlag == 0 && bytesDeleteFlag == 0,
+                {"raw", rawBytesDeleteFlag},
+                {"b", bytesDeleteFlag});
         }
     }
 

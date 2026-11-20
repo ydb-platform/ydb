@@ -2574,6 +2574,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         using TResult = NKikimrTxDataShard::TEvCompactTableResult;
         using EBackground = NKikimr::NYDBTest::ICSController::EBackground;
 
+        // the first member: the observer and the controller below are registered with it and must be destroyed before it
+        TTestBasicRuntime Runtime;
+
     private:
         static constexpr ui64 TableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> Pk = TTestSchema::YdbPkSchema();
@@ -2585,7 +2588,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTestActorRuntimeBase::TEventObserverHolder ReplyObserver;
 
     public:
-        TTestBasicRuntime Runtime;
         NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> Controller;
         TActorId Sender;
         // the schema versions of the live portions when the shard sent its last reply (background compaction may go on

@@ -1,4 +1,7 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
+
+#include <util/generic/hash_set.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -110,6 +113,15 @@ public:
             NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
         );
 
+        THashSet<ui64> cdcParents;
+        if (!record.GetCascade()) {
+            for (const auto* target : Replication->GetTargets()) {
+                if (const auto* child = GetCdcTarget(target)) {
+                    cdcParents.insert(child->GetCdc().GetParentTargetId());
+                }
+            }
+        }
+
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
@@ -120,25 +132,56 @@ public:
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
 
-            target->Shutdown(ctx);
+            auto* child = GetCdcTarget(target);
+            const bool initializingCdc = child && child->GetCdc().HasSourceStream() && !target->GetDstPathId();
+            const bool admittedBirth = initializingCdc && child->GetCdc().HasInitialCreateTxId();
+            const bool finishBirth = admittedBirth && !record.GetCascade();
+            const bool abandonSource = record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON;
+            const bool finishSourceCreate = initializingCdc && !admittedBirth && !abandonSource
+                && !target->GetStreamName().empty() && target->GetStreamState() == TReplication::EStreamState::Creating;
+            if (!finishSourceCreate && !(finishBirth && target->GetDstState() == TReplication::EDstState::Creating)) {
+                target->Shutdown(ctx);
+            }
 
-            target->SetStreamState(record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
-                ? TReplication::EStreamState::Removed
-                : TReplication::EStreamState::Removing);
+            if (abandonSource || (initializingCdc && target->GetStreamName().empty())) {
+                target->SetStreamState(TReplication::EStreamState::Removed);
+            } else if (!finishSourceCreate) {
+                target->SetStreamState(TReplication::EStreamState::Removing);
+            }
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            if (record.GetCascade() || target->GetKind() == TReplication::ETargetKind::Topic) {
-                if (!record.GetCascade() && target->GetKind() == TReplication::ETargetKind::Topic) {
-                    target->SetDstState(TReplication::EDstState::Alter);
-                } else {
-                    target->SetDstState(TReplication::EDstState::Removing);
+            if (initializingCdc) {
+                // Direct DROP reconciles any admitted CREATE before trimming the managed topic.
+                // CASCADE removes the owned table, which fences later child creation.
+                target->SetDstState(finishBirth ? TReplication::EDstState::Creating : TReplication::EDstState::Done);
+            } else if (!record.GetCascade() && child) {
+                using TCdc = NKikimrReplicationController::TCdcTarget;
+                auto& state = child->GetCdc();
+                if (state.GetPhase() == TCdc::FINISHED) {
+                    continue;
                 }
+                if (state.GetPhase() == TCdc::PREPARED) {
+                    state.SetPhase(TCdc::TRIMMING);
+                } else if (state.GetPhase() != TCdc::TRIMMING) {
+                    state.SetPhase(TCdc::STOPPING);
+                }
+                target->SetDstState(TReplication::EDstState::Alter);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
-                    NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
-                );
+                    NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()));
+            } else if (cdcParents.contains(tid) || (record.GetCascade() && child)) {
+                // Direct DROP keeps the parent read-only. CASCADE drops its CDC children with the parent.
+                target->SetDstState(TReplication::EDstState::Done);
+            } else if (record.GetCascade()) {
+                target->SetDstState(TReplication::EDstState::Removing);
+            } else if (target->GetKind() == TReplication::ETargetKind::Topic) {
+                target->SetDstState(TReplication::EDstState::Alter);
+            } else {
+                continue;
             }
+            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
         }
 
         YDB_LOG_NOTICE_CTX(ctx, "Drop replication",

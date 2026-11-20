@@ -1,5 +1,8 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
 #include "target_transfer.h"
+
+#include <ydb/core/base/appdata.h>
 
 #include <util/string/join.h>
 
@@ -10,6 +13,28 @@ namespace NKikimr::NReplication::NController {
 class TController::TTxDiscoveryTargetsResult: public TTxBase {
     TEvPrivate::TEvDiscoveryTargetsResult::TPtr Ev;
     TReplication::TPtr Replication;
+
+    void AddCdcTargets(const TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry& table, ui64 parentId, NIceDb::TNiceDb& db) {
+        for (const auto& stream : table.CdcStreams) {
+            auto childPath = [&stream](TStringBuf tablePath) -> TString {
+                tablePath.ChopSuffix("/");
+                return TStringBuilder() << tablePath << '/' << stream.GetName();
+            };
+            const auto config = std::make_shared<TTargetCdc::TConfig>(
+                childPath(table.Config->GetSrcPath()), childPath(table.Config->GetDstPath()));
+            const auto id = Replication->AddTarget(TReplication::ETargetKind::CdcTopic, config);
+
+            auto& cdc = GetCdcTarget(Replication->FindTarget(id))->GetCdc();
+            cdc.SetParentTargetId(parentId);
+            stream.SerializeTo(*cdc.MutableSourceStream());
+
+            db.Table<Schema::Targets>().Key(Replication->GetId(), id).Update(
+                NIceDb::TUpdate<Schema::Targets::Kind>(TReplication::ETargetKind::CdcTopic),
+                NIceDb::TUpdate<Schema::Targets::SrcPath>(config->GetSrcPath()),
+                NIceDb::TUpdate<Schema::Targets::DstPath>(config->GetDstPath()),
+                NIceDb::TUpdate<Schema::Targets::Cdc>(cdc.SerializeAsString()));
+        }
+    }
 
 public:
     explicit TTxDiscoveryTargetsResult(TController* self, TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev)
@@ -79,6 +104,16 @@ public:
                     NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
                     NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
+
+                const auto& config = Replication->GetConfig();
+                if (target.Kind == TReplication::ETargetKind::Table
+                    && config.GetInitialScan()
+                    && config.GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::kRow
+                    && AppData(ctx)->FeatureFlags.GetEnableTopicReplication()
+                    && AppData(ctx)->FeatureFlags.GetEnableAsyncReplicationTableOwnership())
+                {
+                    AddCdcTargets(target, tid, db);
+                }
 
                 YDB_LOG_NOTICE_CTX(ctx, "Add target",
                     {"rid", rid},

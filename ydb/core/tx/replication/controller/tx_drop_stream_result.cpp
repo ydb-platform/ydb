@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -67,7 +68,9 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (target->GetDstState() == TReplication::EDstState::Removing) {
+        const bool handoffPending = target->GetDstState() == TReplication::EDstState::Alter
+            && (GetCdcTarget(target) || !GetCdcChildren(*Replication, tid).empty());
+        if (target->GetDstState() == TReplication::EDstState::Removing || handoffPending) {
             Self->DeleteProcessedSourceOffsets(rid, tid, db);
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());

@@ -6,6 +6,7 @@
 
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
@@ -123,15 +124,8 @@ class TTopicMirroringFixture {
     static constexpr const char* SourceTopic = "/Root/src/topic";
     static constexpr const char* DestinationTopic = "/Root/topic";
 
-    static TFeatureFlags Flags() {
-        TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableTopicReplication(true);
-        flags.FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
-        return flags;
-    }
-
     struct TSourceEnv: TEnv<> {
-        TSourceEnv(): TEnv<>(Flags()) {
+        TSourceEnv(): TEnv<>(TopicReplicationFlags()) {
             UNIT_ASSERT_VALUES_EQUAL(MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
             auto topic = MakeTopicDescription({.Name = "topic"});
             topic->MutablePQTabletConfig()->AddConsumers()->SetName(Consumer);
@@ -139,25 +133,10 @@ class TTopicMirroringFixture {
         }
     };
 
-    struct TOffsets {
-        ui64 End;
-        ui64 Committed;
-    };
-
-    static TOffsets GetOffsets(TEnv<>& env, const TString& topic, const TString& consumer) {
-        NYdb::NTopic::TTopicClient client(env.GetDriver());
-        const auto result = env.RunCall([&] {
-            return client.DescribeConsumer(topic, consumer, NYdb::NTopic::TDescribeConsumerSettings()
-                .IncludeStats(true)).GetValueSync();
-        });
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        const auto& partitions = result.GetConsumerDescription().GetPartitions();
-        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-        const auto& partition = partitions.front();
-        UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-        UNIT_ASSERT(partition.GetPartitionStats());
-        UNIT_ASSERT(partition.GetPartitionConsumerStats());
-        return {partition.GetPartitionStats()->GetEndOffset(), partition.GetPartitionConsumerStats()->GetCommittedOffset()};
+    static TTopicOffsets GetOffsets(TEnv<>& env, const TString& topic, const TString& consumer) {
+        const auto offsets = GetTopicOffsets(env, topic, consumer);
+        UNIT_ASSERT(offsets);
+        return *offsets;
     }
 
     TString MirrorConsumer;
@@ -169,7 +148,7 @@ public:
 
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false,
             TMirrorReaderFactory* mirrorReaderFactory = nullptr, const TString& sourceWriteMode = {})
-        : Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
+        : Destination(TopicReplicationFlags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
     {
         if (mirrorReaderFactory) {
             auto& runtime = Destination.GetRuntime();
@@ -194,7 +173,7 @@ public:
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
                 CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", endpoint.c_str()));
         if (stopBeforeCreateResult) {
-            Wait([&] { return createResultBlocked.load(); });
+            WaitForReplication(Destination, [&] { return createResultBlocked.load(); });
             return;
         }
         WaitMirror(true);
@@ -218,26 +197,13 @@ public:
         return result->Get()->GetRecord().GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
     }
 
-    template <typename TCondition>
-    void Wait(const TCondition& ready, const TString& description = "topic mirroring") {
-        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
-        while (!ready()) {
-            UNIT_ASSERT_C(TInstant::Now() < deadline, "Timed out waiting for " << description);
-            if (Destination.GetRuntime().IsRealThreads()) {
-                Sleep(TDuration::MilliSeconds(10));
-            } else {
-                Destination.GetRuntime().SimulateSleep(TDuration::MilliSeconds(10));
-            }
-        }
-    }
-
     void WaitMirror(bool enabled) {
-        Wait([&] { return Config().GetPartitionConfig().HasMirrorFrom() == enabled; });
+        WaitForReplication(Destination, [&] { return Config().GetPartitionConfig().HasMirrorFrom() == enabled; });
     }
 
     void Done() {
         Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
-        Wait([&] { return Destination.GetDescription("/Root/replication")
+        WaitForReplication(Destination, [&] { return Destination.GetDescription("/Root/replication")
             .GetPathDescription().GetReplicationDescription().GetState().HasDone(); });
     }
 
@@ -312,15 +278,9 @@ public:
         const auto commit = CommitSourceConsumerOffset(offset);
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
 
-        NYdb::NTopic::TTopicClient destination(Destination.GetDriver());
-        Wait([&] {
-            const auto result = destination.DescribeConsumer(DestinationTopic, Consumer,
-                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            const auto& partitions = result.GetConsumerDescription().GetPartitions();
-            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-            const auto& stats = partitions.front().GetPartitionConsumerStats();
-            return stats && stats->GetCommittedOffset() == offset;
+        WaitForReplication(Destination, [&] {
+            const auto stats = GetTopicOffsets(Destination, DestinationTopic, Consumer);
+            return stats && stats->Committed == offset;
         });
     }
 
@@ -348,7 +308,7 @@ public:
 
     void WaitForOffsets(ui64 end, ui64 appOffset) {
         TString description;
-        Wait([&] {
+        WaitForReplication(Destination, [&] {
             const auto destination = GetOffsets(Destination, DestinationTopic, Consumer);
             description = TStringBuilder() << "destination partition 0 to reach end offset " << end
                 << " and application offset " << appOffset << " (observed " << destination.End
@@ -356,7 +316,7 @@ public:
             return destination.End == end && destination.Committed == appOffset;
         }, description);
 
-        Wait([&] {
+        WaitForReplication(Destination, [&] {
             const auto source = GetOffsets(Source, SourceTopic, MirrorConsumer);
             description = TStringBuilder() << "source mirror consumer " << MirrorConsumer
                 << " to commit partition 0 through offset " << end << " (observed " << source.Committed << ')';
@@ -376,31 +336,11 @@ public:
     }
 
     void ReadBack(const TVector<TString>& payloads, ui64 firstOffset) {
-        using namespace NYdb::NTopic;
-        TTopicClient client(Destination.GetDriver());
-        auto reader = client.CreateReadSession(TReadSessionSettings().WithoutConsumer()
-            .AppendTopics(TTopicReadSettings(DestinationTopic).AppendPartitionIds(0)));
-        size_t index = 0;
-        Wait([&] {
-            auto event = reader->GetEvent();
-            if (!event) {
-                return false;
-            }
-            if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-                start->Confirm(firstOffset + index);
-            } else if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                for (const auto& message : data->GetMessages()) {
-                    UNIT_ASSERT(index < payloads.size());
-                    UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), firstOffset + index);
-                    UNIT_ASSERT_VALUES_EQUAL(message.GetData(), payloads[index]);
-                    ++index;
-                }
-            } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
-                UNIT_FAIL(closed->DebugString());
-            }
-            return index == payloads.size();
-        });
-        UNIT_ASSERT(Destination.RunCall([&] { return reader->Close(TDuration::Seconds(10)); }));
+        const auto records = ReadTopic(Destination, DestinationTopic, payloads.size(), firstOffset);
+        for (size_t i = 0; i < payloads.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(records[i].Offset, firstOffset + i);
+            UNIT_ASSERT_VALUES_EQUAL(records[i].Data, payloads[i]);
+        }
     }
 
     void WriteAndReadBack(const TString& payload, ui64 offset) {
@@ -411,12 +351,14 @@ public:
 
 class TConsumerRemovalFixture {
 public:
-    TConsumerRemovalFixture() {
+    explicit TConsumerRemovalFixture(bool cdc = false) {
         Runtime.Initialize(TAppPrepare().Unwrap());
         Parent = Runtime.AllocateEdgeActor();
         Proxy = Runtime.AllocateEdgeActor();
-        Remover = Runtime.Register(CreateStreamRemover(Parent, Proxy, 1, 1,
-            TReplication::ETargetKind::Topic, "/Root/topic", "consumer"));
+        Remover = Runtime.Register(cdc
+            ? CreateCdcStreamConsumerRemover(Parent, Proxy, 1, 1, "/Root/table", "feed", "consumer")
+            : CreateStreamRemover(Parent, Proxy, 1, 1,
+                TReplication::ETargetKind::Topic, "/Root/topic", "consumer"));
         Runtime.EnableScheduleForActor(Remover);
         Runtime.GrabEdgeEvent<TEvPrivate::TEvRequestDropStream>(Parent);
         Runtime.Send(Remover, Parent, new TEvPrivate::TEvAllowDropStream());
@@ -451,6 +393,43 @@ public:
             Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
             UNIT_ASSERT(Runtime.GetCurrentTime() - start >= TDuration::Seconds(10));
         }
+    }
+
+    void CheckCdcAbsence(bool missingTable) {
+        auto describe = [&](NYdb::EStatus status, bool hasFeed) {
+            Reply(NYdb::EStatus::SCHEME_ERROR);
+            const auto request = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(request->Get()->GetArgs()), "/Root/table");
+            Ydb::Table::DescribeTableResult description;
+            if (hasFeed) {
+                description.add_changefeeds()->set_name("feed");
+            }
+            Runtime.Send(Remover, Proxy, new TEvYdbProxy::TEvDescribeTableResponse(
+                NYdb::TStatus(status, {}), std::move(description), NYdb::NTable::TDescribeTableSettings()));
+        };
+        for (const auto status : {NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAUTHORIZED}) {
+            const auto start = Runtime.GetCurrentTime();
+            describe(status, status == NYdb::EStatus::SUCCESS);
+            const auto retry = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
+            UNIT_ASSERT(Runtime.GetCurrentTime() - start >= TDuration::Seconds(10));
+            const auto& args = retry->Get()->GetArgs();
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(args), "/Root/table/feed");
+            const auto& consumers = std::get<NYdb::NTopic::TAlterTopicSettings>(args).DropConsumers_;
+            UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(consumers.front(), "consumer");
+        }
+
+        describe(missingTable ? NYdb::EStatus::SCHEME_ERROR : NYdb::EStatus::SUCCESS, false);
+        if (missingTable) {
+            const auto request = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvListDirectoryRequest>(Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(request->Get()->GetArgs()), "/Root");
+            NYdb::NScheme::TSchemeEntry parent;
+            parent.Type = NYdb::NScheme::ESchemeEntryType::SubDomain;
+            Runtime.Send(Remover, Proxy, new TEvYdbProxy::TEvListDirectoryResponse(
+                NYdb::NScheme::TListDirectoryResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), parent, {})));
+        }
+        const auto result = Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(Parent);
+        UNIT_ASSERT(result->Get()->IsSuccess());
     }
 
     void FinishWithMissingConsumer() {
@@ -498,6 +477,12 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         test.DenyAndWaitForRetry();
         test.CheckAmbiguousAbsence();
         test.FinishWithMissingConsumer();
+    }
+
+    Y_UNIT_TEST_TWIN(CdcConsumerCleanupRequiresProvenAbsence, MissingTable) {
+        TConsumerRemovalFixture test(true);
+        test.DenyAndWaitForRetry();
+        test.CheckCdcAbsence(MissingTable);
     }
 
     Y_UNIT_TEST(ConsumerCleanupCanBeCancelledAfterFailure) {

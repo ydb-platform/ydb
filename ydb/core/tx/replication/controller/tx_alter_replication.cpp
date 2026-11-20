@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
 
 #include <util/generic/algorithm.h>
 
@@ -67,6 +68,50 @@ bool RetryPausedBootstrap(
             NIceDb::TUpdate<TControllerSchema::Targets::Issue>(target->GetIssue()));
     }
 
+    return true;
+}
+
+bool KeepCdcStateDuringAlter(TReplication& replication, TReplication::ITarget& target,
+        NIceDb::TNiceDb& db, const TActorContext& ctx)
+{
+    if (replication.GetDesiredState() == TReplication::EState::Done
+        && target.GetDstState() == TReplication::EDstState::Done
+        && (GetCdcTarget(&target) || !GetCdcChildren(replication, target.GetId()).empty()))
+    {
+        return true;
+    }
+
+    if (target.GetDstState() == TReplication::EDstState::PreparingCdc
+        && replication.GetDesiredState() != TReplication::EState::Done)
+    {
+        target.Shutdown(ctx);
+        return true;
+    }
+
+    const auto* child = GetCdcTarget(&target);
+    if (!child || !child->GetCdc().HasSourceStream() || target.GetDstPathId()
+        || target.GetDstState() == TReplication::EDstState::Done)
+    {
+        return false;
+    }
+
+    const auto desiredState = replication.GetDesiredState();
+    const bool retrySource = desiredState == TReplication::EState::Ready
+        && target.GetStreamState() == TReplication::EStreamState::Error;
+    const bool retryDestination = target.GetDstState() == TReplication::EDstState::Error
+        && (desiredState == TReplication::EState::Ready
+            || (desiredState == TReplication::EState::Done && child->GetCdc().HasInitialCreateTxId()));
+    if (retrySource || retryDestination) {
+        target.Shutdown(ctx);
+        target.SetDstState(TReplication::EDstState::Creating);
+        if (retrySource) {
+            target.SetStreamState(TReplication::EStreamState::Creating);
+            db.Table<TControllerSchema::SrcStreams>().Key(replication.GetId(), target.GetId()).Update(
+                NIceDb::TUpdate<TControllerSchema::SrcStreams::State>(target.GetStreamState()));
+        }
+        db.Table<TControllerSchema::Targets>().Key(replication.GetId(), target.GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::Targets::DstState>(target.GetDstState()));
+    }
     return true;
 }
 
@@ -294,6 +339,30 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        if (alter && desiredState == TReplication::EState::Done
+            && record.GetSwitchState().GetDone().GetFailoverMode()
+                == NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE)
+        {
+            for (auto* target : Replication->GetTargets()) {
+                if (auto* cdc = GetCdcTarget(target);
+                    cdc && cdc->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::RUNNING)
+                {
+                    auto& state = cdc->GetCdc();
+                    if (state.HasSourceStream() && !state.HasInitialCreateTxId()) {
+                        // Cancel source preparation before any destination DDL. Keep its cleanup metadata.
+                        target->Shutdown(ctx);
+                        target->SetDstState(TReplication::EDstState::Done);
+                        state.SetPhase(NKikimrReplicationController::TCdcTarget::FINISHED);
+                    } else {
+                        // An admitted initial CREATE can finish locally even when the source is offline.
+                        state.SetPhase(NKikimrReplicationController::TCdcTarget::STOPPING);
+                    }
+                    db.Table<Schema::Targets>().Key(Replication->GetId(), target->GetId()).Update(
+                        NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()),
+                        NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+                }
+            }
+        }
         if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
             issue.clear();
         }
@@ -355,6 +424,10 @@ public:
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
+                continue;
+            }
+
+            if (KeepCdcStateDuringAlter(*Replication, *target, db, ctx)) {
                 continue;
             }
 
@@ -479,6 +552,9 @@ public:
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
+                continue;
+            }
+            if (KeepCdcStateDuringAlter(*Replication, *target, db, ctx)) {
                 continue;
             }
             target->Shutdown(ctx);

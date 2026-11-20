@@ -4097,49 +4097,80 @@ Y_UNIT_TEST_F(PlanStep_Changed_While_WriteTx_Inflight_Is_Persisted, TPQTabletFix
     UNIT_ASSERT_VALUES_EQUAL(info.GetExecTxId(), txId);
 }
 
+Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
+{
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+
+    // validate supportive partition was created
+    WaitForExactSupportivePartitionsCount(1);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), true);
+
+    // increment time till after kafka txn timeout
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // wait till supportive partition for this kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(0);
+}
+
 Y_UNIT_TEST_F(Kafka_Expired_Writes_Without_Partitions_Are_Deleted_After_Restart, TPQTabletFixture)
 {
     const NKafka::TProducerInstanceId producerInstanceId = {1, 0};
     const ui64 txId = 67890;
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
-    const TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
-    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
-    WaitForExactSupportivePartitionsCount(1);
+    // Emulate a snapshot left by an older version after transaction deletion.
+    // Do not rely on commit leaving a stale entry: DeleteWriteId now marks
+    // TxWrites as changed and the next persist removes it from _txinfo.
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 0);
+    const auto createdAt = Ctx->Runtime->GetCurrentTime();
+    auto* write = txInfo.AddTxWrites();
+    SetWriteId(*write, TWriteId{producerInstanceId});
+    write->SetKafkaTransaction(true);
+    write->SetCreatedAt(createdAt.MilliSeconds());
 
-    CommitKafkaTransaction(producerInstanceId, txId);
-    WaitForTheTransactionToBeDeleted(txId);
-    WaitForExactSupportivePartitionsCount(0);
-
-    // The transaction is gone, but its empty write entry remains in the last
-    // persisted _txinfo snapshot. Restart restores it without a linked TxId.
-    const auto txInfo = GetTxWritesFromKV();
-    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
-    const auto& write = txInfo.GetTxWrites(0);
-    UNIT_ASSERT_VALUES_EQUAL(GetWriteId(write), TWriteId{producerInstanceId});
-    UNIT_ASSERT(write.HasCreatedAt());
-    UNIT_ASSERT(!write.HasOriginalPartitionId());
-    UNIT_ASSERT(!write.HasInternalPartitionId());
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto* command = request->Record.AddCmdWrite();
+    command->SetKey(TX_INFO_KEY);
+    command->SetValue(txInfo.SerializeAsString());
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+    SendToPipe(Ctx->Edge, request.Release());
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetWriteResult(0).GetStatus(), NKikimrProto::OK);
 
     PQTabletRestart(*Ctx);
     ResetPipe();
     const auto restored = GetTxWritesFromKV();
     UNIT_ASSERT_VALUES_EQUAL(restored.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(GetWriteId(restored.GetTxWrites(0)), TWriteId{producerInstanceId});
-    UNIT_ASSERT_VALUES_EQUAL(restored.GetTxWrites(0).GetCreatedAt(), write.GetCreatedAt());
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetTxWrites(0).GetCreatedAt(), createdAt.MilliSeconds());
+    UNIT_ASSERT(!restored.GetTxWrites(0).HasOriginalPartitionId());
+    UNIT_ASSERT(!restored.GetTxWrites(0).HasInternalPartitionId());
 
     const ui64 timeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(timeoutMs + 1));
     SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
 
-    // Prepare an unrelated read transaction to persist the cleaned-up TxWrites.
-    SendProposeTransactionRequest({.TxId=txId + 1,
+    SendProposeTransactionRequest({.TxId=txId,
                                   .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
                                   .TxOps={
                                       {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
                                   }});
-    WaitProposeTransactionResponse({.TxId=txId + 1,
+    WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
     WaitForExactTxWritesCount(0);
 }

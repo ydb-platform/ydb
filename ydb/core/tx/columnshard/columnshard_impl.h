@@ -572,8 +572,9 @@ private:
     };
 
     std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
-    // the operation served (TEvCompactTable::OperationId): the same id again is a retry, another one a new operation
-    std::optional<ui64> ForcedCompactionOperationId;
+    // the forced compaction served (TEvCompactTable::ForcedCompactionId): the same id again is a retry, another one a
+    // new forced compaction
+    std::optional<ui64> ForcedCompactionId;
     bool ForcedCompactionActualizeSchema = false;   // its Cascade: the reply also waits for the rewrite
     void FinishForcedCompactionActualization();
     ui32 JitterIntervalMS = 200;

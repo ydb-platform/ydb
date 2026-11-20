@@ -331,12 +331,20 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
         new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
     request->Record.SetCompactBorrowed(true);
     if (it->second.TabletType == ETabletType::ColumnShard) {
-        if (auto* info = InProgressForcedCompactionsByShard.FindPtr(shardIdx)) {
-            // column shard: CASCADE also rewrites the portions to the current schema, the id tells a retry of this
-            // operation from a new one
-            request->Record.SetCascade((*info)->Cascade);
-            request->Record.SetOperationId((*info)->Id);
+        // column shard: CASCADE also rewrites the portions to the current schema, the id tells a retry of this
+        // operation from a new one. A queued shard always belongs to an operation in progress; a request without the
+        // id is reserved for pre-upgrade schemeshards (the shard answers it NOT_NEEDED), so none is sent here.
+        auto* info = InProgressForcedCompactionsByShard.FindPtr(shardIdx);
+        if (!info) {
+            YDB_LOG_ERROR_CTX(ctx, "[ForcedCompaction] [Start] No operation in progress for the column shard",
+                {"shardIdx", shardIdx},
+                {"schemeshard", TabletID()},
+            );
+            CompleteForcedCompactionForShard(shardIdx, ctx);
+            return NOperationQueue::EStartStatus::EOperationRemove;
         }
+        request->Record.SetCascade((*info)->Cascade);
+        request->Record.SetForcedCompactionId((*info)->Id);
     }
 
     PipeClientCache->Send(

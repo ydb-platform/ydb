@@ -1222,9 +1222,9 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (!record.HasOperationId()) {
+    if (!record.HasForcedCompactionId()) {
         // not a forced compaction of this protocol (an older schemeshard): NOT_NEEDED, FAILED would be retried forever
-        YDB_LOG_WARN("Forced compaction request without an operation id",
+        YDB_LOG_WARN("Forced compaction request without an id",
             {"tablet", TabletID()},
             {"pathId", pathId},
             {"requestedFrom", ev->Sender});
@@ -1253,10 +1253,10 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (ForcedCompactionOperationId != record.GetOperationId()) {
+    if (ForcedCompactionId != record.GetForcedCompactionId()) {
         // a new operation, not a retry (the schemeshard repeats the request until answered; a retry must not touch the
         // rewrite): CASCADE targets the current schema, a plain operation turns off the rewrite of a cancelled CASCADE
-        ForcedCompactionOperationId = record.GetOperationId();
+        ForcedCompactionId = record.GetForcedCompactionId();
         if (record.GetCascade()) {
             engine.SetSchemeNeedActualization(true);
         } else if (ForcedCompactionActualizeSchema) {

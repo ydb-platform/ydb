@@ -3448,6 +3448,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .InitKikimrRunConfig();
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
+        const auto bscActor = ResolveTablet(runtime, MakeBSControllerID());
         const auto sender = runtime.AllocateEdgeActor();
         const auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         bool withSample = true;
@@ -3461,11 +3462,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> cachedPools;
         std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> cachedGroups;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsRequest) {
-                ++storagePoolRequests;
-            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsRequest) {
-                ++groupRequests;
-            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsRequest) {
+            const auto type = ev->GetTypeRewrite();
+            if (ev->GetRecipientRewrite() == bscActor) {
+                // The controller forwards these requests to its system views collector.
+                storagePoolRequests += type == NSysView::TEvSysView::EvGetStoragePoolsRequest;
+                groupRequests += type == NSysView::TEvSysView::EvGetGroupsRequest;
+            }
+            if (type == NSysView::TEvSysView::EvGetVSlotsRequest) {
                 const auto& request = ev->Get<NSysView::TEvSysView::TEvGetVSlotsRequest>()->Record;
                 returnDDiskPoolNames = request.GetIncludeDDiskPoolNames();
                 UNIT_ASSERT_VALUES_EQUAL(returnDDiskPoolNames, includeDDisks);

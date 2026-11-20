@@ -23,6 +23,7 @@ ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSession
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBothTabletsCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootTabletOnlyCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut unittest.sole chunk
+ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-27-1-1_to_prestable-27-1-1-COLUMN]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-26-4-1_to_prestable-27-1-1-COLUMN]
 ydb/tests/compatibility/common test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_column_tables[rolling_stable-26-4-1_to_prestable-27-1-1]

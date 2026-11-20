@@ -420,8 +420,9 @@ public:
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree: {
-                if (State != EIndexState::Ready) {
-                    // Do not try to update vector indexes until their build is finished
+                // A vector index accepts updates once all levels are built and the
+                // main table snapshot for the delta scan has been taken (WriteOnly).
+                if (State != EIndexState::Ready && State != EIndexState::WriteOnly) {
                     return false;
                 }
                 const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).GetSettings();

@@ -184,6 +184,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
 
     Y_UNIT_TEST_F(PgPolicyPreservesCheckpointOnRejectedRestart, TStreamingTestFixture) {
         SetupAppConfig().MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
         CreateScopedTopic("pgPolicyInput");
         CreateScopedTopic("pgPolicyOutput");
         CreatePqSource("pgPolicySource");

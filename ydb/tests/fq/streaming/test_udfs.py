@@ -47,6 +47,7 @@ def kikimr_udfs(request):
 
 class TestUdfsUsage(StreamingTestBase):
     def test_dynamic_udf(self, kikimr_udfs, entity_name):
+        topic_ydb_client = kikimr_udfs.external_ydb_client
         source_name = entity_name("test_udfs")
         self.init_topics(source_name, create_output=False)
         self.create_source(kikimr_udfs, source_name)
@@ -77,13 +78,18 @@ def get_all_cgi_params(url):
         """)
 
         time.sleep(1)
-        self.write_stream(['{"url": "http://kuibyshevsky.sam.sudrf.ru/modules.php?name=information"}'])
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"url": "http://kuibyshevsky.sam.sudrf.ru/modules.php?name=information"}'],
+        )
 
         assert future.result()[0].rows[0]["name"] == "information"
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_precompute_recovery(self, kikimr_udfs, local_topics, entity_name):
-        inp, out, endpoint = self.get_io_names(kikimr_udfs, "test_precompute_recovery", local_topics, entity_name)
+        inp, out, topic_ydb_client = self.get_io_names(
+            kikimr_udfs, "test_precompute_recovery", local_topics, entity_name
+        )
         name = f"{entity_name('test_precompute_recovery_query')}"
         path = f"{kikimr_udfs.endpoint.database}/{name}"
 
@@ -151,10 +157,12 @@ def get_all_cgi_params(url):
 
             if suffix is not None:
                 self.wait_completed_checkpoints(kikimr_udfs, name)
-                self.write_stream_with_message_metadata(
-                    kikimr_udfs, [("test_data", {"msg_id": "id-1"})], endpoint=endpoint
+                topic_ydb_client.topic_write(
+                    self.input_topic,
+                    [ydb.TopicWriterMessage("test_data", metadata_items={"msg_id": "id-1"})],
+                    producer_id="fq_test_message_meta_writer",
                 )
-                assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0] == f"test_data{suffix}"
+                assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0] == f"test_data{suffix}"
 
         tests_count = 20
         for i in range(tests_count):
@@ -172,7 +180,11 @@ def get_all_cgi_params(url):
         kikimr_udfs.ydb_client.query(f"""
             ALTER STREAMING QUERY `{name}` SET (RUN = FALSE)
         """)
-        self.write_stream_with_message_metadata(kikimr_udfs, [("test_data", {"msg_id": "id-1"})], endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage("test_data", metadata_items={"msg_id": "id-1"})],
+            producer_id="fq_test_message_meta_writer",
+        )
         logger.info("Stopped simple query")
 
         # Start query with heavy precompute
@@ -211,6 +223,7 @@ END DO
         kikimr_udfs.first_node.start()
         logger.info("Node with query restarted")
         kikimr_udfs.ydb_client = kikimr_udfs._setup_ydb_client(kikimr_udfs.endpoint, enable_discovery=False)
+        topic_ydb_client = self.get_ydb_client(kikimr_udfs, local_topics)
 
         time.sleep(5)
         second_node = list(kikimr_udfs.cluster.slots.values())[1]
@@ -252,9 +265,11 @@ END DO
         validate_query(sql, tests_count, client=second_ydb_client)
         logger.info("Checked final query info")
 
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0] == "test_data_final"
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0] == "test_data_final"
         logger.info("Checked checkpoint recovery")
 
         time.sleep(5)
         validate_query(sql, tests_count, suffix="_final", client=second_ydb_client)
         logger.info("Checked final status")
+
+        second_ydb_client.query(f"DROP STREAMING QUERY `{name}`;")

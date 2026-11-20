@@ -55,6 +55,7 @@ class TestIamAuth(StreamingTestBase):
         """Write a message to a local topic, process it through a CREATE STREAMING QUERY
         that reads via an IAM-auth external data source, and verify the output topic
         receives the transformed message."""
+        topic_ydb_client = kikimr.ydb_client
 
         endpoint = self.get_endpoint(kikimr, local_topics=True)
         source_name = entity_name(f"iam_source{shared_reading!s:.1}")
@@ -91,8 +92,8 @@ class TestIamAuth(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, query_name)
 
         # 4. Write a message to the input topic and read the result from the output topic.
-        self.write_stream(['{"time": "iam lunch time"}'], endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        topic_ydb_client.topic_write(self.input_topic, ['{"time": "iam lunch time"}'])
+        result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0]
         assert json.loads(result) == {"time": "iam lunch time"}
 
         self.wait_completed_checkpoints(kikimr, query_name)
@@ -100,8 +101,8 @@ class TestIamAuth(StreamingTestBase):
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
         self.wait_completed_checkpoints(kikimr, query_name)
 
-        self.write_stream(['{"time": "new iam lunch time"}'], endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        topic_ydb_client.topic_write(self.input_topic, ['{"time": "new iam lunch time"}'])
+        result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0]
         assert json.loads(result) == {"time": "new iam lunch time"}
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

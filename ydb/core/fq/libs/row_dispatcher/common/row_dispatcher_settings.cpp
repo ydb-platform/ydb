@@ -6,6 +6,9 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <util/string/cast.h>
+#include <util/system/env.h>
+
 namespace NFq {
 
 TRowDispatcherSettings::TJsonParserSettings::TJsonParserSettings(const NConfig::TJsonParserConfig& config)
@@ -57,6 +60,9 @@ TRowDispatcherSettings::TRowDispatcherSettings(
     const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config, bool enableStructuredJsonParsing)
     : Coordinator(config)
 {
+    if (ui64 seconds = 0; TryFromString<ui64>(GetEnv("YDB_TEST_ROW_DISPATCHER_START_SESSION_TIMEOUT_SEC"), seconds)) {
+        SetTimeoutBeforeStartSession(TDuration::Seconds(seconds));
+    }
     JsonParser.SetStructuredParsing(enableStructuredJsonParsing);
 
     std::optional<size_t> userPoolSize;

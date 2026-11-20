@@ -693,7 +693,9 @@ class TestS3TopicJoin(StreamingTestBase):
         for key, value in [(1, 'one'), (2, 'two'), (3, 'three')]:
             bucket.put_object(Key=f'{key}.json', Body=f'{{"key": {key}, "value": "{value}"}}')
         source = client.create_external_data_source(unique_prefix + 'source', 'join-s3-with-topic').name
-        topic, endpoint = self.get_input_name(kikimr, unique_prefix + 'join_s3_with_topic', True, lambda name: name)
+        topic, topic_ydb_client = self.get_input_name(
+            kikimr, unique_prefix + 'join_s3_with_topic', True, lambda name: name
+        )
         words = ['January', 'February', 'March', 'Monday', 'Tuesday', 'Wednesday', 'Gold', 'Silver', 'Bronze']
         sql = f'''
             SELECT dictionary.value AS num, input_rows.word AS word
@@ -708,8 +710,8 @@ class TestS3TopicJoin(StreamingTestBase):
             future = client.start_topic_query(
                 sql, kikimr.get_database_name() + '/' + self.input_topic, self.consumer_name
             )
-            self.write_stream(
-                [f'{{"key": {i % 3 + 1}, "word": "{word}"}}' for i, word in enumerate(words)], endpoint=endpoint
+            topic_ydb_client.topic_write(
+                self.input_topic, [f'{{"key": {i % 3 + 1}, "word": "{word}"}}' for i, word in enumerate(words)]
             )
             result = future.result(timeout=70)[0]
             expected = [(number.encode(), word.encode()) for number, word in zip(['one', 'two', 'three'] * 3, words)]

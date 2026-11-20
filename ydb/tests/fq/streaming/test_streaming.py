@@ -4,6 +4,7 @@ import pytest
 import random
 import string
 import time
+from contextlib import ExitStack
 from typing import Callable
 
 import ydb
@@ -37,7 +38,7 @@ class TestStreamingInYdb(StreamingTestBase):
         local_topics: bool,
         use_partition_balancing,
     ) -> None:
-        input_name, endpoint = self.get_input_name(
+        input_name, topic_ydb_client = self.get_input_name(
             kikimr, f"test_read_topic{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name
         )
 
@@ -54,7 +55,7 @@ class TestStreamingInYdb(StreamingTestBase):
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
         data = ['{"time": "lunch time"}']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         assert result_sets[0].rows[0]['time'] == b'lunch time'
 
@@ -66,7 +67,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         S3 batch analogs: `test_formats.TestS3Formats.test_csv_format_no_header`, etc.
         """
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_csv", local_topics, entity_name)
+        input_name, topic_ydb_client = self.get_input_name(kikimr, "test_read_topic_csv", local_topics, entity_name)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
@@ -79,7 +80,7 @@ class TestStreamingInYdb(StreamingTestBase):
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
         data = ["lunch time"]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         assert result_sets[0].rows[0]["time"] == b"lunch time"
 
@@ -91,7 +92,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
         S3 analog: `test_formats.TestS3Formats.test_format` / `test_custom_csv_delimiter_csv_with_names` (csv_with_names).
         """
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_csv_with_names", local_topics, entity_name)
+        input_name, topic_ydb_client = self.get_input_name(
+            kikimr, "test_read_topic_csv_with_names", local_topics, entity_name
+        )
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
@@ -104,7 +107,7 @@ class TestStreamingInYdb(StreamingTestBase):
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
         data = ["time\nlunch time\n"]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         assert result_sets[0].rows[0]["time"] == b"lunch time"
 
@@ -116,7 +119,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         S3 analog: `test_formats.TestS3Formats.test_csv_projection_column_order`.
         """
-        input_name, endpoint = self.get_input_name(
+        input_name, topic_ydb_client = self.get_input_name(
             kikimr, "test_csv_projection_column_order", local_topics, entity_name
         )
 
@@ -132,7 +135,7 @@ class TestStreamingInYdb(StreamingTestBase):
         time.sleep(1)
         # SCHEMA (a, b): first CSV field is `a`, second is `b`.
         data = ["aa,bb"]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         row = result_sets[0].rows[0]
         assert row["b"] == b"bb"
@@ -146,7 +149,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         S3 analog: `test_formats.TestS3Formats.test_csv_with_names_projection_column_order`.
         """
-        input_name, endpoint = self.get_input_name(
+        input_name, topic_ydb_client = self.get_input_name(
             kikimr, "test_csv_with_names_projection_column_order", local_topics, entity_name
         )
 
@@ -162,7 +165,7 @@ class TestStreamingInYdb(StreamingTestBase):
         time.sleep(1)
         # Header lists a then b; data line matches that order (same as SCHEMA declaration order).
         data = ["a,b\naa,bb\n"]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         row = result_sets[0].rows[0]
         assert row["b"] == b"bb"
@@ -173,7 +176,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv_with_names` (semicolon + header per message)."""
-        input_name, endpoint = self.get_input_name(
+        input_name, topic_ydb_client = self.get_input_name(
             kikimr, "test_custom_csv_delimiter_csv_with_names", local_topics, entity_name
         )
 
@@ -197,7 +200,7 @@ class TestStreamingInYdb(StreamingTestBase):
             "Fruit;Price;Weight\nApple;2;22\n",
             "Fruit;Price;Weight\nPear;15;33\n",
         ]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         rows = result_sets[0].rows
         assert len(rows) == 3
@@ -210,7 +213,9 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv` / `test_csv_format_custom_delimiter`."""
-        input_name, endpoint = self.get_input_name(kikimr, "test_custom_csv_delimiter_csv", local_topics, entity_name)
+        input_name, topic_ydb_client = self.get_input_name(
+            kikimr, "test_custom_csv_delimiter_csv", local_topics, entity_name
+        )
 
         sql = f"""SELECT * FROM {input_name}
             WITH (
@@ -228,7 +233,7 @@ class TestStreamingInYdb(StreamingTestBase):
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
         data = ["Banana;3;100", "Apple;2;22", "Pear;15;33"]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         rows = result_sets[0].rows
         assert len(rows) == 3
@@ -283,7 +288,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_csv_empty_schema_rejected`."""
-        input_name, endpoint = self.get_input_name(kikimr, "test_csv_empty_schema_rejected", local_topics, entity_name)
+        input_name, _ = self.get_input_name(kikimr, "test_csv_empty_schema_rejected", local_topics, entity_name)
 
         sql = f"""SELECT * FROM {input_name}
             WITH (
@@ -304,7 +309,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_csv_projection_single_column`."""
-        input_name, endpoint = self.get_input_name(
+        input_name, topic_ydb_client = self.get_input_name(
             kikimr, "test_csv_projection_single_column", local_topics, entity_name
         )
 
@@ -318,7 +323,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
-        self.write_stream(["aa,bb"], endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, ["aa,bb"])
         result_sets = future.result()
         assert len(result_sets[0].rows) == 1
         assert result_sets[0].rows[0]["b"] == b"bb"
@@ -328,7 +333,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_csv_projection_column_order_non_alphabetical_schema`."""
-        input_name, endpoint = self.get_input_name(
+        input_name, topic_ydb_client = self.get_input_name(
             kikimr, "test_csv_projection_nonalpha_schema", local_topics, entity_name
         )
 
@@ -342,7 +347,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
-        self.write_stream(["bb,aa"], endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, ["bb,aa"])
         result_sets = future.result()
         row = result_sets[0].rows[0]
         assert row["a"] == b"aa"
@@ -353,7 +358,9 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_csv_format_no_header` (same data as test_format_data/test_no_header.csv)."""
-        input_name, endpoint = self.get_input_name(kikimr, "test_csv_no_header_three_rows", local_topics, entity_name)
+        input_name, topic_ydb_client = self.get_input_name(
+            kikimr, "test_csv_no_header_three_rows", local_topics, entity_name
+        )
 
         sql = f"""SELECT * FROM {input_name}
             WITH (
@@ -370,7 +377,7 @@ class TestStreamingInYdb(StreamingTestBase):
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
         data = ["Banana,3,100", "Apple,2,22", "Pear,15,33"]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         rows = result_sets[0].rows
         assert len(rows) == 3
@@ -383,7 +390,9 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_csv_format_no_header_project_non_first_alphabetic_column`."""
-        input_name, endpoint = self.get_input_name(kikimr, "test_csv_no_header_select_price", local_topics, entity_name)
+        input_name, topic_ydb_client = self.get_input_name(
+            kikimr, "test_csv_no_header_select_price", local_topics, entity_name
+        )
 
         sql = f"""SELECT Price FROM {input_name}
             WITH (
@@ -400,7 +409,7 @@ class TestStreamingInYdb(StreamingTestBase):
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
         data = ["Banana,3,100", "Apple,2,22", "Pear,15,33"]
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         result_sets = future.result()
         rows = result_sets[0].rows
         assert len(rows) == 3
@@ -413,7 +422,9 @@ class TestStreamingInYdb(StreamingTestBase):
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
         """Analog of `TestS3Formats.test_csv_format_schema_order_differs_from_alphabet`."""
-        input_name, endpoint = self.get_input_name(kikimr, "test_csv_physical_column_order", local_topics, entity_name)
+        input_name, topic_ydb_client = self.get_input_name(
+            kikimr, "test_csv_physical_column_order", local_topics, entity_name
+        )
 
         sql = f"""SELECT * FROM {input_name}
             WITH (
@@ -429,7 +440,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
-        self.write_stream(["100,3,Banana"], endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, ["100,3,Banana"])
         result_sets = future.result()
         row = result_sets[0].rows[0]
         assert row["Weight"] == 100
@@ -440,7 +451,7 @@ class TestStreamingInYdb(StreamingTestBase):
     def test_read_topic_shared_reading_limit(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"shared_reading_limit{local_topics!s:.1}",
             local_topics,
@@ -469,27 +480,16 @@ class TestStreamingInYdb(StreamingTestBase):
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
-        self.write_stream(data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         sql_drop = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql_drop.format(query_name=query_name1))
         kikimr.ydb_client.query(sql_drop.format(query_name=query_name2))
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_user_attributes_in_topic_query": True},
-            {"enable_user_attributes_in_topic_query": False},
-        ],
-        ids=["ua_on", "ua_off"],
-        indirect=["kikimr"],
-    )
-    def test_read_user_attributes(self, kikimr, entity_name, request):
-        cfg = request.node.callspec.params["kikimr"]
-        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
-
-        inp, endpoint = self.get_input_name(
+    @pytest.mark.parametrize("enable_message_meta_flag", [True, False], ids=["ua_on", "ua_off"])
+    def test_read_user_attributes(self, kikimr, entity_name, enable_message_meta_flag):
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua",
             True,
@@ -511,6 +511,7 @@ class TestStreamingInYdb(StreamingTestBase):
             LIMIT 1
         """
 
+        kikimr.set_feature_flags({"enable_user_attributes_in_topic_query": enable_message_meta_flag})
         if not enable_message_meta_flag:
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql)
@@ -522,7 +523,11 @@ class TestStreamingInYdb(StreamingTestBase):
         time.sleep(1)
 
         rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-a"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -530,20 +535,9 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["field2"] == 105
         assert row["trace_id"] == b"tid-a"
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_user_attributes_in_topic_query": True},
-            {"enable_user_attributes_in_topic_query": False},
-        ],
-        ids=["ua_on", "ua_off"],
-        indirect=["kikimr"],
-    )
-    def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, request):
-        cfg = request.node.callspec.params["kikimr"]
-        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
-
-        inp, out, endpoint = self.get_io_names(
+    @pytest.mark.parametrize("enable_message_meta_flag", [True, False], ids=["ua_on", "ua_off"])
+    def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, enable_message_meta_flag):
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             "ua_sq",
             True,
@@ -568,6 +562,7 @@ class TestStreamingInYdb(StreamingTestBase):
                 );
             END DO;'''
 
+        kikimr.set_feature_flags({"enable_user_attributes_in_topic_query": enable_message_meta_flag})
         if not enable_message_meta_flag:
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
@@ -576,23 +571,28 @@ class TestStreamingInYdb(StreamingTestBase):
             return
 
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
-        self.wait_completed_checkpoints(kikimr, query_name)
+        try:
+            self.wait_completed_checkpoints(kikimr, query_name)
 
-        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
-        assert json.loads(result) == {
-            "field1": "value1",
-            "field2": 105,
-            "trace_id": "tid-sq",
-        }
-
-        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
+            topic_ydb_client.topic_write(
+                self.input_topic,
+                [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+                producer_id="fq_test_message_meta_writer",
+            )
+            result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0]
+            assert json.loads(result) == {
+                "field1": "value1",
+                "field2": 105,
+                "trace_id": "tid-sq",
+            }
+        finally:
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     # --- Issue #40506: Missing key in non-empty dictionary ---
     def test_ua_missing_key_in_nonempty_dict(self, kikimr, entity_name):
         """DictLookup for a key that is NOT in the metadata must return NULL (Optional<String>)."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_miss_key",
             True,
@@ -616,7 +616,11 @@ LIMIT 1"""
         time.sleep(1)
 
         rows = [('{"field1": "v1"}', {"present_key": "hello"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -627,7 +631,7 @@ LIMIT 1"""
     # --- Issue #40507: When no user attribute provided returns empty dict ---
     def test_ua_no_attributes_returns_empty_dict(self, kikimr, entity_name):
         """When a message has no metadata_items, __ydb_user_attributes must be an empty Dict."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_empty",
             True,
@@ -650,7 +654,7 @@ LIMIT 1"""
         time.sleep(1)
 
         data = ['{"field1": "v1"}']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -660,7 +664,7 @@ LIMIT 1"""
     # --- Issue #40508: Empty dictionary metadata_items equivalent to empty dict ---
     def test_ua_empty_metadata_items_is_empty_dict(self, kikimr, entity_name):
         """Explicitly empty metadata_items should produce the same empty dict as no metadata at all."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_empty_meta",
             True,
@@ -685,7 +689,11 @@ LIMIT 1"""
 
         # Write with explicitly empty metadata
         rows = [('{"field1": "v1"}', {})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -696,7 +704,7 @@ LIMIT 1"""
     # --- Issue #40509: Multiple keys in metadata ---
     def test_ua_multiple_keys(self, kikimr, entity_name):
         """All pairs from metadata_items are in the dictionary; multiple keys can be extracted independently."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_multi_keys",
             True,
@@ -722,7 +730,11 @@ LIMIT 1"""
         time.sleep(1)
 
         rows = [('{"field1": "v1"}', {"key1": "aaa", "key2": "bbb", "key3": "ccc"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -735,7 +747,7 @@ LIMIT 1"""
     # --- Issue #40510: All user attributes must be accessible as dictionary ---
     def test_ua_all_attributes_accessible(self, kikimr, entity_name):
         """The full dictionary returned by __ydb_user_attributes must contain all written pairs."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_all_access",
             True,
@@ -760,7 +772,11 @@ LIMIT 1"""
 
         meta = {"alpha": "1", "beta": "2", "gamma": "3"}
         rows = [('{"field1": "v1"}', meta)]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -772,7 +788,7 @@ LIMIT 1"""
     # --- Issue #40511: Special characters and UTF-8 ---
     def test_ua_special_characters_and_utf8(self, kikimr, entity_name):
         """Keys and values with special characters and UTF-8 must be preserved."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_utf8",
             True,
@@ -802,7 +818,11 @@ LIMIT 1"""
             "emoji🔑": "emoji🎉value",
         }
         rows = [('{"field1": "v1"}', meta)]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -814,7 +834,7 @@ LIMIT 1"""
     # --- Issue #40512: Multiple messages in a row ---
     def test_ua_multiple_messages(self, kikimr, entity_name):
         """Each message carries its own metadata; streaming query does not mix attributes across messages."""
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             "ua_multi_msg",
             True,
@@ -846,9 +866,13 @@ LIMIT 1"""
             ('{"field1": "msg2"}', {"msg_id": "id-2"}),
             ('{"field1": "msg3"}', {"msg_id": "id-3"}),
         ]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
-        raw_results = self.read_stream(3, topic_path=self.output_topic, endpoint=endpoint)
+        raw_results = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 3)
         results = [json.loads(raw) for raw in raw_results]
 
         # Each message must have its own msg_id, not mixed
@@ -863,7 +887,7 @@ LIMIT 1"""
     # --- Issue #40513: Restart after checkpoint ---
     def test_ua_restart_after_checkpoint(self, kikimr, entity_name):
         """After streaming query restart, metadata processing still works."""
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             "ua_restart",
             True,
@@ -892,8 +916,12 @@ LIMIT 1"""
 
         # Write and read before restart
         rows = [('{"field1": "before"}', {"trace_id": "tid-before"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
+        result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0]
         assert json.loads(result) == {"field1": "before", "trace_id": "tid-before"}
 
         self.wait_completed_checkpoints(kikimr, query_name)
@@ -906,8 +934,12 @@ LIMIT 1"""
 
         # Write and read after restart
         rows = [('{"field1": "after"}', {"trace_id": "tid-after"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
+        result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0]
         assert json.loads(result) == {"field1": "after", "trace_id": "tid-after"}
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
@@ -915,7 +947,7 @@ LIMIT 1"""
     # --- Issue #40514: WHERE predicate works on metadata ---
     def test_ua_where_predicate(self, kikimr, entity_name):
         """WHERE clause can filter on user_attributes values."""
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             "ua_where",
             True,
@@ -948,9 +980,13 @@ LIMIT 1"""
             ('{"field1": "high_msg"}', {"priority": "high"}),
             ('{"field1": "medium_msg"}', {"priority": "medium"}),
         ]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
-        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        result = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0]
         parsed = json.loads(result)
         assert parsed["field1"] == "high_msg"
         assert parsed["priority"] == "high"
@@ -960,7 +996,7 @@ LIMIT 1"""
     # --- Issue #40515: Reading user_attributes and system attributes in one query ---
     def test_ua_with_system_attributes(self, kikimr, entity_name):
         """user_attributes and other system metadata (e.g. _message_group_id) can be read in one query."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_sys_attr",
             True,
@@ -984,7 +1020,11 @@ LIMIT 1"""
         time.sleep(1)
 
         rows = [('{"field1": "v1"}', {"trace_id": "tid-sys"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -996,7 +1036,7 @@ LIMIT 1"""
     # --- Issue #40516: json_each_row + SCHEMA + user_attributes ---
     def test_ua_json_each_row_with_schema(self, kikimr, entity_name):
         """user_attributes works with json_each_row format and explicit SCHEMA for payload."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_json_schema",
             True,
@@ -1020,7 +1060,11 @@ LIMIT 1"""
         time.sleep(1)
 
         rows = [('{"name": "Alice", "age": 30}', {"source": "test-system"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -1031,7 +1075,7 @@ LIMIT 1"""
     # --- Issue #40517: user_attributes in remote topics ---
     def test_ua_remote_topics(self, kikimr, entity_name):
         """user_attributes works when reading from a topic via an external data source (remote topic)."""
-        inp, endpoint = self.get_input_name(
+        inp, topic_ydb_client = self.get_input_name(
             kikimr,
             "ua_remote",
             False,
@@ -1054,7 +1098,11 @@ LIMIT 1"""
         time.sleep(1)
 
         rows = [('{"field1": "remote_v1"}', {"trace_id": "tid-remote"})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            [ydb.TopicWriterMessage(payload, metadata_items=metadata or {}) for payload, metadata in rows],
+            producer_id="fq_test_message_meta_writer",
+        )
 
         result_sets = future.result()
         row = result_sets[0].rows[0]
@@ -1094,7 +1142,7 @@ FROM `{table_name}`"""
         local_topics: bool,
         use_partition_balancing,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10
         )
 
@@ -1120,9 +1168,9 @@ FROM `{table_name}`"""
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         self.wait_completed_checkpoints(kikimr, name)
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
@@ -1130,10 +1178,10 @@ FROM `{table_name}`"""
 
         data = ['{"time": "next lunch time"}']
         expected_data = ['next lunch time']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
@@ -1148,9 +1196,10 @@ FROM `{table_name}`"""
         committed_offset: int,
         checkpoint_has_data: bool,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(kikimr, "consumer_offset", local_topics, entity_name)
+        inp, out, topic_ydb_client = self.get_io_names(kikimr, "consumer_offset", local_topics, entity_name)
+        endpoint = self.get_endpoint(kikimr, local_topics)
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
-        topic_client = self.get_ydb_client(kikimr, local_topics).driver.topic_client
+        topic_client = topic_ydb_client.driver.topic_client
         query_name = entity_name("consumer_offset_query")
         query_path = f"{kikimr.get_database_name()}/{query_name}"
 
@@ -1177,7 +1226,7 @@ FROM `{table_name}`"""
             ), f"Expected committed offset {offset}: {consumer_stats()}"
 
         if committed_offset:
-            self.write_stream(["already-committed"], endpoint=endpoint)
+            topic_ydb_client.topic_write(self.input_topic, ["already-committed"])
             commit_offset(committed_offset)
 
         kikimr.ydb_client.query(f'''
@@ -1189,8 +1238,8 @@ FROM `{table_name}`"""
         try:
             wait_consumer_session(True)
             if checkpoint_has_data:
-                self.write_stream(["before-checkpoint"], endpoint=endpoint)
-                assert self.read_stream(1, endpoint=endpoint) == ["before-checkpoint"]
+                topic_ydb_client.topic_write(self.input_topic, ["before-checkpoint"])
+                assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ["before-checkpoint"]
 
             # Complete checkpoints after the read session starts, including when it has delivered no data.
             self.wait_completed_checkpoints(kikimr, query_name)
@@ -1199,7 +1248,7 @@ FROM `{table_name}`"""
 
             saved_offset = committed_offset + int(checkpoint_has_data)
             data = ["committed-while-stopped", "uncommitted-while-stopped"]
-            self.write_stream(data, endpoint=endpoint)
+            topic_ydb_client.topic_write(self.input_topic, data)
             commit_offset(saved_offset + 1)
 
             kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
@@ -1229,7 +1278,9 @@ FROM `{table_name}`"""
                 expected_data = data[1:]
 
             wait_consumer_session(True)
-            assert self.read_stream(len(expected_data), endpoint=endpoint) == expected_data
+            assert (
+                topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
+            )
             self.wait_completed_checkpoints(kikimr, query_name)
             assert wait_for(
                 lambda: consumer_stats().committed_offset == saved_offset + len(data),
@@ -1250,10 +1301,11 @@ FROM `{table_name}`"""
         entity_name: Callable[[str], str],
         local_topics: bool,
     ) -> None:
-        inp, endpoint = self.get_input_name(kikimr, "snapshot_at_consumer_end", local_topics, entity_name)
+        inp, topic_ydb_client = self.get_input_name(kikimr, "snapshot_at_consumer_end", local_topics, entity_name)
+        endpoint = self.get_endpoint(kikimr, local_topics)
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
-        self.write_stream(["already-committed"], endpoint=endpoint)
-        topic_client = self.get_ydb_client(kikimr, local_topics).driver.topic_client
+        topic_ydb_client.topic_write(self.input_topic, ["already-committed"])
+        topic_client = topic_ydb_client.driver.topic_client
         topic_client.commit_offset(self.input_topic, self.consumer_name, partition_id=0, offset=1)
 
         result_sets = kikimr.ydb_client.query(
@@ -1270,7 +1322,7 @@ FROM `{table_name}`"""
     def test_read_topic_shared_reading_insert_to_topic(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"shared_reading_insert_to_topic{local_topics!s:.1}",
             local_topics,
@@ -1303,8 +1355,8 @@ FROM `{table_name}`"""
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
-        self.write_stream(data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name1)
 
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);'''
@@ -1315,12 +1367,12 @@ FROM `{table_name}`"""
 
         data = ['{"time": "next lunch time"}']
         expected_data = ['next lunch time', 'next lunch time']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
 
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);'''
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
@@ -1330,7 +1382,7 @@ FROM `{table_name}`"""
     def test_read_topic_shared_reading_restart_nodes(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"reading_restart_nodes_{local_topics!s:.1}",
             local_topics,
@@ -1354,37 +1406,32 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
-        self.write_stream(['{"value": "value1"}'], endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, ['{"value": "value1"}'])
         expected_data = ['value1']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
         self.restart_streaming_node(kikimr)
-        self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, ['{"value": "value2"}'])
         expected_data = ['value2']
         self.wait_completed_checkpoints(kikimr, query_name)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
         self.restart_streaming_node(kikimr)
-        self.write_stream(['{"value": "value3"}'], endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, ['{"value": "value3"}'])
         expected_data = ['value3']
         self.wait_completed_checkpoints(kikimr, query_name)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
-    # SchemeShard counters cover the database, so each case needs a fresh cluster.
-    @pytest.mark.parametrize(
-        "local_topics,kikimr",
-        [(True, {}), (False, {})],
-        indirect=["kikimr"],
-        scope="function",
-        ids=["True", "False"],
-    )
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_restore_state(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"test_read_topic_restore_state_{local_topics!s:.1}",
             local_topics,
@@ -1428,9 +1475,9 @@ FROM `{table_name}`"""
         self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 1)
 
         data = ['{"dt": 1696849942000001, "str": "A" }', '{"dt": 1696849942500001, "str": "B" }']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         expected_data = ['{"a_time":1696849942000001,"b_time":1696849942500001,"c_time":null}']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
         restart_node_id = None
@@ -1445,11 +1492,11 @@ FROM `{table_name}`"""
         node.start()
 
         data = ['{"dt": 1696849943000001, "str": "C" }']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
         self.wait_completed_checkpoints(kikimr, query_name)
 
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 1)
         self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 1)
@@ -1462,7 +1509,7 @@ FROM `{table_name}`"""
     def test_json_errors(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, f"test_json_errors_{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True
         )
 
@@ -1482,16 +1529,18 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, name)
 
         data = ['{"time": 101, "data": "hello1"}', '{"time": 102, "data": 7777}', '{"time": 103, "data": "hello2"}']
-        self.write_stream(data, partition_key="key", endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data, producer_id="key")
 
         expected = ['hello1', 'hello2']
-        assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected)) == expected
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize("local_topics", [False])
     def test_shared_reading_group(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"test_reading_group_{local_topics!s:.1}",
             local_topics,
@@ -1499,6 +1548,7 @@ FROM `{table_name}`"""
             partitions_count=10,
             shared=True,
         )
+        endpoint = self.get_endpoint(kikimr, local_topics)
 
         source_name2 = entity_name("shared_group_two")
         name = f"test_reading_group_{local_topics!s:.1}"
@@ -1562,10 +1612,10 @@ FROM `{table_name}`"""
             '{"time": 103, "data": "hello2"}',
             '{"time": 104, "data": 1111}',
         ]
-        self.write_stream(data, partition_key="key", endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data, producer_id="key")
 
         expected = ['hello1', 'from_integer_7777', 'hello2', 'from_integer_1111']
-        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)) == sorted(
+        assert sorted(topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected))) == sorted(
             expected
         )
 
@@ -1576,7 +1626,7 @@ FROM `{table_name}`"""
     def test_restart_query_by_rescaling(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"test_restart_query_by_rescaling{local_topics!s:.1}",
             local_topics,
@@ -1605,13 +1655,12 @@ FROM `{table_name}`"""
 
         message_count = 20
         for i in range(message_count):
-            self.write_stream(
+            topic_ydb_client.topic_write(
+                self.input_topic,
                 ['{"time": "time to do it"}'],
-                topic_path=None,
-                partition_key=(''.join(random.choices(string.digits, k=8))),
-                endpoint=endpoint,
+                producer_id=''.join(random.choices(string.digits, k=8)),
             )
-        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == [
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, message_count) == [
             "time to do it" for i in range(message_count)
         ]
         self.wait_completed_checkpoints(kikimr, name)
@@ -1639,17 +1688,18 @@ FROM `{table_name}`"""
 
         message = '{"time": "time to lunch"}'
         for i in range(message_count):
-            self.write_stream(
+            topic_ydb_client.topic_write(
+                self.input_topic,
                 [message],
-                topic_path=None,
-                partition_key=(''.join(random.choices(string.digits, k=8))),
-                endpoint=endpoint,
+                producer_id=''.join(random.choices(string.digits, k=8)),
             )
-        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == [
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, message_count) == [
             "time to lunch" for i in range(message_count)
         ]
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize(
         "use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"]
@@ -1662,13 +1712,14 @@ FROM `{table_name}`"""
         local_topics: bool,
         use_partition_balancing,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}",
             local_topics,
             entity_name,
             partitions_count=10,
         )
+        endpoint = self.get_endpoint(kikimr, local_topics)
 
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
 
@@ -1692,8 +1743,8 @@ FROM `{table_name}`"""
         )
 
         kikimr.ydb_client.query(sql.format(query_name=query_name, consumer_name=self.consumer_name, inp=inp, out=out))
-        self.write_stream(['{"time": "lunch time"}'], endpoint=endpoint)
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ['lunch time']
+        topic_ydb_client.topic_write(self.input_topic, ['{"time": "lunch time"}'])
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ['lunch time']
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
@@ -1708,7 +1759,9 @@ FROM `{table_name}`"""
         local_topics: bool,
         use_partition_balancing,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(kikimr, "test_types", local_topics, entity_name, partitions_count=1)
+        inp, out, topic_ydb_client = self.get_io_names(
+            kikimr, "test_types", local_topics, entity_name, partitions_count=1
+        )
 
         query_name = f"test_types1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
 
@@ -1729,8 +1782,8 @@ FROM `{table_name}`"""
             )
 
             kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, type_name=type, out=out))
-            self.write_stream([f"{{\"field_name\": {input}}}"], endpoint=endpoint)
-            assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == [expected_output]
+            topic_ydb_client.topic_write(self.input_topic, [f"{{\"field_name\": {input}}}"])
+            assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == [expected_output]
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
         test_type(
@@ -1808,7 +1861,7 @@ FROM `{table_name}`"""
         local_topics: bool,
         use_partition_balancing,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, "test_raw_format", local_topics, entity_name, partitions_count=10
         )
 
@@ -1834,9 +1887,9 @@ FROM `{table_name}`"""
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
         query_name = f"test_raw_format_default_{local_topics!s:.1}{use_partition_balancing!s:.1}"
@@ -1856,9 +1909,9 @@ FROM `{table_name}`"""
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
         query_name = f"test_raw_format_json_{local_topics!s:.1}{use_partition_balancing!s:.1}"
@@ -1881,9 +1934,9 @@ FROM `{table_name}`"""
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
-        self.write_stream(data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, data)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
@@ -1902,7 +1955,7 @@ FROM `{table_name}`"""
 
         # Disable deduplication
 
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10
         )
         name = f"test_deduplication_{local_topics!s:.1}"
@@ -1911,13 +1964,12 @@ FROM `{table_name}`"""
 
         data1 = 'value1'
         count1 = 1
-        self.write_stream(
+        topic_ydb_client.topic_write(
+            self.input_topic,
             [data1],
-            topic_path=None,
-            partition_key=''.join(random.choices(string.ascii_uppercase, k=8)),
-            endpoint=endpoint,
+            producer_id=''.join(random.choices(string.ascii_uppercase, k=8)),
         )
-        assert self.read_stream(count1, topic_path=self.output_topic, endpoint=endpoint) == [
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, count1) == [
             data1 for i in range(count1)
         ]
 
@@ -1926,16 +1978,15 @@ FROM `{table_name}`"""
         data2 = 'value2'
         count2 = 10
         for i in range(count2):
-            self.write_stream(
+            topic_ydb_client.topic_write(
+                self.input_topic,
                 [data2],
-                topic_path=None,
-                partition_key=''.join(random.choices(string.ascii_uppercase, k=8)),
-                endpoint=endpoint,
+                producer_id=''.join(random.choices(string.ascii_uppercase, k=8)),
             )
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
 
-        readed_data = self.read_stream(count1 + count2, topic_path=self.output_topic, endpoint=endpoint)
+        readed_data = topic_ydb_client.topic_read(self.output_topic, self.consumer_name, count1 + count2)
         expected = [data2 for i in range(count2)] + [data1 for i in range(count1)]
         assert sorted(readed_data) == sorted(expected)
 
@@ -1943,54 +1994,52 @@ FROM `{table_name}`"""
 
         # Enable deduplication
 
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, "test_deduplication_enabled", local_topics, entity_name, partitions_count=10
         )
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
         self.wait_completed_checkpoints(kikimr, name, checkpoints_count=1)
 
-        self.write_stream(
+        topic_ydb_client.topic_write(
+            self.input_topic,
             [data1],
-            topic_path=None,
-            partition_key=''.join(random.choices(string.ascii_uppercase, k=8)),
-            endpoint=endpoint,
+            producer_id=''.join(random.choices(string.ascii_uppercase, k=8)),
         )
-        assert self.read_stream(count1, topic_path=self.output_topic, endpoint=endpoint) == [
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, count1) == [
             data1 for i in range(count1)
         ]
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
 
         for i in range(count2):
-            self.write_stream(
+            topic_ydb_client.topic_write(
+                self.input_topic,
                 [data2],
-                topic_path=None,
-                partition_key=''.join(random.choices(string.ascii_uppercase, k=8)),
-                endpoint=endpoint,
+                producer_id=''.join(random.choices(string.ascii_uppercase, k=8)),
             )
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
 
-        readed_data = self.read_stream(20, topic_path=self.output_topic, endpoint=endpoint)
+        readed_data = topic_ydb_client.topic_read(
+            self.output_topic,
+            self.consumer_name,
+            20,
+            allow_partial=True,
+        )
         assert len(readed_data) == 10
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {"enable_shared_reading_in_streaming_queries": False},
-            {"enable_shared_reading_in_streaming_queries": True},
-        ],
-        indirect=["kikimr"],
-    )
+    @pytest.mark.parametrize("shared_reading_enabled", [False, True], ids=["disabled", "enabled"])
     def test_check_shared_reading_disabled(
-        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], request
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        shared_reading_enabled: bool,
     ) -> None:
-        cfg = request.node.callspec.params["kikimr"]
-        enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
+        kikimr.set_feature_flags({"enable_shared_reading_in_streaming_queries": shared_reading_enabled})
         source_name = entity_name("MyEDS")
 
-        if enable_shared_reading_in_streaming_queries:
+        if shared_reading_enabled:
             self.create_source(kikimr, source_name, shared=True)
             kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
         else:
@@ -2000,22 +2049,16 @@ FROM `{table_name}`"""
             ):
                 self.create_source(kikimr, source_name, shared=True)
 
-    @pytest.mark.parametrize(
-        "kikimr",
-        [
-            {
-                "enable_streaming_queries": False,
-                "enable_external_data_sources": False,
-                "enable_shared_reading_in_streaming_queries": False,
-            }
-        ],
-        indirect=["kikimr"],
-    )
     def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
-        input_name, endpoint = self.get_input_name(kikimr, "test_table_mode", True, entity_name)
+        kikimr.set_feature_flags({
+            "enable_streaming_queries": False,
+            "enable_external_data_sources": False,
+            "enable_shared_reading_in_streaming_queries": False,
+        })
+        input_name, topic_ydb_client = self.get_input_name(kikimr, "test_table_mode", True, entity_name)
 
         message = b'{"time": "lunch time"}'
-        self.write_stream([message], endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, [message])
 
         sql = f"SELECT * FROM {input_name}"
 
@@ -2034,7 +2077,7 @@ FROM `{table_name}`"""
         local_topics: bool,
         additional_operator: str,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"test_precompute_and_other_ops_{local_topics!s:.1}_{additional_operator}",
             local_topics,
@@ -2203,11 +2246,17 @@ FROM `{table_name}`"""
                 DELETE FROM `{output_table}`;
             """)
 
-        self.write_stream(['{"Key": 1, "Value": "in1", "Ts": "2026-07-17T07:20:53.428176Z"}'], endpoint=endpoint)
-        self.write_stream(['{"Key": 2, "Value": "in1", "Ts": "2026-07-17T08:20:53.428176Z"}'], endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 1, "Value": "in1", "Ts": "2026-07-17T07:20:53.428176Z"}'],
+        )
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 2, "Value": "in1", "Ts": "2026-07-17T08:20:53.428176Z"}'],
+        )
         if expected_data1:
             assert sorted(
-                self.read_stream(len(expected_data1), topic_path=self.output_topic, endpoint=endpoint)
+                topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data1))
             ) == sorted(expected_data1)
             self.wait_completed_checkpoints(kikimr, query_name)
             validate_table(expected_data1)
@@ -2217,27 +2266,35 @@ FROM `{table_name}`"""
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
         """)
 
-        self.write_stream(['{"Key": 1, "Value": "in2", "Ts": "2026-07-17T09:20:53.428176Z"}'], endpoint=endpoint)
-        self.write_stream(['{"Key": 2, "Value": "in2", "Ts": "2026-07-17T10:20:53.428176Z"}'], endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 1, "Value": "in2", "Ts": "2026-07-17T09:20:53.428176Z"}'],
+        )
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 2, "Value": "in2", "Ts": "2026-07-17T10:20:53.428176Z"}'],
+        )
 
         kikimr.ydb_client.query(f"""
             ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);
         """)
 
-        assert sorted(self.read_stream(len(expected_data2), topic_path=self.output_topic, endpoint=endpoint)) == sorted(
-            expected_data2
-        )
+        assert sorted(
+            topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data2))
+        ) == sorted(expected_data2)
         self.wait_completed_checkpoints(kikimr, query_name)
         # After restart the newly written records can reach the table while the
         # delayed records expected below are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     @link_test_case("#46139")
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_alter_query_with_precompute(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, f"test_alter_query_with_precompute_{local_topics!s:.1}", local_topics, entity_name
         )
 
@@ -2268,8 +2325,8 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, query_name)
 
         expected_data = ["test_data1"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         self.wait_completed_checkpoints(kikimr, query_name)
         kikimr.ydb_client.query(f"""
@@ -2282,8 +2339,8 @@ FROM `{table_name}`"""
         """)
 
         self.wait_completed_checkpoints(kikimr, query_name)
-        self.write_stream(["test_data2"], endpoint=endpoint)
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["test_data2value-p-row"]
+        topic_ydb_client.topic_write(self.input_topic, ["test_data2"])
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ["test_data2value-p-row"]
 
         self.wait_completed_checkpoints(kikimr, query_name)
         kikimr.ydb_client.query(f"""
@@ -2296,19 +2353,18 @@ FROM `{table_name}`"""
 
         self.wait_completed_checkpoints(kikimr, query_name)
         expected_data = ["test_data3"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         kikimr.ydb_client.query(f"""
             DROP STREAMING QUERY `{query_name}`;
         """)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_structured_json_parsing": True}], indirect=["kikimr"])
     def test_read_topic_shared_reading_structured_parsing(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"structured_json{local_topics!s:.1}",
             local_topics,
@@ -2367,8 +2423,8 @@ FROM `{table_name}`"""
         ] * 2
         expected_data = [*map(lambda x: x.replace('{longstr}', longstr), expected_data)]
 
-        self.write_stream(data, endpoint=endpoint)
-        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(
+        topic_ydb_client.topic_write(self.input_topic, data)
+        assert sorted(topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data))) == sorted(
             expected_data
         )
 
@@ -2716,7 +2772,7 @@ FROM `{table_name}`"""
     def test_read_topic_shared_reading_pushdown(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"shared_pushdown{local_topics!s:.1}",
             local_topics,
@@ -2788,8 +2844,8 @@ FROM `{table_name}`"""
             '{"ev":"xup","str1":"xep","str2":"xip"}',
         ]
 
-        self.write_stream(data, endpoint=endpoint)
-        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(
+        topic_ydb_client.topic_write(self.input_topic, data)
+        assert sorted(topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data))) == sorted(
             expected_data
         )
 
@@ -2845,7 +2901,7 @@ FROM `{table_name}`"""
     def test_streaming_query_stop_after_restart(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name
         )
 
@@ -2860,8 +2916,8 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}'))
 
         expected_data = ["test_data1"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         self.wait_completed_checkpoints(kikimr, entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}'))
         logger.info("Query checked")
@@ -2872,6 +2928,7 @@ FROM `{table_name}`"""
         kikimr.first_node.start()
         logger.info("Node with query restarted")
         kikimr.ydb_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
+        topic_ydb_client = self.get_ydb_client(kikimr, local_topics)
 
         second_node = list(kikimr.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(
@@ -2889,12 +2946,14 @@ FROM `{table_name}`"""
 
         time.sleep(5)
         expected_data = ["test_data2"]
-        self.write_stream(expected_data, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
 
         second_ydb_client.query(f"""
             ALTER STREAMING QUERY `{path}` SET (RUN = TRUE);
         """)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
+
+        second_ydb_client.query(f"DROP STREAMING QUERY `{path}`;")
 
     @link_test_case("#47255")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -2906,7 +2965,7 @@ FROM `{table_name}`"""
         local_topics: bool,
         additional_operator: str,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, f"test_join_and_other_ops_{local_topics!s:.1}_{additional_operator}", local_topics, entity_name
         )
 
@@ -3051,11 +3110,17 @@ FROM `{table_name}`"""
                 DELETE FROM `{output_table}`;
             """)
 
-        self.write_stream(['{"Key": 1, "Value": "in1", "Ts": "2026-07-17T07:20:53.428176Z"}'], endpoint=endpoint)
-        self.write_stream(['{"Key": 2, "Value": "in1", "Ts": "2026-07-17T08:20:53.428176Z"}'], endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 1, "Value": "in1", "Ts": "2026-07-17T07:20:53.428176Z"}'],
+        )
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 2, "Value": "in1", "Ts": "2026-07-17T08:20:53.428176Z"}'],
+        )
         if expected_data1:
             assert sorted(
-                self.read_stream(len(expected_data1), topic_path=self.output_topic, endpoint=endpoint)
+                topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data1))
             ) == sorted(expected_data1)
             self.wait_completed_checkpoints(kikimr, query_name)
             validate_table(expected_data1)
@@ -3065,27 +3130,35 @@ FROM `{table_name}`"""
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
         """)
 
-        self.write_stream(['{"Key": 1, "Value": "in2", "Ts": "2026-07-17T09:20:53.428176Z"}'], endpoint=endpoint)
-        self.write_stream(['{"Key": 2, "Value": "in2", "Ts": "2026-07-17T10:20:53.428176Z"}'], endpoint=endpoint)
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 1, "Value": "in2", "Ts": "2026-07-17T09:20:53.428176Z"}'],
+        )
+        topic_ydb_client.topic_write(
+            self.input_topic,
+            ['{"Key": 2, "Value": "in2", "Ts": "2026-07-17T10:20:53.428176Z"}'],
+        )
 
         kikimr.ydb_client.query(f"""
             ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);
         """)
 
-        assert sorted(self.read_stream(len(expected_data2), topic_path=self.output_topic, endpoint=endpoint)) == sorted(
-            expected_data2
-        )
+        assert sorted(
+            topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data2))
+        ) == sorted(expected_data2)
         self.wait_completed_checkpoints(kikimr, query_name)
         # After restart, records written before the query was stopped can be
         # persisted while the expected delayed records are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     @link_test_case("#47257")
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_alter_query_with_join(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, f"test_alter_query_with_join_{local_topics!s:.1}", local_topics, entity_name
         )
 
@@ -3116,8 +3189,8 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, query_name)
 
         expected_data = ["test_data1"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         self.wait_completed_checkpoints(kikimr, query_name)
         kikimr.ydb_client.query(f"""
@@ -3130,8 +3203,8 @@ FROM `{table_name}`"""
         """)
 
         self.wait_completed_checkpoints(kikimr, query_name)
-        self.write_stream(["test_data2"], endpoint=endpoint)
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["test_data2-value-j"]
+        topic_ydb_client.topic_write(self.input_topic, ["test_data2"])
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ["test_data2-value-j"]
 
         self.wait_completed_checkpoints(kikimr, query_name)
         kikimr.ydb_client.query(f"""
@@ -3144,8 +3217,8 @@ FROM `{table_name}`"""
 
         self.wait_completed_checkpoints(kikimr, query_name)
         expected_data = ["test_data3"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         kikimr.ydb_client.query(f"""
             DROP STREAMING QUERY `{query_name}`;
@@ -3156,7 +3229,7 @@ FROM `{table_name}`"""
     def test_alter_query_outputs(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr, f"test_alter_query_outputs_{local_topics!s:.1}", local_topics, entity_name
         )
 
@@ -3187,8 +3260,8 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, query_name)
 
         expected_data = ["test_data1"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
 
         # 2. Add a second output (table)
         self.wait_completed_checkpoints(kikimr, query_name)
@@ -3202,8 +3275,8 @@ FROM `{table_name}`"""
         """)
 
         self.wait_completed_checkpoints(kikimr, query_name)
-        self.write_stream(["test_data2"], endpoint=endpoint)
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["test_data2"]
+        topic_ydb_client.topic_write(self.input_topic, ["test_data2"])
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ["test_data2"]
         self.wait_completed_checkpoints(kikimr, query_name)
         assert table_rows() == ["test_data2"]
 
@@ -3218,8 +3291,8 @@ FROM `{table_name}`"""
 
         self.wait_completed_checkpoints(kikimr, query_name)
         expected_data = ["test_data3"]
-        self.write_stream(expected_data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        topic_ydb_client.topic_write(self.input_topic, expected_data)
+        assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
         # Table output was removed, so it must not receive test_data3
         assert table_rows() == ["test_data2"]
 
@@ -3229,116 +3302,118 @@ FROM `{table_name}`"""
         """)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"enable_discovery": False}], indirect=["kikimr"])
     def test_streaming_query_issues_after_restart(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
-            kikimr, f"test_issues_after_restart_{local_topics!s:.1}", local_topics, entity_name
-        )
+        with ExitStack() as clients:
+            query_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
+            clients.callback(query_client.stop)
 
-        join_table = f"test_issues_after_restart_table_{local_topics!s:.1}"
-        kikimr.ydb_client.query(f"""
-            CREATE TABLE `{join_table}` (
-                Key Int32 NOT NULL,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        """)
-        kikimr.ydb_client.query(f"""
-            UPSERT INTO `{join_table}`
-                (Key, Value)
-            VALUES
-                (1, "value-j-row"),
-                (2, NULL);
-        """)
+            inp, out, topic_ydb_client = self.get_io_names(
+                kikimr, f"test_issues_after_restart_{local_topics!s:.1}", local_topics, entity_name
+            )
 
-        path = f"{kikimr.get_database_name()}/{entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}')}"
-        kikimr.ydb_client.query(f"""
-            CREATE STREAMING QUERY `{path}` AS DO BEGIN
-                INSERT INTO {out}
-                SELECT Unwrap(j.Value) FROM {inp} AS i
-                LEFT JOIN `{join_table}` AS j ON CAST(i.Data AS Int32) = j.Key;
-            END DO;
-        """)
-
-        self.wait_completed_checkpoints(kikimr, entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}'))
-        self.write_stream(["1"], endpoint=endpoint)
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-j-row"]
-        self.wait_completed_checkpoints(kikimr, entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}'))
-        logger.info("Query checked")
-
-        def get_issues(client=None):
-            """Fetch issues from .sys/streaming_queries"""
-            if client is None:
-                client = kikimr.ydb_client
-
-            result_sets = client.query(f"""
-                SELECT
-                    Issues
-                FROM `.sys/streaming_queries`
-                WHERE Path = "{path}"
+            join_table = f"test_issues_after_restart_table_{local_topics!s:.1}"
+            query_client.query(f"""
+                CREATE TABLE `{join_table}` (
+                    Key Int32 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
             """)
-            assert len(result_sets) == 1
-            result_set_rows = result_sets[0].rows
-            assert len(result_set_rows) == 1
-            return result_set_rows[0].Issues
+            query_client.query(f"""
+                UPSERT INTO `{join_table}`
+                    (Key, Value)
+                VALUES
+                    (1, "value-j-row"),
+                    (2, NULL);
+            """)
 
-        def check_issues(query_issues: str, substring: str):
-            """Validate issues structure and content."""
-            assert substring in query_issues, query_issues
-            assert query_issues.count("Previous query retries") == 1, query_issues
-            depth = max_json_depth(json.loads(query_issues))
-            assert depth <= 10, f"Issues JSON depth {depth} exceeds limit: {query_issues}"
+            path = f"{kikimr.get_database_name()}/{entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}')}"
+            query_client.query(f"""
+                CREATE STREAMING QUERY `{path}` AS DO BEGIN
+                    INSERT INTO {out}
+                    SELECT Unwrap(j.Value) FROM {inp} AS i
+                    LEFT JOIN `{join_table}` AS j ON CAST(i.Data AS Int32) = j.Key;
+                END DO;
+            """)
 
-        self.write_stream(["2"], endpoint=endpoint)
-        assert wait_for(
-            lambda: "Previous query retries" in get_issues(), timeout_seconds=60, step_seconds=1
-        ), "Failed to wait for Previous query retries"
-        check_issues(get_issues(), "Failed to unwrap")
+            self.wait_completed_checkpoints(kikimr, entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}'))
+            topic_ydb_client.topic_write(self.input_topic, ["1"])
+            assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ["value-j-row"]
+            self.wait_completed_checkpoints(kikimr, entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}'))
+            logger.info("Query checked")
 
-        kikimr.ydb_client.query(f"""
-            UPSERT INTO `{join_table}`
-                (Key, Value)
-            VALUES
-                (2, "value-second"),
-                (3, "value-third");
-        """)
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-second"]
-        self.wait_completed_checkpoints(kikimr, entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}'))
-        logger.info("Query fixed")
+            def get_issues(client):
+                """Fetch issues from .sys/streaming_queries"""
+                result_sets = client.query(f"""
+                    SELECT
+                        Issues
+                    FROM `.sys/streaming_queries`
+                    WHERE Path = "{path}"
+                """)
+                assert len(result_sets) == 1
+                result_set_rows = result_sets[0].rows
+                assert len(result_set_rows) == 1
+                return result_set_rows[0].Issues
 
-        kikimr.ydb_client.stop()
-        # Restart the node hosting the streaming query to trigger lease expiration.
-        self.restart_streaming_node(kikimr)
-        kikimr.ydb_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
-        time.sleep(5)
-        assert wait_for(
-            lambda: "Lease expired" in get_issues(), timeout_seconds=30, step_seconds=1
-        ), "Failed to trigger lease expiration after restarting streaming node"
+            def check_issues(query_issues: str, substring: str):
+                """Validate issues structure and content."""
+                assert substring in query_issues, query_issues
+                assert query_issues.count("Previous query retries") == 1, query_issues
+                depth = max_json_depth(json.loads(query_issues))
+                assert depth <= 10, f"Issues JSON depth {depth} exceeds limit: {query_issues}"
 
-        self.write_stream(["3"], endpoint=endpoint)
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-third"]
-        logger.info("Query checked after restart")
+            topic_ydb_client.topic_write(self.input_topic, ["2"])
+            assert wait_for(
+                lambda: "Previous query retries" in get_issues(query_client), timeout_seconds=60, step_seconds=1
+            ), "Failed to wait for Previous query retries"
+            check_issues(get_issues(query_client), "Failed to unwrap")
 
-        second_node = list(kikimr.cluster.slots.values())[1]
-        second_ydb_client = YdbClient.from_driver_config(
-            database=kikimr.endpoint.database,
-            endpoint=f"grpc://{second_node.host}:{second_node.port}",
-            enable_discovery=False,
-        )
-        check_issues(get_issues(client=second_ydb_client), "Lease expired")
+            query_client.query(f"""
+                UPSERT INTO `{join_table}`
+                    (Key, Value)
+                VALUES
+                    (2, "value-second"),
+                    (3, "value-third");
+            """)
+            assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ["value-second"]
+            self.wait_completed_checkpoints(kikimr, entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}'))
+            logger.info("Query fixed")
+
+            # Restart the node hosting the streaming query to trigger lease expiration.
+            self.restart_streaming_node(kikimr)
+            restarted_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
+            clients.callback(restarted_client.stop)
+            time.sleep(5)
+            assert wait_for(
+                lambda: "Lease expired" in get_issues(restarted_client), timeout_seconds=30, step_seconds=1
+            ), "Failed to trigger lease expiration after restarting streaming node"
+
+            topic_ydb_client.topic_write(self.input_topic, ["3"])
+            assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1) == ["value-third"]
+            logger.info("Query checked after restart")
+
+            second_node = list(kikimr.cluster.slots.values())[1]
+            second_ydb_client = YdbClient.from_driver_config(
+                database=kikimr.endpoint.database,
+                endpoint=f"grpc://{second_node.host}:{second_node.port}",
+                enable_discovery=False,
+            )
+            clients.callback(second_ydb_client.stop)
+            check_issues(get_issues(client=second_ydb_client), "Lease expired")
+
+            second_ydb_client.query(f"DROP STREAMING QUERY `{path}`;")
 
     @pytest.mark.parametrize(
-        argnames="table_role,table_store,kikimr",
+        argnames="table_role,table_store",
         argvalues=[
-            ("join", "row", {}),
-            ("join", "column", {}),
-            ("native_join", "row", {"enable_kqp_constraints_transformer": False}),
-            ("output", "row", {}),
-            ("output", "column", {}),
+            ("join", "row"),
+            ("join", "column"),
+            ("native_join", "row"),
+            ("output", "row"),
+            ("output", "column"),
         ],
-        indirect=["kikimr"],
         ids=[
             "join-row",
             "join-column",
@@ -3351,7 +3426,7 @@ FROM `{table_name}`"""
     def test_query_after_table_change(self, kikimr, entity_name, table_store, table_role, table_change):
         """Table changes must preserve progress or restart execution on a table error."""
         name = f"table_change_{table_store}_{table_role}_{table_change}"
-        inp, out, endpoint = self.get_io_names(kikimr, name=name, local_topics=True, entity_name=entity_name)
+        inp, out, topic_ydb_client = self.get_io_names(kikimr, name=name, local_topics=True, entity_name=entity_name)
         table_name = entity_name(name=f"{name}_table")
         query_name = entity_name(name=f"{name}_query")
         query_path = f"{kikimr.get_database_name()}/{query_name}"
@@ -3392,11 +3467,11 @@ FROM `{table_name}`"""
             return rows[0]["lease_generation"]
 
         def write_input(key, value):
-            self.write_stream(data=[json.dumps(obj={"Key": key, "Value": value})], endpoint=endpoint)
+            topic_ydb_client.topic_write(self.input_topic, [json.dumps(obj={"Key": key, "Value": value})])
 
         def check_output(key, value):
             if table_role != "output":
-                assert self.read_stream(messages_count=1, endpoint=endpoint, timeout=timeout) == [value]
+                assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1, timeout=timeout) == [value]
             else:
                 expected = {"Key": key}
                 if value is not None:
@@ -3412,6 +3487,8 @@ FROM `{table_name}`"""
 
         create_table()
         try:
+            if table_role == "native_join":
+                kikimr.set_feature_flags({"enable_kqp_constraints_transformer": False})
             fill_join_table(value="before")
             pragma = ""
             if table_role == "output":
@@ -3549,13 +3626,14 @@ FROM `{table_name}`"""
         local_topics: bool,
         shared_reading: bool,
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"test_restart_after_topic_recreation_{local_topics!s:.1}_{shared_reading!s:.1}",
             local_topics,
             entity_name,
             shared=shared_reading,
         )
+        endpoint = self.get_endpoint(kikimr, local_topics)
 
         query_name = f"test_restart_after_topic_recreation_{local_topics!s:.1}_{shared_reading!s:.1}"
         kikimr.ydb_client.query(f'''
@@ -3569,9 +3647,9 @@ FROM `{table_name}`"""
             self.wait_completed_checkpoints(kikimr, query_name)
 
             expected_data = ["first", "second"]
-            self.write_stream(expected_data, endpoint=endpoint)
+            topic_ydb_client.topic_write(self.input_topic, expected_data)
             assert (
-                self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+                topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_data)) == expected_data
             )
             self.wait_completed_checkpoints(kikimr, query_name)
 
@@ -3768,7 +3846,6 @@ FROM `{table_name}`"""
                 # from KQP placement snapshots. Wait before the next case creates a query.
                 kikimr.wait_kqp_node_count(original_node_count)
 
-    @pytest.mark.parametrize("kikimr", [{"max_message_size": 136314880}], indirect=True)
     @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
     def test_read_large_topic_message(
         self: StreamingTestBase,
@@ -3798,8 +3875,10 @@ FROM `{table_name}`"""
                 ("grpc.max_send_message_length", max_message_size),
             ],
         )
-        with ydb.Driver(driver_config) as driver:
+        with ydb.Driver(driver_config) as driver, ExitStack() as clients:
             driver.wait(timeout=10, fail_fast=True)
+            topic_ydb_client = YdbClient(driver)
+            clients.callback(topic_ydb_client.stop)
             topic_client = driver.topic_client
             for topic in (self.input_topic, self.output_topic):
                 topic_client.alter_topic(
@@ -3821,17 +3900,12 @@ FROM `{table_name}`"""
                 timeout=timeout,
             )
             data = b"x" * 130000000
-            writer = topic_client.writer(self.input_topic, codec=ydb.TopicCodec.RAW)
-            try:
-                writer.write_with_ack(data, timeout=timeout)
-            finally:
-                writer.close(flush=False, timeout=timeout)
-
-            with topic_client.reader(self.output_topic, consumer=self.consumer_name) as reader:
-                message = reader.receive_message(timeout=timeout)
-                assert len(message.data) == len(data)
-                # Keep assertion diagnostics from printing the entire 130 MB payload.
-                contents_match = message.data == data
-                assert contents_match, "Large topic message contents differ"
-                reader.commit_with_ack(message, timeout=timeout)
+            topic_ydb_client.topic_write(self.input_topic, [data], timeout=timeout, codec=ydb.TopicCodec.RAW)
+            messages = topic_ydb_client.topic_read(
+                self.output_topic, self.consumer_name, 1, timeout=timeout, decode=False
+            )
+            assert len(messages[0]) == len(data)
+            # Keep assertion diagnostics from printing the entire 130 MB payload.
+            contents_match = messages[0] == data
+            assert contents_match, "Large topic message contents differ"
             future.result(timeout=timeout)

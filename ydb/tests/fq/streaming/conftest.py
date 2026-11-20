@@ -13,9 +13,6 @@ def kikimr(request):
     param = getattr(request, "param", {})
     set_test_env(request)
     config = get_ydb_config(request)
-    if max_message_size := param.get("max_message_size"):
-        config.yaml_config["grpc_config"]["max_message_size"] = max_message_size
-        config.yaml_config["pqconfig"]["max_message_size_bytes"] = max_message_size
     kikimr = Kikimr(
         config,
         enable_discovery=param.get("enable_discovery", True),
@@ -23,6 +20,17 @@ def kikimr(request):
     )
     yield kikimr
     kikimr.stop()
+
+
+@pytest.fixture(autouse=True)
+def restore_config(request):
+    if "kikimr" not in request.fixturenames:
+        yield
+        return
+
+    kikimr = request.getfixturevalue("kikimr")
+    with kikimr.preserve_config():
+        yield
 
 
 @pytest.fixture

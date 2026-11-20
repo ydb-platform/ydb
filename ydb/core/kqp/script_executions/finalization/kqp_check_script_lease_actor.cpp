@@ -7,6 +7,9 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <util/string/cast.h>
+#include <util/system/env.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 
 namespace NKikimr::NKqp {
@@ -190,6 +193,10 @@ private:
 
 IActor* CreateScriptExecutionLeaseCheckActor(
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters) {
+    if (ui64 seconds = 0; TryFromString<ui64>(GetEnv("YDB_TEST_LEASE_CHECK_STARTUP_TIMEOUT_SEC"), seconds)) {
+        startupTimeout = TDuration::Seconds(seconds);
+    }
+
     return new TScriptExecutionLeaseCheckActor(queryServiceConfig, startupTimeout, counters);
 }
 

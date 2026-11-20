@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpStats) {
 // A miss is reported once per query lookup, before the request is queued.
 // Recompile and SPLIT requests are not lookups.
 Y_UNIT_TEST(CompilationCacheHitMissCounters) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetDisablePgCompatibility(true);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableCreateTableAs(true);
     config->SetEnableDataShardCreateTableAs(true);
@@ -163,10 +163,27 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     check(0, 1);
 
     // Recompile bypasses the cache and is neither a hit nor a miss.
-    runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, Nothing(), false,
-        TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
-    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
-    check(0, 0);
+    auto recompile = [&](const TMaybe<TKqpQueryId>& query, bool disablePgCompatibility) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, query, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+        auto response = receive();
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(result.Uid, uid);
+        UNIT_ASSERT(result.Query);
+        UNIT_ASSERT_VALUES_EQUAL(result.Query->DisablePgCompatibility, disablePgCompatibility);
+        check(0, 0);
+    };
+    recompile(Nothing(), true);
+    auto& appData = runtime.GetAppData();
+    NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    recompile(TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+        TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings), false);
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    recompile(Nothing(), true);
 
     // NeedToSplit is an ordinary miss; the follow-up SPLIT request is not a lookup.
     // A NeedToSplit reply carries no success status, the session actor checks the flag first.

@@ -735,7 +735,7 @@ ISubOperation::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx)
 ISubOperation::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx, bool allowPgForBackup);
+ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx, bool allowPgForBackup = false);
 ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState state);

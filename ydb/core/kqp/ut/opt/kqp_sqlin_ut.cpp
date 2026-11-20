@@ -691,11 +691,19 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         UNIT_ASSERT_C(native.IsSuccess(), native.GetIssues().ToString());
         CompareYson("[[1u]]", FormatResultSetYson(native.GetResultSet(0)));
 
-        for (const TString query : {"SELECT legacy FROM Mixed;", "SELECT id FROM Mixed WHERE legacy IS NULL;"}) {
+        for (const TString query : {
+            "SELECT legacy FROM Mixed;",
+            "SELECT * FROM Mixed;",
+            "SELECT id FROM Mixed WHERE legacy IS NULL;",
+        }) {
             const auto pg = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(pg.GetStatus(), EStatus::UNSUPPORTED, pg.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(pg.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
         }
+
+        const auto explicitPgType = session.ExecuteDataQuery("SELECT PgType('int4');", txControl).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explicitPgType.GetStatus(), EStatus::BAD_REQUEST, explicitPgType.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(explicitPgType.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
     }
 
     Y_UNIT_TEST(SecondaryIndex_PgKey) {

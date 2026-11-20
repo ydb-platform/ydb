@@ -686,12 +686,12 @@ private:
             ? *request.DisablePgCompatibility
             : AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
         TKqpCompileResult::TConstPtr compileResult = QueryCache->FindByUid(request.Uid, false);
-        const bool modeChanged = compileResult && compileResult->Query->DisablePgCompatibility != disablePgCompatibility;
         if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
             compileResult = nullptr;
         }
+        const bool modeChanged = compileResult && compileResult->Query->DisablePgCompatibility != disablePgCompatibility;
 
-        if (!modeChanged && (compileResult || request.Query)) {
+        if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
@@ -706,21 +706,26 @@ private:
                     : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;
             query.DisablePgCompatibility = disablePgCompatibility;
-            if (compileResult) {
+            if (compileResult && !modeChanged) {
                 query.UserSid = compileResult->Query->UserSid;
                 if (query != *compileResult->Query) {
                     YDB_LOG_WARN_CTX(ctx, "QueryId in recompile request and queryId in cache are different queryId in queryId",
                         {"request", query.SerializeToString()},
                         {"cache", compileResult->Query->SerializeToString()});
                 }
+                query = *compileResult->Query;
+            } else if (modeChanged && !request.Query) {
+                request.GUCSettings = std::make_shared<TGUCSettings>(query.GUCSettings);
+                request.UsePessimisticLocks = query.Settings.UsePessimisticLocks;
             }
-            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : std::move(query),
+            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, std::move(query),
                 compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), nullptr, nullptr,
                 request.UsePessimisticLocks, request.CollectDiagnostics);
+            compileRequest.RevalidatePgCompatibility = modeChanged;
 
             EnqueueCompileRequest(std::move(compileRequest), ctx);
             return;

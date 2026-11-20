@@ -6,6 +6,8 @@
 
 #include <util/generic/hash_set.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 namespace {
 
@@ -72,7 +74,12 @@ public:
 
     TStatus Transform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final {
         const auto name = input->Content();
-        const bool unsupported = input->IsCallable() && (IsPgCallable(name) ||
+        // ExpandType can describe a full input row before the projection prunes unused columns.
+        const bool explicitPgCallable = IsPgCallable(name) &&
+            (name != "PgType" || !std::ranges::any_of(ctx.TypeAsNodeCache, [&](const auto& entry) {
+                return entry.second == input;
+            }));
+        const bool unsupported = input->IsCallable() && (explicitPgCallable ||
             (name == "FromPg" && input->ChildrenSize() == 1 && input->Head().GetTypeAnn() &&
                 input->Head().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg));
         if (unsupported) {

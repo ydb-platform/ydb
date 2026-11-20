@@ -48,7 +48,7 @@ using namespace NKMeans;
  *     - Output: rows annotated with cluster IDs and optional data columns
  */
 
-class TLocalKMeansScan: public TActor<TLocalKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TLocalKMeansScan: public NActors::TActorWithExceptionHandler<TActor<TLocalKMeansScan>>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -129,7 +129,7 @@ public:
     TLocalKMeansScan(ui64 tabletId, const TUserTable& table, const NKikimrTxDataShard::TEvLocalKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response,
         TLead&& lead, std::unique_ptr<IClusters>&& clusters)
-        : TActor{&TThis::StateWork}
+        : TActorWithExceptionHandler{&TThis::StateWork}
         , Parent{request.GetParentFrom()}
         , Child{request.GetChild()}
         , State{EState::SAMPLE}

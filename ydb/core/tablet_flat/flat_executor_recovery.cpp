@@ -382,7 +382,7 @@ private:
     TDeque<TAutoPtr<ITransaction>> PendingTx;
 };
 
-class TRecoveryShard : public TActor<TRecoveryShard>, public TTabletExecutedFlat {
+class TRecoveryShard : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TRecoveryShard>>, public TTabletExecutedFlat {
 public:
     friend class TTxUploadSchema;
     friend class TTxUploadSnapshot;
@@ -400,7 +400,7 @@ public:
     }
 
     explicit TRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateWork)
+        : TTabletActor(&TThis::StateWork)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {}
 

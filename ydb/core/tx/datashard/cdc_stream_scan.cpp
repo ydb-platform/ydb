@@ -419,7 +419,7 @@ public:
 
 }; // TTxCdcStreamScanProgress
 
-class TCdcStreamScan: public IActorCallback, public IActorExceptionHandler, public IScan {
+class TCdcStreamScan: public NActors::TActorWithExceptionHandler<IActorCallback>, public IScan {
     using TStats = TCdcStreamScanManager::TStats;
 
     using TLimits = NStreamScan::TLimits;
@@ -449,7 +449,7 @@ public:
             const TPathId& tablePathId, const TPathId& streamPathId, const TRowVersion& readVersion,
             const TVector<TTag>& valueTags, const TMaybe<TSerializedCellVec>& lastKey,
             const TStats& stats, const TLimits& limits)
-        : IActorCallback(static_cast<TReceiveFunc>(&TCdcStreamScan::StateWork), NKikimrServices::TActivity::CDC_STREAM_SCAN_ACTOR)
+        : TActorWithExceptionHandler(static_cast<TReceiveFunc>(&TCdcStreamScan::StateWork), NKikimrServices::TActivity::CDC_STREAM_SCAN_ACTOR)
         , DataShardActorId(self->SelfId())
         , TxId(txId)
         , TablePathId(tablePathId)

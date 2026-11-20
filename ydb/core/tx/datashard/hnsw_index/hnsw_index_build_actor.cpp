@@ -68,13 +68,13 @@ namespace NKikimr::NDataShard {
         };
     }
 
-    class THnswIndexBuildWorker : public TActorBootstrapped<THnswIndexBuildWorker>, public IActorExceptionHandler {
+    class THnswIndexBuildWorker : public NActors::TActorWithExceptionHandler<TActorBootstrapped<THnswIndexBuildWorker>> {
     public:
         THnswIndexBuildWorker(const Ydb::Table::VectorIndexSettings& settings,
             std::vector<std::pair<TString, TString>> rows, std::shared_ptr<void> reservation,
             ui64 budget, THnswIndexBuildCallback callback, bool allowEmpty,
             std::shared_ptr<std::atomic<bool>> cancelled, std::function<void(ui64)> reduceReservation)
-            : TActorBootstrapped(NKikimrServices::TActivity::DATASHARD_READ_SCAN)
+            : TActorWithExceptionHandler(NKikimrServices::TActivity::DATASHARD_READ_SCAN)
             , Settings(settings), Rows(std::move(rows)), Reservation(std::move(reservation))
             , Budget(budget), Callback(std::move(callback)), AllowEmpty(allowEmpty)
             , Cancelled(cancelled ? std::move(cancelled) : std::make_shared<std::atomic<bool>>(false))

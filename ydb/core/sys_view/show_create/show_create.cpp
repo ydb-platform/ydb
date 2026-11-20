@@ -58,9 +58,9 @@ bool RewriteTemporaryTablePath(const TString& database, TString& tablePath, TStr
     return true;
 }
 
-class TShowCreate : public TScanActorWithoutBackPressure<TShowCreate>, public NActors::IActorExceptionHandler {
+class TShowCreate : public NActors::TActorWithExceptionHandler<TScanActorWithoutBackPressure<TShowCreate>> {
 public:
-    using TBase = TScanActorWithoutBackPressure<TShowCreate>;
+    using TBase = NActors::TActorWithExceptionHandler<TScanActorWithoutBackPressure<TShowCreate>>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;

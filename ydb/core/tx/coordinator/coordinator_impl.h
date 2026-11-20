@@ -206,7 +206,7 @@ do { \
 
 class TCoordinatorStateActor;
 
-class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat {
+class TTxCoordinator : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTxCoordinator>>, public TTabletExecutedFlat {
 
     friend class TCoordinatorStateActor;
 

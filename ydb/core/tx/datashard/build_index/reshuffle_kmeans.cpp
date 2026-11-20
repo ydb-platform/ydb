@@ -48,7 +48,7 @@ using namespace NKMeans;
  *   - The row and any specified data columns are written to the output table
  */
 
-class TReshuffleKMeansScan: public TActor<TReshuffleKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TReshuffleKMeansScan: public NActors::TActorWithExceptionHandler<TActor<TReshuffleKMeansScan>>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -113,7 +113,7 @@ public:
         const NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response,
         std::unique_ptr<IClusters>&& clusters)
-        : TActor(&TThis::StateWork)
+        : TActorWithExceptionHandler(&TThis::StateWork)
         , Parent(request.GetParent())
         , Child(request.GetChild())
         , UploadState(request.GetUpload())

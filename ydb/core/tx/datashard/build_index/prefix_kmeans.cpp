@@ -54,7 +54,7 @@ using namespace NKMeans;
  *     - Prefix: records the (prefix key, parent cluster ID) mapping
  */
 
-class TPrefixKMeansScan: public TActor<TPrefixKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TPrefixKMeansScan: public NActors::TActorWithExceptionHandler<TActor<TPrefixKMeansScan>>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -131,7 +131,7 @@ public:
     TPrefixKMeansScan(ui64 tabletId, const TUserTable& table, const NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response,
         std::unique_ptr<IClusters>&& clusters)
-        : TActor{&TThis::StateWork}
+        : TActorWithExceptionHandler{&TThis::StateWork}
         , Parent{request.GetChild()}
         , Child{Parent + 1}
         , State{EState::SAMPLE}

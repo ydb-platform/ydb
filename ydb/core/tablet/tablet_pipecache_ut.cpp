@@ -29,10 +29,10 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         };
     };
 
-    class TCustomTablet : public TActor<TCustomTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TCustomTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TCustomTablet>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         TCustomTablet(const TActorId& tablet, TTabletStorageInfo* info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         { }
 

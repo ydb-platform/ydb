@@ -15,10 +15,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>
-                         , public NActors::IActorExceptionHandler
+class TCommitOffsetActor : public NActors::TActorWithExceptionHandler<TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>>
                          , public NPQ::TLogPrefix {
-    using TBase = TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>;
+    using TBase = NActors::TActorWithExceptionHandler<TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>>;
 
 public:
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session

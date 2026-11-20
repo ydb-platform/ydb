@@ -41,7 +41,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitionActor
-    : public NActors::TActor<TPartitionActor>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<
+          NActors::TActor<TPartitionActor>>
     , public TTabletBase<TPartitionActor>
 {
     using TDirectBlockGroupsConnections =

@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-    class TFakeCoordinator : public TActor<TFakeCoordinator>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TFakeCoordinator : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeCoordinator>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         struct TState : TThrRefBase {
             ui64 CurrentStep = 5000000;
@@ -25,7 +25,7 @@ namespace NKikimr {
         }
 
         TFakeCoordinator(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)
-            : TActor<TFakeCoordinator>(&TFakeCoordinator::StateInit)
+            : TTabletActor(&TFakeCoordinator::StateInit)
             , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
             , State(state)
             , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))

@@ -14,9 +14,9 @@ TServiceControlServiceSettings::TServiceControlServiceSettings(TString endpoint,
     UserAgentPrefix = BuildUserAgentPrefix(userAgentHint);
 }
 
-class TServiceControlService : public NActors::TActor<TServiceControlService>, public NActors::IActorExceptionHandler, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::ServiceControlService> {
+class TServiceControlService : public NActors::TActorWithExceptionHandler<NActors::TActor<TServiceControlService>>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::ServiceControlService> {
     using TThis = TServiceControlService;
-    using TBase = NActors::TActor<TServiceControlService>;
+    using TBase = NActors::TActorWithExceptionHandler<NActors::TActor<TServiceControlService>>;
 
     struct TSetupDelegationRequest : TGrpcRequest {
         static constexpr auto Request = &yandex::cloud::priv::iam::v1::ServiceControlService::Stub::AsyncSetupDelegation;

@@ -14,7 +14,7 @@
 namespace NKikimr::NCdcAggregator {
 
 class TCdcAggregator
-    : public TActor<TCdcAggregator>
+    : public NTabletFlatExecutor::TTabletActor<TActor<TCdcAggregator>>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
     using Schema = TCdcAggregatorSchema;

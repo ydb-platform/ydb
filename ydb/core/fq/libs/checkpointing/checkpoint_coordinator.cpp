@@ -43,7 +43,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId, con
     const TCheckpointCoordinatorSettings& settings, const ::NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode, const FederatedQuery::StreamingDisposition& streamingDisposition,
     bool restoreOffsetsFromForeignCheckpoint)
-    : NActors::TActor<TCheckpointCoordinator>(&TCheckpointCoordinator::DispatchEvent)
+    : TActorWithExceptionHandler(&TCheckpointCoordinator::DispatchEvent)
     , CoordinatorId(std::move(coordinatorId))
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)

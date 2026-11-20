@@ -53,7 +53,7 @@ using TEvStatVolumeResponse =
 TPartitionActor::TPartitionActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletBase<TPartitionActor>(
           tablet,
           NKikimr::TTabletStorageInfoPtr(info),

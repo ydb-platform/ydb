@@ -119,7 +119,7 @@ public:
 
 
 TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new TDataShardMiniKQLFactory(this))
     , PersistentPipeCache(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent))
     , SchemeShardPipeRetryPolicy({})

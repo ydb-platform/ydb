@@ -329,37 +329,6 @@ namespace NActors {
     };
 
 
-    /**
-     * Optional interface for actors with exception handling
-     */
-    class IActorExceptionHandler {
-    protected:
-        ~IActorExceptionHandler() = default;
-
-    public:
-        /**
-         * Handles std::exception_ptr which allows to catch any thrown object.
-         * By default ignores anything that is not an std::exception subclass.
-         */
-        virtual bool OnUnhandledException(const std::exception_ptr& excPtr) {
-            try {
-                std::rethrow_exception(excPtr);
-            } catch (const std::exception& exc) {
-                return OnUnhandledException(exc);
-            } catch (...) {
-                return false;
-            }
-        }
-
-        /**
-         * Called when actor's event handler throws an std::exception subclass
-         *
-         * The implementation is supposed to return true for handled exceptions
-         * and false to rethrow (which will likely result in a process crash).
-         */
-        virtual bool OnUnhandledException(const std::exception&) = 0;
-    };
-
     class TActorActivityType {
     public:
         TActorActivityType()
@@ -802,14 +771,32 @@ namespace NActors {
 
         void Receive(TAutoPtr<IEventHandle>& ev);
 
+        // Select the catch boundary before dispatch, while the actor's original
+        // stack is still intact. Use TActorWithExceptionHandler to opt in.
+        virtual bool HasExceptionHandler() const noexcept {
+            return false;
+        }
+
+        virtual bool OnUnhandledException(const std::exception_ptr&) {
+            return false;
+        }
+
+        virtual bool OnUnhandledException(const std::exception&) {
+            return false;
+        }
+
         TActorContext ActorContext() const {
             return TActivationContext::ActorContextFor(SelfId());
         }
 
     private:
+        void DispatchEvent(TAutoPtr<IEventHandle>& ev);
         bool OnUnhandledExceptionSafe(const std::exception_ptr& exc);
 
     protected:
+        // Called only from Receive's catch, with the original exception active.
+        [[noreturn]] virtual void RethrowUnhandledException();
+
         void SetEnoughCpu(bool isEnough);
 
         void Describe(IOutputStream&) const override;
@@ -893,6 +880,36 @@ namespace NActors {
         return activityType.GetName();
     }
 
+    // An optional link in the actor inheritance chain, rather than a sibling
+    // interface. TBase may also be a component-specific actor base.
+    template <typename TBase>
+    class TActorWithExceptionHandler : public TBase {
+    protected:
+        template <typename... TArgs>
+        explicit TActorWithExceptionHandler(TArgs&&... args)
+            : TBase(std::forward<TArgs>(args)...)
+        {}
+
+    public:
+        bool HasExceptionHandler() const noexcept final {
+            return true;
+        }
+
+        // Non-std exceptions are declined unless a derived actor overrides
+        // this overload. Both overloads preserve the former handler contract.
+        bool OnUnhandledException(const std::exception_ptr& excPtr) override {
+            try {
+                std::rethrow_exception(excPtr);
+            } catch (const std::exception& exc) {
+                return OnUnhandledException(exc);
+            } catch (...) {
+                return false;
+            }
+        }
+
+        bool OnUnhandledException(const std::exception&) override = 0;
+    };
+
     // For compatibility with existing code
     using IActorCallback = IActor;
 
@@ -918,6 +935,15 @@ namespace NActors {
 
     protected:
         // static constexpr char ActorName[] = "UNNAMED";
+
+        [[noreturn]] Y_NO_INLINE void RethrowUnhandledException() override {
+            // Keep a distinct frame for each CRTP actor type, even when the
+            // linker folds identical functions. This runs only on a fatal path.
+            static volatile unsigned char typeTag = 0;
+            const unsigned char tag = typeTag;
+            Y_UNUSED(tag);
+            throw;
+        }
 
         TActor(TDerivedReceiveFunc func)
             : IActorCallback(static_cast<TReceiveFunc>(func), GetDefaultActivityType()) {

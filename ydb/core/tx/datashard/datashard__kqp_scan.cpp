@@ -32,7 +32,7 @@ constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
 class TKqpScanResult : public IDestructable {};
 
-class TKqpScan : public TActor<TKqpScan>, public IActorExceptionHandler, public NTable::IScan {
+class TKqpScan : public NActors::TActorWithExceptionHandler<TActor<TKqpScan>>, public NTable::IScan {
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_TABLE_SCAN;
@@ -44,7 +44,7 @@ public:
         const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys,
         const NYql::NDqProto::EDqStatsMode& statsMode, ui64 timeoutMs, ui32 generation,
         NKikimrDataEvents::EDataFormat dataFormat, const ui64 tabletId)
-        : TActor(&TKqpScan::StateScan)
+        : TActorWithExceptionHandler(&TKqpScan::StateScan)
         , ComputeActorId(computeActorId)
         , DatashardActorId(datashardActorId)
         , ScanId(scanId)

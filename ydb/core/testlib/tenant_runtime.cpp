@@ -132,7 +132,7 @@ public:
     }
 };
 
-class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public TTabletExecutedFlat {
+class TFakeSchemeShard : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeSchemeShard>>, public TTabletExecutedFlat {
     void Handle(TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx)
     {
         if (HoldResolve) {
@@ -209,7 +209,7 @@ public:
 
     TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info,
                      TActorId sender, const TVector<std::pair<TString, ui64>> &subDomains)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Sender(sender)
         , HoldResolve(false)
@@ -242,7 +242,7 @@ public:
     bool HoldResolve;
 };
 
-class TFakeBSController : public TActor<TFakeBSController>, public TTabletExecutedFlat {
+class TFakeBSController : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeBSController>>, public TTabletExecutedFlat {
     void DefaultSignalTabletActive(const TActorContext &) override
     {
         // must be empty
@@ -266,7 +266,7 @@ class TFakeBSController : public TActor<TFakeBSController>, public TTabletExecut
 
 public:
     TFakeBSController(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
     {
     }
@@ -282,7 +282,7 @@ public:
     }
 };
 
-class TFakeTenantSlotBroker : public TActor<TFakeTenantSlotBroker>, public TTabletExecutedFlat {
+class TFakeTenantSlotBroker : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeTenantSlotBroker>>, public TTabletExecutedFlat {
     void DefaultSignalTabletActive(const TActorContext &) override
     {
         // must be empty
@@ -326,7 +326,7 @@ class TFakeTenantSlotBroker : public TActor<TFakeTenantSlotBroker>, public TTabl
 
 public:
     TFakeTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
     {
     }
@@ -349,7 +349,7 @@ private:
     THashMap<TString, NKikimrTenantSlotBroker::TAlterTenant> State;
 };
 
-class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
+class TFakeHive : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeHive>>, public TTabletExecutedFlat {
     struct TClientInfo {
         TString Name;
         TSubDomainKey Key;
@@ -676,7 +676,7 @@ public:
 
     TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TActorId sender,
               ui64 hiveId, const THashMap<TSubDomainKey, TString> &subDomainKeys)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Sender(sender)
         , WaitForState(false)

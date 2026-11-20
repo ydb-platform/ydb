@@ -20,8 +20,7 @@ using namespace NActors;
 using namespace NTable;
 
 class TIncrementalRestoreScan
-    : public IActorCallback
-    , public IActorExceptionHandler
+    : public NActors::TActorWithExceptionHandler<IActorCallback>
     , public NTable::IScan
     , protected TChangeRecordBodySerializer
 {
@@ -47,7 +46,7 @@ public:
             const TPathId& targetPathId,
             ui64 txId,
             NStreamScan::TLimits limits)
-        : IActorCallback(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR)
+        : TActorWithExceptionHandler(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR)
         , Parent(parent)
         , ChangeSenderFactory(changeSenderFactory)
         , TxId(txId)

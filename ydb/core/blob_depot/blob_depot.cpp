@@ -12,7 +12,7 @@
 namespace NKikimr::NBlobDepot {
 
     TBlobDepot::TBlobDepot(TActorId tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , TabletCountersPtr(new TProtobufTabletCounters<
                 NKikimrBlobDepot::ESimpleCounters_descriptor,

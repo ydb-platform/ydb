@@ -25,7 +25,7 @@ NMonitoring::TDynamicCounterPtr CreateDetailedCounterGroup(
 } // namespace
 
 TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
     , CollectInterval(TotalInterval / 2)

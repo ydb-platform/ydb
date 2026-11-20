@@ -4,7 +4,7 @@
 namespace NKikimr::NBackup {
 
 TBackupController::TBackupController(const TActorId& tablet, TTabletStorageInfo* info)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
     Y_UNUSED(tablet, info);

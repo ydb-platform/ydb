@@ -36,7 +36,7 @@ protected:
     virtual void CloseEraser() = 0;
 };
 
-class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, public IScan, public IEraserOps {
+class TCondEraseScan: public NActors::TActorWithExceptionHandler<IActorCallback>, public IScan, public IEraserOps {
     struct TDataShardId {
         TActorId ActorId;
         ui64 TabletId;
@@ -224,7 +224,7 @@ public:
         const TString& databaseName, const TTableId& tableId, ui64 txId,
         THolder<IEraseRowsCondition> condition, const TLimits& limits
     )
-        : IActorCallback(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
+        : TActorWithExceptionHandler(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
         , DatabaseName(databaseName)
         , TableId(tableId)
         , DataShard{ds->SelfId(), ds->TabletID()}

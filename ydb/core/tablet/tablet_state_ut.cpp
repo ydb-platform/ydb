@@ -12,12 +12,12 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TabletState) {
 
     class TSimpleTablet
-        : public TActor<TSimpleTablet>
+        : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TSimpleTablet>>
         , public NTabletFlatExecutor::TTabletExecutedFlat
     {
     public:
         TSimpleTablet(const TActorId& tablet, TTabletStorageInfo* info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         {}
 

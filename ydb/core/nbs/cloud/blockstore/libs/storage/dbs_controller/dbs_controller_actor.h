@@ -16,7 +16,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDbsControllerActor
-    : public NActors::TActor<TDbsControllerActor>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<
+          NActors::TActor<TDbsControllerActor>>
     , public TTabletBase<TDbsControllerActor>
 {
     enum EState

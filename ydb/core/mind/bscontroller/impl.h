@@ -80,7 +80,7 @@ public:
     }
 };
 
-class TBlobStorageController : public TActor<TBlobStorageController>, public TTabletExecutedFlat {
+class TBlobStorageController : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TBlobStorageController>>, public TTabletExecutedFlat {
 public:
     using THostConfigId = Schema::HostConfig::TKey::Type;
     using THostId = std::tuple<TString, i32>; // (Host, IcPort) identifier

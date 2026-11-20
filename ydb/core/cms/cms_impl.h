@@ -34,7 +34,7 @@ using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
 
-class TCms : public TActor<TCms>, public TTabletExecutedFlat {
+class TCms : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TCms>>, public TTabletExecutedFlat {
 public:
     struct TEvPrivate {
         enum EEv {
@@ -94,7 +94,7 @@ public:
     static void AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &node, NKikimrCms::TClusterStateResponse &resp, TInstant timestamp);
 
 private:
-    using TActorBase = TActor<TCms>;
+    using TActorBase = NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TCms>>;
     using EStatusCode = NKikimrCms::TStatus::ECode;
 
     class TTxGetLogTail;
@@ -546,7 +546,7 @@ private:
 
 public:
     TCms(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , State(new TCmsState)
         , Logger(State)

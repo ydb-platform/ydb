@@ -13,7 +13,7 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
-    class TDateTestFlatTablet : public TActor<TDateTestFlatTablet>, public TTabletExecutedFlat {
+    class TDateTestFlatTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TDateTestFlatTablet>>, public TTabletExecutedFlat {
         struct Schema : NIceDb::Schema {
             struct DateValue : Table<1> {
                 struct Key : Column<1, NScheme::NTypeIds::Uint32> {};
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
 
     public:
         TDateTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Sender(sender)
         {

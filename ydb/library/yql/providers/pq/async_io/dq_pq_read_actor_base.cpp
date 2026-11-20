@@ -55,7 +55,7 @@ TInstant InitStartingMessageTimestamp(const NPq::NProto::TDqPqTopicSource& sourc
     }());
 }
 
-class TControlPlaneInteractor final: public NActors::TActorBootstrapped<TControlPlaneInteractor>, public NActors::IActorExceptionHandler {
+class TControlPlaneInteractor final: public NActors::TActorWithExceptionHandler<NActors::TActorBootstrapped<TControlPlaneInteractor>> {
     using TConnection = NPq::NProto::TEvDescribeConsumer::TConnection;
     using TComplete = std::function<void(TIssues)>;
 

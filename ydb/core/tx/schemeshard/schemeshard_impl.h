@@ -105,7 +105,7 @@ struct TSetColumnConstraintOperationInfo;
 struct TIndexBuildShardStatus;
 
 class TSchemeShard
-    : public TActor<TSchemeShard>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TSchemeShard>>
     , public NTabletFlatExecutor::TTabletExecutedFlat
     , public IQuotaCounters
 {

@@ -55,12 +55,12 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
     };
 
     class TLeasesTablet
-        : public TActor<TLeasesTablet>
+        : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TLeasesTablet>>
         , public TTabletExecutedFlat
     {
     public:
         TLeasesTablet(const TActorId& tablet, TTabletStorageInfo* info, bool enableInitialLease)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , EnableInitialLease(enableInitialLease)
         { }

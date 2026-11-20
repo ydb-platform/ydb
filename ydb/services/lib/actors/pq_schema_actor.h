@@ -248,11 +248,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 
     template<class TDerived, class TRequest>
-    class TPQGrpcSchemaBase : public NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>
+    class TPQGrpcSchemaBase : public NActors::TActorWithExceptionHandler<NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>>
                             , public TPQSchemaBase<TPQGrpcSchemaBase<TDerived, TRequest>>
-                            , public NActors::IActorExceptionHandler {
+    {
     protected:
-        using TBase = NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>;
+        using TBase = NActors::TActorWithExceptionHandler<NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>>;
         using TActorBase = TPQSchemaBase<TPQGrpcSchemaBase<TDerived, TRequest>>;
 
         using TProtoRequest = typename TRequest::TRequest;

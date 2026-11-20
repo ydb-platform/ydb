@@ -19,7 +19,7 @@ using namespace NActors;
 using namespace NExportScan;
 using namespace NTable;
 
-class TExportScan: private NActors::IActorCallback, public IActorExceptionHandler, public NTable::IScan {
+class TExportScan: private NActors::TActorWithExceptionHandler<NActors::IActorCallback>, public NTable::IScan {
     enum EStateBits {
         ES_REGISTERED = 0, // Actor is registered
         ES_INITIALIZED, // Seek(...) was called
@@ -156,7 +156,7 @@ public:
     }
 
     explicit TExportScan(std::function<IActor*()>&& createUploaderFn, IBuffer::TPtr buffer)
-        : IActorCallback(static_cast<TReceiveFunc>(&TExportScan::StateWork), NKikimrServices::TActivity::EXPORT_SCAN_ACTOR)
+        : TActorWithExceptionHandler(static_cast<TReceiveFunc>(&TExportScan::StateWork), NKikimrServices::TActivity::EXPORT_SCAN_ACTOR)
         , CreateUploaderFn(std::move(createUploaderFn))
         , Buffer(std::move(buffer))
         , Stats(new TStats)

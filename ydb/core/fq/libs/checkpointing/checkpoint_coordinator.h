@@ -42,7 +42,7 @@ private:
     YDB_ACCESSOR(ui64, MaxInflight, 1);
 };
 
-class TCheckpointCoordinator: public NActors::TActor<TCheckpointCoordinator>, public NActors::IActorExceptionHandler {
+class TCheckpointCoordinator: public NActors::TActorWithExceptionHandler<NActors::TActor<TCheckpointCoordinator>> {
     struct TScheduleCheckpointContext {
         static constexpr TDuration MIN_METRICS_REPORT_GRANULARITY = TDuration::Seconds(1);
 

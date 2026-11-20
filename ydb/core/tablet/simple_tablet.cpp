@@ -5,7 +5,7 @@
 namespace NKikimr {
 
 TSimpleTablet::TSimpleTablet(const TActorId &tablet, TTabletStorageInfo *info)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
 {}
 

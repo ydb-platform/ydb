@@ -32,10 +32,10 @@ using ::NMonitoring::TDynamicCounterPtr;
 class TTenantsManager;
 class TConfigsManager;
 
-class TConsole : public TActor<TConsole>
+class TConsole : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TConsole>>
                , public TTabletExecutedFlat
                , public ITxExecutor {
-    using TActorBase = TActor<TConsole>;
+    using TActorBase = NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TConsole>>;
 
 public:
     enum EConfigKey {
@@ -151,7 +151,7 @@ private:
 
 public:
     TConsole(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , TxProcessor(new TTxProcessor(*this, "console", NKikimrServices::CMS))
         , ConfigsManager(nullptr)

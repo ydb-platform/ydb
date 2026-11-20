@@ -1,5 +1,6 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/hash_set.h>
 #include <util/system/env.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/mon/mon.h>
@@ -854,6 +855,70 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 } // Y_UNIT_TEST_SUITE(PQCountersSimple)
 
 Y_UNIT_TEST_SUITE(PQCountersLabeled) {
+    Y_UNIT_TEST_TWIN(SuppressLabeledCountersWhenWriteProhibited, firstClass) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        bool activeZone = false;
+        tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClass);
+        auto& runtime = *tc.Runtime;
+        runtime.SetScheduledLimit(10000);
+
+        TActorId tabletActor;
+        THashSet<TString> sentGroups;
+        ui32 tabletWakeups = 0;
+        ui32 partitionCounters = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvTabletCounters::EvTabletAddLabeledCounters) {
+                const auto* counters = event->Get<TEvTabletCounters::TEvTabletAddLabeledCounters>();
+                if (counters->TabletID == tc.TabletId) {
+                    tabletActor = event->Sender;
+                    sentGroups.insert(counters->LabeledCounters->GetGroup());
+                    // Observe publication without retaining the in-flight cookie in an aggregator.
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            } else if (event->GetRecipientRewrite() == tabletActor) {
+                if (event->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                    ++tabletWakeups;
+                } else if (event->GetTypeRewrite() == TEvPQ::EvPartitionCounters) {
+                    ++partitionCounters;
+                }
+            }
+            return TTestActorRuntime::DefaultObserverFunc(event);
+        });
+
+        auto config = MakePQTabletConfig({.deleteTime = 3600}, {{"client", true}}, runtime, 1);
+        SendPQTabletConfig(runtime, tc.TabletId, tc.Edge, config, 100, 1);
+        CmdWrite(0, "sourceid", TestData(), tc, false, {}, true);
+        runtime.SimulateSleep(TDuration::Seconds(15));
+        UNIT_ASSERT(tabletActor);
+        UNIT_ASSERT_C(sentGroups.size() >= 2, "Expected both topic and consumer counter groups");
+        const auto expectedGroups = sentGroups;
+
+        for (const auto mode : {NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE,
+                               NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED,
+                               NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE})
+        {
+            config.SetVersion(config.GetVersion() + 1);
+            config.SetWriteMode(mode);
+            SendPQTabletConfig(runtime, tc.TabletId, tc.Edge, config, 100 + config.GetVersion(), config.GetVersion());
+            // Drain publications queued before the configuration change.
+            runtime.SimulateSleep(TDuration::Seconds(5));
+            sentGroups.clear();
+            tabletWakeups = 0;
+            partitionCounters = 0;
+
+            runtime.SimulateSleep(TDuration::Seconds(15));
+            UNIT_ASSERT_C(tabletWakeups >= 2, "The tablet must run multiple reporting cycles");
+            UNIT_ASSERT_C(partitionCounters > 0, "Ordinary partition counters must still be sent");
+            if (mode == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED) {
+                UNIT_ASSERT_C(sentGroups.empty(), "Labeled counters were published while writes were prohibited");
+            } else {
+                UNIT_ASSERT_C(sentGroups == expectedGroups, "All labeled counter groups must be published");
+            }
+        }
+        runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+    }
+
     void CompareJsons(const TString& inputStr, const TString& referenceStr) {
         NJson::TJsonValue referenceJson;
         UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(referenceStr), &referenceJson));

@@ -235,13 +235,10 @@ TMaybe<TBuffer> Flush(bool last) override {
         return Nothing();
     }
 
-    // The rows pending when a part is sent stay for the next row group rather than
-    // becoming a small one of their own. Flush writes them at the end of the file, and
-    // into a part that has no row group yet (sent without encoded output, with MinBytes 0).
-    if (last || !OutStream->GetBufferSize()) {
-        if (!FlushRowGroup(last)) {
-            return Nothing();
-        }
+    // The pending rows wait for the next row group rather than becoming a small one of
+    // their own; only the end of the file writes them.
+    if (last && !FlushRowGroup(true)) {
+        return Nothing();
     }
 
     return OutStream->Checkpoint();

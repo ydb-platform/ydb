@@ -116,7 +116,7 @@ public:
     virtual void Clear() = 0;
     virtual bool IsFilled() const = 0;
     // Bytes the buffer accounts for: the output held for the next part and the cell bytes
-    // of the rows a format keeps unencoded (a flush before the last may keep the latter).
+    // of the rows a format keeps unencoded (a flush before the last keeps the latter).
     virtual ui64 GetMemoryBytes() const = 0;
     virtual TString GetError() const = 0;
 };

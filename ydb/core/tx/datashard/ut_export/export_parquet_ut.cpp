@@ -451,27 +451,6 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         CheckRows(data, rows);
     }
 
-    // A part cut by its rows before any row group is written takes the pending rows as a
-    // row group, so that it is not empty.
-    Y_UNIT_TEST(ShouldWritePendingRowsIntoAPartWithoutARowGroup) {
-        TVector<std::pair<ui32, TString>> rows;
-        for (ui32 i = 0; i < 7; ++i) {
-            rows.emplace_back(i, TStringBuilder() << "value_" << i);
-        }
-
-        TS3ExportBufferSettings bufferSettings;
-        bufferSettings
-            .WithMaxRows(3)
-            .WithMinBytes(0) // a part is sent without encoded output
-            .WithMaxBytes(Max<ui64>());
-        const auto buffer = CreateParquetBuffer(std::move(bufferSettings), /* rowGroupSize */ 1000, /* rowGroupBytes */ 64_KB);
-
-        const TString data = CollectRows(*buffer, rows);
-
-        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "3,3,1");
-        CheckRows(data, rows);
-    }
-
     // The export cuts row groups by its batch size (BytesBatchSize of the scan settings,
     // BackupBytesBatchSize of the config by default).
     Y_UNIT_TEST(ShouldCutRowGroupsByTheExportBatchSize) {

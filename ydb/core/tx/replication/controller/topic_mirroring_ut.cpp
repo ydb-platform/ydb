@@ -1,4 +1,5 @@
 #include "private_events.h"
+#include "public_events.h"
 #include "dst_alterer.h"
 #include "dst_remover.h"
 #include "stream_remover.h"
@@ -8,6 +9,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
+#include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -18,6 +20,7 @@
 #include <util/string/printf.h>
 #include <util/datetime/base.h>
 #include <atomic>
+#include <optional>
 
 namespace NKikimr::NReplication::NController {
 namespace {
@@ -100,10 +103,25 @@ public:
         Wait([&] { return Config().GetPartitionConfig().HasMirrorFrom() == enabled; });
     }
 
-    void Done() {
+    void ForceDone() {
         Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
-        Wait([&] { return Destination.GetDescription("/Root/replication")
-            .GetPathDescription().GetReplicationDescription().GetState().HasDone(); });
+    }
+
+    void WaitForControllerDone() {
+        const auto pathId = Destination.GetPathId("/Root/replication");
+        const auto controllerId = Destination.GetDescription("/Root/replication")
+            .GetPathDescription().GetReplicationDescription().GetControllerId();
+        UNIT_ASSERT(controllerId);
+        Wait([&] {
+            auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+            pathId.ToProto(request->Record.MutablePathId());
+            const auto response = Destination.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_C(record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
+                record.ShortDebugString());
+            UNIT_ASSERT_C(!record.GetState().HasError(), record.GetState().ShortDebugString());
+            return record.GetState().HasDone();
+        });
     }
 
     void CheckDropByMissingId() {
@@ -164,30 +182,57 @@ public:
         UNIT_ASSERT(!Config().GetPartitionConfig().HasMirrorFrom());
     }
 
+    static std::optional<NYdb::NTopic::TPartitionConsumerStats> DescribeConsumerStats(
+            NYdb::NTopic::TTopicClient& client, const TString& topic, const TString& consumer)
+    {
+        const auto result = client.DescribeConsumer(topic, consumer,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto& partitions = result.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        return partitions.front().GetPartitionConsumerStats();
+    }
+
     void CommitAndWaitForConsumerOffset(ui64 offset) {
         NYdb::NTopic::TTopicClient source(Source.GetDriver()), destination(Destination.GetDriver());
         const auto commit = source.CommitOffset("/Root/src/topic", 0, Consumer, offset).GetValueSync();
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
 
         Wait([&] {
-            const auto result = destination.DescribeConsumer("/Root/topic", Consumer,
-                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            const auto& partitions = result.GetConsumerDescription().GetPartitions();
-            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-            const auto& stats = partitions.front().GetPartitionConsumerStats();
+            const auto stats = DescribeConsumerStats(destination, "/Root/topic", Consumer);
             return stats && stats->GetCommittedOffset() == offset;
+        });
+    }
+
+    void CheckDestinationConsumerOffset(ui64 offset) {
+        NYdb::NTopic::TTopicClient client(Destination.GetDriver());
+        const auto stats = DescribeConsumerStats(client, "/Root/topic", Consumer);
+        UNIT_ASSERT(stats);
+        UNIT_ASSERT_VALUES_EQUAL(stats->GetCommittedOffset(), offset);
+    }
+
+    void WaitForSourceMirrorSession(const TString& consumer, bool attached) {
+        NYdb::NTopic::TTopicClient client(Source.GetDriver());
+        Wait([&] {
+            const auto stats = DescribeConsumerStats(client, "/Root/src/topic", consumer);
+            return stats && (stats->GetReadSessionId().empty() != attached);
         });
     }
 
     void WriteAndReadBack(const TString& payload, ui64 offset) {
         using namespace NYdb::NTopic;
-        TTopicClient sourceClient(Source.GetDriver()), destinationClient(Destination.GetDriver());
+        TTopicClient sourceClient(Source.GetDriver());
         auto writer = sourceClient.CreateSimpleBlockingWriteSession(TWriteSessionSettings()
             .Path("/Root/src/topic").ProducerId("producer").MessageGroupId("producer").Codec(ECodec::RAW));
         UNIT_ASSERT(writer->Write(payload));
         UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
 
+        ReadBack(payload, offset);
+    }
+
+    void ReadBack(const TString& payload, ui64 offset) {
+        using namespace NYdb::NTopic;
+        TTopicClient destinationClient(Destination.GetDriver());
         auto reader = destinationClient.CreateReadSession(TReadSessionSettings().WithoutConsumer()
             .AppendTopics(TTopicReadSettings("/Root/topic").AppendPartitionIds(0)));
         Wait([&] {
@@ -294,7 +339,9 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
 
     Y_UNIT_TEST(DoneBeforeCreateResultDoesNotStartMirroring) {
         TTopicMirroringFixture test("localhost", true);
-        test.Done();
+        test.ForceDone();
+        test.Wait([&] { return test.Destination.GetDescription("/Root/replication")
+            .GetPathDescription().GetReplicationDescription().GetState().HasDone(); });
         UNIT_ASSERT(!test.Config().GetPartitionConfig().HasMirrorFrom());
     }
 
@@ -323,6 +370,28 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
     Y_UNIT_TEST(MissingDestinationCannotResume) {
         TTopicMirroringFixture test;
         test.CheckMissingDestination();
+    }
+
+    Y_UNIT_TEST(DoneDetachesActiveMirror) {
+        TTopicMirroringFixture test("[::1]");
+        const auto destination = test.Destination.GetPathId("/Root/topic");
+        const auto mirrorConsumer = test.Config().GetPartitionConfig().GetMirrorFrom().GetConsumer();
+        UNIT_ASSERT(!mirrorConsumer.empty());
+
+        test.WriteAndReadBack("mirrored", 0);
+        test.CommitAndWaitForConsumerOffset(1);
+        test.WaitForSourceMirrorSession(mirrorConsumer, true);
+
+        test.ForceDone();
+        test.WaitForControllerDone();
+        UNIT_ASSERT(!test.Config().GetPartitionConfig().HasMirrorFrom());
+        UNIT_ASSERT_VALUES_EQUAL(test.Destination.GetPathId("/Root/topic"), destination);
+        test.CheckDestinationConsumerOffset(1);
+        test.WaitForSourceMirrorSession(mirrorConsumer, false);
+
+        test.ReadBack("mirrored", 0);
+        UNIT_ASSERT(WriteTopic(test.Destination, "/Root/topic", "local", NYdb::NTopic::ECodec::RAW));
+        test.ReadBack("local", 1);
     }
 
     Y_UNIT_TEST(CopiesMessagesAcrossPauseAndResume) {

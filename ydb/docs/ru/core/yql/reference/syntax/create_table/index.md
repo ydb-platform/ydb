@@ -216,7 +216,11 @@ WITH (
   );
   ```
 
+<<<<<<< HEAD
   Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [Таблицы](../../../../concepts/datamodel/table.md).
+=======
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мебибайт (МиБ). Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+>>>>>>> 6cc7a689204 ([YDBDOCS-2875] Correct AUTO_PARTITIONING_PARTITION_SIZE_MB default and units (#52607))
 
 - Создание колоночной таблицы
 

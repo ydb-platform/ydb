@@ -14,11 +14,8 @@ SRCS(
     dictionary_feature_flag_ut.cpp
     kesus_description_ut.cpp
     table_description_ut.cpp
-<<<<<<< HEAD
     replication_description_ut.cpp
-=======
     topic_description_ut.cpp
->>>>>>> f3674463da7 (Reduce msgbus usage in PQ tests: create/alter/delete via Topic/PersQueue SDK (#49687))
     ydb_convert_ut.cpp
 )
 

@@ -12,9 +12,6 @@
 
 namespace NKikimr {
 
-<<<<<<< HEAD
-bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
-=======
 bool ResolveConsumerServiceType(
     const NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
     const NKikimrPQ::TPQConfig& pqConfig,
@@ -38,8 +35,7 @@ bool ResolveConsumerServiceType(
     return true;
 }
 
-bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& config, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
->>>>>>> f3674463da7 (Reduce msgbus usage in PQ tests: create/alter/delete via Topic/PersQueue SDK (#49687))
+bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
     Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;

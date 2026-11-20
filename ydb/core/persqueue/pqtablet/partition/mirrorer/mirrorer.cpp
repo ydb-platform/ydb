@@ -145,8 +145,7 @@ bool AppendToWriteRequest(
     NKikimrClient::TPersQueuePartitionRequest& request,
     TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message,
     bool& incorrectRequest,
-    ui64& nextOffset,
-    bool syncWriteTime
+    ui64& nextOffset
 ) {
     if (!request.HasCmdWriteOffset()) {
         if (request.CmdWriteSize() > 0) {
@@ -172,15 +171,9 @@ bool AppendToWriteRequest(
     write->SetSourceId(NSourceIdEncoding::EncodeSimple(producerId));
     write->SetSeqNo(message.GetSeqNo());
     write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
-<<<<<<< HEAD
-    if (syncWriteTime) {
-        write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
-    }
-=======
     // SyncWriteTime removed; mirrored topics always preserve source write time
     // (same as PQv1 remote_mirror_rule + client_write_disabled).
     write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
->>>>>>> f3674463da7 (Reduce msgbus usage in PQ tests: create/alter/delete via Topic/PersQueue SDK (#49687))
     write->SetDisableDeduplication(true);
     write->SetUncompressedSize(message.GetUncompressedSize());
 
@@ -201,7 +194,7 @@ bool TMirrorer::AddToWriteRequest(
     bool& incorrectRequest,
     ui64& nextOffset
 ) {
-    return AppendToWriteRequest(request, message, incorrectRequest, nextOffset, Config.GetSyncWriteTime());
+    return AppendToWriteRequest(request, message, incorrectRequest, nextOffset);
 }
 
 void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {

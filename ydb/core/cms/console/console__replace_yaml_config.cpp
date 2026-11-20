@@ -7,6 +7,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/base/appdata.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
@@ -178,8 +179,9 @@ public:
                 Error = true;
                 auto ev = MakeHolder<TEvConsole::TEvGenericError>();
                 ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-                ErrorReason = "Unknown keys in config.";
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_ERROR, ctx);
+                ErrorReason = NYql::IssuesFromMessageAsString(
+                    Response->Get<TEvConsole::TEvGenericError>()->Record.GetIssues());
             } else if (!Force) {
                 auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);

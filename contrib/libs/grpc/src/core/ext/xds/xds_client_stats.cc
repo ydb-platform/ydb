@@ -40,10 +40,10 @@ uint64_t GetAndResetCounter(std::atomic<uint64_t>* from) {
 // XdsClusterDropStats
 //
 
-XdsClusterDropStats::XdsClusterDropStats(
-    RefCountedPtr<XdsClient> xds_client,
-    const XdsBootstrap::XdsServer& lrs_server, y_absl::string_view cluster_name,
-    y_absl::string_view eds_service_name)
+XdsClusterDropStats::XdsClusterDropStats(RefCountedPtr<XdsClient> xds_client,
+                                         y_absl::string_view lrs_server,
+                                         y_absl::string_view cluster_name,
+                                         y_absl::string_view eds_service_name)
     : RefCounted(GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_refcount_trace)
                      ? "XdsClusterDropStats"
                      : nullptr),
@@ -53,7 +53,7 @@ XdsClusterDropStats::XdsClusterDropStats(
       eds_service_name_(eds_service_name) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
     gpr_log(GPR_INFO, "[xds_client %p] created drop stats %p for {%s, %s, %s}",
-            xds_client_.get(), this, lrs_server_.server_uri().c_str(),
+            xds_client_.get(), this, TString(lrs_server_).c_str(),
             TString(cluster_name_).c_str(),
             TString(eds_service_name_).c_str());
   }
@@ -63,7 +63,7 @@ XdsClusterDropStats::~XdsClusterDropStats() {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
     gpr_log(GPR_INFO,
             "[xds_client %p] destroying drop stats %p for {%s, %s, %s}",
-            xds_client_.get(), this, lrs_server_.server_uri().c_str(),
+            xds_client_.get(), this, TString(lrs_server_).c_str(),
             TString(cluster_name_).c_str(),
             TString(eds_service_name_).c_str());
   }
@@ -94,9 +94,9 @@ void XdsClusterDropStats::AddCallDropped(const TString& category) {
 //
 
 XdsClusterLocalityStats::XdsClusterLocalityStats(
-    RefCountedPtr<XdsClient> xds_client,
-    const XdsBootstrap::XdsServer& lrs_server, y_absl::string_view cluster_name,
-    y_absl::string_view eds_service_name, RefCountedPtr<XdsLocalityName> name)
+    RefCountedPtr<XdsClient> xds_client, y_absl::string_view lrs_server,
+    y_absl::string_view cluster_name, y_absl::string_view eds_service_name,
+    RefCountedPtr<XdsLocalityName> name)
     : RefCounted(GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_refcount_trace)
                      ? "XdsClusterLocalityStats"
                      : nullptr),
@@ -106,23 +106,25 @@ XdsClusterLocalityStats::XdsClusterLocalityStats(
       eds_service_name_(eds_service_name),
       name_(std::move(name)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
-    gpr_log(GPR_INFO,
-            "[xds_client %p] created locality stats %p for {%s, %s, %s, %s}",
-            xds_client_.get(), this, lrs_server_.server_uri().c_str(),
-            TString(cluster_name_).c_str(),
-            TString(eds_service_name_).c_str(),
-            name_->AsHumanReadableString().c_str());
+    gpr_log(
+        GPR_INFO,
+        "[xds_client %p] created locality stats %p for {%s, %s, %s, %s}",
+        xds_client_.get(), this, TString(lrs_server_).c_str(),
+        TString(cluster_name_).c_str(),
+        TString(eds_service_name_).c_str(),
+        name_ == nullptr ? "<none>" : name_->human_readable_string().c_str());
   }
 }
 
 XdsClusterLocalityStats::~XdsClusterLocalityStats() {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
-    gpr_log(GPR_INFO,
-            "[xds_client %p] destroying locality stats %p for {%s, %s, %s, %s}",
-            xds_client_.get(), this, lrs_server_.server_uri().c_str(),
-            TString(cluster_name_).c_str(),
-            TString(eds_service_name_).c_str(),
-            name_->AsHumanReadableString().c_str());
+    gpr_log(
+        GPR_INFO,
+        "[xds_client %p] destroying locality stats %p for {%s, %s, %s, %s}",
+        xds_client_.get(), this, TString(lrs_server_).c_str(),
+        TString(cluster_name_).c_str(),
+        TString(eds_service_name_).c_str(),
+        name_ == nullptr ? "<none>" : name_->human_readable_string().c_str());
   }
   xds_client_->RemoveClusterLocalityStats(lrs_server_, cluster_name_,
                                           eds_service_name_, name_, this);

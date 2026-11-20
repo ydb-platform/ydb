@@ -8,7 +8,7 @@ from ydb.apps.dstool.lib import dstool_cmd_cluster_balance as balance
 @pytest.fixture
 def strategy():
     args = SimpleNamespace(
-        group_ids=None, storage_pool=None, only_from_overpopulated_pdisks=False,
+        group_ids=None, storage_pool=None, pdisk_type=None, only_from_overpopulated_pdisks=False,
         max_donors_per_pdisk=0, max_replicating_pdisks=None,
         prefer_less_occupied_rack=False, with_attention_to_replication=False,
         dry_run=False, quiet=True,
@@ -44,6 +44,39 @@ def response_to(node, index=0):
     item.From.NodeId, item.From.PDiskId = 1, 1
     item.To.NodeId, item.To.PDiskId = node, 1
     return response
+
+
+@pytest.mark.parametrize('pdisk_type, expected_groups, expected_histo', [
+    (None, {101, 202, 303}, {6: 1, 5: 1, 2: 1}),
+    ('ROT', {101}, {6: 1}),
+    ('SSD', {202}, {5: 1}),
+    ('NVME', {303}, {2: 1}),
+])
+def test_pdisk_type_selection(strategy, pdisk_type, expected_groups, expected_histo):
+    info = strategy.cluster_info
+    vslots = balance.common.build_vslot_map(info.base_config)
+    for node, media_type, group_id, used_slots in (
+        (1, 'ROT', 101, 6),
+        (2, 'SSD', 202, 5),
+        (3, 'NVME', 303, 2),
+    ):
+        info.pdisk_map[node, 1].Type = balance.common.EPDiskType.Value(media_type)
+        vslots[node, 1, 1].GroupId = group_id
+        info.pdisk_usage[node, 1] = used_slots
+    strategy.groups_info.healthy_groups = {101, 202, 303}
+
+    by_type_args = SimpleNamespace(**vars(strategy.args))
+    by_type_args.pdisk_type = pdisk_type
+    by_type = balance.VSlotBalancingStrategy(by_type_args, info, strategy.groups_info)
+    by_type.calculate_extra_info()
+    candidates, _ = by_type.list_candidate_vslots()
+    assert {vslot.GroupId for vslot in candidates} == expected_groups
+    assert by_type.histo == expected_histo
+
+    by_group_ids_args = SimpleNamespace(**vars(strategy.args))
+    by_group_ids_args.group_ids = expected_groups
+    by_group_ids = balance.VSlotBalancingStrategy(by_group_ids_args, info, strategy.groups_info)
+    assert by_group_ids.list_candidate_vslots()[0] == candidates
 
 
 @pytest.fixture

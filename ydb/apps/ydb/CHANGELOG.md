@@ -1,4 +1,5 @@
 * Added `ydb admin database freeze` and `ydb admin database unfreeze` commands to freeze database schema changes and writes, wait for CDC delivery to topics, and remove the freeze. Both commands wait for completion and support a client `--timeout`.
+* Added support for exporting table data in Apache Parquet format with the `ydb export s3` command. Added the `--file-format` option to select the data file format and `--parquet-row-group-size` to set the number of rows per Parquet row group.
 * `ydb operation get` displays returned operation data even when the operation status indicates failure, while retaining a nonzero exit code. When metadata is unavailable, pretty output shows only common operation fields.
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).

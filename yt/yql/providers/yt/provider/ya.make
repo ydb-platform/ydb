@@ -134,6 +134,7 @@ PEERDIR(
     yt/yql/providers/yt/lib/key_filter
     yt/yql/providers/yt/lib/mkql_helpers
     yt/yql/providers/yt/lib/nile
+    yt/yql/providers/yt/lib/qlfilter
     yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/row_spec
     yt/yql/providers/yt/lib/schema

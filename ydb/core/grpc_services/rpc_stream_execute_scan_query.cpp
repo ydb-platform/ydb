@@ -8,7 +8,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/common/events/stream.h>
 #include <ydb/core/kqp/query_plan/query_plan.h>
 
 #include <ydb/library/services/services.pb.h>
@@ -213,7 +213,7 @@ private:
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+            HFunc(NKqp::TEvKqpExecuterStreamData, Handle);
             default: {
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Unexpected event received in TStreamExecuteScanQueryRPC::StateWork: " << ev->GetTypeRewrite());
@@ -292,7 +292,7 @@ private:
                 {"to", ExecuterActorId_});
 
             // scan query has single result set, so it's ok to put zero as channelId here.
-            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
+            auto resp = MakeHolder<NKqp::TEvKqpExecuterStreamDataAck>(*LastSeqNo_, 0);
             resp->Record.SetFreeSpace(freeSpaceBytes);
             ctx.Send(ExecuterActorId_, resp.Release());
             AckedFreeSpaceBytes_ = freeSpaceBytes;
@@ -359,7 +359,7 @@ private:
         ReplyFinishStream(NYql::NDq::DqStatusToYdbStatus(record.GetStatusCode()), issues);
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqpExecuterStreamData::TPtr& ev, const TActorContext& ctx) {
         if (!ExecuterActorId_) {
             ExecuterActorId_ = ev->Sender;
         }
@@ -398,7 +398,7 @@ private:
             {"to", ev->Sender},
             {"queue", FlowControl_.QueueSize()});
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuterStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());

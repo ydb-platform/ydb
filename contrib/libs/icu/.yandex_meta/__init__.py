@@ -21,6 +21,8 @@ def post_build(self):
 def post_install(self):
     result_target = self.yamakes["."]
 
+    result_target.PEERDIR.add("library/cpp/sanitizer/include")
+
     major_version = _get_major_version(self.version)
     result_target.SRCS.add(f"icudt{major_version}_dat.rodata")
 

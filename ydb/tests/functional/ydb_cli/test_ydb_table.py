@@ -3,6 +3,7 @@
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+import json
 import os
 import logging
 import pytest
@@ -190,7 +191,36 @@ class TestExecuteQueryWithFormats(BaseTestTableService):
         return self.execute_read_table('json-base64-array')
 
     def test_read_table_json_unicode(self):
-        return self.execute_read_table('json-unicode')
+        canonical_output = self.execute_read_table('json-unicode')
+
+        # Export [2, 7) in pages, resuming after the last key already exported.
+        read_args = [
+            "table", "readtable", self.table_path, "--format", "json-unicode",
+            "--ordered", "--limit", "2", "--columns", "key,value",
+            "--to", "[7]", "--to-exclusive",
+        ]
+        expected_pages = [
+            [{"key": 2, "value": "two"}, {"key": 3, "value": "three"}],
+            [{"key": 5, "value": "five"}],
+            [],
+        ]
+        last_key = None
+        for expected_page in expected_pages:
+            args = read_args + ["--from", json.dumps([2 if last_key is None else last_key])]
+            if last_key is not None:
+                args.append("--from-exclusive")
+            output = self.execute_ydb_cli_command(args)
+            rows = [json.loads(line) for line in output.splitlines()]
+            assert rows == expected_page
+            if rows:
+                last_key = rows[-1]["key"]
+
+        count = self.execute_ydb_cli_command([
+            "table", "readtable", self.table_path,
+            "--from", "[2]", "--to", "[5]", "--count-only",
+        ])
+        assert count.strip() == "3"
+        return canonical_output
 
     def test_read_table_json_unicode_array(self):
         return self.execute_read_table('json-unicode-array')

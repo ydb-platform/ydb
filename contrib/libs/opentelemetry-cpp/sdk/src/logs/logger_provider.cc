@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <chrono>
+#include <exception>
 #include <mutex>
+#include <ostream>
 #include <utility>
 #include <vector>
 
+#include "opentelemetry/logs/logger.h"
+#include "opentelemetry/logs/noop.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
@@ -25,35 +29,67 @@ namespace sdk
 namespace logs
 {
 
+namespace
+{
+
+nostd::shared_ptr<opentelemetry::logs::Logger> CreateNoopLoggerFallback()
+{
+  return nostd::shared_ptr<opentelemetry::logs::Logger>(new opentelemetry::logs::NoopLogger());
+}
+
+void LogGetLoggerConstructionFailure(const char *detail) noexcept
+{
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+  try
+  {
+#endif
+    OTEL_INTERNAL_LOG_ERROR("[LoggerProvider::GetLogger] Failed to construct logger: "
+                            << detail << "; returning noop logger.");
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+  }
+  catch (const std::exception &)  // NOLINT(bugprone-empty-catch)
+  {
+    // Logging can throw (typically std::bad_alloc from the string stream).
+    // Swallow it so the noexcept GetLogger path cannot throw.
+  }
+#endif
+}
+
+}  // namespace
+
 LoggerProvider::LoggerProvider(
     std::unique_ptr<LogRecordProcessor> &&processor,
     const opentelemetry::sdk::resource::Resource &resource,
-    std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>>
-        logger_configurator) noexcept
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>> logger_configurator)
+    : noop_logger_(CreateNoopLoggerFallback())
 {
   std::vector<std::unique_ptr<LogRecordProcessor>> processors;
   processors.emplace_back(std::move(processor));
   context_ = std::make_shared<LoggerContext>(std::move(processors), resource,
                                              std::move(logger_configurator));
   OTEL_INTERNAL_LOG_DEBUG("[LoggerProvider] LoggerProvider created.");
+  initialized_ = true;
 }
 
 LoggerProvider::LoggerProvider(
     std::vector<std::unique_ptr<LogRecordProcessor>> &&processors,
     const opentelemetry::sdk::resource::Resource &resource,
-    std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>>
-        logger_configurator) noexcept
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>> logger_configurator)
     : context_{std::make_shared<LoggerContext>(std::move(processors),
                                                resource,
-                                               std::move(logger_configurator))}
+                                               std::move(logger_configurator))},
+      noop_logger_(CreateNoopLoggerFallback()),
+      initialized_(true)
 {}
 
-LoggerProvider::LoggerProvider() noexcept
-    : context_{std::make_shared<LoggerContext>(std::vector<std::unique_ptr<LogRecordProcessor>>{})}
+LoggerProvider::LoggerProvider()
+    : context_{std::make_shared<LoggerContext>(std::vector<std::unique_ptr<LogRecordProcessor>>{})},
+      noop_logger_(CreateNoopLoggerFallback()),
+      initialized_(true)
 {}
 
-LoggerProvider::LoggerProvider(std::unique_ptr<LoggerContext> context) noexcept
-    : context_(std::move(context))
+LoggerProvider::LoggerProvider(std::unique_ptr<LoggerContext> context)
+    : context_(std::move(context)), noop_logger_(CreateNoopLoggerFallback()), initialized_(true)
 {}
 
 LoggerProvider::~LoggerProvider()
@@ -80,26 +116,58 @@ opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> LoggerProvider::Ge
     name = logger_name;
   }
 
-  // Ensure only one thread can read/write from the map of loggers
-  std::lock_guard<std::mutex> lock_guard{lock_};
-
-  // If a logger with a name "logger_name" already exists, return it
-  for (auto &logger : loggers_)
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+  try
   {
-    auto &logger_lib = logger->GetInstrumentationScope();
-    if (logger->GetName() == logger_name &&
-        logger_lib.equal(name, version, schema_url, &attributes))
+#endif
+    // Release the lock before construction-failure diagnostics can re-enter the provider.
+    // Ensure only one thread can read/write from the map of loggers
+    std::lock_guard<std::mutex> lock_guard{lock_};
+
+    // If a logger with a name "logger_name" already exists, return it
+    for (auto &logger : loggers_)
     {
-      return opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>{logger};
+      auto &logger_lib = logger->GetInstrumentationScope();
+      if (logger->GetName() == logger_name &&
+          logger_lib.equal(name, version, schema_url, &attributes))
+      {
+        return opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>{logger};
+      }
     }
+
+    // GetLogger is noexcept and does not surface an error, so callers cannot
+    // recover after a construction failure. Retrying would re-throw, catch, and
+    // log on later GetLogger calls. After the first failure, treat the provider
+    // as non-functional for new loggers.
+    if (!initialized_)
+    {
+      return noop_logger_;
+    }
+
+    initialized_ = false;
+    std::unique_ptr<instrumentationscope::InstrumentationScope> lib =
+        instrumentationscope::InstrumentationScope::Create(name, version, schema_url, attributes);
+
+    auto logger = std::make_shared<Logger>(logger_name, context_, std::move(lib));
+    loggers_.push_back(logger);
+    opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> result{logger};
+    initialized_ = true;
+    return result;
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
   }
-
-  std::unique_ptr<instrumentationscope::InstrumentationScope> lib =
-      instrumentationscope::InstrumentationScope::Create(name, version, schema_url, attributes);
-
-  loggers_.push_back(std::shared_ptr<opentelemetry::sdk::logs::Logger>(
-      new Logger(logger_name, context_, std::move(lib))));
-  return opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>{loggers_.back()};
+  catch (const std::exception &ex)
+  {
+    LogGetLoggerConstructionFailure(ex.what());
+    return noop_logger_;
+  }
+  // User-provided scope configurators can throw any exception type, not just
+  // std::exception. Catch everything so GetLogger stays noexcept.
+  catch (...)
+  {
+    LogGetLoggerConstructionFailure("unknown exception");
+    return noop_logger_;
+  }
+#endif
 }
 
 void LoggerProvider::AddProcessor(std::unique_ptr<LogRecordProcessor> processor) noexcept

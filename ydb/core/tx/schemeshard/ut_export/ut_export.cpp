@@ -1572,6 +1572,46 @@ namespace {
             }
         }
 
+        void TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::EWriteMode mode) {
+            Env();
+            ui64 txId = 100;
+            const auto topic = NDescUT::TSimpleTopic(0, 0);
+            auto description = topic.GetPrivateProto();
+            description.MutablePQTabletConfig()->SetWriteMode(mode);
+
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", description.DebugString());
+            Env().TestWaitNotification(Runtime(), txId);
+            TestExport(Runtime(), ++txId, "/MyRoot", topic.GetExportRequest(S3Port()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            Ydb::Topic::CreateTopicRequest exported;
+            const auto content = GetS3FileContent(topic.GetPath());
+            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(content, &exported), content);
+            const auto value = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE ? "unavailable"
+                : mode == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ? "prohibited" : "available";
+            UNIT_ASSERT(exported.attributes().contains("_write_mode"));
+            UNIT_ASSERT_VALUES_EQUAL(exported.attributes().at("_write_mode"), value);
+
+            TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "Topic_0"
+                        destination_path: "/MyRoot/RestoredTopic"
+                    }
+                }
+            )", S3Port()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
+            const auto& config = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+            UNIT_ASSERT(config.HasWriteMode());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetWriteMode()), static_cast<int>(mode));
+        }
+
         void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
             EnvOptions().EnablePermissionsExport(enablePermissions);
             Env();
@@ -5880,6 +5920,76 @@ state: STATE_ENABLED
       TestTopic();
     }
 
+    Y_UNIT_TEST_TWIN(TopicReplicationConsumerExportImport, replication) {
+        Env();
+        ui64 txId = 100;
+        const TString attribute = "_ydb_replication_consumer";
+        const auto topic = NDescUT::TSimpleTopic(0, 2);
+        auto description = topic.GetPrivateProto();
+        auto* consumer = description.MutablePQTabletConfig()->MutableConsumers(1);
+        consumer->SetType(replication
+            ? NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+            : NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+        const auto replicationConsumer = consumer->GetName();
+
+        TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", description.DebugString());
+        Env().TestWaitNotification(Runtime(), txId);
+        TestExport(Runtime(), ++txId, "/MyRoot", topic.GetExportRequest(S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        Ydb::Topic::CreateTopicRequest exported;
+        const auto content = GetS3FileContent(topic.GetPath());
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(content, &exported), content);
+        const auto it = exported.attributes().find(attribute);
+        if (replication) {
+            UNIT_ASSERT_C(it != exported.attributes().end(), content);
+            UNIT_ASSERT_VALUES_EQUAL(it->second, replicationConsumer);
+        } else {
+            UNIT_ASSERT_C(it == exported.attributes().end(), content);
+        }
+
+        TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "Topic_0"
+                    destination_path: "/MyRoot/RestoredTopic"
+                }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
+        const auto& consumers = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 2);
+        ui32 replicationConsumers = 0;
+        for (const auto& restoredConsumer : consumers) {
+            if (restoredConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+                ++replicationConsumers;
+                UNIT_ASSERT_VALUES_EQUAL(restoredConsumer.GetName(), replicationConsumer);
+            } else {
+                UNIT_ASSERT_C(restoredConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING,
+                    restoredConsumer.DebugString());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicationConsumers, replication ? 1 : 0);
+    }
+
+    Y_UNIT_TEST(TopicWriteAvailableExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+    }
+
+    Y_UNIT_TEST(TopicWriteUnavailableExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(TopicWriteProhibitedExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED);
+    }
+
     Y_UNIT_TEST(TopicWithPermissionsExport) {
       TestTopic(true);
     }
@@ -6928,6 +7038,7 @@ WITH (
             PQTabletConfig {
                 RequireAuthRead: false
                 RequireAuthWrite: false
+                WriteMode: WRITE_PROHIBITED
                 AbcId: 123
                 AbcSlug: "abc_slug"
                 FederationAccount: "federation_account"
@@ -7099,6 +7210,9 @@ WITH (
         // RequireAuthWrite: false -> _allow_unauthenticated_write: true
         UNIT_ASSERT(attrs.contains("_allow_unauthenticated_write"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_write"), "true");
+
+        UNIT_ASSERT(attrs.contains("_write_mode"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_write_mode"), "prohibited");
 
         UNIT_ASSERT(attrs.contains("_abc_id"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_id"), "123");

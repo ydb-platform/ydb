@@ -1,0 +1,3 @@
+/dev/stdin:<main>:5:15: Error: Cluster shouldn't be specified for AS_TABLE source
+	SELECT * FROM plato.AS_TABLE($data);
+	              ^

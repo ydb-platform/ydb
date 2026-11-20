@@ -138,6 +138,8 @@ private:
 
 }; // TPartitionKeyRange
 
+bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes);
+
 } // namespace NKikimr::NPQ
 
 } // namespace NKikimr

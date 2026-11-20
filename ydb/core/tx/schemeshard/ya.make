@@ -406,6 +406,7 @@ PEERDIR(
     ydb/core/test_tablet
     ydb/core/tx
     ydb/core/tx/datashard
+    ydb/core/tx/replication/common
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/generated
     ydb/core/tx/schemeshard/index

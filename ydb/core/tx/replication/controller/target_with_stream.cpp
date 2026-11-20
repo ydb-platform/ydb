@@ -9,6 +9,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/replication/common/changefeed.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -17,8 +18,6 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
-
-const TString ReplicationConsumerName = "replicationConsumer";
 
 using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
 

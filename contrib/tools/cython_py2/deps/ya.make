@@ -4,6 +4,8 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
+SUBSCRIBER(g:python-contrib)
+
 VERSION(3.0.12)
 
 ORIGINAL_SOURCE(mirror://pypi/c/cython/cython-3.0.12.tar.gz)

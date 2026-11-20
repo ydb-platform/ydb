@@ -87,9 +87,15 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 #### AUTO_PARTITIONING_PARTITION_SIZE_MB {#auto_partitioning_partition_size_mb}
 
 * Type: `Uint64`.
-* Default value: `2000 MB` (`2 GB`).
+* Default value: `2048 MiB` (`2 GiB`).
 
+<<<<<<< HEAD
 The desired partition size threshold in megabytes. Recommended values range from `10 MB` to `2000 MB`. If this threshold is exceeded, a shard may split. This setting takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
+=======
+The desired partition size threshold in mebibytes. Recommended values range from `10 MiB` to `2048 MiB`. If this threshold is exceeded, a shard may split.
+The specified value serves only as a recommendation for splitting. Splitting may not occur even if the configured size is exceeded.
+This setting applies when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
+>>>>>>> 6cc7a689204 ([YDBDOCS-2875] Correct AUTO_PARTITIONING_PARTITION_SIZE_MB default and units (#52607))
 
 This value serves as a recommendation for partitioning. Partitioning may sometimes not occur even if the configured size is exceeded.
 

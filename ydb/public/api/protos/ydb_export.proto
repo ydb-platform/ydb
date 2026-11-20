@@ -75,9 +75,8 @@ message YdbDumpFormat {
 }
 
 message ParquetFormat {
-    // The maximum number of rows in a row group. A row group is also closed before a
-    // row that would take its data past the export batch size of the server (32 MB
-    // by default), so the number of rows is an upper bound.
+    // The maximum number of rows in a row group. A row group is also closed when its data
+    // would exceed the export batch size of the server (32 MB by default).
     uint32 row_group_size = 1 [(value) = "[1; 10000000]"];
 }
 

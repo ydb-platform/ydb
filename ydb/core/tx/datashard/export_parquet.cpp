@@ -99,8 +99,8 @@ bool FlushRowGroup(bool last) {
     if (BatchBuilder->Rows() != 0) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         auto batch = BatchBuilder->FlushBatch(true, false);
-        // The builder keeps the batch it flushed. Release it, so that the scan does not
-        // hold the row group it has written as well as the one it is collecting.
+        // The builder keeps the flushed batch: drop it, or the written row group stays
+        // in memory next to the one being collected.
         BatchBuilder->ReleaseBatch();
         batches.push_back(batch);
         auto tableResult = arrow::Table::FromRecordBatches(batches);
@@ -201,8 +201,8 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
         return false;
     }
 
-    // Cut the row group before the row that does not fit into it. A row wider than
-    // the limit forms a row group of its own: a reader has to hold a whole row anyway.
+    // Cut the row group before a row that does not fit. A row wider than the limit is
+    // a row group of its own.
     if (RowGroupBytes && BatchBuilder->Rows()) {
         ui64 rowBytes = 0;
         for (const auto& cell : *row) {
@@ -235,11 +235,9 @@ TMaybe<TBuffer> Flush(bool last) override {
         return Nothing();
     }
 
-    // The buffer is filled, and the part is sent, once the encoded output reaches the
-    // minimum part size and, with the pending rows, the part size, so the rows pending
-    // by then stay for the next row group: written now, they would be a small row group
-    // of their own. The pending rows are written when the file is finished, and when the
-    // part has no row group yet (a part cut by its rows, with MinBytes 0).
+    // The rows pending when a part is sent stay for the next row group rather than
+    // becoming a small one of their own. Flush writes them at the end of the file, and
+    // into a part that has no row group yet (sent without encoded output, with MinBytes 0).
     if (last || !OutStream->GetBufferSize()) {
         if (!FlushRowGroup(last)) {
             return Nothing();

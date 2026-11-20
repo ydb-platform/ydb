@@ -72,12 +72,8 @@ struct TParquetExportSettings {
 
     IExport::TTableColumns Columns;
     ui64 RowGroupSize = 10000;
-    // The limit on the bytes of the cells of a row group, 0 means no limit. It bounds
-    // the cells a scan holds before they are encoded, and about the data a reader
-    // decodes per row group (the encoded size differs from the cells). The export sets
-    // it to its batch size (BytesBatchSize of the scan settings, BackupBytesBatchSize of
-    // the config by default), the default here is the default batch. A row wider than
-    // the limit is a row group of its own.
+    // The limit on the cell bytes of a row group, 0 for no limit. A row wider than the
+    // limit is a row group of its own. The export sets it to its batch size.
     ui64 RowGroupBytes = 32ull << 20;
     TMaybe<TCompressionSettings> CompressionSettings;
 };
@@ -94,9 +90,8 @@ public:
     // (data produced but not yet returned via Flush). Formats that write row
     // output directly into the Collect out stream return 0.
     virtual size_t GetReadyOutputBytes() const = 0;
-    // Bytes of the cells of the rows the format holds before it encodes them
-    // (Parquet: the pending row group). Formats that encode every row at Collect
-    // return 0.
+    // Cell bytes of the rows the format holds unencoded (Parquet: the pending row group).
+    // Formats that encode every row at Collect return 0.
     virtual size_t GetPendingInputBytes() const = 0;
     virtual TString GetError() const = 0;
 

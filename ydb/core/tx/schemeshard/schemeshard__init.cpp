@@ -6222,6 +6222,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(op.ParseFromString(serializedOp));
 
                 TOperationId opId(txId, 0);
+                bool removed = false;
+                if (!RemoveStaleIncrementalRestoreOp(db, opId, op, removed, ctx)) {
+                    return false;
+                }
+                if (removed) {
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
                 Self->LongIncrementalRestoreOps[opId] = op;
 
                 if (op.HasBackupCollectionPathId()) {
@@ -6300,9 +6310,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
                 if (stateIt == Self->IncrementalRestoreStates.end()) {
-                    // Orphan row (state already forgotten / cleaned up). Drop.
-                    db.Table<Schema::IncrementalRestoreItem>()
-                        .Key(originalOpId, itemSeq).Delete();
+                    // A legacy orphan may still have a live child. Keep its
+                    // durable association so another reboot cannot mistake the
+                    // parent for abandoned work after losing this evidence.
+                    if (waitTxId == 0 || !Self->Operations.contains(TTxId(waitTxId))) {
+                        db.Table<Schema::IncrementalRestoreItem>()
+                            .Key(originalOpId, itemSeq).Delete();
+                    }
                     if (!irow.Next()) return false;
                     continue;
                 }
@@ -6663,6 +6677,137 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // catches restoration drift at load time.
         Self->DebugCheckDbRefIntegrity();
 #endif
+        return true;
+    }
+
+    // Validate before rebuilding any path locks. Removing the obsolete header,
+    // rather than just skipping a bad path, also makes the repaired database safe
+    // for readers which do not have this recovery check.
+    TString ValidateIncrementalRestoreOp(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op,
+                                        bool terminal, THashSet<TPathId>& paths) {
+        TString issue;
+        auto checkPath = [&](const TPath& path) {
+            if (path.IsResolved()) {
+                paths.insert(path.Base()->PathId);
+            }
+            if (issue.empty() && (!path.IsResolved() || path.Base()->Dropped())) {
+                issue = TStringBuilder() << "Missing or dropped path: " << path.PathString();
+            }
+        };
+
+        if (!op.HasBackupCollectionPathId()) {
+            issue = "Missing BackupCollectionPathId";
+        }
+        const TPathId collectionId(op.GetBackupCollectionPathId().GetOwnerId(),
+                                   op.GetBackupCollectionPathId().GetLocalId());
+        TPath collection = TPath::Init(collectionId, Self);
+        checkPath(collection);
+        if (issue.empty() && !Self->BackupCollections.contains(collectionId)) {
+            issue = TStringBuilder() << "Missing backup collection metadata: " << collectionId;
+        }
+
+        // Completed/failed history does not require its old tables to exist.
+        // Its collection still identifies the database for Get/List/FORGET.
+        if (terminal && issue.empty()) {
+            return {};
+        }
+
+        for (const auto& tablePath : op.GetTablePathList()) {
+            const TPath table = TPath::Resolve(tablePath, Self);
+            checkPath(table);
+            if (!collection.IsResolved() || table.IsEmpty()) {
+                continue;
+            }
+            // LeafName is also available for an unresolved target.
+            const TString prefix = collection.PathString() + "/";
+            if (op.HasFullBackupTrimmedName()) {
+                checkPath(TPath::Resolve(prefix + NBackup::FullBackupDirName(op.GetFullBackupTrimmedName())
+                    + "/" + table.LeafName(), Self));
+            }
+            for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
+                checkPath(TPath::Resolve(prefix + NBackup::IncrementalBackupDirName(name)
+                    + "/" + table.LeafName(), Self));
+            }
+        }
+        return issue;
+    }
+
+    bool RemoveStaleIncrementalRestoreOp(NIceDb::TNiceDb& db, const TOperationId& opId,
+                                        const NKikimrSchemeOp::TLongIncrementalRestoreOp& op,
+                                        bool& removed, const TActorContext& ctx) {
+        removed = false;
+        const ui64 id = ui64(opId.GetTxId());
+        const auto* state = Self->IncrementalRestoreStates.FindPtr(id);
+        const bool terminal = state && (state->State == TIncrementalRestoreState::EState::Completed
+            || state->State == TIncrementalRestoreState::EState::Failed);
+        THashSet<TPathId> paths;
+        const TString issue = ValidateIncrementalRestoreOp(op, terminal, paths);
+        if (issue.empty()) {
+            return true;
+        }
+
+        // Never forget a live schema transaction or one of its children. Include
+        // ancestors to protect index implementation tables and legacy sub-ops
+        // that have no IncrementalRestoreItem row.
+        auto touchesPath = [&](TPathId pathId) {
+            while (pathId) {
+                if (paths.contains(pathId)) {
+                    return true;
+                }
+                const auto* path = Self->PathsById.FindPtr(pathId);
+                if (!path || (*path)->IsRoot()) {
+                    break;
+                }
+                pathId = (*path)->ParentPathId;
+            }
+            return false;
+        };
+        if (Self->Operations.contains(opId.GetTxId())) {
+            return true;
+        }
+        for (const auto& [txId, tx] : Self->TxInFlight) {
+            if (txId.GetTxId() == opId.GetTxId()
+                || touchesPath(tx.SourcePathId) || touchesPath(tx.TargetPathId)) {
+                return true;
+            }
+        }
+
+        // DataShard work can outlive its schema sub-operation. Its persisted
+        // per-shard progress must not be discarded just because TxInFlight is empty.
+        if (state && !state->InProgressOperations.empty()) {
+            return true;
+        }
+        TVector<ui32> itemSeqs;
+        auto items = db.Table<Schema::IncrementalRestoreItem>().Range(id).Select();
+        if (!items.IsReady()) {
+            return false;
+        }
+        while (!items.EndOfSet()) {
+            const ui64 waitTxId = items.GetValueOrDefault<Schema::IncrementalRestoreItem::WaitTxId>(0);
+            if (waitTxId && Self->Operations.contains(TTxId(waitTxId))) {
+                return true;
+            }
+            itemSeqs.push_back(items.GetValue<Schema::IncrementalRestoreItem::ItemSeq>());
+            if (!items.Next()) {
+                return false;
+            }
+        }
+
+        // Init has not reconstructed this operation's path states or item maps
+        // yet. Dropped paths retain StepDropped/NotExist; surviving paths are not
+        // re-locked. Commit all deletions together, including untracked items.
+        for (ui32 seq : itemSeqs) {
+            db.Table<Schema::IncrementalRestoreItem>().Key(id, seq).Delete();
+        }
+        db.Table<Schema::IncrementalRestoreOperations>().Key(id).Delete();
+        db.Table<Schema::IncrementalRestoreState>().Key(id).Delete();
+        Self->IncrementalRestoreStates.erase(id);
+        removed = true;
+        YDB_LOG_WARN_CTX(ctx, "TTxInit removed stale incremental restore operation",
+            {"operationId", opId},
+            {"reason", issue},
+            {"schemeshard", Self->TabletID()},
+        );
         return true;
     }
 

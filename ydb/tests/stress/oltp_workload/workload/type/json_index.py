@@ -97,39 +97,18 @@ class WorkloadJsonIndex(WorkloadBase):
         """
         self.client.query(delete_sql, False)
 
-    def _select_rows(self, table_path, index_name):
-        predicate = json.get_random_predicate()
+    def _select_rows(self, table_path, index_name=None):
+        predicate = json.get_random_predicate(explicit_index=index_name is not None)
+        view = f"VIEW `{index_name}`" if index_name is not None else ""
         select_sql = f"""
             SELECT pk, json
-            FROM `{table_path}`
-            VIEW `{index_name}`
+            FROM `{table_path}` {view}
             WHERE {predicate}
             LIMIT {self.limit};
         """
         res = self.client.query(select_sql, False)
         n = len(res[0].rows)
         logger.info(f"Selected {n} rows using predicate `{predicate}`")
-        return n
-
-    def _wait_index_ready(self, index_name, table_path):
-        start_time = time.time()
-        while time.time() - start_time < 60:
-            time.sleep(5)
-            try:
-                res = self._select_rows(
-                    index_name=index_name,
-                    table_path=table_path,
-                )
-                if res == 0:
-                    continue
-            except Exception as ex:
-                if "No global indexes for table" in str(ex):
-                    continue
-                raise ex
-
-            logger.info(f"Index {index_name} is ready")
-            return
-        raise Exception("Error getting index status")
 
     def _model_keys(self, string_pk):
         if string_pk:
@@ -278,23 +257,13 @@ class WorkloadJsonIndex(WorkloadBase):
             table_path=table_path,
         )
 
-        self._wait_index_ready(
-            index_name=index_name,
-            table_path=table_path,
-        )
+        self._wait_model_index_ready(table_path, index_name)
 
         model_state = self._insert_and_check_model(
             table_path, index_name, json_document, False)
 
-        n = 0
-        for _ in range(0, self.query_count):
-            n += self._select_rows(
-                index_name=index_name,
-                table_path=table_path,
-            )
-
-        if n == 0:
-            raise Exception(f"No rows selected with {self.query_count} contains queries")
+        for query in range(self.query_count):
+            self._select_rows(table_path, index_name if query % 2 == 0 else None)
 
         self._upsert_rows(
             table_path=table_path,

@@ -127,14 +127,15 @@ class JsonCorpusGenerator:
 
 
 class JsonPredicateGenerator:
-    """Generate predicates supported by explicitly selected JSON indexes."""
+    """Generate JSON index predicates, with a limited pool for compatibility tests."""
 
     _COMMON_TYPES = ("base", "extended", "compact")
     _COMMON_VERSIONS = tuple(range(1, 6))
 
-    def __init__(self, column="`json`", mode="strict"):
+    def __init__(self, column="`json`", mode="strict", indexable_only=False):
         self._column = column
         self._mode = mode
+        self._indexable_only = indexable_only
         self._atoms = []
         self._and_pairs = []
         self._or_pairs = []
@@ -153,9 +154,31 @@ class JsonPredicateGenerator:
         self._atoms.append(sql)
 
     def _build_pool(self):
+        if self._indexable_only:
+            self._build_indexable_pool()
+            return
         self._build_json_exists()
         self._build_json_value()
         self._build_compound_pairs()
+
+    def _build_indexable_pool(self):
+        for field in JsonCorpusGenerator._COMMON_FIELDS + JsonCorpusGenerator._PARTIAL_FIELDS:
+            self._add(self._je(f"$.{field}"))
+
+        for value in self._COMMON_TYPES:
+            self._add(self._je(f'$.common_type ? (@ == "{value}")'))
+            self._add(self._jv("$.common_type", "Utf8", f'= "{value}"'))
+
+        for version in self._COMMON_VERSIONS:
+            self._add(self._je(f"$.common_version ? (@ == {version})"))
+            self._add(self._jv("$.common_version", "Int64", f"= {version}"))
+
+        for comparison in (">= 1", "<= 5", "> 0", "< 6"):
+            self._add(self._jv("$.common_version", "Int64", comparison))
+
+        for value in ("true", "false"):
+            self._add(self._je(f"$.active ? (@ == {value})"))
+        self._add(self._jv("$.active", "Bool", "= true"))
 
     def _build_json_exists(self):
         self._add(self._je("$.common_type"))
@@ -330,10 +353,12 @@ def get_random_json():
     return JsonCorpusGenerator().random_json()
 
 
-def get_random_predicate(column="`json`", mode="strict"):
+def get_random_predicate(column="`json`", mode="strict", indexable_only=False):
     global _PREDICATE_GENERATOR
     if _PREDICATE_GENERATOR is None or (
-        _PREDICATE_GENERATOR._column != column or _PREDICATE_GENERATOR._mode != mode
+        _PREDICATE_GENERATOR._column != column
+        or _PREDICATE_GENERATOR._mode != mode
+        or _PREDICATE_GENERATOR._indexable_only != indexable_only
     ):
-        _PREDICATE_GENERATOR = JsonPredicateGenerator(column=column, mode=mode)
+        _PREDICATE_GENERATOR = JsonPredicateGenerator(column=column, mode=mode, indexable_only=indexable_only)
     return _PREDICATE_GENERATOR.random_predicate()

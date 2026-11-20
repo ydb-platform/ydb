@@ -92,6 +92,13 @@ public:
         IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
+    // ColumnShard can report completion before this schemeshard has applied the plan step.
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "TEvNotifyTxCompletionResult triggered early");
+        NTableState::CollectSchemaChanged(OperationId, ev, context);
+        return false;
+    }
+
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 

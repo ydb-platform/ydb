@@ -17,6 +17,16 @@
 #include <util/random/random.h>
 
 Y_UNIT_TEST_SUITE(THttpServerTest) {
+    Y_UNIT_TEST(FailLogDataPreservesLegacyAggregateInitialization) {
+        const THttpServer::ICallBack::TFailLogData data = {-1, TString("/legacy")};
+        UNIT_ASSERT_VALUES_EQUAL(data.failstate, -1);
+        UNIT_ASSERT_VALUES_EQUAL(data.url, "/legacy");
+        UNIT_ASSERT_VALUES_EQUAL(data.responseCode, 503);
+        UNIT_ASSERT(data.requestPath.empty());
+        UNIT_ASSERT(data.requestHeaders == nullptr);
+        UNIT_ASSERT(data.requestTarget.empty());
+    }
+
     class TEchoServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {
         public:
@@ -425,6 +435,42 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription());
             }
         }
+        server.Stop();
+    }
+
+    Y_UNIT_TEST(ProtocolRejectionInFailQueueNotifiesActualStatus) {
+        class TObservedServer: public TEchoServer {
+        public:
+            TObservedServer() : TEchoServer("unused") {}
+            void OnFailRequestEx(const TFailLogData& data) override {
+                Code = data.responseCode;
+                Path = data.requestPath;
+                Target = data.requestTarget;
+                HasHost = data.requestHeaders && data.requestHeaders->FindHeader("Host");
+                Observed.Signal();
+            }
+            unsigned Code = 0;
+            TString Path;
+            TString Target;
+            bool HasHost = false;
+            TManualEvent Observed;
+        } callbacks;
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        using TWorkers = TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
+        THttpServer::TMtpQueueRef workers = new TWorkers(&callbacks, SystemThreadFactory());
+        THttpServer::TMtpQueueRef failWorkers = new TThreadPool(SystemThreadFactory());
+        THttpServer server(&callbacks, workers, failWorkers, THttpServer::TOptions(port));
+        static_cast<TFailingMtpQueue*>(workers.Get())->SetFailOnAdd();
+        UNIT_ASSERT(server.Start());
+        TTestRequest request(port);
+        request.Type = "OPTIONS";
+        request.Execute();
+        UNIT_ASSERT(callbacks.Observed.WaitT(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.Code, 405);
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.Path, "/");
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.Target, "/");
+        UNIT_ASSERT(callbacks.HasHost);
         server.Stop();
     }
 

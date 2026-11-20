@@ -256,32 +256,46 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
             }
         }
 
-        std::vector<TLogoBlobID> fallbackQueries;
+        constexpr ui32 shift = 2;
+        constexpr ui32 size = 4;
+        constexpr auto dataKind = NKikimrBlobStorage::TDataKind::SYSTEM;
+        std::vector<TEvBlobStorage::TEvGet::TQuery> fallbackQueries;
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->HasEvent() &&
                     ev->Recipient == MakeBlobStorageProxyID(pileGroups[1])) {
                 const auto *msg = ev->Get<TEvBlobStorage::TEvGet>();
+                UNIT_ASSERT_EQUAL(msg->DataKind, dataKind);
                 for (ui32 i = 0; i < msg->QuerySize; ++i) {
-                    fallbackQueries.push_back(msg->Queries[i].Id);
+                    fallbackQueries.push_back(msg->Queries[i]);
                 }
             }
             return true;
         };
 
         const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        SendGet(env, edge, groupId, ids);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[2]);
+            queries[0].Set(ids[0]);
+            queries[1].Set(ids[1], shift, size);
+            auto get = std::make_unique<TEvBlobStorage::TEvGet>(queries, 2, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            get->DataKind = dataKind;
+            SendToBSProxy(edge, groupId, get.release());
+        });
         const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
         UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 2);
+        const TString expectedData[] = {data[0], data[1].substr(shift, size)};
         for (ui32 i = 0; i < 2; ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Responses[i].Status, NKikimrProto::OK, res->Get()->ToString());
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[i].Buffer.ConvertToString(), data[i]);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[i].Buffer.ConvertToString(), expectedData[i]);
         }
         env.Sim(TDuration::MilliSeconds(100));
         env.Runtime->FilterFunction = {};
 
         UNIT_ASSERT_VALUES_EQUAL(fallbackQueries.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(fallbackQueries.front(), ids[1]);
+        UNIT_ASSERT_VALUES_EQUAL(fallbackQueries.front().Id, ids[1]);
+        UNIT_ASSERT_VALUES_EQUAL(fallbackQueries.front().Shift, shift);
+        UNIT_ASSERT_VALUES_EQUAL(fallbackQueries.front().Size, size);
     }
 
     Y_UNIT_TEST(LocalPileFirstFallbackMergesRemainingBlobs) {

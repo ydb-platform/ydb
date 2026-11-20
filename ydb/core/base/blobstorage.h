@@ -31,7 +31,6 @@
 #include <util/generic/xrange.h>
 
 #include <optional>
-#include <span>
 
 namespace NWilson {
     class TSpan;
@@ -1071,9 +1070,9 @@ struct TEvBlobStorage {
         std::optional<TReaderTabletData> ReaderTabletData;
         std::optional<TForceBlockTabletData> ForceBlockTabletData;
 
-        TEvGet(TCloneEventPolicy, const TEvGet& origin, std::span<const ui32> queryIndices = {})
+        TEvGet(TCloneEventPolicy, const TEvGet& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
-            , QuerySize(queryIndices.empty() ? origin.QuerySize : queryIndices.size())
+            , QuerySize(origin.QuerySize)
             , Queries(new TQuery[QuerySize])
             , Deadline(origin.Deadline)
             , MustRestoreFirst(origin.MustRestoreFirst)
@@ -1087,17 +1086,10 @@ struct TEvBlobStorage {
             , ReportDetailedPartMap(origin.ReportDetailedPartMap)
             , PhantomCheck(origin.PhantomCheck)
             , Decommission(origin.Decommission)
-            , DoNotReportIndexRestoreGetMissingBlobs(origin.DoNotReportIndexRestoreGetMissingBlobs)
             , ReaderTabletData(origin.ReaderTabletData)
             , ForceBlockTabletData(origin.ForceBlockTabletData)
         {
-            if (queryIndices.empty()) {
-                std::copy(&origin.Queries[0], &origin.Queries[QuerySize], &Queries[0]);
-            } else {
-                for (ui32 i = 0; i < QuerySize; ++i) {
-                    Queries[i] = origin.Queries[queryIndices[i]];
-                }
-            }
+            std::copy(&origin.Queries[0], &origin.Queries[QuerySize], &Queries[0]);
         }
 
         TEvGet(TArrayHolder<TQuery> &q, ui32 sz, TInstant deadline, NKikimrBlobStorage::EGetHandleClass getHandleClass,

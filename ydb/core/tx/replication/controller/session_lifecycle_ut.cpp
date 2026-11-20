@@ -14,6 +14,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/scheme_secret/service.h>

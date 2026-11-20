@@ -16,6 +16,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-Enable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
+ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationReadCommittedRW

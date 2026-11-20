@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/mind/bootstrapper
     ydb/core/testlib/default
 )
 

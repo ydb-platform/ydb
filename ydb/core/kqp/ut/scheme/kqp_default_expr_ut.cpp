@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         auto prepared = prepareResult.GetQuery();
         NYdb::NTable::TExecDataQuerySettings settings;
-        settings.KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic);
+        settings.KeepInQueryCache(true).CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
 
         // Neither the schema nor the prepared handle changes between executions.
         for (i32 key : {1, 2}) {

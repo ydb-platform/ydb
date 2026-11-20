@@ -4127,6 +4127,41 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Cerr << sizeof(NArrow::NMerger::TSortableBatchPosition) << Endl;
     }
 
+    Y_UNIT_TEST(DefaultFilledColumnCountRejected) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        const ui64 tableId = 1;
+        ui64 txId = 100;
+        const auto ydbSchema = TTestSchema::YdbSchema();
+        const auto ydbPk = TTestSchema::YdbPkSchema();
+        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, true, ydbSchema, ydbPk), ++txId));
+
+        const auto writeWithDefaultCount = [&](const ui32 defaultFilledColumnCount) {
+            auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(++writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            auto& operation = write->AddOperation(
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, TTableId(0, tableId, 1), {}, 0, NKikimrDataEvents::FORMAT_ARROW);
+            *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema));
+            operation.SetDefaultFilledColumnCount(defaultFilledColumnCount);
+            NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*write);
+            writer.AddDataToPayload(MakeTestBlob({ 0, 100 }, ydbSchema));
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
+            return WaitWriteResult(runtime, TTestTxConfig::TxTablet0);
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(writeWithDefaultCount(1), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(writeWithDefaultCount(0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
     Y_UNIT_TEST_DUO(InternalScanAfterDropColumn, Standalone) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);

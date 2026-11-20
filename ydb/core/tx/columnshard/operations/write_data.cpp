@@ -8,6 +8,7 @@
 namespace NKikimr::NColumnShard {
 
 bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NEvWrite::IPayloadReader& payload) {
+    OriginalDataSize = 0;
     if (proto.GetDefaultFilledColumnCount() != 0) {
         YDB_LOG_WARN("",
             {"event", "default_filled_column_count"},

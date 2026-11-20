@@ -4,21 +4,17 @@ from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
-import logging
-
-logger = logging.getLogger(__name__)
 
 
-class TestToolsCopy(BaseCliTestWithDatabase):
+class TestToolsTableOperations(BaseCliTestWithDatabase):
 
     @classmethod
     def setup_class(cls):
         super().setup_class()
         cls.session = cls.driver.table_client.session().create()
 
-    def create_table_with_indexes_and_data(self, session, path):
-        """Create a table with indexes and populate it with test data."""
-        session.create_table(
+    def create_table_with_indexes_and_data(self, path, rows):
+        self.session.create_table(
             path,
             ydb.TableDescription()
             .with_columns(
@@ -33,118 +29,111 @@ class TestToolsCopy(BaseCliTestWithDatabase):
             )
         )
 
-        # Insert test data
-        table_name = os.path.basename(path)
-        table_dir = os.path.dirname(path)
-        session.transaction().execute(
+        self.upsert_rows(path, rows)
+
+    def upsert_rows(self, path, rows):
+        query = self.session.prepare(
+            f"""
+            DECLARE $rows AS List<Struct<key: Uint32, id: Uint64, value: String>>;
+            UPSERT INTO `{path}` SELECT * FROM AS_TABLE($rows);
             """
-            PRAGMA TablePathPrefix("{0}");
-            UPSERT INTO {1} (`key`, `id`, `value`) VALUES (1, 1111, "one");
-            UPSERT INTO {1} (`key`, `id`, `value`) VALUES (2, 2222, "two");
-            UPSERT INTO {1} (`key`, `id`, `value`) VALUES (3, 3333, "three");
-            UPSERT INTO {1} (`key`, `id`, `value`) VALUES (5, 5555, "five");
-            UPSERT INTO {1} (`key`, `id`, `value`) VALUES (7, 7777, "seven");
-            """.format(table_dir, table_name),
+        )
+        self.session.transaction().execute(
+            query,
+            {'$rows': [
+                {'key': key, 'id': row_id, 'value': value.encode('utf-8')}
+                for key, row_id, value in rows
+            ]},
             commit_tx=True,
         )
 
-    def verify_table_data(self, session, path):
-        """Verify that table data matches expected values."""
-        table_name = os.path.basename(path)
-        table_dir = os.path.dirname(path)
-        result = session.transaction().execute(
-            """
-            PRAGMA TablePathPrefix("{0}");
-            SELECT `key`, `id`, `value` FROM {1} ORDER BY `key`;
-            """.format(table_dir, table_name),
-            commit_tx=True,
-        )
+    def verify_table(self, path, expected_rows, with_indexes=True):
+        description = self.session.describe_table(path)
+        actual_indexes = sorted((index.name, list(index.index_columns)) for index in description.indexes)
+        expected_indexes = [('by_id', ['id']), ('by_value', ['value'])] if with_indexes else []
+        assert actual_indexes == expected_indexes, f"Indexes at {path}: {actual_indexes}"
 
-        rows = []
-        for row in result[0].rows:
-            # Decode bytes to string if needed
-            value = row.value.decode('utf-8') if isinstance(row.value, bytes) else row.value
-            rows.append((row.key, row.id, value))
+        # Read through each index as well as the table: metadata alone does not prove
+        # that a copied or renamed index still points at the right data.
+        views = [''] + [f' VIEW `{name}`' for name, _ in expected_indexes]
+        for view in views:
+            result = self.session.transaction().execute(
+                f"SELECT `key`, `id`, `value` FROM `{path}`{view} ORDER BY `key`;",
+                commit_tx=True,
+            )
+            actual_rows = [
+                (row.key, row.id, row.value.decode('utf-8') if isinstance(row.value, bytes) else row.value)
+                for row in result[0].rows
+            ]
+            assert actual_rows == expected_rows, f"Data at {path}{view}: {actual_rows}"
 
-        expected_rows = [
-            (1, 1111, "one"),
-            (2, 2222, "two"),
-            (3, 3333, "three"),
-            (5, 5555, "five"),
-            (7, 7777, "seven")
-        ]
+    def verify_table_names(self, directory, expected_names):
+        actual_names = {entry.name for entry in self.driver.scheme_client.list_directory(directory).children}
+        assert actual_names == expected_names
 
-        assert rows == expected_rows, f"Data mismatch: expected {expected_rows}, got {rows}"
+    def test_copy_multiple_tables_mixed_indexes(self, tmp_path):
+        """Copy a working dataset with indexes and an archive without indexes."""
+        directory = os.path.join(self.root_dir, tmp_path.name)
+        self.driver.scheme_client.make_directory(directory)
+        customers = os.path.join(directory, 'customers')
+        events = os.path.join(directory, 'events')
+        customers_copy = os.path.join(directory, 'customers_copy')
+        events_copy = os.path.join(directory, 'events_copy')
+        customer_rows = [(1, 101, 'Alice'), (2, 102, 'Bob')]
+        event_rows = [(7, 701, 'created'), (9, 901, 'updated')]
+        self.create_table_with_indexes_and_data(customers, customer_rows)
+        self.create_table_with_indexes_and_data(events, event_rows)
 
-    def test_copy_table_with_indexes(self):
-        """Test copying a table with indexes (default behavior)."""
-        source_path = os.path.join(self.root_dir, "test_copy_with_indexes_source")
-        dest_path = os.path.join(self.root_dir, "test_copy_with_indexes_dest")
-
-        # Create source table with indexes and data
-        self.create_table_with_indexes_and_data(self.session, source_path)
-
-        # Copy table using CLI
         self.execute_ydb_cli_command([
-            "tools", "copy",
-            "--item", "source=test_copy_with_indexes_source,destination=test_copy_with_indexes_dest"
+            'tools', 'copy',
+            '--item', f'source={customers},destination={tmp_path.name}/customers_copy',
+            '--item', f'source={tmp_path.name}/events,destination={events_copy},omit-indexes=true',
         ])
 
-        # Verify destination table has data
-        self.verify_table_data(self.session, dest_path)
+        self.verify_table(customers_copy, customer_rows)
+        self.verify_table(events_copy, event_rows, with_indexes=False)
+        self.verify_table(events, event_rows)
 
-        # Verify destination table has indexes
-        desc = self.session.describe_table(dest_path)
-        assert len(desc.indexes) == 2, f"Expected 2 indexes, got {len(desc.indexes)}"
+        # The working table can keep changing without changing the copied snapshot.
+        new_customer = [(3, 103, 'Carol')]
+        self.upsert_rows(customers, new_customer)
+        self.verify_table(customers, customer_rows + new_customer)
+        self.verify_table(customers_copy, customer_rows)
 
-        index_names = sorted([idx.name for idx in desc.indexes])
-        assert index_names == ['by_id', 'by_value'], f"Index names mismatch: {index_names}"
+    def test_rename_rollout_and_rollback(self, tmp_path):
+        """Publish a staged table, retain a backup, then roll back the release."""
+        directory = os.path.join(self.root_dir, tmp_path.name)
+        self.driver.scheme_client.make_directory(directory)
+        production = os.path.join(directory, 'production')
+        staging = os.path.join(directory, 'staging')
+        backup = os.path.join(directory, 'backup')
+        original_rows = [(1, 101, 'old-one'), (2, 102, 'old-two')]
+        staged_rows = [(1, 201, 'new-one'), (3, 203, 'new-three')]
+        self.create_table_with_indexes_and_data(production, original_rows)
+        self.create_table_with_indexes_and_data(staging, staged_rows)
 
-    def test_copy_table_omit_indexes(self):
-        """Test copying a table with omit-indexes=true."""
-        source_path = os.path.join(self.root_dir, "test_copy_omit_indexes_source")
-        dest_path = os.path.join(self.root_dir, "test_copy_omit_indexes_dest")
+        # An ordinary rename must not silently overwrite the live table.
+        rejected = self.execute_ydb_cli_command([
+            'tools', 'rename', '--item', f'src={staging},dst={production}',
+        ], check_exit_code=False)
+        assert rejected.exit_code != 0, rejected.stdout
+        assert 'SCHEME_ERROR' in rejected.stderr, rejected.stderr
+        self.verify_table(production, original_rows)
+        self.verify_table(staging, staged_rows)
+        self.verify_table_names(directory, {'production', 'staging'})
 
-        # Create source table with indexes and data
-        self.create_table_with_indexes_and_data(self.session, source_path)
-
-        # Copy table using CLI with omit-indexes=true
         self.execute_ydb_cli_command([
-            "tools", "copy",
-            "--item", "source=test_copy_omit_indexes_source,destination=test_copy_omit_indexes_dest,omit-indexes=true"
+            'tools', 'rename',
+            '--item', f'src={production},dst={tmp_path.name}/backup',
+            '--item', f'src={tmp_path.name}/staging,dst={production}',
         ])
+        self.verify_table(production, staged_rows)
+        self.verify_table(backup, original_rows)
+        self.verify_table_names(directory, {'production', 'backup'})
 
-        # Verify destination table has data
-        self.verify_table_data(self.session, dest_path)
-
-        # Verify destination table has NO indexes
-        desc = self.session.describe_table(dest_path)
-        assert len(desc.indexes) == 0, f"Expected 0 indexes, got {len(desc.indexes)}"
-
-    def test_copy_multiple_tables_mixed_indexes(self):
-        """Test copying multiple tables, some with and some without indexes."""
-        source1_path = os.path.join(self.root_dir, "test_multi_copy_with_idx_src")
-        dest1_path = os.path.join(self.root_dir, "test_multi_copy_with_idx_dst")
-        source2_path = os.path.join(self.root_dir, "test_multi_copy_omit_idx_src")
-        dest2_path = os.path.join(self.root_dir, "test_multi_copy_omit_idx_dst")
-
-        # Create source tables with indexes and data
-        self.create_table_with_indexes_and_data(self.session, source1_path)
-        self.create_table_with_indexes_and_data(self.session, source2_path)
-
-        # Copy both tables in one command: first with indexes, second without
         self.execute_ydb_cli_command([
-            "tools", "copy",
-            "--item", "source=test_multi_copy_with_idx_src,destination=test_multi_copy_with_idx_dst",
-            "--item", "source=test_multi_copy_omit_idx_src,destination=test_multi_copy_omit_idx_dst,omit-indexes=true"
+            'tools', 'rename',
+            '--item', f'source={backup},destination={production},replace=true',
         ])
-
-        # Verify first destination table has data and indexes
-        self.verify_table_data(self.session, dest1_path)
-        desc1 = self.session.describe_table(dest1_path)
-        assert len(desc1.indexes) == 2, f"Expected 2 indexes in first table, got {len(desc1.indexes)}"
-
-        # Verify second destination table has data but NO indexes
-        self.verify_table_data(self.session, dest2_path)
-        desc2 = self.session.describe_table(dest2_path)
-        assert len(desc2.indexes) == 0, f"Expected 0 indexes in second table, got {len(desc2.indexes)}"
+        self.verify_table(production, original_rows)
+        self.verify_table_names(directory, {'production'})

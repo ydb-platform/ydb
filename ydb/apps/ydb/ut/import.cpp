@@ -3,6 +3,8 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/api/grpc/ydb_import_v1.grpc.pb.h>
 
+#include <library/cpp/json/json_reader.h>
+
 const TString TEST_BUCKET = "test-bucket";
 const TString TEST_S3_ENDPOINT = "https://ydb.s3.local";
 const ui32 DEFAULT_RETRIES = 10;
@@ -459,7 +461,12 @@ Y_UNIT_TEST_SUITE(ImportTest) {
 
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TImportFixture) {
         PutS3TableExport("source/prefix/keep");
+        PutS3TableExport("source/prefix/keep/by_customer/indexImplTable");
         PutS3TableExport("source/prefix/skip");
+        PutS3TableExport("source/standalone");
+        PutS3Object("/" + TEST_BUCKET + "/source/prefix/keep/data_00.csv");
+        PutS3Object("/" + TEST_BUCKET + "/source/prefix/report/create_view.sql");
+        PutS3Object("/" + TEST_BUCKET + "/source/prefix/updates/create_topic.pb");
 
         const TString s3Endpoint = GetS3Endpoint();
 
@@ -470,7 +477,10 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             .ExpectS3AccessKey("test-key")
             .ExpectS3SecretKey("test-access-key")
             .ExpectDisableVirtualAddressing(true)
-            .ExpectItem("source/prefix/keep", "/test_database/import-root/keep");
+            .ExpectItem("source/prefix/keep", "/test_database/import-root/keep")
+            .ExpectItem("source/prefix/report", "/test_database/import-root/report")
+            .ExpectItem("source/prefix/updates", "/test_database/import-root/updates")
+            .ExpectItem("source/standalone", "/test_database/import-root/renamed");
 
         RunCli(
             {
@@ -485,6 +495,7 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--secret-key", "test-access-key",
                 "--use-virtual-addressing", "false",
                 "--item", "src=source/prefix,dst=/test_database/import-root",
+                "--item", "src=source/standalone/,dst=/test_database/import-root/renamed",
                 "--exclude", "skip",
             }
         );
@@ -574,24 +585,24 @@ Y_UNIT_TEST_SUITE(ImportTest) {
         const TString encryptionKey = "test-encryption-key";
         const TString encryptionKeyFile = EnvFile(encryptionKey, "import_list_encryption.key");
 
-        Service<TImportImpl>()
-            .ExpectListCall()
-            .ExpectBucket(TEST_BUCKET)
-            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
-            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
-            .ExpectS3AccessKey("test-key")
-            .ExpectS3SecretKey("test-access-key")
-            .ExpectNumberOfRetries(42)
-            .ExpectDisableVirtualAddressing(true)
-            .ExpectCommonSourcePrefix("source/prefix")
-            .ExpectSymmetricKey(encryptionKey)
-            .ExpectListItem("src/path")
-            .ExpectListItem("another/path")
-            .AddListResultItem("source/prefix/src/path", "src/path")
-            .AddListResultItem("source/prefix/another/path", "another/path");
+        auto runList = [&](bool json) {
+            Service<TImportImpl>()
+                .ExpectListCall()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectNumberOfRetries(42)
+                .ExpectDisableVirtualAddressing(true)
+                .ExpectCommonSourcePrefix("source/prefix")
+                .ExpectSymmetricKey(encryptionKey)
+                .ExpectListItem("src/path")
+                .ExpectListItem("another/path")
+                .AddListResultItem("source/prefix/src/path", "src/path")
+                .AddListResultItem("source/prefix/another/path", "another/path");
 
-        const TString output = RunCli(
-            {
+            TList<TString> args{
                 "-v",
                 "-e", GetEndpoint(),
                 "-d", GetDatabase(),
@@ -608,13 +619,30 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--retries", "42",
                 "--use-virtual-addressing", "false",
                 "--encryption-key-file", encryptionKeyFile,
+            };
+            if (json) {
+                args.emplace_back("--format");
+                args.emplace_back("proto-json-base64");
             }
-        );
+            return RunCli(std::move(args));
+        };
 
+        const TString output = runList(false);
         UNIT_ASSERT_STRING_CONTAINS(output, "src/path");
         UNIT_ASSERT_STRING_CONTAINS(output, "source/prefix/src/path");
         UNIT_ASSERT_STRING_CONTAINS(output, "another/path");
         UNIT_ASSERT_STRING_CONTAINS(output, "source/prefix/another/path");
+
+        // A script can read the path and its exact object-store prefix.
+        NJson::TJsonValue listing;
+        const TString json = runList(true);
+        UNIT_ASSERT_C(NJson::ReadJsonTree(json, &listing), json);
+        const auto& items = listing["items"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(items[0]["path"].GetString(), "src/path");
+        UNIT_ASSERT_VALUES_EQUAL(items[0]["prefix"].GetString(), "source/prefix/src/path");
+        UNIT_ASSERT_VALUES_EQUAL(items[1]["path"].GetString(), "another/path");
+        UNIT_ASSERT_VALUES_EQUAL(items[1]["prefix"].GetString(), "source/prefix/another/path");
     }
 
     Y_UNIT_TEST_F(PassEncryptionKey, TImportFixture) {

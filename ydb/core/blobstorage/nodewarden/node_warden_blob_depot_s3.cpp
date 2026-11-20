@@ -5,6 +5,8 @@
 #include <ydb/core/blob_depot/s3_router.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 namespace NKikimr::NStorage {
 
     void TNodeWarden::Handle(TAutoPtr<TEventHandle<TEvNodeWardenAcquireBlobDepotS3Router>> ev) {
@@ -18,11 +20,16 @@ namespace NKikimr::NStorage {
         TActorSystem* const as = TActivationContext::ActorSystem();
         auto& rec = BlobDepotS3Routers[tabletId];
 
-        if (!rec.Router) {
-            rec.Settings = msg.Settings;
-            IActor* routerActor = NBlobDepot::CreateBlobDepotS3Router(msg.Settings, tabletId);
+        if (!rec.Router || (msg.Generation > rec.Generation &&
+                !google::protobuf::util::MessageDifferencer::Equals(rec.Settings, msg.Settings))) {
+            const TActorId previous = rec.Router;
+            rec.Settings = std::move(msg.Settings);
+            IActor* routerActor = NBlobDepot::CreateBlobDepotS3Router(rec.Settings, tabletId);
             rec.Router = Register(routerActor, TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
             as->RegisterLocalService(MakeBlobDepotS3RouterID(tabletId), rec.Router);
+            if (previous) {
+                Send(previous, new TEvents::TEvPoison);
+            }
             YDB_LOG_INFO_COMP(BS_NODE, "BlobDepotS3Router created",
                 {"marker", "NW71"},
                 {"tabletId", tabletId},
@@ -34,7 +41,9 @@ namespace NKikimr::NStorage {
                 {"router", rec.Router});
         }
 
-        rec.Consumers.insert(ev->Sender);
+        rec.Generation = Max(rec.Generation, msg.Generation);
+        auto& generation = rec.Consumers[ev->Sender];
+        generation = Max(generation, msg.Generation);
     }
 
     void TNodeWarden::Handle(TAutoPtr<TEventHandle<TEvNodeWardenReleaseBlobDepotS3Router>> ev) {
@@ -51,7 +60,11 @@ namespace NKikimr::NStorage {
         }
 
         auto& rec = it->second;
-        rec.Consumers.erase(ev->Sender);
+        const auto consumer = rec.Consumers.find(ev->Sender);
+        if (consumer == rec.Consumers.end() || consumer->second != msg.Generation) {
+            return;
+        }
+        rec.Consumers.erase(consumer);
         if (rec.Consumers.empty()) {
             YDB_LOG_INFO_COMP(BS_NODE, "BlobDepotS3Router terminating",
                 {"marker", "NW74"},

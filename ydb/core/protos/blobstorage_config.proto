@@ -708,8 +708,14 @@ message TReconfigureVirtualGroup {
     string Name = 1;
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
     // Confirm the new route accesses the same S3 objects, including writes already in flight.
-    // The bucket and physical key prefix must remain the same.
     bool ConfirmS3RouteChange = 3;
+    // Offline namespace migration. Quiesce the depot, fence old S3 mutations and drain outstanding
+    // requests. Copy its referenced objects with the same locator suffixes into a dedicated empty
+    // destination, or verify there are no S3 references when disabling S3. Keep writers quiescent
+    // and the source readable until the tablet and agents use the new configuration.
+    bool ConfirmS3NamespaceMigration = 4;
+    // Replacement physical suffix for a malformed pre-UUID S3 storage name. The group name is unchanged.
+    optional string MigratedS3Name = 5;
 }
 
 message TRecommissionGroups {

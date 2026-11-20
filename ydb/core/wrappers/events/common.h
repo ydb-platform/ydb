@@ -49,8 +49,9 @@ struct TRequestWithBody: public TGenericRequest<TDerived, EventType, T> {
 
     TString Body;
 
-    explicit TRequestWithBody(const typename TGeneric::TRequest& request, TString&& body)
-        : TGeneric(request)
+    explicit TRequestWithBody(const typename TGeneric::TRequest& request, TString&& body,
+            IRequestContext::TPtr requestContext = nullptr)
+        : TGeneric(request, std::move(requestContext))
         , Body(std::move(body))
     {
     }

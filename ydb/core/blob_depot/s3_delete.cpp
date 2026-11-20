@@ -1,5 +1,6 @@
 #include "s3.h"
 #include "s3_collection.h"
+#include "s3_request_timer.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -38,20 +39,51 @@ namespace NKikimr::NBlobDepot {
             ->GetCounter("", true) += count;
     }
 
-    class TS3Manager::TDeleterActor : public TActor<TDeleterActor> {
-        TActorId ParentId;
+    class TS3Manager::TDeleterActor : public TActorBootstrapped<TDeleterActor> {
+        const TActorId ParentId;
+        const TActorId WrapperId;
+        const TString Bucket;
         THashMap<TString, TS3Locator> Locators;
         TString LogId;
         const ui64 TabletId;
+        TS3RequestTimer Timer;
 
     public:
-        TDeleterActor(TActorId parentId, THashMap<TString, TS3Locator> locators, TString logId, ui64 tabletId)
-            : TActor(&TThis::StateFunc)
-            , ParentId(parentId)
-            , Locators(locators)
+        TDeleterActor(TActorId parentId, TActorId wrapperId, TString bucket, THashMap<TString, TS3Locator> locators,
+                TString logId, ui64 tabletId)
+            : ParentId(parentId)
+            , WrapperId(wrapperId)
+            , Bucket(std::move(bucket))
+            , Locators(std::move(locators))
             , LogId(std::move(logId))
             , TabletId(tabletId)
         {}
+
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+            if (Locators.size() == 1) {
+                const auto& [key, locator] = *Locators.begin();
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete",
+                    {"marker", "BDEV33"}, {"BDT", TabletId}, {"locator", locator});
+                Timer.SendWithTimeout(WrapperId, new TEvExternalStorage::TEvDeleteObjectRequest(
+                    Aws::S3::Model::DeleteObjectRequest().WithBucket(Bucket).WithKey(key)));
+            } else {
+                Aws::S3::Model::Delete del;
+                for (const auto& [key, locator] : Locators) {
+                    del.AddObjects(Aws::S3::Model::ObjectIdentifier().WithKey(key));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete:multi",
+                        {"marker", "BDEV34"}, {"BDT", TabletId}, {"locator", locator});
+                }
+                Timer.SendWithTimeout(WrapperId, new TEvExternalStorage::TEvDeleteObjectsRequest(
+                    Aws::S3::Model::DeleteObjectsRequest().WithBucket(Bucket).WithDelete(std::move(del))));
+            }
+        }
+
+        void HandleTimeout() {
+            if (Timer.OnWakeup()) {
+                Finish("S3 delete deadline exceeded");
+            }
+        }
 
         void Handle(TEvExternalStorage::TEvDeleteObjectResponse::TPtr ev) {
             auto& msg = *ev->Get();
@@ -190,6 +222,7 @@ namespace NKikimr::NBlobDepot {
         STRICT_STFUNC(StateFunc,
             hFunc(TEvExternalStorage::TEvDeleteObjectResponse, Handle)
             hFunc(TEvExternalStorage::TEvDeleteObjectsResponse, Handle)
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout)
             cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
@@ -251,6 +284,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::RunDeletersIfNeeded() {
+        if (!WrapperId) {
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_QUEUE_SIZE] = DeleteQueue.size();
+            return;
+        }
         const TMonotonic now = TActivationContext::Monotonic();
         if (now < DeleteThrottleUntil) {
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_QUEUE_SIZE] = DeleteQueue.size();
@@ -281,37 +318,8 @@ namespace NKikimr::NBlobDepot {
                 break;
             }
 
-            const TActorId actorId = Self->Register(new TDeleterActor(Self->SelfId(), locators, Self->GetLogId(),
-                Self->TabletID()));
-            ActiveDeleters.insert(actorId);
-
-            if (locators.size() == 1) {
-                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete",
-                    {"marker", "BDEV33"},
-                    {"BDT", Self->TabletID()},
-                    {"locator", locators.begin()->second});
-                TActivationContext::Send(new IEventHandle(WrapperId, actorId,
-                    new TEvExternalStorage::TEvDeleteObjectRequest(
-                        Aws::S3::Model::DeleteObjectRequest()
-                            .WithBucket(Bucket)
-                            .WithKey(locators.begin()->first)
-                    ),
-                    IEventHandle::FlagTrackDelivery
-                ));
-            } else {
-                auto del = Aws::S3::Model::Delete();
-                for (const auto& [key, locator] : locators) {
-                    del.AddObjects(Aws::S3::Model::ObjectIdentifier().WithKey(key));
-                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete:multi",
-                        {"marker", "BDEV34"},
-                        {"BDT", Self->TabletID()},
-                        {"locator", locator});
-                }
-
-                TActivationContext::Send(new IEventHandle(WrapperId, actorId,
-                    new TEvExternalStorage::TEvDeleteObjectsRequest(Aws::S3::Model::DeleteObjectsRequest()
-                        .WithBucket(Bucket).WithDelete(std::move(del))), IEventHandle::FlagTrackDelivery));
-            }
+            ActiveDeleters.insert(Self->Register(new TDeleterActor(Self->SelfId(), WrapperId, Bucket,
+                std::move(locators), Self->GetLogId(), Self->TabletID())));
         }
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_QUEUE_SIZE] = DeleteQueue.size();
     }

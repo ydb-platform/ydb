@@ -1,6 +1,8 @@
 #include "s3.h"
+#include "config.h"
 #include "coro_tx.h"
 #include "s3_request_timer.h"
+#include "s3_router_events.h"
 #include "s3_error.h"
 #include "schema.h"
 
@@ -50,6 +52,7 @@ namespace NKikimr::NBlobDepot {
         const TString Bucket;
         const TIntrusivePtr<TTabletStorageInfo> Info;
         const TS3Locator Locator;
+        const TDuration PutTimeout;
         const TString ObjectName;
         std::vector<TRead> Reads;
         size_t NextRead = 0;
@@ -61,13 +64,14 @@ namespace NKikimr::NBlobDepot {
 
     public:
         TUploaderActor(TActorId owner, TActorId wrapperId, TString basePath, TString bucket,
-                TIntrusivePtr<TTabletStorageInfo> info, TS3Locator locator, const TPack& pack)
+                TIntrusivePtr<TTabletStorageInfo> info, TS3Locator locator, const TPack& pack, TDuration putTimeout)
             : Owner(owner)
             , WrapperId(wrapperId)
             , BasePath(std::move(basePath))
             , Bucket(std::move(bucket))
             , Info(std::move(info))
             , Locator(locator)
+            , PutTimeout(putTimeout)
             , ObjectName(Locator.MakeObjectName(BasePath))
         {
             for (size_t itemIndex = 0; itemIndex < pack.Items.size(); ++itemIndex) {
@@ -117,9 +121,8 @@ namespace NKikimr::NBlobDepot {
                 return;
             }
 
-            // The SDK owns the payload until its terminal callback. Keep the pack and upload slot
-            // reserved throughout the transfer, including when it outlasts the source-read timeout.
-            Timer.Clear();
+            const auto putDeadline = TActivationContext::Monotonic() + PutTimeout;
+            Timer.Arm(putDeadline);
             auto request = Aws::S3::Model::PutObjectRequest().WithBucket(Bucket).WithKey(ObjectName);
             // Queued SDK work can outlive the tablet. Stop it when its uploader has exited.
             const std::weak_ptr<std::atomic_bool> put = PutRetried;
@@ -130,7 +133,8 @@ namespace NKikimr::NBlobDepot {
                     retried->store(true);
                 }
             });
-            Send(WrapperId, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)),
+            Send(WrapperId, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer),
+                std::make_shared<TS3PutContext>(putDeadline, TS3PutContext::ESource::Cooling)),
                 IEventHandle::FlagTrackDelivery);
         }
 
@@ -218,6 +222,9 @@ namespace NKikimr::NBlobDepot {
             if (!Timer.OnWakeup()) {
                 return;
             }
+            if (ReadDeadlines.empty()) {
+                return Finish("cooling S3 PUT deadline exceeded", {}, ECoolingPutOutcome::MayArriveLate);
+            }
             std::optional<size_t> failedSource;
             const auto& read = Reads[ReadDeadlines.begin()->first];
             if (std::holds_alternative<TLogoBlobID>(read.Source)) {
@@ -250,7 +257,8 @@ namespace NKikimr::NBlobDepot {
         void Complete(const TActorContext&) override {
             auto& manager = *Self->S3Manager;
             const TActorId actorId = Self->Register(new TUploaderActor(Self->SelfId(), manager.WrapperId,
-                manager.BasePath, manager.Bucket, Self->Info(), Locator, Pack));
+                manager.BasePath, manager.Bucket, Self->Info(), Locator, Pack,
+                GetS3PutTimeout(Self->Config.GetS3BackendSettings().GetSettings(), AppData()->AwsClientConfig)));
             manager.ActiveUploaders.emplace(actorId, std::make_pair(Locator, std::move(Pack)));
         }
     };

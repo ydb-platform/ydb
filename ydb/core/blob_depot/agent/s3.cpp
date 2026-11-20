@@ -19,7 +19,7 @@ namespace NKikimr::NBlobDepot {
             // well-known service id before any later event we send can be processed, so
             // we can use the service id immediately.
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, *S3BackendSettings));
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, BlobDepotGeneration, *S3BackendSettings));
             S3WrapperId = MakeBlobDepotS3RouterID(TabletId);
             S3BasePath = MakeS3BasePath(settings, name);
         }
@@ -331,7 +331,10 @@ namespace NKikimr::NBlobDepot {
                     .WithBucket(std::move(Agent.S3BackendSettings->GetSettings().GetBucket()))
                     .WithKey(std::move(key))
                     .AddMetadata("key", id.ToString()),
-                buffer.ExtractUnderlyingContainerOrCopy<TString>()),
+                buffer.ExtractUnderlyingContainerOrCopy<TString>(),
+                std::make_shared<TS3PutContext>(TActivationContext::Monotonic() +
+                    GetS3PutTimeout(Agent.S3BackendSettings->GetSettings(), AppData()->AwsClientConfig),
+                    TS3PutContext::ESource::Agent)),
             IEventHandle::FlagTrackDelivery));
 
     }

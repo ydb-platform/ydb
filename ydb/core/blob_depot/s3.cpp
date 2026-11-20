@@ -27,8 +27,9 @@ namespace NKikimr::NBlobDepot {
             // All S3 traffic goes through the per-node router managed by NodeWarden.
             // Acquire is fire-and-forget: NodeWarden registers the router under its
             // well-known service id before any later event we send can be processed.
+            RouterGeneration = Self->Executor()->Generation();
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
-                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), *settings));
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), RouterGeneration, *settings));
             WrapperId = MakeBlobDepotS3RouterID(Self->TabletID());
             BasePath = MakeS3BasePath(settings->GetSettings(), Self->Config.GetName());
             Bucket = settings->GetSettings().GetBucket();
@@ -75,7 +76,7 @@ namespace NKikimr::NBlobDepot {
         }
         if (WrapperId) {
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID()));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID(), RouterGeneration));
             WrapperId = {};
         }
     }

@@ -28,15 +28,24 @@ public:
         Replication = replication;
         Replication->ResetCredentials(ctx);
         Replication->UpdateSecret(result.Value, result.Revision, ToString(Event->Sender));
-        Replication->SetState(TReplication::EState::Ready);
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Replications>().Key(result.ReplicationId).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
-            NIceDb::TUpdate<Schema::Replications::Issue>(TString()),
-            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(TString()));
         for (auto* target : Replication->GetTargets()) {
             target->Shutdown(ctx);
-            if (target->GetDstState() == TReplication::EDstState::Error) {
+            if (result.MissingIndexStreams.contains(target->GetId())
+                && target->GetDstState() != TReplication::EDstState::Removing)
+            {
+                // The source confirmed the GUID is gone, but may have retained
+                // the original index. Keep this target in the GLOBAL quorum
+                // until an authoritative base-table schema record retires it.
+                target->SetStreamState(TReplication::EStreamState::Removed);
+                target->SetDstState(TReplication::EDstState::Error);
+                target->SetIssue("Source index changefeed is missing");
+                db.Table<Schema::SrcStreams>().Key(result.ReplicationId, target->GetId()).Update(
+                    NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+                db.Table<Schema::Targets>().Key(result.ReplicationId, target->GetId()).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                    NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
+            } else if (target->GetDstState() == TReplication::EDstState::Error && !target->HasMissingIndexStream()) {
                 target->SetDstState(TReplication::EDstState::Ready);
                 target->SetIssue({});
                 db.Table<Schema::Targets>().Key(result.ReplicationId, target->GetId()).Update(
@@ -44,6 +53,11 @@ public:
                     NIceDb::TUpdate<Schema::Targets::Issue>(TString()));
             }
         }
+        Replication->SetState(TReplication::EState::Ready);
+        db.Table<Schema::Replications>().Key(result.ReplicationId).Update(
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()));
         return true;
     }
 

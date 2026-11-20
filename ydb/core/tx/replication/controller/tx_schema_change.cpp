@@ -544,6 +544,13 @@ class TController::TTxSchemaChangeReport: public TTxBase {
             ProgressRemovedIndexes = true;
             RecheckHeartbeats = true;
         }
+        if (ProgressRemovedIndexes && replication->IsReconcilingIndexStreams()) {
+            replication->SetState(TReplication::EState::Ready);
+            db.Table<Schema::Replications>().Key(key.first).Update(
+                NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(replication->GetAuthenticationErrorRevision()),
+                NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()));
+        }
     }
 
     void HandleCollectingReport(

@@ -2,6 +2,7 @@
 #include "private_events.h"
 #include "secret_resolver.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -205,6 +206,11 @@ bool CanRefreshSecret(TStringBuf failed, TStringBuf resolved) {
             && TryFromString(marker, revision.Version);
     };
     NKqp::TSecretRevision previous, next;
+    if (failed == MissingIndexStreamRecoveryMarker) {
+        // After a controller restart, revalidate the current credentials on all
+        // remaining streams before resuming the base workers.
+        return resolved == LegacySecretRecoveryMarker || parseSchemaRevision(resolved, next);
+    }
     return parseSchemaRevision(failed, previous) && parseSchemaRevision(resolved, next)
         && previous.PathOwnerId == next.PathOwnerId && previous.LocalPathId == next.LocalPathId
         && previous.Version < next.Version;
@@ -222,7 +228,8 @@ class TSecretRefresh: public TActorBootstrapped<TSecretRefresh> {
     const TString FailedRevision;
     const TVector<TSecretProbeTopic> Topics;
 
-    static NActors::async<NYdb::EStatus> ProbeTopic(const TActorId& proxy, const TSecretProbeTopic& topic) {
+    static NActors::async<NYdb::EStatus> ProbeTopic(const TActorId& proxy, const TSecretProbeTopic& topic,
+            THashSet<ui64>& missingIndexStreams) {
         auto described = co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTopicResponse>(proxy,
             new TEvYdbProxy::TEvDescribeTopicRequest(topic.Path, {}));
         const auto status = described->Get()->Result.GetStatus();
@@ -231,7 +238,8 @@ class TSecretRefresh: public TActorBootstrapped<TSecretRefresh> {
         }
 
         // DescribeTopic conceals both missing paths and ACL denials as SCHEME_ERROR.
-        // The base worker can reconcile the stream only if this index was dropped.
+        // If the index name has already been reused, inspect the owned feed on
+        // the implementation table itself, using the same candidate credentials.
         const auto& index = *topic.SchemaManagedIndex;
         auto table = co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTableResponse>(proxy,
             new TEvYdbProxy::TEvDescribeTableRequest(index.TablePath, {}));
@@ -241,7 +249,21 @@ class TSecretRefresh: public TActorBootstrapped<TSecretRefresh> {
         }
         for (const auto& present : result.GetTableDescription().GetIndexDescriptions()) {
             if (TStringBuf(present.GetIndexName()) == index.Name) {
-                co_return status;
+                auto implTable = co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTableResponse>(proxy,
+                    new TEvYdbProxy::TEvDescribeTableRequest(TString(ExtractParent(topic.Path)), {}));
+                const auto& impl = implTable->Get()->Result;
+                if (!impl.IsSuccess()) {
+                    co_return impl.GetStatus();
+                }
+                for (const auto& feed : impl.GetTableDescription().GetChangefeedDescriptions()) {
+                    if (TStringBuf(feed.GetName()) == ExtractBase(topic.Path)) {
+                        co_return status;
+                    }
+                }
+                // The GUID is gone. Only a base CDC record can establish that
+                // the old index itself was dropped.
+                missingIndexStreams.insert(index.TargetId);
+                break;
             }
         }
         co_return NYdb::EStatus::SUCCESS;
@@ -281,7 +303,7 @@ public:
             }
             // DescribeTopic can succeed for credentials that the worker cannot use to read.
             // The failed legacy password is known in memory until the controller restarts.
-            if (secret.Revision == LegacySecretRecoveryMarker && failedCredentials.HasPassword()
+            if (FailedRevision == LegacySecretRecoveryMarker && failedCredentials.HasPassword()
                 && secret.Value == failedCredentials.GetPassword())
             {
                 continue;
@@ -291,9 +313,10 @@ public:
             const auto proxy = Register(CreateYdbProxy(Params.GetEndpoint(), Params.GetDatabase(),
                 Params.GetEnableSsl(), Params.GetCaCert(), credentials));
             Y_DEFER { SelfId().Send(proxy, new TEvents::TEvPoison()); };
+            THashSet<ui64> missingIndexStreams;
             bool authorized = true;
             for (const auto& topic : Topics) {
-                const auto status = co_await NActors::WithTimeout(TDuration::Seconds(30), ProbeTopic(proxy, topic));
+                const auto status = co_await NActors::WithTimeout(TDuration::Seconds(30), ProbeTopic(proxy, topic, missingIndexStreams));
                 if (status == NYdb::EStatus::SUCCESS) {
                     continue;
                 }
@@ -307,7 +330,7 @@ public:
                 break;
             }
             if (authorized) {
-                Send(Parent, new TEvPrivate::TEvRefreshCredentials(ReplicationId, secret.Value, secret.Revision));
+                Send(Parent, new TEvPrivate::TEvRefreshCredentials(ReplicationId, secret.Value, secret.Revision, std::move(missingIndexStreams)));
                 PassAway();
                 co_return;
             }

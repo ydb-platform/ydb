@@ -271,7 +271,7 @@ public:
             }
         }
 
-        if (alter && Replication->GetState() == TReplication::EState::Error) {
+        if (alter && Replication->GetOperationalState() == TReplication::EState::Error) {
             Replication->SetState(TReplication::EState::Ready);
             ResetFailedSchemaBarriers = true;
             if (desiredState == TReplication::EState::Error) {
@@ -326,7 +326,7 @@ public:
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
-            NIceDb::TUpdate<Schema::Replications::Issue>(issue)
+            NIceDb::TUpdate<Schema::Replications::Issue>(Replication->IsReconcilingIndexStreams() ? Replication->GetIssue() : issue)
         );
 
         if (!alter) {
@@ -390,7 +390,9 @@ public:
         if (Replication->CheckAlterDone()) {
             Replication->SetState(desiredState);
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-                NIceDb::TUpdate<Schema::Replications::State>(desiredState)
+                NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()),
+                NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
             );
         }
 

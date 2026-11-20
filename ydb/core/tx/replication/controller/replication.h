@@ -111,6 +111,10 @@ public:
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
+        bool HasMissingIndexStream() const {
+            return GetKind() == ETargetKind::IndexTable && GetStreamState() == EStreamState::Removed
+                && GetDstState() != EDstState::Removing;
+        }
         virtual bool IsExpectedStreamCreator(const TActorId& actorId) const = 0;
 
         virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
@@ -183,6 +187,8 @@ public:
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
+    EState GetOperationalState() const;
+    bool IsReconcilingIndexStreams() const;
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
     const TString& GetIssue() const;

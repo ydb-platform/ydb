@@ -277,13 +277,13 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         auto nodeWardenConfig = MakeNodeWardenConfig(config, bridgeConfig);
         nodeWardenConfig->StartupConfigYaml = startupConfigYaml;
         if (dynamicPileName) {
-            nodeWardenConfig->DynamicNodeConfig.emplace();
+            nodeWardenConfig->DynamicNodeConfig = std::make_unique<NKikimrConfig::TDynamicNodeConfig>();
             auto *info = nodeWardenConfig->DynamicNodeConfig->MutableNodeInfo();
             info->SetNodeId(nodeId);
             info->MutableLocation()->SetBridgePileName(dynamicPileName);
         }
         if (selfManagementConfig) {
-            nodeWardenConfig->SelfManagementConfig = *selfManagementConfig;
+            nodeWardenConfig->SelfManagementConfig = std::make_unique<NKikimrConfig::TSelfManagementConfig>(*selfManagementConfig);
         }
         auto storageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
         const TActorId keeperId = runtime.Register(
@@ -12173,7 +12173,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             .BaseConfig = &s.BaseConfig,
             .IgnoreVSlotQuotaCheck = true,
         });
-        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
     }
 
     // static VDisk placed on the PDisk of BSC takes slot id below the range BSC allocates from, as BSC may allocate the

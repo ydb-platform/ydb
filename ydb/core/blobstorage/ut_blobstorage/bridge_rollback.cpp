@@ -619,6 +619,75 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
         CheckRollbackStatus(env, {});
     }
 
+    Y_UNIT_TEST(AdmittedReadCompletesAfterRollback) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker);
+        checker.CheckAll();
+        const auto& [_, id, data] = checker.GetWritten().front();
+        const auto proxy = env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(MakeBlobStorageProxyID(groupId));
+        UNIT_ASSERT(proxy);
+
+        std::unique_ptr<IEventHandle> held;
+        bool passthrough = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == proxy) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
+                    const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                    passthrough |= info && !info->IsBridged();
+                } else if (!passthrough && ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                    const auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                    if (msg->ResponseSz == 1 && msg->Responses[0].Id == id) {
+                        UNIT_ASSERT(!held);
+                        held = std::move(ev);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
+        auto read = [&](ui64 cookie) {
+            auto request = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::LowRead);
+            request->ExecutionRelay = relay;
+            env.Runtime->WrapInActorContext(edge, [&] { SendToBSProxy(edge, groupId, request.release(), cookie); });
+        };
+        auto checkReply = [&](ui64 cookie) {
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Seconds(5));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Cookie, cookie);
+            UNIT_ASSERT(result->Get()->ExecutionRelay == relay);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
+        };
+
+        const auto start = env.Runtime->GetClock();
+        read(1);
+        WaitUntil(env, [&] { return bool(held); }, "inline read response", TDuration::MilliSeconds(10), 100);
+        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableRollbackBridge(); });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        WaitUntil(env, [&] { return passthrough; }, "ordinary group config", TDuration::MilliSeconds(100), 600);
+        read(2);
+        checkReply(2);
+        const auto counters = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "GetLow")->GetSubgroup("sizeClass", "262144");
+        UNIT_ASSERT(!counters->FindHistogram("bridgeResponseTimeMs"));
+
+        // A request sent before the rollback races with the new VDisk generation and retries on the inner DSProxy.
+        auto *msg = held->Get<TEvBlobStorage::TEvGetResult>();
+        msg->Status = NKikimrProto::RACE;
+        msg->RacingGeneration = GetNodeGroupGeneration(env, groupId, 1);
+        env.Runtime->Send(held.release(), 1);
+        checkReply(1);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("bridgeRequestBytes", true)->Val(), data.size());
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("bridgeResponseBytes", true)->Val(), data.size());
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
+        CheckSingleBridgeResponseLatency(counters, env.Runtime->GetClock() - start);
+    }
+
     // the converted cluster is rolled back: static groups become ordinary ones, BSC makes its pools and groups such, the
     // cluster state goes away; running nodes keep serving the groups (their bridge proxies pass requests through), and
     // then they are restarted without bridge config; the cluster can be converted again afterwards

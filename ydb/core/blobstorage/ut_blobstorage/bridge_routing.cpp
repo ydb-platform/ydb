@@ -218,6 +218,7 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
 
     Y_UNIT_TEST(LatencyIncludesQueueAndRoutingRestart) {
         TQueuedRoutingTest test;
+        const auto start = test.Env.Runtime->GetClock();
         test.SendGet(1);
         test.Env.Sim(TDuration::MilliSeconds(1300));
         test.HoldResults = true;
@@ -237,17 +238,7 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
         UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), 10);
         UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
-        const auto hist = get->FindHistogram("bridgeResponseTimeMs");
-        UNIT_ASSERT(hist);
-        const auto snapshot = hist->Snapshot();
-        ui64 samples = 0;
-        for (ui32 i = 0; i < snapshot->Count(); ++i) {
-            samples += snapshot->Value(i);
-            if (snapshot->Value(i)) {
-                UNIT_ASSERT_GE(snapshot->UpperBound(i), 1300);
-            }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(samples, 1);
+        CheckSingleBridgeResponseLatency(get, test.ResultAt.at(1) - start);
     }
 
     Y_UNIT_TEST(RestartLimitReturnsError) {

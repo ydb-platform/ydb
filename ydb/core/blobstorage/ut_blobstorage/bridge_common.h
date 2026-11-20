@@ -24,6 +24,20 @@ namespace NBridgeTest {
         return GetBridgeRequestCounters(env, nodeId, env.StoragePoolName);
     }
 
+    inline void CheckSingleBridgeResponseLatency(const ::NMonitoring::TDynamicCounterPtr& counters, TDuration elapsed) {
+        const auto hist = counters->FindHistogram("bridgeResponseTimeMs");
+        UNIT_ASSERT(hist);
+        const auto snapshot = hist->Snapshot();
+        const double elapsedMs = elapsed.MicroSeconds() / 1000.0;
+        bool found = false;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            const bool expected = !found && elapsedMs <= snapshot->UpperBound(i);
+            UNIT_ASSERT_VALUES_EQUAL_C(snapshot->Value(i), expected, "elapsed " << elapsed << " bucket " << i);
+            found |= expected;
+        }
+        UNIT_ASSERT(found);
+    }
+
     // TDataChecker writes small blobs with the TabletLog handle class.
     inline auto GetCompletedTestWrites(TEnvironmentSetup& env, ui32 nodeId, const TString& poolName) {
         return GetBridgeRequestCounters(env, nodeId, poolName)->GetSubgroup("handleClass", "PutTabletLog")

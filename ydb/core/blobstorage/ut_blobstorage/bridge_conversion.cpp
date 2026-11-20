@@ -5,6 +5,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <algorithm>
 

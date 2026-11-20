@@ -72,6 +72,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
     )
     enable_streaming_aggregation = param.get("enable_streaming_aggregation", True)
+    aggregation_compute_threads = param.get("aggregation_compute_threads", 0)
 
     extra_feature_flags = {
         "enable_streaming_queries_counters",
@@ -192,6 +193,10 @@ def get_ydb_config(request, enable_fq_connector=None):
     }
     config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
     config.yaml_config["auth_config"]["use_access_service_tls"] = False
+    if aggregation_compute_threads:
+        config.yaml_config["table_service_config"]["aggregation_config"] = {
+            "aggregation_compute_threads": aggregation_compute_threads
+        }
     return config
 
 

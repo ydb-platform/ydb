@@ -658,10 +658,15 @@ void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
             {"previousRealResourceUsage", oldr},
             {"realResourceUsage", queue->RealResourceUsage});
 
-    Tasks.erase(std::make_pair(task->Client, task->TaskId));
-    auto clientIt = TasksByClient.find(task->Client);
+    EraseTaskFromIndexes(*task);
+}
+
+void TScheduler::EraseTaskFromIndexes(const TTask &task)
+{
+    Tasks.erase(std::make_pair(task.Client, task.TaskId));
+    auto clientIt = TasksByClient.find(task.Client);
     Y_DEBUG_ABORT_UNLESS(clientIt != TasksByClient.end());
-    const auto erased = clientIt->second.erase(task->TaskId);
+    const auto erased = clientIt->second.erase(task.TaskId);
     Y_DEBUG_ABORT_UNLESS(erased == 1);
     if (clientIt->second.empty()) {
         TasksByClient.erase(clientIt);
@@ -692,12 +697,8 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
             if (!queue->QueueLimit.HasResources(memory)) {
                 blocked = true;
             } else if (!ResourceLimit->HasResources(memory)) {
-                // Preserve inter-queue fairness while this reservation can
-                // accumulate enough global memory. An oversized task left by
-                // reconfiguration must not block other queues indefinitely.
-                if (task->RequiredResources[NKikimrResourceBroker::MEMORY] <= ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]) {
-                    blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
-                }
+                // Let global memory accumulate for this reservation before later queues use it.
+                blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
                 blocked = true;
             }
             if (blocked) {
@@ -841,7 +842,7 @@ TDuration TScheduler::EstimateTaskExecutionTime(TTaskPtr task)
     return TaskConfig(task->Type).ExecTime.GetAverage();
 }
 
-void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSystem &as)
+TVector<TTaskPtr> TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSystem &as)
 {
     // Remove all tasks from queues.
     for (auto &entry : Tasks)
@@ -874,9 +875,18 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
     }
     Y_ABORT_UNLESS(TaskConfigs.contains(NLocalDb::UnknownTaskName), "task '%s' wasn't found in config", NLocalDb::UnknownTaskName.data());
 
-    // Move all tasks to queues.
-    for (auto &entry : Tasks)
-        AssignTask(entry.second, as);
+    TVector<TTaskPtr> rejected;
+    for (auto &[_, task] : Tasks) {
+        if (!task->InFly && !FitsMemoryLimit(task->Type, task->RequiredResources)) {
+            rejected.push_back(task);
+        } else {
+            AssignTask(task, as);
+        }
+    }
+    for (const auto &task : rejected) {
+        EraseTaskFromIndexes(*task);
+    }
+    return rejected;
 }
 
 TVector<TEvResourceBroker::TQueueUsage> TScheduler::GetQueueUsage() const
@@ -946,13 +956,27 @@ TVector<TEvResourceBroker::TQueueUsage> TResourceBroker::GetQueueUsage() const
     }
 }
 
+static TResourceBroker::TOpError MakeMemoryLimitError(ui64 taskId, const TIntrusivePtr<TThrRefBase>& cookie, ui64 limit)
+{
+    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+    error->TaskId = taskId;
+    error->Cookie = cookie;
+    error->Status.Code = TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
+    error->Status.Message = "scan memory reservation exceeds the current broker limit";
+    error->Status.MemoryLimit = limit;
+    return error;
+}
+
 void TResourceBroker::Configure(const TResourceBrokerConfig &config)
 {
     with_lock(Lock) {
         Config = config;
 
         Scheduler.UpdateTime(ActorSystem->Timestamp());
-        Scheduler.Configure(Config, *ActorSystem);
+        for (const auto &task : Scheduler.Configure(Config, *ActorSystem)) {
+            auto error = MakeMemoryLimitError(task->TaskId, task->Cookie, Scheduler.GetMemoryLimit(task->Type));
+            ActorSystem->Send(task->Client, error.Release());
+        }
         Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
             ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
         });
@@ -973,13 +997,7 @@ TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::T
             return error;
         }
         if (!Scheduler.FitsMemoryLimit(ev.Task.Type, ev.Task.RequiredResources)) {
-            auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
-            error->TaskId = ev.Task.TaskId;
-            error->Status.Code = TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
-            error->Status.Message = "scan memory reservation exceeds the current broker limit";
-            error->Status.MemoryLimit = Scheduler.GetMemoryLimit(ev.Task.Type);
-            error->Cookie = ev.Task.Cookie;
-            return error;
+            return MakeMemoryLimitError(ev.Task.TaskId, ev.Task.Cookie, Scheduler.GetMemoryLimit(ev.Task.Type));
         }
         if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) {
             Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
@@ -1037,13 +1055,7 @@ TResourceBroker::TOpError TResourceBroker::UpdateTask(const TEvResourceBroker::T
         // Validate new admissions, including readmission after a zero-resource
         // wait. Running tasks must still charge payloads they already own.
         if (task && (ev.Resubmit || !task->InFly) && !Scheduler.FitsMemoryLimit(ev.Type, ev.RequiredResources)) {
-            auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
-            error->TaskId = ev.TaskId;
-            error->Status.Code = TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
-            error->Status.Message = "scan memory reservation exceeds the current broker limit";
-            error->Status.MemoryLimit = Scheduler.GetMemoryLimit(ev.Type);
-            error->Cookie = task->Cookie;
-            return error;
+            return MakeMemoryLimitError(ev.TaskId, task->Cookie, Scheduler.GetMemoryLimit(ev.Type));
         }
         if (Scheduler.UpdateTask(ev.TaskId, sender, ev.RequiredResources, ev.Priority, ev.Type, ev.Resubmit, *ActorSystem)) {
             Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {

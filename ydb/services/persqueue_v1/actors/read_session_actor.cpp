@@ -1983,7 +1983,7 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     return diff;
 }
 
-template <EProtocol Protocol>
+template <bool UseMigrationProtocol>
 void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (!SupportsReplicationMessages) {
         return;
@@ -1992,7 +1992,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr&
     if (!ActualPartitionActors.contains(ev->Sender) || !Partitions.contains(record.GetPartitionSessionId())) {
         return;
     }
-    if constexpr (Protocol == EProtocol::Topic) {
+    if constexpr (!UseMigrationProtocol) {
         TServerMessage response;
         response.set_status(Ydb::StatusIds::SUCCESS);
         auto* partitionData = response.mutable_read_response()->add_partition_data();
@@ -2012,7 +2012,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr&
     }
 }
 
-template <EProtocol Protocol>
+template <bool UseMigrationProtocol>
 void TReadSessionActor<Protocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
     if (!ActualPartitionActors.contains(ev->Sender)) {
         return;

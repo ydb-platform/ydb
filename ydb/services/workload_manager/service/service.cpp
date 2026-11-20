@@ -7,7 +7,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/cms/console/events/console.h>
-#include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/mind/tenant_node_enumeration/tenant_node_enumeration.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>

@@ -97,7 +97,7 @@ PEERDIR(
     ydb/core/config/init
     ydb/core/control/lib
     ydb/core/engine/minikql
-    ydb/core/mind
+    ydb/core/mind/events
     ydb/core/node_whiteboard
     ydb/core/path_aliasing
     ydb/core/protos

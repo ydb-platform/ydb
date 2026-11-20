@@ -10,7 +10,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/runtime
-    ydb/core/mind
+    ydb/core/mind/tenant_node_enumeration
     ydb/core/protos
     ydb/core/resource_pools
     ydb/library/aclib
@@ -27,4 +27,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-

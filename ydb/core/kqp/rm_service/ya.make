@@ -16,7 +16,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/warmup
     ydb/core/kqp/counters
-    ydb/core/mind
+    ydb/core/mind/events
     ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/protos

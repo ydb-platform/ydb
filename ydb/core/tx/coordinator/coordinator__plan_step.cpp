@@ -181,7 +181,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                                     NIceDb::TUpdate<Schema::Transaction::AffectedSet>(affectedSet));
                     }
 
-                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction " << txId << " has been planned");
+                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction has been planned",
+                        {"txId", txId});
                 }
 
                 for (TMediatorStep& m : mediatorSteps) {
@@ -193,8 +194,10 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                                 db.Table<Schema::AffectedSet>().Key(mediatorId, txId, tabletId).Update();
                                 m.Volatile = false;
                             }
-                            FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                                "Planned transaction " << txId << " for mediator " << mediatorId << " tablet " << tabletId);
+                            FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Planned transaction",
+                                {"txId", txId},
+                                {"mediatorId", mediatorId},
+                                {"tabletId", tabletId});
                         }
                         m.Transactions.emplace_back(txId, affected.data(), affected.size());
                     }

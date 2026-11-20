@@ -1762,11 +1762,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         TxProxyMon->CacheRequestLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
-        LOG_LOG_S_SAMPLED_BY(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_NOTICE),
-            NKikimrServices::TX_PROXY, TxId,
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " HANDLE EvNavigateKeySetResult TFlatSchemeReq marker# P5"
-            << " ErrorCount# " << navigate->ErrorCount);
+        YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_NOTICE), NKikimrServices::TX_PROXY, TxId, "HANDLE EvNavigateKeySetResult TFlatSchemeReq",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId},
+            {"errorCount", navigate->ErrorCount},
+            {"marker", "P5"});
 
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
 

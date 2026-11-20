@@ -15,8 +15,11 @@ std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualization
     const TPortionInfo& portion) const {
     YDB_LOG_VERIFY(CriticalSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
-    auto portionSchema = portion.GetSchema(VersionedIndex);
-    if (portionSchema->GetVersion() < CriticalSchema->GetVersion()) {
+    // by the version stored in the portion, not by the schema it resolves to: with schema collapsing
+    // (EnableCSSchemasCollapsing) a portion written before a collapsed ADD COLUMN resolves to the surviving successor
+    // and would look current
+    if (portion.GetSchemaVersionVerified() < CriticalSchema->GetVersion()) {
+        auto portionSchema = portion.GetSchema(VersionedIndex);
         // rewritten with the newest schema, not with the critical one: a schema change meanwhile moves the portions
         // still to be rewritten to the new schema, while the already rewritten ones are not rewritten again
         const auto writeSchema = VersionedIndex.GetLastSchema();
@@ -95,13 +98,13 @@ void TSchemeActualizer::DoExtractTasks(
                 }
             }
             auto info = BuildActualizationInfo(*portion);
-            if (!info) {   // its possible through chains with equivalent schemas collapsed
+            if (!info) {   // not expected: queued by the same test, and the queue is rebuilt whenever CriticalSchema changes
                 portionsToRemove.emplace(portion->GetPortionId());
                 continue;
             }
             auto portionScheme = portion->GetSchema(VersionedIndex);
-            TPortionEvictionFeatures features(
-                portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+            TPortionEvictionFeatures features(portion->GetSchemaVersionVerified(), portionScheme, info->GetTargetScheme(),
+                portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
             bool limitExceeded = false;

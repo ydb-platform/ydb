@@ -254,8 +254,8 @@ void TTieringActualizer::DoExtractTasks(
                     continue;
                 }
                 auto portionScheme = portion->GetSchema(VersionedIndex);
-                TPortionEvictionFeatures features(
-                    portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+                TPortionEvictionFeatures features(portion->GetSchemaVersionVerified(), portionScheme, info->GetTargetScheme(),
+                    portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 
                 switch (tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {

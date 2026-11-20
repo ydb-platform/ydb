@@ -2706,6 +2706,18 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             RebootTablet(Runtime, TTestTxConfig::TxTablet0, Sender);
         }
 
+        // EnableCSSchemasCollapsing: drives the background loop until the shard has erased the schema version (its
+        // successor only added nullable columns, so the lookup of the version gives the successor from then on)
+        void WaitSchemaVersionCollapsed(const ui64 version) {
+            for (ui32 i = 0; i < 30; ++i) {
+                if (!Engine().GetVersionedIndex().GetSchemaByVersion().contains(version)) {
+                    return;
+                }
+                RunBackground(1);
+            }
+            UNIT_ASSERT_C(false, "schema version " << version << " was not collapsed");
+        }
+
         // portions queued for the schema rewrite (counted by the test controller)
         i64 QueuedForActualization() {
             return Controller->GetNeedActualizationCount().Val();
@@ -2834,6 +2846,31 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             t.SendCompact(4, true);
             UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
         }
+    }
+
+    Y_UNIT_TEST(ForcedCompactionCascadeRewritesCollapsedVersion) {
+        // With EnableCSSchemasCollapsing the shard erases a schema version whose successor only added nullable columns:
+        // the lookup of that version gives the successor's schema from then on, so the portions written with it look
+        // current. The rewrite goes by the version stored in the portion and CASCADE still brings them to the current
+        // schema.
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        TForcedCompactionTest t("lc-buckets");
+        t.Runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
+        t.DisableBackground(EBackground::Compaction);
+        t.WriteOverlappingBatches(1);
+
+        t.AlterSchema();   // version 2, version 1 collapses into it
+        t.WaitSchemaVersionCollapsed(1);
+        t.AssertVersions({ 1 });   // the portion keeps its stored version
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
+
+        t.SendCompact(1, true);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 2 });
+
+        t.SendCompact(2, true);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
     }
 
     Y_UNIT_TEST(ForcedCompactionCascadeRetryNewOperationRestart) {

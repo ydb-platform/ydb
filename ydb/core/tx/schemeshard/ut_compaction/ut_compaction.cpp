@@ -3714,14 +3714,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         };
 
         // Column tables have no index impl tables: CASCADE instead asks every shard to also rewrite its portions to the
-        // current schema (TEvCompactTable::Cascade). Schema collapsing makes the portions of a collapsed version look
-        // current and so hides them from the rewrite: CASCADE is refused while the feature is on.
-        runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
-        cascadeCompact(Ydb::StatusIds::PRECONDITION_FAILED);
-        runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(false);
-
-        // The request carries the flag and the operation id, so that the shard tells a timeout retry of the operation
-        // from a new one.
+        // current schema (TEvCompactTable::Cascade). The request carries the flag and the operation id, so that the
+        // shard tells a timeout retry of the operation from a new one.
         std::vector<NKikimrTxDataShard::TEvCompactTable> requests;
         auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTable>(
             [&](const TEvDataShard::TEvCompactTable::TPtr& ev) { requests.push_back(ev->Get()->Record); });

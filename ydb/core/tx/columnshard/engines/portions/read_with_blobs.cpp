@@ -97,7 +97,9 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
 std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
     const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier,
     const std::shared_ptr<IStoragesManager>& storages, std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
-    if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
+    // by the version stored in the portion: with schema collapsing `from` (the lookup of that version) may already be `to`
+    if (source.GetPortionInfo().GetSchemaVersionVerified() == to->GetVersion() &&
+        targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
         YDB_LOG_WARN("",
             {"event", "we don't need sync portion"});
         return {};

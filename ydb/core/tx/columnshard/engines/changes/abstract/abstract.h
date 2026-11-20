@@ -43,6 +43,9 @@ class TVersionedIndex;
 
 class TPortionEvictionFeatures {
 private:
+    // the version stored in the portion: with schema collapsing (EnableCSSchemasCollapsing) it may be older than
+    // CurrentScheme, the lookup of a collapsed version gives the surviving successor
+    YDB_READONLY(ui64, PortionSchemaVersion, 0);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
     std::optional<TString> TargetTierName;
@@ -50,9 +53,10 @@ private:
     std::optional<NActualizer::TRWAddress> RWAddress;
 
 public:
-    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme,
-        const TString& currentTierName)
-        : CurrentScheme(currentScheme)
+    TPortionEvictionFeatures(const ui64 portionSchemaVersion, const std::shared_ptr<ISnapshotSchema>& currentScheme,
+        const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
+        : PortionSchemaVersion(portionSchemaVersion)
+        , CurrentScheme(currentScheme)
         , TargetScheme(targetScheme)
         , CurrentTierName(currentTierName)
     {
@@ -101,7 +105,7 @@ public:
         if (CurrentTierName != TargetTierName) {
             return true;
         }
-        if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+        if (PortionSchemaVersion != TargetScheme->GetVersion()) {
             return true;
         }
         YDB_LOG_VERIFY(false);

@@ -114,11 +114,14 @@ additional **direct** writes, first to eligible handoffs and then, when
 needed, to desired hosts. Requested/completed/failed masks prevent counting
 one destination twice. The request timeout bounds the client operation.
 
-Late successful responses still matter after the client reply, even when the
-quorum was never reached: they identify extra PB copies that need cleanup.
-`MaybeReplyOrNotifyBelated`, `TVChunk::OnBelatedWriteBlocksResponse`, and the
-belated erase queue implement that path. Changes to timeout handling must
-preserve it.
+Late responses still matter after the client reply, even when the quorum was
+never reached. A success while the record is still in the dirty map confirms
+the host, and the erase is sent then. A failure leaves the host unconfirmed,
+and the restore barrier finishes the record, the same way as a host that
+never answers.
+`MaybeReplyOrNotifyBelated`, `TVChunk::OnBelatedWriteBlocksResponse`,
+`TBlocksDirtyMap::OnBelatedWrite` and `TInflightInfo::OnBelatedWrite` implement
+that path. Changes to timeout handling must preserve it.
 
 The proto enum's zero value is `IndirectWrite`; the C++ fallback for an absent
 configuration field is `DirectWrite`. Inspect the effective config rather
@@ -137,7 +140,7 @@ from [TInflightInfo::ReadMask](../dirty_map/inflight_info.cpp):
 | `PBufferPendingWrite` | Does not introduce a PB source; the unacknowledged write is invisible |
 | `PBufferIncompleteWrite` | Wait for its quorum-ready future and recompute hints |
 | `PBufferWritten`, `PBufferFlushing` | A PB that confirmed the record, using its original key |
-| `PBufferFlushed`, `PBufferErasing`, `PBufferErased` | DDisk |
+| `PBufferFlushed`, `PBufferDiscarded`, `PBufferErased` | DDisk |
 | No visible PB overlap | DDisk |
 
 Pending writes preserve the pre-write view: an older visible PB record can

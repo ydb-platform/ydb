@@ -20,8 +20,6 @@ enum class EVChunkOperation
     Flush,
     // Erase of PBuffer records that have been flushed.
     Erase,
-    // Erase of PBuffer records superseded by a later write.
-    EraseBelated,
 
     MAX
 };

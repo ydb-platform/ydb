@@ -35,6 +35,25 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         return DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
     };
 
+    auto makeParameters = [&](TControlWrapper dormantTimeoutMinutes) {
+        return TBlobStorageProxyParameters{
+            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+            .Controls = TBlobStorageProxyControlWrappers{
+                .EnablePutBatching = EnablePutBatching,
+                .EnableVPatch = EnableVPatch,
+                .LongRequestThresholdMs = LongRequestThresholdMs,
+                .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
+                .DormantTimeoutMinutes = dormantTimeoutMinutes,
+                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
+                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
+                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
+                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+            }
+        };
+    };
+
     YDB_LOG_DEBUG("StartLocalProxy",
         {"marker", "NW12"},
         {"groupId", groupId},
@@ -45,7 +64,25 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         // create mock proxy
         proxy.reset(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(groupId)));
     } else if (auto info = NeedGroupInfo(groupId)) {
-        if (info->BlobDepotId) {
+        // create proxy serving physical part of the group
+        auto createPhysicalProxy = [&](TControlWrapper dormantTimeoutMinutes) -> IActor* {
+            if (info->IsInlinePile()) {
+                // create proxy for the inline pile of the group and the bridge proxy in front of it
+                const TActorId innerProxyId = as->Register(CreateBlobStorageGroupProxyConfigured(info->MakeInlinePileView(),
+                    group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), makeParameters(dormantTimeoutMinutes)),
+                    TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+                group.InlinePileProxy = true;
+                return CreateInlinePileBridgeProxyActor(info, innerProxyId);
+            } else if (info->IsBridged()) {
+                return CreateBridgeProxyActor(info);
+            } else {
+                // create proxy with configuration
+                return CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
+                    group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), makeParameters(dormantTimeoutMinutes));
+            }
+        };
+
+        if (info->BlobDepotId.value_or(0)) { // zero is reported when BlobDepot has failed to be created
             TActorId proxyActorId;
 
             switch (info->DecommitStatus) {
@@ -55,25 +92,10 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
 
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
                 case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
-                    // create proxy that will be used by blob depot agent to fetch underlying data
-                    proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
-                        TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
-                        getCounters(info), TBlobStorageProxyParameters{
-                            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-                            .Controls = TBlobStorageProxyControlWrappers{
-                                .EnablePutBatching = EnablePutBatching,
-                                .EnableVPatch = EnableVPatch,
-                                .LongRequestThresholdMs = LongRequestThresholdMs,
-                                .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-                                .DormantTimeoutMinutes = TControlWrapper(0, 0, 1'000'000),
-                                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
-                                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
-                                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
-                                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
-                            }
-                        }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+                    // create proxy that will be used by blob depot agent to fetch underlying data; for bridged group
+                    // it is the bridge proxy, as the data resides in the piles
+                    proxyActorId = as->Register(createPhysicalProxy(TControlWrapper(0, 0, 1'000'000)),
+                        TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
@@ -84,48 +106,13 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_UNREACHABLE();
             }
-        } else if (info->IsBridged()) {
-            proxy.reset(CreateBridgeProxyActor(info));
         } else {
-            // create proxy with configuration
-            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
-                group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
-                        .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-                        .Controls = TBlobStorageProxyControlWrappers{
-                            .EnablePutBatching = EnablePutBatching,
-                            .EnableVPatch = EnableVPatch,
-                            .LongRequestThresholdMs = LongRequestThresholdMs,
-                            .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-                            .DormantTimeoutMinutes = DormantTimeoutMinutes,
-                            .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                            .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                            .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
-                            ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
-                            ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
-                            ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
-                        }
-                    }
-                )
-            );
+            proxy.reset(createPhysicalProxy(DormantTimeoutMinutes));
         }
     } else {
         // create proxy without configuration
-        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
-            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-            .Controls = TBlobStorageProxyControlWrappers{
-                .EnablePutBatching = EnablePutBatching,
-                .EnableVPatch = EnableVPatch,
-                .LongRequestThresholdMs = LongRequestThresholdMs,
-                .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-                .DormantTimeoutMinutes = DormantTimeoutMinutes,
-                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
-                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
-                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
-                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
-            }
-        }));
+        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon,
+            makeParameters(DormantTimeoutMinutes)));
 
         Y_DEBUG_ABORT_UNLESS(!EjectedGroups.contains(groupId));
     }
@@ -284,6 +271,7 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
             .HandleClass = msg.Record.GetHandleClass(),
             .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .WriteSource = WriteSourceFromProto(item.GetWriteSourceOp()),
             .DataKind = item.GetDataKind(),
             .IssueKeepFlag = item.GetIssueKeepFlag(),
             .IgnoreBlock = item.GetIgnoreBlock(),
@@ -291,6 +279,9 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .ReduceInterpileTraffic = false,
             .IsZeroEntry = item.GetIsZeroEntry(),
         });
+        for (const auto& check : item.GetExtraBlockChecks()) {
+            ev->ExtraBlockChecks.emplace_back(check.GetTabletId(), check.GetGeneration());
+        }
         ev->ForceGroupGeneration = groupGeneration;
         SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
         ++common->RepliesRemaining;
@@ -306,6 +297,18 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
     item->SetStatus(msg.Status);
     if (msg.ErrorReason) {
         item->SetErrorReason(msg.ErrorReason);
+    }
+    if (msg.RacingGeneration) {
+        item->SetRacingGeneration(msg.RacingGeneration);
+    }
+    if (msg.WrittenBeyondBarrier) {
+        item->SetWrittenBeyondBarrier(true);
+    }
+    if (msg.StatusFlags.Raw) {
+        item->SetStatusFlags(msg.StatusFlags.Raw);
+    }
+    if (msg.ApproximateFreeSpaceShare) {
+        item->SetApproximateFreeSpaceShare(msg.ApproximateFreeSpaceShare);
     }
     if (!--common.RepliesRemaining) {
         auto ev = std::make_unique<TEvInterpilePutResult>();

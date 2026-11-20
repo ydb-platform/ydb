@@ -707,6 +707,25 @@ namespace NKikimr {
                     }
                 };
 
+                if (InlinePileBridgeProxyId) {
+                    // requests batched before the bridge proxy was put in front of us go to the actor in front of the
+                    // group, just like the ones handled by HandleWork
+                    auto& queue = batchedPuts.Queue;
+                    const auto newEnd = std::remove_if(queue.begin(), queue.end(), [&](auto& ev) {
+                        const ui64 partSize = Info->Type.PartSize(ev->Get()->Id);
+                        if (!ResendToGroupService(ev)) {
+                            return false;
+                        }
+                        batchedPuts.Bytes -= partSize;
+                        return true;
+                    });
+                    queue.erase(newEnd, queue.end());
+                    if (queue.empty()) {
+                        batchedPuts.Bytes = 0;
+                        return;
+                    }
+                }
+
                 std::optional<std::optional<ui32>> forceGroupGeneration;
                 bool split = false;
                 for (const auto& ev : batchedPuts.Queue) {
@@ -1245,7 +1264,13 @@ namespace NKikimr {
             ReplyAndDie(NKikimrProto::RACE);
             return false;
         }
-        Y_VERIFY_S(!Info->Group || !Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
+        if (Info->Group && Info->Group->HasBridgeProxyGroupId() && !ForceGroupGeneration) {
+            // a part of bridged group is reached through its bridge proxy, which fences every request with the
+            // generation of the part; a request addressed to the part directly (e.g. from a monitoring page) is refused
+            ErrorReason = "request to a part of bridged group without forced generation";
+            ReplyAndDie(NKikimrProto::ERROR);
+            return false;
+        }
         return true;
     }
 

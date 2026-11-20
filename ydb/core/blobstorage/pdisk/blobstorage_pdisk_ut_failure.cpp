@@ -221,9 +221,10 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
             });
 
             // Let both pieces of the write leave in the same PDisk cycle.
-            auto cfg = testCtx.GetPDiskConfig();
-            cfg->UseNoopScheduler = true;
-            testCtx.UpdateConfigRecreatePDisk(cfg);
+            testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* pdisk) {
+                pdisk->UseNoopSchedulerHDD = 1;
+                pdisk->UseNoopSchedulerSSD = 1;
+            });
 
             TVDiskMock vdisk(&testCtx);
             vdisk.InitFull();
@@ -292,9 +293,10 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
             });
 
             // Let all buffers of the record leave in the same PDisk cycle.
-            auto cfg = testCtx.GetPDiskConfig();
-            cfg->UseNoopScheduler = true;
-            testCtx.UpdateConfigRecreatePDisk(cfg);
+            testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* pdisk) {
+                pdisk->UseNoopSchedulerHDD = 1;
+                pdisk->UseNoopSchedulerSSD = 1;
+            });
 
             TVDiskMock vdisk(&testCtx);
             vdisk.InitFull();

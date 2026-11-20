@@ -92,15 +92,18 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
         TBlob(TLogoBlobID key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlob& msg, TBlobStorageGroupType gtype) {
             Y_DEBUG_ABORT_UNLESS(msg.HasIngress());
             Id = key;
-            const int collectMode = TIngress(msg.GetIngress()).GetCollectMode(TIngress::IngressMode(gtype));
+            const TIngress ingress(msg.GetIngress());
+            const int collectMode = ingress.GetCollectMode(TIngress::IngressMode(gtype));
             Keep = collectMode & CollectModeKeep;
             DoNotKeep = collectMode & CollectModeDoNotKeep;
+            HasData = !ingress.LocalParts(gtype).Empty();
         }
 
         bool Merge(const TBlob& other) {
             if (Id == other.Id) {
                 Keep |= other.Keep;
                 DoNotKeep |= other.DoNotKeep;
+                HasData |= other.HasData;
                 return true;
             } else {
                 return false;
@@ -346,6 +349,7 @@ public:
         ProcessReplyFromQueue(ev->Get());
 
         const auto& record = ev->Get()->Record;
+        Result->ReplyBytes += record.ByteSizeLong();
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const ui32 orderNumber = Info->GetTopology().GetOrderNumber(vdiskId);
         Y_ABORT_UNLESS(orderNumber < PerVDiskInfo.size());

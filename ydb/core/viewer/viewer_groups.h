@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -112,6 +113,16 @@ enum class EGroupFields : ui8 {
     MaxNormalizedOccupancy,
     CapacityAlert,
     GroupSizeInUnits,
+    BridgeSyncStatus,
+    BridgeSyncStage,
+    BridgeSyncLastError,
+    BridgeSyncLastProgressTimestamp,
+    BridgeSyncCopyBytesPerSecond,
+    BridgeSyncRemainingBytes,
+    BridgeSyncRemainingBytesComplete,
+    BridgeSyncRunning,
+    BridgeSyncLastErrorTimestamp,
+    BridgeSyncErrorCount,
     COUNT
 };
 
@@ -322,6 +333,7 @@ public:
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         float DiskSpaceUsage = 0; // the highest
         TString PileName;
+        const NKikimrSysView::TGroupInfo* BscInfo = nullptr;
         float MaxPDiskUsage = 0;
         float MaxVDiskSlotUsage = 0;
         float MaxVDiskRawUsage = 0;
@@ -560,6 +572,10 @@ public:
             return PutTabletLogLatency;
         }
 
+        NKikimrBridge::ESynchronizationStatus GetBridgeSyncStatus() const {
+            return BscInfo && BscInfo->HasBridgeSyncStatus() ? BscInfo->GetBridgeSyncStatus() : NKikimrBridge::UNKNOWN;
+        }
+
         TString GetGroupName(EGroupFields groupBy) const {
             TString groupName;
             switch (groupBy) {
@@ -602,6 +618,9 @@ public:
                 case EGroupFields::CapacityAlert:
                     groupName = NKikimrBlobStorage::TPDiskSpaceColor::E_Name(CapacityAlert);
                     break;
+                case EGroupFields::BridgeSyncStatus:
+                    groupName = NKikimrBridge::ESynchronizationStatus_Name(GetBridgeSyncStatus());
+                    break;
                 default:
                     break;
             }
@@ -622,6 +641,8 @@ public:
                     return GetGroupName(groupBy);
                 case EGroupFields::State:
                     return StateSortKey;
+                case EGroupFields::BridgeSyncStatus:
+                    return static_cast<ui32>(GetBridgeSyncStatus());
                 case EGroupFields::Usage:
                     return Usage;
                 case EGroupFields::DiskSpaceUsage:
@@ -704,10 +725,20 @@ public:
     TFieldsType FieldsRequired; // fields that are required to calculate the response
     TFieldsType FieldsAvailable;
     const TFieldsType FieldsAll = TFieldsType().set();
+    const TFieldsType FieldsBridgeSync = TFieldsType().set(+EGroupFields::BridgeSyncStatus)
+                                                     .set(+EGroupFields::BridgeSyncStage)
+                                                     .set(+EGroupFields::BridgeSyncLastError)
+                                                     .set(+EGroupFields::BridgeSyncLastProgressTimestamp)
+                                                     .set(+EGroupFields::BridgeSyncCopyBytesPerSecond)
+                                                     .set(+EGroupFields::BridgeSyncRemainingBytes)
+                                                     .set(+EGroupFields::BridgeSyncRemainingBytesComplete)
+                                                     .set(+EGroupFields::BridgeSyncRunning)
+                                                     .set(+EGroupFields::BridgeSyncLastErrorTimestamp)
+                                                     .set(+EGroupFields::BridgeSyncErrorCount);
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
                                                     .set(+EGroupFields::Latency)
-                                                    .set(+EGroupFields::GroupSizeInUnits);
+                                                    .set(+EGroupFields::GroupSizeInUnits) | FieldsBridgeSync;
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
                                                    .set(+EGroupFields::MediaType)
@@ -767,6 +798,10 @@ public:
 
     bool FieldsNeeded(TFieldsType fields) const {
         return (FieldsRequired & (fields & ~FieldsAvailable)).any();
+    }
+
+    bool CanShowBridgeSync() {
+        return !IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject()) || DatabaseStoragePoolsApplied;
     }
 
     bool NeedFilter = false;
@@ -844,6 +879,26 @@ public:
             result = EGroupFields::MaxVDiskRawUsage;
         } else if (field == "GroupSizeInUnits") {
             result = EGroupFields::GroupSizeInUnits;
+        } else if (field == "BridgeSyncStatus") {
+            result = EGroupFields::BridgeSyncStatus;
+        } else if (field == "BridgeSyncStage") {
+            result = EGroupFields::BridgeSyncStage;
+        } else if (field == "BridgeSyncLastError") {
+            result = EGroupFields::BridgeSyncLastError;
+        } else if (field == "BridgeSyncLastProgressTimestamp") {
+            result = EGroupFields::BridgeSyncLastProgressTimestamp;
+        } else if (field == "BridgeSyncCopyBytesPerSecond") {
+            result = EGroupFields::BridgeSyncCopyBytesPerSecond;
+        } else if (field == "BridgeSyncRemainingBytes") {
+            result = EGroupFields::BridgeSyncRemainingBytes;
+        } else if (field == "BridgeSyncRemainingBytesComplete") {
+            result = EGroupFields::BridgeSyncRemainingBytesComplete;
+        } else if (field == "BridgeSyncRunning") {
+            result = EGroupFields::BridgeSyncRunning;
+        } else if (field == "BridgeSyncLastErrorTimestamp") {
+            result = EGroupFields::BridgeSyncLastErrorTimestamp;
+        } else if (field == "BridgeSyncErrorCount") {
+            result = EGroupFields::BridgeSyncErrorCount;
         }
         return result;
     }
@@ -933,7 +988,9 @@ public:
             FieldsRequired |= FieldsBsPDisks;
         }
         TString fieldsRequired = Params.Get("fields_required");
-        if (!fieldsRequired.empty()) {
+        if (fieldsRequired.empty()) {
+            FieldsRequired |= FieldsBridgeSync;
+        } else {
             if (fieldsRequired == "all") {
                 FieldsRequired = FieldsAll;
             } else {
@@ -1271,7 +1328,8 @@ public:
                     GroupsByGroupId.clear();
                 }
             }
-            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
+            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy) &&
+                    (FilterGroupBy != EGroupFields::BridgeSyncStatus || CanShowBridgeSync())) {
                 TGroupView groupView;
                 for (TGroup* group : GroupView) {
                     if (group->GetGroupName(FilterGroupBy) == FilterGroup) {
@@ -1309,6 +1367,9 @@ public:
     }
 
     void ApplyGroup() {
+        if (GroupBy == EGroupFields::BridgeSyncStatus && !CanShowBridgeSync()) {
+            return;
+        }
         if (!NeedFilter && NeedGroup && FieldsAvailable.test(+GroupBy)) {
             switch (GroupBy) {
                 case EGroupFields::GroupId:
@@ -1318,6 +1379,7 @@ public:
                 case EGroupFields::Encryption:
                 case EGroupFields::MediaType:
                 case EGroupFields::PileName:
+                case EGroupFields::BridgeSyncStatus:
                     GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; });
                     NeedGroup = false;
@@ -1348,12 +1410,24 @@ public:
                 case EGroupFields::MaxNormalizedOccupancy:
                 case EGroupFields::MaxVDiskRawUsage:
                 case EGroupFields::GroupSizeInUnits:
+                case EGroupFields::BridgeSyncStage:
+                case EGroupFields::BridgeSyncLastError:
+                case EGroupFields::BridgeSyncLastProgressTimestamp:
+                case EGroupFields::BridgeSyncCopyBytesPerSecond:
+                case EGroupFields::BridgeSyncRemainingBytes:
+                case EGroupFields::BridgeSyncRemainingBytesComplete:
+                case EGroupFields::BridgeSyncRunning:
+                case EGroupFields::BridgeSyncLastErrorTimestamp:
+                case EGroupFields::BridgeSyncErrorCount:
                     break;
             }
         }
     }
 
     void ApplySort() {
+        if (SortBy == EGroupFields::BridgeSyncStatus && !CanShowBridgeSync()) {
+            return;
+        }
         if (NeedSort && FieldsAvailable.test(+SortBy)) {
             switch (SortBy) {
                 case EGroupFields::GroupId:
@@ -1404,6 +1478,9 @@ public:
                 case EGroupFields::State:
                     SortCollection(GroupView, [](const TGroup* group) { return group->StateSortKey; }, ReverseSort);
                     break;
+                case EGroupFields::BridgeSyncStatus:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GetBridgeSyncStatus(); }, ReverseSort);
+                    break;
                 case EGroupFields::Latency:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
                     break;
@@ -1430,6 +1507,15 @@ public:
                 case EGroupFields::NodeId:
                 case EGroupFields::PDisk:
                 case EGroupFields::VDisk:
+                case EGroupFields::BridgeSyncStage:
+                case EGroupFields::BridgeSyncLastError:
+                case EGroupFields::BridgeSyncLastProgressTimestamp:
+                case EGroupFields::BridgeSyncCopyBytesPerSecond:
+                case EGroupFields::BridgeSyncRemainingBytes:
+                case EGroupFields::BridgeSyncRemainingBytesComplete:
+                case EGroupFields::BridgeSyncRunning:
+                case EGroupFields::BridgeSyncLastErrorTimestamp:
+                case EGroupFields::BridgeSyncErrorCount:
                 case EGroupFields::COUNT:
                     break;
             }
@@ -1618,6 +1704,7 @@ public:
                         continue;
                     }
                     TGroup& group = GroupData.emplace_back();
+                    group.BscInfo = &info;
                     group.GroupId = entry.GetKey().GetGroupId();
                     group.GroupGeneration = info.GetGeneration();
                     group.BoxId = info.GetBoxId();
@@ -2022,6 +2109,7 @@ public:
                 GroupView.emplace_back(&group);
             }
             FieldsAvailable |= FieldsWbGroups;
+            FieldsAvailable.set(+EGroupFields::BridgeSyncStatus);
             FoundGroups = TotalGroups = GroupView.size();
             ApplyEverything();
         }
@@ -2475,6 +2563,7 @@ public:
             json.AddProblems(problem);
         }
         if (GroupGroups.empty()) {
+            const bool showBridgeSync = CanShowBridgeSync();
             for (const TGroup* group : GroupView) {
                 NKikimrViewer::TStorageGroupInfo& jsonGroup = *json.AddStorageGroups();
                 jsonGroup.SetGroupId(::ToString(group->GroupId));
@@ -2554,6 +2643,49 @@ public:
                 }
                 if (FieldsAvailable.test(+EGroupFields::PileName) && FieldsRequested.test(+EGroupFields::PileName)) {
                     jsonGroup.SetPileName(group->PileName);
+                }
+                if (showBridgeSync && group->BscInfo) {
+                    const auto& info = *group->BscInfo;
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncStatus) && FieldsRequested.test(+EGroupFields::BridgeSyncStatus) &&
+                            info.HasBridgeSyncStatus()) {
+                        jsonGroup.SetBridgeSyncStatus(info.GetBridgeSyncStatus());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncStage) && FieldsRequested.test(+EGroupFields::BridgeSyncStage) &&
+                            info.HasBridgeSyncStage()) {
+                        jsonGroup.SetBridgeSyncStage(info.GetBridgeSyncStage());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncLastError) && FieldsRequested.test(+EGroupFields::BridgeSyncLastError) &&
+                            !info.GetBridgeSyncLastError().empty()) {
+                        jsonGroup.SetBridgeSyncLastError(info.GetBridgeSyncLastError());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncLastProgressTimestamp) && FieldsRequested.test(+EGroupFields::BridgeSyncLastProgressTimestamp) &&
+                            info.HasBridgeSyncLastProgressTimestamp()) {
+                        jsonGroup.SetBridgeSyncLastProgressTimestamp(info.GetBridgeSyncLastProgressTimestamp());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncCopyBytesPerSecond) && FieldsRequested.test(+EGroupFields::BridgeSyncCopyBytesPerSecond) &&
+                            info.HasBridgeSyncCopyBytesPerSecond()) {
+                        jsonGroup.SetBridgeSyncCopyBytesPerSecond(info.GetBridgeSyncCopyBytesPerSecond());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncRemainingBytes) && FieldsRequested.test(+EGroupFields::BridgeSyncRemainingBytes) &&
+                            info.HasBridgeSyncRemainingBytes()) {
+                        jsonGroup.SetBridgeSyncRemainingBytes(info.GetBridgeSyncRemainingBytes());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncRemainingBytesComplete) && FieldsRequested.test(+EGroupFields::BridgeSyncRemainingBytesComplete) &&
+                            info.HasBridgeSyncRemainingBytesComplete()) {
+                        jsonGroup.SetBridgeSyncRemainingBytesComplete(info.GetBridgeSyncRemainingBytesComplete());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncRunning) && FieldsRequested.test(+EGroupFields::BridgeSyncRunning) &&
+                            info.HasBridgeSyncRunning()) {
+                        jsonGroup.SetBridgeSyncRunning(info.GetBridgeSyncRunning());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncLastErrorTimestamp) && FieldsRequested.test(+EGroupFields::BridgeSyncLastErrorTimestamp) &&
+                            info.HasBridgeSyncLastErrorTimestamp()) {
+                        jsonGroup.SetBridgeSyncLastErrorTimestamp(info.GetBridgeSyncLastErrorTimestamp());
+                    }
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncErrorCount) && FieldsRequested.test(+EGroupFields::BridgeSyncErrorCount) &&
+                            info.HasBridgeSyncErrorCount()) {
+                        jsonGroup.SetBridgeSyncErrorCount(info.GetBridgeSyncErrorCount());
+                    }
                 }
                 if (FieldsAvailable.test(+EGroupFields::MaxPDiskUsage) && FieldsRequested.test(+EGroupFields::MaxPDiskUsage)) {
                     jsonGroup.SetMaxPDiskUsage(group->MaxPDiskUsage);
@@ -2665,6 +2797,7 @@ public:
                           * `Erasure`
                           * `MissingDisks`
                           * `State`
+                          * `BridgeSyncStatus`
                           * `Usage`
                           * `GroupId`
                           * `Used`
@@ -2699,6 +2832,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `BridgeSyncStatus`
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2718,6 +2852,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `BridgeSyncStatus`
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2730,7 +2865,10 @@ public:
                   - name: fields_required
                     in: query
                     description: >
-                        list of fields required in response (the more - the heavier could be request):
+                        list of fields required in response (the more - the heavier could be request).
+                        When absent or empty, bridge synchronization fields are returned along with GroupId.
+                        An explicit list selects bridge fields individually; `all` requests every available field.
+                        Supported fields:
                           * `GroupId` (always required)
                           * `PoolName`
                           * `Kind`
@@ -2738,6 +2876,16 @@ public:
                           * `Erasure`
                           * `MissingDisks`
                           * `State`
+                          * `BridgeSyncStatus`
+                          * `BridgeSyncStage`
+                          * `BridgeSyncLastError`
+                          * `BridgeSyncLastProgressTimestamp`
+                          * `BridgeSyncCopyBytesPerSecond`
+                          * `BridgeSyncRemainingBytes`
+                          * `BridgeSyncRemainingBytesComplete`
+                          * `BridgeSyncRunning`
+                          * `BridgeSyncLastErrorTimestamp`
+                          * `BridgeSyncErrorCount`
                           * `Usage`
                           * `Used`
                           * `Limit`
@@ -2823,6 +2971,29 @@ public:
         storageGroupProperties["MaxNormalizedOccupancy"]["description"] = "max VDisk.NormalizedOccupancy across VDisks in this group";
         storageGroupProperties["MaxVDiskRawUsage"]["description"] = "max VDisk.RawUsage across VDisks in this group";
         storageGroupProperties["CapacityAlert"]["description"] = "worst VDisk.CapacityAlert in this group";
+        storageGroupProperties["BridgeSyncStatus"]["description"] =
+            "Bridge synchronization status from BSC: NOT_REQUIRED, SYNCED, SYNCING, UNKNOWN or PENDING. "
+            "Omitted when unavailable. Groups without an observed status use UNKNOWN for grouping and sorting.";
+        storageGroupProperties["BridgeSyncStage"]["description"] =
+            "Bridge synchronization stage as reported by the storage controller. Omitted when unavailable.";
+        storageGroupProperties["BridgeSyncLastError"]["description"] =
+            "Last synchronization error reported by the storage controller. Omitted when no error text is available.";
+        storageGroupProperties["BridgeSyncLastProgressTimestamp"]["description"] =
+            "Unix microseconds when BSC last confirmed scan/data progress or a committed stage advance in this synchronization round. "
+            "Omitted until progress is observed after a BSC restart. Unchanged reports do not advance this timestamp.";
+        storageGroupProperties["BridgeSyncCopyBytesPerSecond"]["description"] =
+            "Average copy rate over the last minute, in blob bytes per second.";
+        storageGroupProperties["BridgeSyncRemainingBytes"]["description"] =
+            "Blob bytes left to copy. A lower bound while BridgeSyncRemainingBytesComplete is false. Omitted when unavailable.";
+        storageGroupProperties["BridgeSyncRemainingBytesComplete"]["description"] =
+            "The remaining-byte estimate is based on a full scan of the current or preceding stage.";
+        storageGroupProperties["BridgeSyncRunning"]["description"] =
+            "BSC currently has an assigned syncer for this physical group. Omitted when unavailable.";
+        storageGroupProperties["BridgeSyncLastErrorTimestamp"]["description"] =
+            "BSC observation time of the latest reported failed synchronization attempt on the current stage, in Unix microseconds. "
+            "The failure may be retryable and its timestamp may precede the latest progress.";
+        storageGroupProperties["BridgeSyncErrorCount"]["description"] =
+            "Number of reported synchronization failures on the current stage.";
         return node;
     }
 };

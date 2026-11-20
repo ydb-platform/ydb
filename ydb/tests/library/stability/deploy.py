@@ -8,6 +8,8 @@ import logging
 import os
 import time as time_module
 from typing import Optional
+
+import yaml
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -20,6 +22,25 @@ from ydb.tests.library.stability.utils.results_models import StressUtilDeployRes
 
 # Default orchestrator port from nemesis Settings.app_port
 _NEMESIS_ORCHESTRATOR_PORT = 31434
+# Bridge clusters schedule pile faults and tablet kills only.
+_BRIDGE_CLUSTER_SCHEDULER_TYPES = (
+    "BridgePileStopNodesNemesis",
+    "BridgePileRouteUnreachableNemesis",
+    "BridgePileIptablesBlockPortsNemesis",
+    "KillCoordinatorNemesis",
+    "KillHiveNemesis",
+    "KillBsControllerNemesis",
+    "KillNodeBrokerNemesis",
+    "KillSchemeShardNemesis",
+    "KillMediatorNemesis",
+    "KillTxAllocatorNemesis",
+    "KillKeyValueNemesis",
+    "KillTenantSlotBrokerNemesis",
+    "KillPersQueueNemesis",
+    "KillDataShardNemesis",
+    "KillBlockstoreVolumeNemesis",
+    "KillBlockstorePartitionNemesis",
+)
 # Health polling parameters
 _HEALTH_POLL_INTERVAL_S = 10
 _HEALTH_POLL_TIMEOUT_S = 300
@@ -40,6 +61,21 @@ def _ssh_cluster_nodes(*, load_kafka_port: bool = False) -> list[YdbCluster.Node
         for node in YdbCluster.get_cluster_nodes(db_only=True, load_kafka_port=load_kafka_port)
         if _is_ssh_host(node.host)
     ]
+
+
+def _yaml_has_bridge_piles(path: Optional[str]) -> bool:
+    """True when ``path`` is a cluster yaml with at least two bridge piles."""
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            doc = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return False
+    if not isinstance(doc, dict):
+        return False
+    piles = (doc.get("config") or {}).get("bridge_config", {}).get("piles", [])
+    return isinstance(piles, list) and len(piles) >= 2
 
 
 class StressUtilDeployer:
@@ -439,46 +475,65 @@ class StressUtilDeployer:
         )
         return False
 
+    def _scheduler_start_body(self) -> dict:
+        """Select pile faults and tablet kills for a bridge cluster."""
+        paths = (self.cluster_path, self.yaml_config)
+        if any(_yaml_has_bridge_piles(path) for path in paths):
+            return {"enabled": list(_BRIDGE_CLUSTER_SCHEDULER_TYPES)}
+        return {}
+
     def _set_schedules_enabled(
         self, enabled: bool, nemesis_log: list[str]
     ) -> bool:
-        """Start or stop the nemesis scheduler via the orchestrator API.
+        """Use per-type schedules for Bridge, native scheduling otherwise.
 
-        ``POST /api/scheduler/start`` (empty profile → catalog defaults) or
-        ``POST /api/scheduler/stop``.
+        Bridge pile planners are not supported by this branch's native scheduler.
+        Keep their catalog intervals and stop the native scheduler before enabling
+        the Bridge profile through the per-type API.
 
         Returns:
             ``True`` on success, ``False`` on failure.
         """
         endpoint = self._get_orchestrator_endpoint()
-        url = f"{endpoint}/api/scheduler/{'start' if enabled else 'stop'}"
-        payload = json.dumps({}).encode()
-
         action = "Enabling" if enabled else "Disabling"
-        nemesis_log.append(f"{action} nemesis scheduler via {url}")
-        logging.info(f"{action} nemesis scheduler: POST {url}")
-
         try:
-            req = urllib.request.Request(
-                url,
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = json.loads(resp.read().decode())
-                if body.get("status") == "ok":
-                    nemesis_log.append(
-                        f"Schedules {'enabled' if enabled else 'disabled'} successfully: {body}"
+            requests = [(f"/api/scheduler/{'start' if enabled else 'stop'}", {})]
+            profile = self._scheduler_start_body()
+            if profile:
+                requests = [
+                    ("/api/scheduler/stop", {}),
+                    ("/api/schedule/all", {"enabled": False}),
+                ]
+                if enabled:
+                    req = urllib.request.Request(f"{endpoint}/api/process_types", method="GET")
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        types = json.loads(resp.read().decode())
+                    intervals = {item["name"]: item["schedule"] for item in types}
+                    requests.extend(
+                        ("/api/schedule", {"type": name, "enabled": True, "interval": intervals[name]})
+                        for name in profile["enabled"]
                     )
-                    logging.info(f"Nemesis schedules response: {body}")
-                    return True
-                nemesis_log.append(f"Unexpected scheduler response: {body}")
-                logging.warning(f"Unexpected {url} response: {body}")
-                return False
+            for path, body in requests:
+                url = f"{endpoint}{path}"
+                nemesis_log.append(f"{action} nemesis schedules via {url} body={body}")
+                logging.info(f"Nemesis schedules: POST {url} body={body}")
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(body).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    response = json.loads(resp.read().decode())
+                if response.get("status") != "ok":
+                    nemesis_log.append(f"Unexpected schedule response: {response}")
+                    logging.warning(f"Unexpected {path} response: {response}")
+                    return False
+            nemesis_log.append(f"Schedules {'enabled' if enabled else 'disabled'} successfully")
+            return True
         except Exception as exc:
-            nemesis_log.append(f"Failed to {action.lower()} scheduler: {exc}")
-            logging.error(f"Error calling {url}: {exc}")
+            nemesis_log.append(f"Failed to {action.lower()} schedules: {exc}")
+            logging.error(f"Error updating nemesis schedules: {exc}")
             return False
 
     def _fetch_nemesis_problems(self, nemesis_log: list[str]) -> dict:

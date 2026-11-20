@@ -285,12 +285,11 @@ namespace NKikimr::NBsController {
                 if (!prev.IsBeingDeleted() && cur.IsBeingDeleted()) {
                     // the slot has started deletion during this update
                     AddVSlotToProtobuf(vslotId, prev, TMood::Delete);
-                } else if (prev.Mood != cur.Mood) {
-                    // the slot mood has changed
+                } else if (prev.Mood != cur.Mood || prev.GroupGeneration != cur.GroupGeneration) {
+                    // the slot mood or generation has changed; the slot keeps its mood with the new generation, as on
+                    // registration of the node, so that a read-only VDisk stays read-only and the one being wiped
+                    // finishes the wipe
                     AddVSlotToProtobuf(vslotId, cur, static_cast<TMood::EValue>(cur.Mood));
-                } else if (prev.GroupGeneration != cur.GroupGeneration) {
-                    // the slot generation has changed
-                    AddVSlotToProtobuf(vslotId, cur, TMood::Normal);
                 }
             }
 
@@ -372,6 +371,8 @@ namespace NKikimr::NBsController {
                 }
                 Y_ABORT_UNLESS(prev.VDisksInGroup.size() == cur.VDisksInGroup.size() ||
                     (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) ||
+                    // inline pile has been removed along with its pile, the group serves as bridge proxy only now
+                    (cur.VDisksInGroup.empty() && prev.IsInlinePile() && !cur.BridgePileId && cur.BridgeGroupInfo) ||
                     (prev.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING));
                 for (size_t i = 0; i < Min(prev.VDisksInGroup.size(), cur.VDisksInGroup.size()); ++i) {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
@@ -388,14 +389,26 @@ namespace NKikimr::NBsController {
             }
         };
 
-        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
-                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
+        // Completes the set of groups getting new generation when the changes made so far are committed. It only adds the
+        // groups which would be added at commit anyway, so it may be called at any point of the transaction.
+        void TBlobStorageController::PropagateGroupContentChanged(TConfigState& state) {
+            // virtual group state reported to node wardens may change without explicit group content change (for
+            // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (base && overlay->second && base->second->GetReportedVirtualGroupState() !=
+                        overlay->second->GetReportedVirtualGroupState()) {
+                    state.GroupContentChanged.insert(overlay->first);
+                }
+            }
 
             // when bridged non-proxy groups get updated, we update parent group too
             THashSet<TGroupId> updates;
             for (TGroupId groupId : state.GroupContentChanged) {
                 if (const TGroupInfo *group = state.Groups.Find(groupId)) {
-                    if (group->BridgeProxyGroupId && !state.GroupContentChanged.contains(*group->BridgeProxyGroupId)) {
+                    // earlier versions deleted the bridge proxy group on cancelled decommission, leaving its parts
+                    // referring to it
+                    if (group->BridgeProxyGroupId && !state.GroupContentChanged.contains(*group->BridgeProxyGroupId) &&
+                            state.Groups.Find(*group->BridgeProxyGroupId)) {
                         updates.insert(*group->BridgeProxyGroupId);
                     }
                 }
@@ -406,15 +419,22 @@ namespace NKikimr::NBsController {
             updates.clear();
             for (TGroupId groupId : state.GroupContentChanged) {
                 if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->BridgeGroupInfo) {
-                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
                         const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                         if (!state.GroupContentChanged.contains(groupId)) {
                             updates.insert(groupId);
                         }
-                    }
+                    });
                 }
             }
             state.GroupContentChanged.insert(updates.begin(), updates.end());
+        }
+
+        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
+                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
+
+            PropagateGroupContentChanged(state);
 
             // spin generation for every changed group
             THashSet<TGroupId> bridgeProxyGroupIds;
@@ -441,13 +461,21 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(group->BridgeGroupInfo);
 
                 // set correct generations for bridge groups
-                for (auto& pile : *group->BridgeGroupInfo->MutableBridgeGroupState()->MutablePile()) {
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
                     const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     Y_ABORT_UNLESS(state.GroupContentChanged.contains(groupId));
                     const TGroupInfo *referenced = state.Groups.Find(groupId);
                     Y_ABORT_UNLESS(referenced);
                     Y_DEBUG_ABORT_UNLESS(pile.GetGroupGeneration() + 1 == referenced->Generation);
                     pile.SetGroupGeneration(referenced->Generation);
+                });
+
+                // the new group state is made for the cluster state we know; proxies won't serve the group with older one
+                auto *bridgeGroupState = group->BridgeGroupInfo->MutableBridgeGroupState();
+                if (StorageConfig) {
+                    bridgeGroupState->SetClusterStateGeneration(Max(bridgeGroupState->GetClusterStateGeneration(),
+                        StorageConfig->GetClusterState().GetGeneration()));
                 }
             }
 
@@ -588,7 +616,7 @@ namespace NKikimr::NBsController {
 
         std::optional<TString> TBlobStorageController::ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
                 TConfigTxFlags flags, TTransactionContext& txc,
-                NKikimrBlobStorage::TConfigResponse *response) {
+                NKikimrBlobStorage::TConfigResponse *response, bool dryRun) {
             if (!state || !state->Changed()) {
                 return std::nullopt;
             }
@@ -603,6 +631,9 @@ namespace NKikimr::NBsController {
             if (!ValidateConfigUpdates(*state, parameters, &error, response)) {
                 RollbackConfigUpdate(state);
                 return error;
+            } else if (dryRun) {
+                RollbackConfigUpdate(state);
+                return std::nullopt;
             }
 
             CommitConfigUpdates(*state, txc);
@@ -627,12 +658,61 @@ namespace NKikimr::NBsController {
             }
             if (state.StoragePools.Changed()) {
                 MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
+                for (const auto& [previous, current] : Diff(&StoragePools, &state.StoragePools.Get())) {
+                    TStoragePoolInfo::UpdatePDiskFilters(txc.DB,
+                        previous ? &previous->second.PDiskFilters : nullptr,
+                        current ? &current->second.PDiskFilters : nullptr);
+                }
             }
             if (state.Nodes.Changed()) {
                 MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
             }
             if (state.BlobDepotDeleteQueue.Changed()) {
                 MakeTableMerger<Schema::BlobDepotDeleteQueue>(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Get(), this)(txc);
+            }
+
+            // while converting to bridged cluster, watch for groups that have to be converted or stop blocking conversion
+            if (StorageConfig && StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+                for (const auto& [base, overlay] : state.Groups.Diff()) {
+                    const TGroupInfo *prev = base ? &*base->second : nullptr;
+                    const TGroupInfo *cur = overlay->second.Get();
+                    if ((cur && cur->IsBridgeConversionCandidate()) ||
+                            (prev && prev->BlocksBridgeConversion() && !(cur && cur->BlocksBridgeConversion()))) {
+                        state.Callbacks.push_back([this] { CheckBridgeConversion(); });
+                        break;
+                    }
+                }
+            }
+
+            // the groups that didn't let BSC adopt storage pool pile overrides of StorageConfig may be gone now; only
+            // the changes able to make them fit are of interest (see CheckGroupsAgainstPileOverrides), as groups change
+            // all the time for other reasons (e.g. sync stages)
+            if (PileOverridesError) {
+                bool recheck = state.StoragePools.Changed();
+                if (!recheck) {
+                    for (const auto& [base, overlay] : state.Groups.Diff()) {
+                        const TGroupInfo *prev = base ? &*base->second : nullptr;
+                        const TGroupInfo *cur = overlay->second ? &*overlay->second : nullptr;
+                        if (prev && (!cur || cur->StoragePoolId != prev->StoragePoolId ||
+                                cur->BridgePileId != prev->BridgePileId ||
+                                cur->VDisksInGroup.empty() != prev->VDisksInGroup.empty())) {
+                            recheck = true;
+                            break;
+                        }
+                    }
+                }
+                if (recheck) {
+                    state.Callbacks.push_back([this] { UpdatePileOverrides(); });
+                }
+            }
+
+            // groups relying on single parts get synced or lose their parts, see if they are done with it
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (const TGroupInfo *cur = overlay->second.Get(); cur && cur->BridgeGroupInfo &&
+                        cur->BridgeGroupInfo->GetBridgeGroupState().GetAuthorityPileId()) {
+                    state.Callbacks.push_back([this] { CheckBridgeGroupModes(); });
+                    break;
+                }
             }
 
             // apply overlay maps to their respective tables
@@ -856,7 +936,8 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            // apply created/deleted groups
+            // apply created/deleted groups and the ones moved to another storage pool: their status and the space
+            // allocated by their remaining VDisks, donors included, go along with them
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (!base) { // newly created group
                     overlay->second->StatusFlags = overlay->second->GetStorageStatusFlags();
@@ -867,13 +948,42 @@ namespace NKikimr::NBsController {
                         StoragePoolStat->Update(TStoragePoolStat::ConvertId(base->second->StoragePoolId),
                             base->second->StatusFlags, std::nullopt);
                     }
+                } else if (base->second->StoragePoolId != overlay->second->StoragePoolId) { // moved group
+                    const TGroupInfo& group = *overlay->second;
+                    i64 allocatedSize = 0;
+                    for (const TVSlotInfo *vslot : group.VDisksInGroup) {
+                        allocatedSize += vslot->Metrics.GetAllocatedSize();
+                        for (const TVSlotId& donorId : vslot->Donors) {
+                            if (const TVSlotInfo *donor = state.VSlots.Find(donorId)) {
+                                allocatedSize += donor->Metrics.GetAllocatedSize();
+                            }
+                        }
+                    }
+                    if (state.StoragePools.Get().count(base->second->StoragePoolId)) {
+                        const auto origin = TStoragePoolStat::ConvertId(base->second->StoragePoolId);
+                        StoragePoolStat->Update(origin, base->second->StatusFlags, std::nullopt);
+                        StoragePoolStat->UpdateAllocatedSize(origin, -allocatedSize);
+                    }
+                    const auto target = TStoragePoolStat::ConvertId(group.StoragePoolId);
+                    StoragePoolStat->Update(target, std::nullopt, group.StatusFlags);
+                    StoragePoolStat->UpdateAllocatedSize(target, allocatedSize);
                 }
             }
 
-            // apply VDisks going for destruction
+            // apply VDisks going for destruction; their space is accounted in the pool of their group as it was before
+            // this transaction, as the moved groups take only the space of the remaining VDisks to the new one
             for (const auto& [base, overlay] : state.VSlots.Diff()) {
                 if (overlay->second && overlay->second->DeletedFromStoragePoolId && overlay->second->Metrics.GetAllocatedSize()) {
-                    StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(*overlay->second->DeletedFromStoragePoolId),
+                    // the committed state is still in GroupMap, along with the groups this transaction deletes
+                    TBoxStoragePoolId storagePoolId = *overlay->second->DeletedFromStoragePoolId;
+                    if (base) {
+                        const auto it = GroupMap.find(base->second->GroupId);
+                        Y_DEBUG_ABORT_UNLESS(it != GroupMap.end());
+                        if (it != GroupMap.end()) {
+                            storagePoolId = it->second->StoragePoolId;
+                        }
+                    }
+                    StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(storagePoolId),
                         -overlay->second->Metrics.GetAllocatedSize());
                 }
             }
@@ -933,6 +1043,12 @@ namespace NKikimr::NBsController {
             }
             for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
                 SysViewChangedStoragePools.insert(cur ? cur->first : prev->first);
+                if (prev && cur && prev->second.BridgeMode != cur->second.BridgeMode) {
+                    for (auto it = StoragePoolGroups.lower_bound({cur->first, TGroupId::Zero()});
+                            it != StoragePoolGroups.end() && it->first == cur->first; ++it) {
+                        SysViewChangedGroups.insert(it->second);
+                    }
+                }
             }
         }
 
@@ -966,6 +1082,39 @@ namespace NKikimr::NBsController {
                 Self.PushStaticGroupsToSelfHeal();
             }
             return Self.NextConfigTxSeqNo++;
+        }
+
+        void TBlobStorageController::TConfigState::CheckBridgedPartDataRestorable(const TGroupInfo& group,
+                const TBlobStorageGroupInfo::TGroupVDisks& dataless) const {
+            if (!group.BridgePileId || !group.BridgeProxyGroupId || !BridgeInfo) {
+                return;
+            }
+            // The part of the pile taking part in data quorum keeps its sync stage, and the pile its state, whatever
+            // happens to its VDisks: the part (the pile being SYNCHRONIZED, or becoming such) is trusted with the data
+            // it has lost then, and the failover to the pile loses it. The part of the pile out of data quorum gets
+            // reset and resynced when the pile gets back.
+            const auto *pile = BridgeInfo->FindPile(group.BridgePileId);
+            if (!pile || !NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
+                return;
+            }
+            // the data lost by the part is lost by the group when there is no other part to resync it from, like in
+            // the cluster of a single pile; the usual checks of the request decide then
+            const TGroupInfo *proxy = Groups.Find(*group.BridgeProxyGroupId);
+            if (!proxy || !proxy->BridgeGroupInfo || !NBridge::FindGroupPile(proxy->BridgeGroupInfo->GetBridgeGroupState(),
+                    [&](TBridgePileId bridgePileId, const NKikimrBridge::TGroupState::TPile& part) {
+                        const auto *source = BridgeInfo->FindPile(bridgePileId);
+                        return bridgePileId != group.BridgePileId && source &&
+                            source->State == NKikimrBridge::TClusterState::SYNCHRONIZED &&
+                            part.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                    })) {
+                return;
+            }
+            if (!group.Topology->QuorumChecker->CheckFailModelForGroup(dataless)) {
+                throw TExError() << "GroupId# " << group.ID << " is the part of the bridged group in the '" << pile->Name
+                    << "' pile being " << NKikimrBridge::TClusterState::EPileState_Name(pile->State)
+                    << ", the change would leave it unable to restore its data from its pile."
+                    " Take the pile out and rejoin it to resync the part from another pile";
+            }
         }
 
         void TBlobStorageController::TConfigState::DestroyVSlot(TVSlotId vslotId, const TVSlotInfo *ensureAcceptorSlot) {
@@ -1240,6 +1389,7 @@ namespace NKikimr::NBsController {
             }
 
             pb->SetKind(pool.Kind);
+            pb->SetBridgeMode(pool.BridgeMode);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
             if (pool.DefaultGroupSizeInUnits != 0) {
@@ -1267,6 +1417,111 @@ namespace NKikimr::NBsController {
             }
         }
 
+        bool TBlobStorageController::TStoragePoolInfo::LoadPDiskFilters(NIceDb::TNiceDb& db,
+                const TBoxStoragePoolId& id) {
+            PDiskFilters.clear();
+            auto load = [&]<typename T>() {
+                auto rows = db.Table<T>().Range(std::get<0>(id), std::get<1>(id)).Select();
+                if (!rows.IsReady()) {
+                    return false;
+                }
+                while (rows.IsValid()) {
+                    if constexpr (std::is_same_v<T, Schema::BoxStoragePoolPDiskFilter>) {
+                        PDiskFilters.insert(TPDiskFilter::CreateFromRowset(rows));
+                    } else {
+                        PDiskFilters.insert(TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id),
+                            rows.template GetValue<typename T::Filter>()));
+                    }
+                    if (!rows.Next()) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            return load.template operator()<Schema::BoxStoragePoolPDiskFilter>()
+                && load.template operator()<Schema::BoxStoragePoolPDiskFilterV2>();
+        }
+
+        void TBlobStorageController::TStoragePoolInfo::UpdatePDiskFilters(NTable::TDatabase& db,
+                const TPDiskFilters* previous, const TPDiskFilters* current) {
+            for (const auto& [prev, cur] : Diff(previous, current)) {
+                if (prev && cur) {
+                    continue;
+                }
+                const auto op = cur ? NTable::ERowOp::Upsert : NTable::ERowOp::Erase;
+                const auto& filter = cur ? *cur : *prev;
+                auto update = [&]<typename T>(const auto& key) {
+                    auto keyTuple = NTableAdapter::PrepareKeyTuple<T>(&key);
+                    TStackVec<TRawTypeValue, std::tuple_size_v<decltype(keyTuple)>> rawKey;
+                    NTableAdapter::MapKey<T>(&keyTuple, rawKey);
+                    db.Update(T::TableId, op, rawKey, {});
+                };
+                if (filter.Location) {
+                    // Serialize the parsed filter in a fixed property order: request ordering
+                    // must not change its persistent identity, including when deleting a row.
+                    NKikimrBlobStorage::TPDiskFilter proto;
+                    Serialize(&proto, filter);
+                    update.template operator()<Schema::BoxStoragePoolPDiskFilterV2>(
+                        std::make_tuple(filter.BoxId, filter.StoragePoolId, proto.SerializeAsString()));
+                } else {
+                    update.template operator()<Schema::BoxStoragePoolPDiskFilter>(filter.GetLegacyKey());
+                }
+            }
+        }
+
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilter
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
+                const NKikimrBlobStorage::TPDiskFilter& proto) {
+            TPDiskFilter filter;
+            filter.BoxId = boxId;
+            filter.StoragePoolId = storagePoolId;
+            bool hasLocation = false;
+
+            for (const auto &property : proto.GetProperty()) {
+                switch (property.GetPropertyCase()) {
+#define PROPERTY(NAME) \
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
+                        if (filter.NAME) { \
+                            throw TExError() << #NAME << " already set"; \
+                        } else { \
+                            filter.NAME = property.Get ## NAME(); \
+                            continue; \
+                        } \
+                    }
+
+                    PROPERTY(Type)
+                    PROPERTY(SharedWithOs)
+                    PROPERTY(ReadCentric)
+                    PROPERTY(Kind)
+#undef PROPERTY
+
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
+                        if (std::exchange(hasLocation, true)) {
+                            throw TExError() << "Location already set";
+                        }
+                        if (!IsValidPDiskFilterLocation(property.GetLocation())) {
+                            throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
+                        }
+                        // an empty location constrains nothing, so it is stored the same way as an absent one
+                        if (TNodeLocation location(property.GetLocation()); !location.GetItems().empty()) {
+                            filter.SetLocation(location.GetSerializedLocation());
+                        }
+                        continue;
+
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
+                        throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
+                }
+
+                throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
+            }
+
+            if (!filter.Type) {
+                throw TExError() << "TPDiskFilter did not specify Type property";
+            }
+
+            return filter;
+        }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter) {
 #define SERIALIZE_VARIABLE(NAME) (filter.NAME && (pb->AddProperty()->Set##NAME(*filter.NAME), true))
             SERIALIZE_VARIABLE(Type);
@@ -1274,6 +1529,9 @@ namespace NKikimr::NBsController {
             SERIALIZE_VARIABLE(ReadCentric);
             SERIALIZE_VARIABLE(Kind);
 #undef SERIALIZE_VARIABLE
+            if (filter.Location) {
+                *pb->AddProperty()->MutableLocation() = TNodeLocation::ParseLocation(*filter.Location);
+            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk) {
@@ -1376,7 +1634,7 @@ namespace NKikimr::NBsController {
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
 
-            if (group.BridgeGroupInfo) {
+            if (group.BridgeGroupInfo && !group.IsInlinePile()) { // inline pile has its own VDisks
                 pb->SetIsProxyGroup(true);
             }
 
@@ -1492,11 +1750,8 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            if (groupInfo.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
-                Y_ABORT_UNLESS(groupInfo.BlobDepotId);
-                group->SetBlobDepotId(*groupInfo.BlobDepotId);
-            } else if (groupInfo.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
-                group->SetBlobDepotId(0);
+            if (const auto blobDepotId = groupInfo.GetReportedBlobDepotId()) {
+                group->SetBlobDepotId(*blobDepotId);
             }
 
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
@@ -1537,6 +1792,8 @@ namespace NKikimr::NBsController {
             settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
             settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->AddBridgeSyncTotalRateBytesPerSecond(BridgeSyncTotalRate);
+            settings->AddBridgeSyncMaxSyncers(BridgeSyncMaxSyncers);
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

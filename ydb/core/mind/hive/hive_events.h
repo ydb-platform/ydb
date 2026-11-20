@@ -43,6 +43,7 @@ struct TEvPrivate {
         EvReassignInactiveGroupsComplete,
         EvMoveDataComplete,
         EvLogHangingRequests,
+        EvProcessPileDrains,
         EvEnd
     };
 
@@ -61,6 +62,8 @@ struct TEvPrivate {
     };
 
     struct TEvPostponeProcessBootQueue : TEventLocal<TEvPostponeProcessBootQueue, EvPostponeProcessBootQueue> {};
+
+    struct TEvProcessPileDrains : TEventLocal<TEvProcessPileDrains, EvProcessPileDrains> {};
 
     struct TEvProcessDisconnectNode : TEventLocal<TEvProcessDisconnectNode, EvProcessDisconnectNode> {
         ui32 NodeId;

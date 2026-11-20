@@ -539,9 +539,9 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(!cluster->HasNode(42));
         UNIT_ASSERT(!cluster->HasNode(99));
 
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(1), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(2), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(1) == TClusterInfo::TStateStorageReplicaRings{{0, 0}}));
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(2) == TClusterInfo::TStateStorageReplicaRings{{0, 0}}));
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(3) == TClusterInfo::TStateStorageReplicaRings{{0, 1}}));
     }
 
     Y_UNIT_TEST(SysTabletNonActiveStateIgnored) {

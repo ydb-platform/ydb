@@ -186,7 +186,11 @@ private:
         const TInstant now = ctx.Now();
         ResetWatchdogTimer(now, true);
         if (!std::exchange(WatchdogTimerScheduled, true)) {
-            ctx.Schedule(WatchdogBarrier - now, new TEvQueueWatchdog);
+            TInstant wakeup = WatchdogBarrier;
+            if (!AssimilateRequests.empty()) {
+                wakeup = Min(wakeup, AssimilateRequests.begin()->second.Deadline);
+            }
+            ctx.Schedule(wakeup - now, new TEvQueueWatchdog);
         }
     }
 
@@ -215,14 +219,17 @@ private:
 
             // reset the connection
             ResetConnection(ctx, NKikimrProto::ERROR, "watchdog timer hit", TDuration::Seconds(1));
-        } else if (WatchdogBarrier != TInstant::Max()) {
-            // re-schedule event as the barrier has moved during past period
-            ArmWatchdogTimer(ctx);
+        } else {
+            ExpireAssimilateRequests(now, ctx);
+            if (WatchdogBarrier != TInstant::Max()) {
+                // re-schedule event as the barrier has moved during past period
+                ArmWatchdogTimer(ctx);
+            }
         }
     }
 
     void UpdateWatchdogStatus(const TActorContext& ctx) {
-        if (Queue.InFlightCount() || StatusRequests.size()) {
+        if (Queue.InFlightCount() || StatusRequests.size() || AssimilateRequests.size()) {
             ArmWatchdogTimer(ctx);
         } else {
             DisarmWatchdogTimer();
@@ -870,14 +877,21 @@ private:
         ctx.Send(sender, response.release(), 0, cookie);
     }
 
-    THashMap<ui64, std::pair<TActorId, ui64>> AssimilateRequests;
+    struct TAssimilateRequest {
+        TActorId Sender;
+        ui64 Cookie;
+        TInstant Deadline;
+    };
+
+    // ordered by id, which is also the order of deadlines
+    TMap<ui64, TAssimilateRequest> AssimilateRequests;
     ui64 NextAssimilateRequestCookie = 1;
 
     void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
         if (IsReady()) {
             const ui64 id = NextAssimilateRequestCookie++;
             SendToVDisk(ctx, std::unique_ptr<IEventBase>(ev->Release().Release()), id, std::move(ev->TraceId));
-            AssimilateRequests.emplace(id, std::make_pair(ev->Sender, ev->Cookie));
+            AssimilateRequests.emplace(id, TAssimilateRequest{ev->Sender, ev->Cookie, ctx.Now() + QueueWatchdogTimeout});
         } else {
             ctx.Send(ev->Sender, new TEvBlobStorage::TEvVAssimilateResult(NKikimrProto::NOTREADY, "no connection",
                 VDiskId), 0, ev->Cookie);
@@ -885,9 +899,20 @@ private:
     }
 
     void DrainAssimilate(NKikimrProto::EReplyStatus status, TString errorReason, const TActorContext& ctx) {
-        for (const auto& [id, ep] : std::exchange(AssimilateRequests, {})) {
-            const auto& [sender, cookie] = ep;
-            ctx.Send(sender, new TEvBlobStorage::TEvVAssimilateResult(status, errorReason, VDiskId), 0, cookie);
+        for (const auto& [id, request] : std::exchange(AssimilateRequests, {})) {
+            ctx.Send(request.Sender, new TEvBlobStorage::TEvVAssimilateResult(status, errorReason, VDiskId), 0,
+                request.Cookie);
+        }
+    }
+
+    void ExpireAssimilateRequests(TInstant now, const TActorContext& ctx) {
+        // the VDisk answers each assimilation batch within its work quantum, so a request this old is stuck even when
+        // other traffic of this queue keeps the watchdog barrier moving
+        while (!AssimilateRequests.empty() && AssimilateRequests.begin()->second.Deadline <= now) {
+            const auto node = AssimilateRequests.extract(AssimilateRequests.begin());
+            const TAssimilateRequest& request = node.mapped();
+            ctx.Send(request.Sender, new TEvBlobStorage::TEvVAssimilateResult(NKikimrProto::ERROR,
+                "assimilation request timed out", VDiskId), 0, request.Cookie);
         }
     }
 
@@ -896,8 +921,8 @@ private:
             return;
         }
         if (const auto it = AssimilateRequests.find(ev->Cookie); it != AssimilateRequests.end()) {
-            const auto& [sender, cookie] = it->second;
-            ctx.Send(sender, ev->Release().Release(), 0, cookie, std::move(ev->TraceId));
+            const TAssimilateRequest& request = it->second;
+            ctx.Send(request.Sender, ev->Release().Release(), 0, request.Cookie, std::move(ev->TraceId));
             AssimilateRequests.erase(it);
         }
         ResetWatchdogTimer(ctx.Now());

@@ -17,6 +17,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_FEATURE_FLAGS="enable_topic_service_tx")
 
 SRCS(
+    bridge.cpp
     export.cpp
     import.cpp
     mock_env.cpp
@@ -34,10 +35,12 @@ PEERDIR(
     contrib/libs/grpc
     contrib/libs/fmt
     contrib/libs/jwt-cpp
+    library/cpp/json
     library/cpp/json/writer
     ydb/core/security/certificate_check/test_utils
     ydb/core/wrappers/ut_helpers
     ydb/public/api/client/yc_public/iam
+    ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers

@@ -11,6 +11,7 @@ ENDIF()
 
 SRCS(
     main.cpp
+    pdisk_filter_compatibility_ut.cpp
 )
 
 PEERDIR(
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/blobstorage/dsproxy/mock
     ydb/core/mind/bscontroller
     ydb/core/protos
+    ydb/core/tablet_flat/test/libs/table
     ydb/core/testlib/default
     ydb/core/testlib/basics
 )

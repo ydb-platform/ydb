@@ -10,6 +10,8 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_allocation.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -35,6 +37,8 @@ namespace NKikimr {
         // Index capacity already charged to Fresh; transferred back to Skeleton
         // on success or allocation refusal, and held until replay or rejection.
         TFreshAdmission FreshAdmission;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
         NPDisk::EAllocationPurpose AllocationPurpose = NPDisk::EAllocationPurpose::Recovery;
 
         mutable NLWTrace::TOrbit Orbit;
@@ -105,6 +109,8 @@ namespace NKikimr {
         // FreshRefuseAtColor is unset or the gate is off. Skeleton lands it once the record is in Fresh, or
         // instead of that when HugeKeeper refused the data.
         TFreshAdmission FreshAdmission;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,

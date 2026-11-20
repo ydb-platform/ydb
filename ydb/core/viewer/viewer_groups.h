@@ -2103,9 +2103,14 @@ public:
     void ProcessWhiteboardGroups() {
         if (GroupData.empty()) {
             std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
+            std::unordered_set<ui32> ddiskGroups;
             for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
                 if (bsGroupStateResponse.IsOk()) {
                     for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
+                        if (info.GetDDisk()) {
+                            ddiskGroups.insert(info.GetGroupID());
+                            continue;
+                        }
                         TString storagePoolName = info.GetStoragePoolName();
                         if (storagePoolName.empty()) {
                             continue;
@@ -2125,6 +2130,10 @@ public:
                 }
             }
             for (const auto& [groupId, info] : latestGroupInfo) {
+                // During a rolling upgrade, older nodes can still report the same group without its type.
+                if (ddiskGroups.contains(groupId)) {
+                    continue;
+                }
                 TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();

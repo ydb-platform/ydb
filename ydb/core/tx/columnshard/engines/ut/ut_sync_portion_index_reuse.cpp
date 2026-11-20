@@ -222,13 +222,14 @@ bool IsMemoryTierAvailable() {
 }
 
 ISnapshotSchema::TPtr MakeSchemaWithExtraColumn(
-    const ui64 version, const std::optional<ui64> writeDefault, const std::optional<ui64> createdDefault) {
+    const ui64 version, const std::optional<ui64> writeDefault, const std::optional<ui64> createdDefault, const bool notNull = false) {
     auto storages = TTestStoragesManager::GetInstance();
     auto cache = std::make_shared<TSchemaObjectsCache>();
     NKikimrSchemeOp::TColumnTableSchema proto;
     FillDefaultSchemaProto(proto, version);
     auto* extra = proto.AddColumns();
     *extra = NArrow::NTest::TTestColumn("extra", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(3);
+    extra->SetNotNull(notNull);
     if (writeDefault) {
         extra->MutableDefaultValue()->MutableScalar()->SetUint64(*writeDefault);
     }
@@ -599,6 +600,26 @@ Y_UNIT_TEST_SUITE(TDefaultPortionActualization) {
         for (const auto& value : *stored) {
             UNIT_ASSERT(!value);
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDefaultWriteValidation) {
+    Y_UNIT_TEST(NotNullDefaultColumnRejectsExplicitNull) {
+        const auto schema = MakeSchemaWithExtraColumn(1, 5, 5, true);
+        const auto withNull = MakeBatchWithExtra({ 1, std::nullopt, 3 });
+        for (const auto mType :
+            { NEvWrite::EModificationType::Upsert, NEvWrite::EModificationType::Insert, NEvWrite::EModificationType::Replace }) {
+            const auto prepared = schema->PrepareForModification(withNull, mType);
+            UNIT_ASSERT(prepared.IsFail());
+            UNIT_ASSERT_STRING_CONTAINS(prepared.GetErrorMessage(), "null data for not null column 'extra'");
+        }
+        UNIT_ASSERT(schema->PrepareForModification(MakeBatchWithExtra({ 1, 2, 3 }), NEvWrite::EModificationType::Upsert).IsSuccess());
+    }
+
+    Y_UNIT_TEST(NullableDefaultColumnKeepsExplicitNull) {
+        const auto schema = MakeSchemaWithExtraColumn(1, 5, 5);
+        const auto prepared = schema->PrepareForModification(MakeBatchWithExtra({ 1, std::nullopt, 3 }), NEvWrite::EModificationType::Upsert);
+        UNIT_ASSERT_C(prepared.IsSuccess(), prepared.GetErrorMessage());
     }
 }
 

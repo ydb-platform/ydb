@@ -127,10 +127,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                 case NEvWrite::EModificationType::Replace:
                 case NEvWrite::EModificationType::Insert:
                 case NEvWrite::EModificationType::Upsert:
-                    if (!GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
-                        return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
-                    }
-                    break;
+                    return TConclusionStatus::Fail("null data for not null column '" + dstSchema.field(targetIdx)->name() + "'");
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
                 case NEvWrite::EModificationType::Increment:

@@ -456,7 +456,10 @@ public:
             : TTransactionBase(self)
         {}
 
-        bool Execute(TTransactionContext&, const TActorContext&) override {
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            // The last source's removed ranges become visible after the transfer
+            // transaction commits. Reconcile imported persistent records before serving reads.
+            Self->GetSnapshotManager().MarkSnapshotsWithRemovedHistory(txc.DB);
             return true;
         }
 

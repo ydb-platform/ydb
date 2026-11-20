@@ -918,7 +918,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         }
         updated = true;
     }
-    if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
+    const bool schemeChanged = FollowerState.LastSchemeUpdate < lastSchemeUpdate;
+    if (schemeChanged) {
         if (!db.Table<Schema::UserTables>().Precharge()) {
             precharged = false;
         }
@@ -965,7 +966,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         FollowerState.LastSysUpdate = lastSysUpdate;
     }
 
-    if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
+    if (schemeChanged) {
         YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower",
             {"tabletId", TabletID()},
             {"prev", FollowerState.LastSchemeUpdate},
@@ -1049,6 +1050,9 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         }
 
         FollowerState.LastSnapshotsUpdate = lastSnapshotsUpdate;
+    } else if (schemeChanged) {
+        // A legacy leader changes the schema on TRUNCATE without updating its persistent snapshots.
+        SnapshotManager.MarkSnapshotsWithRemovedHistory(txc.DB);
     }
 
     return true;

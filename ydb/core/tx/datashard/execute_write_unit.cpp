@@ -1044,7 +1044,9 @@ public:
 
             const bool requireReadOnlyLocks = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
 
-            const auto* unavailableTable = writeOp->FindUnavailablePreparedReadSnapshot(DataShard, txc.DB);
+            const auto unavailableTable = op->IsImmediate()
+                ? writeTx->FindUnsafeSnapshotWriteLock(DataShard)
+                : writeOp->FindUnavailablePreparedReadSnapshot(DataShard, txc.DB);
             bool validated = false;
             TVector<NKikimrDataEvents::TLock> brokenLocks;
             if (!unavailableTable) {
@@ -1058,7 +1060,7 @@ public:
             if (!validated) {
                 if (unavailableTable) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, TStringBuilder()
-                        << "Prepared operation " << *op << " writes at stale snapshot " << *writeOp->GetReadSnapshot()
+                        << "Operation " << *op << " writes at stale snapshot " << *writeTx->GetMvccSnapshot()
                         << " for table " << *unavailableTable << " at " << tabletId);
                 } else {
                     YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",

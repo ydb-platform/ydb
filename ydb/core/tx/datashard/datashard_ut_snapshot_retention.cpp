@@ -1645,6 +1645,52 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
         UNIT_ASSERT(test.IsRemoved(shards.at(0), retained));
     }
 
+    Y_UNIT_TEST(SplitRejectsPersistentSnapshotRemovedByLegacyTruncate) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (1, 10), (5, 50);");
+        const auto snapshot = CreateVolatileSnapshot(test.Server, {"/Root/table-a"}, TDuration::Hours(1));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        const auto before = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(before.get()), "1, 10\n5, 50\n");
+
+        const auto truncate = AsyncTruncateTable(test.Server, test.Sender, "/Root", "table-a");
+        WaitTxNotification(test.Server, test.Sender, truncate);
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        auto legacySource = runtime.AddObserver<TEvDataShard::TEvSplitTransferSnapshot>([&](auto& ev) {
+            // Old sources sent the real removed range together with a still-available record.
+            auto& record = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetSrcTabletId(), test.ShardA);
+            auto* pin = record.AddPersistentSnapshots();
+            pin->SetOwnerId(test.TableA.PathId.OwnerId);
+            pin->SetPathId(test.TableA.PathId.LocalPathId);
+            pin->SetStep(snapshot.Step);
+            pin->SetTxId(snapshot.TxId);
+            pin->SetFlags(TSnapshot::FlagUser | TSnapshot::FlagTimeout);
+            pin->SetTimeoutMs(TDuration::Hours(1).MilliSeconds());
+        });
+        SetSplitMergePartCountLimit(test.Server->GetRuntime(), -1);
+        const auto split = AsyncSplitTable(test.Server, test.Sender, "/Root/table-a", test.ShardA, 4);
+        WaitTxNotification(test.Server, test.Sender, split);
+        legacySource.Remove();
+        test.TableA = ResolveTableId(test.Server, test.Sender, "/Root/table-a");
+        const auto shards = NKqp::GetTableShards(test.Server, test.Sender, "/Root/table-a");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        for (ui64 shard : shards) {
+            UNIT_ASSERT(test.IsRemoved(shard, snapshot));
+            const auto tables = GetTablesByPathId(test.Server, shard).first;
+            auto request = GetBaseReadRequest(test.TableA, tables.at(test.TableA.PathId).GetDescription(),
+                2, NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+            AddFullRangeQuery(*request);
+            const auto result = SendRead(test.Server, shard, request.release(), test.Sender);
+            const auto& status = result->Record.GetStatus();
+            UNIT_ASSERT_VALUES_EQUAL(status.GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+            UNIT_ASSERT_C(status.IssuesSize() && status.GetIssues(0).message().Contains("has no snapshot"),
+                status.ShortDebugString());
+        }
+    }
+
     Y_UNIT_TEST(MergeRejectsSnapshotMissingFromOneSource) {
         TSnapshotRetentionTest test(false, 2);
         auto& runtime = test.GetRuntime();
@@ -1914,7 +1960,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
-    Y_UNIT_TEST_TWIN(SnapshotWriteAfterCompactionAndUpgrade, Legacy) {
+    Y_UNIT_TEST_QUAD(SnapshotWriteAfterCompactionAndUpgrade, Legacy, Staged) {
         TSnapshotRetentionTest test;
         auto& runtime = test.GetRuntime();
         const auto snapshot = test.WriteVersion(1);
@@ -1932,6 +1978,34 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
         // discarded key 2's insert and erase. The retained snapshot stays
         // readable, but there is no committed record left for that key.
         ForceFullCompaction(runtime, test.ShardA, test.TableA);
+        auto makeUpsert = [&](const TRowVersion& version, ui32 value) {
+            auto request = MakeWriteRequestOneKeyValue(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                test.TableA, TShardedTableOptions::DefaultColumns(), 2, value);
+            request->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+            request->Record.MutableMvccSnapshot()->SetStep(version.Step);
+            request->Record.MutableMvccSnapshot()->SetTxId(version.TxId);
+            return request;
+        };
+        const ui64 lockTxId = 1234567890001;
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+        auto commit = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        if constexpr (Staged) {
+            auto write = makeUpsert(snapshot, 20);
+            write->SetLockId(lockTxId, runtime.GetNodeId(0));
+            const auto written = Write(runtime, test.Sender, test.ShardA, std::move(write));
+            UNIT_ASSERT_VALUES_EQUAL(written.TxLocksSize(), 1);
+            UNIT_ASSERT(written.GetTxLocks(0).GetHasWrites());
+            commit->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+            commit->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+            commit->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
+            auto* locks = commit->Record.MutableLocks();
+            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            locks->AddSendingShards(test.ShardA);
+            locks->AddReceivingShards(test.ShardA);
+            *locks->AddLocks() = written.GetTxLocks(0);
+        }
         if constexpr (Legacy) {
             // A legacy tablet never wrote SysMvcc_SnapshotWriteSafetyGeneration.
             auto patch = std::make_unique<TEvTablet::TEvLocalMKQL>();
@@ -1953,17 +2027,20 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(
             FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
 
-        auto upsert = [&](const TRowVersion& version, ui32 value, auto expectedStatus) {
-            auto request = MakeWriteRequestOneKeyValue(std::nullopt,
-                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
-                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-                test.TableA, TShardedTableOptions::DefaultColumns(), 2, value);
-            request->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
-            request->Record.MutableMvccSnapshot()->SetStep(version.Step);
-            request->Record.MutableMvccSnapshot()->SetTxId(version.TxId);
-            return Write(runtime, test.Sender, test.ShardA, std::move(request), expectedStatus);
-        };
-        const auto result = upsert(snapshot, 20,
+        if constexpr (Legacy && Staged) {
+            // An unsafe lock must also be rejected before issuing PREPARED.
+            auto prepare = std::make_unique<NEvents::TDataEvents::TEvWrite>();
+            prepare->Record = commit->Record;
+            prepare->Record.SetTxMode(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            prepare->Record.SetTxId(100);
+            const auto result = Write(runtime, test.Sender, test.ShardA, std::move(prepare),
+                NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+            UNIT_ASSERT(!result.GetIssues().empty());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("stale snapshot"), result.ShortDebugString());
+        }
+
+        const auto result = Write(runtime, test.Sender, test.ShardA,
+            Staged ? std::move(commit) : makeUpsert(snapshot, 20),
             Legacy ? NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED
                    : NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         if constexpr (Legacy) {
@@ -1976,7 +2053,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
 
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto fresh = AcquireReadSnapshot(runtime, "/Root");
-        upsert(fresh, 200, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        Write(runtime, test.Sender, test.ShardA, makeUpsert(fresh, 200));
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
             "key = 1, value = 3\nkey = 2, value = 200\n");
     }
@@ -2236,6 +2313,100 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
                 "key = 1, value = 3\nkey = 2, value = 200\n");
         }
         NKqpHelpers::CloseSession(runtime, sessionId);
+    }
+
+    Y_UNIT_TEST(KqpDurableSnapshotWritesCheckConflictsBeforePrepare) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(false);
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (1, 1), (2, 20);"
+            "UPSERT INTO `/Root/table-b` (key, value) VALUES (1, 1), (2, 20);");
+        const TString session = NKqpHelpers::CreateSessionRPC(runtime, "/Root");
+        const auto run = [&] {
+            auto request = NKqpHelpers::MakeSimpleRequestRPC(
+                "SELECT value FROM `/Root/table-a` WHERE key = 1;"
+                "SELECT value FROM `/Root/table-b` WHERE key = 1;"
+                "UPDATE `/Root/table-a` ON (key, value) VALUES (2u, 30u);"
+                "UPDATE `/Root/table-b` ON (key, value) VALUES (2u, 30u);", session, {}, true);
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_write();
+            return NKqpHelpers::SendRequest(runtime, std::move(request), "/Root");
+        };
+
+        // An old durable participant can vote before executing row operations in
+        // PREPARE. Check the wire contract KQP must use with such a participant.
+        THashSet<ui64> prepared;
+        auto observePrepare = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
+                && record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE)
+            {
+                UNIT_ASSERT_VALUES_EQUAL(record.OperationsSize(), 0);
+                for (const auto& lock : record.GetLocks().GetLocks()) {
+                    if (lock.GetHasWrites()) {
+                        prepared.insert(lock.GetDataShard());
+                    }
+                }
+            }
+        });
+        TBlockEvents<NEvents::TDataEvents::TEvWrite> delayedA(runtime, [&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+                for (const auto& op : record.GetOperations()) {
+                    if (op.GetTableId().GetTableId() == test.TableA.PathId.LocalPathId) {
+                        UNIT_ASSERT_VALUES_EQUAL(record.GetTxMode(), NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+                        UNIT_ASSERT(record.GetLockTxId() && record.HasMvccSnapshot());
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        bool stagedOnB = false;
+        bool writeConflictOnA = false;
+        auto observeWrites = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetOrigin() == test.ShardB && record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                for (const auto& lock : record.GetTxLocks()) {
+                    stagedOnB |= lock.GetHasWrites();
+                }
+            }
+            if (record.GetOrigin() == test.ShardA && record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+                for (const auto& issue : record.GetIssues()) {
+                    writeConflictOnA |= issue.message().Contains("Write conflict");
+                }
+            }
+        });
+        auto pending = run();
+        runtime.WaitFor("B staged its write while A has not checked its row", [&] {
+            return (stagedOnB && !delayedA.empty()) || pending.HasValue() || pending.HasException();
+        });
+        UNIT_ASSERT(stagedOnB && !delayedA.empty());
+        UNIT_ASSERT(prepared.empty());
+
+        const auto& snapshot = delayedA.front()->Get()->Record.GetMvccSnapshot();
+        test.PublishRegistry({TRowVersion(snapshot.GetStep(), snapshot.GetTxId())}, {test.TableA, test.TableB});
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 25);");
+        delayedA.Stop().Unblock();
+        const auto failed = NKqpHelpers::AwaitResponse(runtime, pending);
+        UNIT_ASSERT_VALUES_EQUAL_C(failed.operation().status(), Ydb::StatusIds::ABORTED, failed.ShortDebugString());
+        UNIT_ASSERT(writeConflictOnA);
+        UNIT_ASSERT(prepared.empty());
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, TVector<ui64>{test.ShardA}, test.TableA),
+            "key = 1, value = 1\nkey = 2, value = 25\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, TVector<ui64>{test.ShardB}, test.TableB),
+            "key = 1, value = 1\nkey = 2, value = 20\n");
+
+        const auto retried = NKqpHelpers::AwaitResponse(runtime, run());
+        UNIT_ASSERT_VALUES_EQUAL_C(retried.operation().status(), Ydb::StatusIds::SUCCESS, retried.ShortDebugString());
+        UNIT_ASSERT(prepared.contains(test.ShardA) && prepared.contains(test.ShardB));
+        for (const auto& [shard, tableId] : {std::make_pair(test.ShardA, test.TableA),
+                                            std::make_pair(test.ShardB, test.TableB)}) {
+            UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, TVector<ui64>{shard}, tableId),
+                "key = 1, value = 1\nkey = 2, value = 30\n");
+        }
+        NKqpHelpers::CloseSession(runtime, session);
     }
 
     Y_UNIT_TEST(ExplicitSnapshotSurvivesDelayedPublication) {

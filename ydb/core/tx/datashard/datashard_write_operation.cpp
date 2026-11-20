@@ -25,6 +25,8 @@ namespace NDataShard {
 namespace {
 
 std::optional<TRowVersion> ExtractReadSnapshot(const NKikimrDataEvents::TEvWrite& record) {
+    // Only row operations need an MVCC history pin. A lock-only commit uses
+    // the wire snapshot to validate its staged writes against the upgrade boundary.
     if (record.HasMvccSnapshot() && record.OperationsSize() > 0) {
         return TRowVersion(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
     }
@@ -146,6 +148,29 @@ bool TValidatedWriteTx::IsReadOnlyPrepare(const TSysLocks& sysLocks) const {
         }
     }
     return true;
+}
+
+std::optional<TTableId> TValidatedWriteTx::FindUnsafeSnapshotWriteLock(TDataShard& self) const {
+    if (!KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit ||
+        LockMode != TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation ||
+        !MvccSnapshot || self.GetSnapshotManager().IsSnapshotWriteSafe(*MvccSnapshot))
+    {
+        return std::nullopt;
+    }
+
+    // A write staged before upgrade may have passed its conflict check after
+    // legacy compaction discarded the evidence. A commit can contain only its lock.
+    const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+    for (const auto& lockProto : KqpLocks->GetLocks()) {
+        if (lockProto.GetDataShard() != TabletId && !allowAncestorLocks) {
+            continue;
+        }
+        const auto lock = self.SysLocksTable().GetRawLock(lockProto.GetLockId());
+        if (lock && lock->IsWriteLock()) {
+            return TTableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+        }
+    }
+    return std::nullopt;
 }
 
 std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperation::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator, const NWilson::TTraceId& traceId) {
@@ -570,9 +595,15 @@ bool TWriteOperation::CanAbortPreparedWrite() const {
         std::ranges::find(locks->GetSendingShards(), TabletId) != locks->GetSendingShards().end();
 }
 
-const TTableId* TWriteOperation::FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const {
-    if (IsImmediate() || !ReadSnapshot || !CanAbortPreparedWrite()) {
-        return nullptr;
+std::optional<TTableId> TWriteOperation::FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const {
+    if (IsImmediate() || !WriteTx->GetMvccSnapshot() || !CanAbortPreparedWrite()) {
+        return std::nullopt;
+    }
+    if (auto table = WriteTx->FindUnsafeSnapshotWriteLock(self)) {
+        return table;
+    }
+    if (!ReadSnapshot) {
+        return std::nullopt;
     }
 
     const auto& snapshots = self.GetSnapshotManager();
@@ -580,17 +611,17 @@ const TTableId* TWriteOperation::FindUnavailablePreparedReadSnapshot(TDataShard&
         snapshots.IsSnapshotWriteSafe(*ReadSnapshot);
     const bool checkRemovedHistory = ReadSnapshotNeedsRecoveryCheck && *ReadSnapshot < snapshots.GetLowWatermark();
     if (canCheckWriteConflicts && !checkRemovedHistory) {
-        return nullptr;
+        return std::nullopt;
     }
     for (const auto& operation : WriteTx->GetOperations()) {
         const auto& tableId = operation.GetTableId();
         // The recovered operation itself pins the version. This check asks
         // whether history was already missing when that pin was recovered.
         if (!canCheckWriteConflicts || !snapshots.IsSnapshotReadable(db, tableId, *ReadSnapshot, /* locallyAcquired */ true)) {
-            return &tableId;
+            return tableId;
         }
     }
-    return nullptr;
+    return std::nullopt;
 }
 
 bool TWriteOperation::TrySetTxBody(const TString& txBody) {

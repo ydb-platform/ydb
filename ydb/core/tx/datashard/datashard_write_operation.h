@@ -71,6 +71,7 @@ public:
         return TxInfo().HasWrites();
     }
     bool IsReadOnlyPrepare(const TSysLocks& sysLocks) const;
+    std::optional<TTableId> FindUnsafeSnapshotWriteLock(TDataShard& self) const;
     bool HasLockedWrites() const {
         return HasWrites() && LockTxId;
     }
@@ -174,7 +175,7 @@ public:
     TString GetTxBody() const;
     bool RestoreReadSnapshot(const TString& txBody);
     bool CanAbortPreparedWrite() const;
-    const TTableId* FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const;
+    std::optional<TTableId> FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const;
     bool TrySetTxBody(const TString& txBody);
     void SetTxBody(const TString& txBody);
     void ClearTxBody();

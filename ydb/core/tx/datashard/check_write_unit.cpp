@@ -57,7 +57,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
     Y_ENSURE(writeTx);
     Y_ENSURE(writeTx->Ready() || writeTx->RequirePrepare());
 
-    if (!op->IsImmediate() && writeTx->HasOperations()) {
+    if (!op->IsImmediate() && (writeTx->HasOperations() || writeTx->FindUnsafeSnapshotWriteLock(DataShard))) {
         TString snapshotError;
         auto snapshotStatus = NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
         if (op->IsMvccSnapshotRead()) {
@@ -66,7 +66,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             snapshotError = TStringBuilder()
                 << "Operation " << *op << " cannot write at snapshot " << op->GetMvccSnapshot()
                 << " using a planned transaction at " << DataShard.TabletID();
-        } else if (const auto& snapshot = writeOp->GetReadSnapshot()) {
+        } else if (const auto& snapshot = writeTx->GetMvccSnapshot()) {
             const auto& manager = DataShard.GetSnapshotManager();
             const auto& locks = writeTx->GetKqpLocks();
             const bool snapshotIsolation = writeTx->GetLockMode() == TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation;

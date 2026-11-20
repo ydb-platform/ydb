@@ -119,6 +119,7 @@ public:
     bool Reload(NIceDb::TNiceDb& db);
     bool ReloadSys(NIceDb::TNiceDb& db);
     bool ReloadSnapshots(NIceDb::TNiceDb& db);
+    void MarkSnapshotsWithRemovedHistory(NTable::TDatabase& db);
 
     void InitExpireQueue(TInstant now);
 

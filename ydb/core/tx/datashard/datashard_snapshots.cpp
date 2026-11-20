@@ -183,18 +183,6 @@ bool TSnapshotManager::ReloadSnapshots(NIceDb::TNiceDb& db) {
         ui64 flags = rowset.GetValue<Schema::Snapshots::Flags>();
         ui64 timeout_ms = rowset.GetValue<Schema::Snapshots::TimeoutMs>();
 
-        // Legacy TRUNCATE could remove history without discarding the snapshot.
-        // Hide such records immediately and let the leader's startup cleanup erase them.
-        if (!(flags & TSnapshot::FlagRemoved) && oid == Self->GetPathOwnerId()) {
-            if (const auto* table = Self->GetUserTables().FindPtr(tid)) {
-                const TRowVersion version(step, txId);
-                const auto& removed = db.GetDatabase().GetRemovedRowVersions((*table)->LocalTid);
-                if (removed.Contains(version, version.Next())) {
-                    flags |= TSnapshot::FlagRemoved;
-                }
-            }
-        }
-
         TSnapshotKey key(oid, tid, step, txId);
 
         auto res = snapshots.emplace(
@@ -209,7 +197,26 @@ bool TSnapshotManager::ReloadSnapshots(NIceDb::TNiceDb& db) {
     }
 
     Snapshots = std::move(snapshots);
+    MarkSnapshotsWithRemovedHistory(db.GetDatabase());
     return true;
+}
+
+void TSnapshotManager::MarkSnapshotsWithRemovedHistory(NTable::TDatabase& db) {
+    // A legacy TRUNCATE could destroy history without discarding its persistent record.
+    // The leader's normal startup cleanup erases records marked here.
+    for (auto& [key, snapshot] : Snapshots) {
+        if (snapshot.HasFlags(TSnapshot::FlagRemoved) || key.OwnerId != Self->GetPathOwnerId()) {
+            continue;
+        }
+        const auto* table = Self->GetUserTables().FindPtr(key.PathId);
+        const TRowVersion version(key.Step, key.TxId);
+        if (table && db.GetRemovedRowVersions((*table)->LocalTid).Contains(version, version.Next())) {
+            snapshot.Flags |= TSnapshot::FlagRemoved;
+            if (ExpireQueue.Has(&snapshot)) {
+                ExpireQueue.Remove(&snapshot);
+            }
+        }
+    }
 }
 
 void TSnapshotManager::InitExpireQueue(TInstant now) {

@@ -667,7 +667,6 @@ public:
             priority,
             mvccSnapshot);
 
-        // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
 
         // Associate this token with the current query's SpanId for TLI lock-break attribution.
@@ -2039,6 +2038,12 @@ public:
 
     bool FlushBeforeCommit() const {
         return NeedToFlushBeforeCommit;
+    }
+
+    void RequireSnapshotWriteFlush() {
+        if (!IsOlap && LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION && !IsEmpty()) {
+            NeedToFlushBeforeCommit = true;
+        }
     }
 
     bool AttachesWriteSeqNum() const {
@@ -5054,8 +5059,15 @@ public:
             YDB_LOG_ENSURE(txId);
             TxId = txId;
 
+            const bool durablePrepare = !TxManager->IsVolatile();
             bool needToFlushBeforeCommit = false;
             ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
+                if (durablePrepare) {
+                    // Older DataShards can send their durable commit vote before
+                    // executing a final row batch. Stage snapshot writes under a
+                    // lock and wait for their conflict checks before any PREPARE.
+                    actor->RequireSnapshotWriteFlush();
+                }
                 needToFlushBeforeCommit |= actor->FlushBeforeCommit();
             });
 

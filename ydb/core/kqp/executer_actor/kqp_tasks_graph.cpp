@@ -3774,7 +3774,9 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     if (UseKqpTasksGraphV2) {
         MaxTasksGraph->EstimateTasksResources();
         MaxTasksGraph->DistributeTasksToNodes(placementParams);
+        Cerr << "Before shrink: " << MaxTasksGraph->DumpToString() << Endl;
         MaxTasksGraph->Shrink();
+        Cerr << "After shrink: " << MaxTasksGraph->DumpToString() << Endl;
     }
 
     MaxTasksGraph->PlaceTasks(*this);

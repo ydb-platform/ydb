@@ -171,7 +171,7 @@ namespace {
         };
 
     Y_UNIT_TEST_SUITE_F(ProduceActor, TProduceActorFixture) {
-        Y_UNIT_TEST(TemporaryWriteRestrictionCanBeRetried) {
+        Y_UNIT_TEST(WriteRestrictionsReturnUnknownServerError) {
             ui32 configVersion = 1'000'000;
             const auto configEdge = Ctx->Runtime->AllocateEdgeActor();
             auto setWriteMode = [&](NKikimrPQ::TPQTabletConfig::EWriteMode mode) {
@@ -202,8 +202,7 @@ namespace {
                         setWriteMode(mode);
                         SendProduceToPartitions({0}, {}, producerId, 0, 0, 0, 0, ECompressionType::NONE, count);
                         const bool temporary = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
-                        const auto rejected = checkResponse(temporary
-                            ? EKafkaErrors::REQUEST_TIMED_OUT : EKafkaErrors::UNKNOWN_SERVER_ERROR);
+                        const auto rejected = checkResponse(EKafkaErrors::UNKNOWN_SERVER_ERROR);
                         UNIT_ASSERT(rejected.ErrorMessage);
                         UNIT_ASSERT_STRING_CONTAINS(TString(*rejected.ErrorMessage), temporary
                             ? "Write to topic is temporarily disabled" : "Write to topic is prohibited");

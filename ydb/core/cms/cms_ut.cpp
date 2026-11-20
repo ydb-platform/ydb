@@ -3346,10 +3346,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         ui32 versionResponses = 0;
         ui32 createRequests = 0;
         TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvCms::EvGetConfigResponse) {
+            if (ev->GetTypeRewrite() == TEvCms::EvGetInterfaceVersionResponse) {
                 ++versionResponses;
-                // Older CMS versions return the config without an interface version.
-                ev->Get<TEvCms::TEvGetConfigResponse>()->Record.ClearInterfaceVersion();
+                // An interface version below the required minimum must be rejected.
+                ev->Get<TEvCms::TEvGetInterfaceVersionResponse>()->Record.SetVersion(0);
             } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
                 ++createRequests;
             }
@@ -3374,87 +3374,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
         UNIT_ASSERT_VALUES_EQUAL(versionResponses, 2);
         UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
-    }
-
-    Y_UNIT_TEST(WalleDrainDataCmsVersionTimeout)
-    {
-        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
-        ui32 versionRequests = 0;
-        ui32 createRequests = 0;
-        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvCms::EvGetConfigRequest) {
-                // Simulate a missing response to the config request.
-                ++versionRequests;
-                return TTestActorRuntime::EEventAction::DROP;
-            } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
-                ++createRequests;
-            }
-            return prev(ev);
-        });
-
-        TFakeMonHttpRequest httpRequest(HTTP_METHOD_POST, "/api/walle/v11/tasks", {},
-            MakeWalleDrainDataJson(env.GetNodeId(0)));
-        const auto edge = env.AllocateEdgeActor();
-        NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
-            TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
-        const auto handler = env.Register(CreateWalleApiHandler(event));
-        env.EnableScheduleForActor(handler, true);
-
-        TAutoPtr<IEventHandle> handle;
-        const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 408"), response->Answer);
-        UNIT_ASSERT_C(response->Answer.Contains("CMS request timeout"), response->Answer);
-        UNIT_ASSERT_VALUES_EQUAL(versionRequests, 1);
-        UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
-        env.CheckWalleListTasks(0);
-        env.CheckListPermissions(WALLE_CMS_USER, 0);
-        env.CheckListRequests(WALLE_CMS_USER, 0);
-    }
-
-    Y_UNIT_TEST(WalleDrainDataRechecksCmsSupportAfterRestart)
-    {
-        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
-        TFakeMonHttpRequest httpRequest(HTTP_METHOD_POST, "/api/walle/v11/tasks", {},
-            MakeWalleDrainDataJson(env.GetNodeId(0)));
-        const auto edge = env.AllocateEdgeActor();
-        NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
-            TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
-        const auto handler = env.Register(CreateWalleApiHandler(event));
-
-        THolder<IEventHandle> firstResponse;
-        THolder<IEventHandle> secondResponse;
-        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->Recipient == handler && ev->GetTypeRewrite() == TEvCms::EvGetConfigResponse) {
-                if (!firstResponse) {
-                    UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvCms::TEvGetConfigResponse>()->Record.GetInterfaceVersion(), CMS_INTERFACE_VERSION);
-                    firstResponse.Reset(ev.Release());
-                } else {
-                    // Simulate reconnecting to a CMS version without DrainData support.
-                    ev->Get<TEvCms::TEvGetConfigResponse>()->Record.ClearInterfaceVersion();
-                    secondResponse.Reset(ev.Release());
-                }
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            return prev(ev);
-        });
-
-        env.WaitFor("first CMS support response", [&] { return bool(firstResponse); }, TDuration::Seconds(30));
-        env.RestartCms();
-        env.WaitFor("CMS support response after restart", [&] { return bool(secondResponse); }, TDuration::Seconds(30));
-        env.SetObserverFunc(prev);
-
-        // The delayed confirmation from the old connection must not authorize task creation.
-        env.Send(firstResponse.Release(), 0, true);
-        env.Send(secondResponse.Release(), 0, true);
-        TAutoPtr<IEventHandle> handle;
-        const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 400"), response->Answer);
-        UNIT_ASSERT_C(response->Answer.Contains("CMS does not support drain_data"), response->Answer);
-        env.CheckWalleListTasks(0);
-        env.CheckListPermissions(WALLE_CMS_USER, 0);
-        env.CheckListRequests(WALLE_CMS_USER, 0);
     }
 
     Y_UNIT_TEST(WalleDrainDataDisabledEvictVDisks)

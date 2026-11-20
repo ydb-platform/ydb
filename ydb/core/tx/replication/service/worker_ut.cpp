@@ -1787,6 +1787,127 @@ Y_UNIT_TEST_SUITE(Worker) {
     Y_UNIT_TEST(ReaderRetryBudgetResetsAfterData) {
         CheckReaderRetryLimit(3);
     }
+
+    class TDataEndReader final : public TActor<TDataEndReader> {
+    public:
+        TDataEndReader(const TActorId& edge, TActorId& self)
+            : TActor(&TThis::StateWork)
+            , Edge(edge)
+            , Self(self)
+        {}
+
+    private:
+        void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
+            Self = SelfId();
+            Send(ev->Sender, new TEvWorker::TEvHandshake());
+            Send(ev->Sender, new TEvWorker::TEvReaderStarted(0));
+        }
+
+        void Handle(TEvWorker::TEvPoll::TPtr& ev) {
+            Send(Edge, new TEvWorker::TEvPoll(ev->Get()->SkipCommit));
+        }
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvWorker::TEvHandshake, Handle);
+                hFunc(TEvWorker::TEvPoll, Handle);
+                IgnoreFunc(TEvWorker::TEvCommit);
+            }
+        }
+
+        const TActorId Edge;
+        TActorId& Self;
+    };
+
+    class TDataEndWriter final : public TActor<TDataEndWriter> {
+    public:
+        TDataEndWriter(const TActorId& edge, TActorId& self)
+            : TActor(&TThis::StateWork)
+            , Edge(edge)
+            , Self(self)
+        {}
+
+    private:
+        void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
+            Self = SelfId();
+            Worker = ev->Sender;
+            Send(Worker, new TEvWorker::TEvHandshake());
+        }
+
+        void Handle(TEvWorker::TEvData::TPtr& ev) {
+            Send(Edge, new TEvWorker::TEvData(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records));
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            Send(Worker, new TEvWorker::TEvPoll());
+        }
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvWorker::TEvHandshake, Handle);
+                hFunc(TEvWorker::TEvData, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        const TActorId Edge;
+        TActorId& Self;
+        TActorId Worker;
+    };
+
+    struct TDataEndSetup {
+        TEnv<> Env{true, ERuntimeMode::Simulated};
+        TActorId Edge;
+        TActorId Reader;
+        TActorId Writer;
+        TActorId Worker;
+
+        TDataEndSetup() {
+            auto& runtime = Env.GetRuntime();
+            Edge = Env.GetSender();
+            Worker = runtime.Register(CreateWorker(Edge,
+                [this] { return new TDataEndReader(Edge, Reader); },
+                [this] { return new TDataEndWriter(Edge, Writer); }));
+            UNIT_ASSERT_C(runtime.GrabEdgeEventRethrow<TEvWorker::TEvPoll>(Edge, TDuration::Seconds(5)),
+                "Reader did not receive the first poll");
+
+            runtime.Send(new IEventHandle(Worker, Reader, new TEvWorker::TEvData(0, "source", {
+                TTopicMessage(0, "first"),
+            })));
+            UNIT_ASSERT_C(runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(Edge, TDuration::Seconds(5)),
+                "Writer did not receive the data batch");
+        }
+
+        void SendDataEnd() {
+            Env.GetRuntime().Send(new IEventHandle(Worker, Reader, new TEvWorker::TEvDataEnd(0, {}, {1, 2})));
+        }
+    };
+
+    Y_UNIT_TEST(ShouldDelayDataEndWhileWriterAppliesInFlightData) {
+        // given
+        TDataEndSetup s;
+
+        // when
+        s.SendDataEnd();
+
+        // then
+        UNIT_ASSERT(!s.Env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvDataEnd>(s.Edge, TDuration::Seconds(1)));
+    }
+
+    Y_UNIT_TEST(ShouldForwardDataEndWhenWriterPollsAfterInFlightData) {
+        // given
+        TDataEndSetup s;
+        s.SendDataEnd();
+
+        // when
+        s.Env.GetRuntime().Send(new IEventHandle(s.Writer, s.Edge, new TEvents::TEvWakeup()));
+
+        // then
+        const auto dataEnd = s.Env.GetRuntime().GrabEdgeEventRethrow<TEvWorker::TEvDataEnd>(s.Edge, TDuration::Seconds(5));
+        UNIT_ASSERT(dataEnd);
+        UNIT_ASSERT_VALUES_EQUAL(dataEnd->Get()->PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(dataEnd->Get()->ChildPartitionsIds.size(), 2);
+    }
 }
 
 }

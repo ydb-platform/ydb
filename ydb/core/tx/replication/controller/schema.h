@@ -200,6 +200,14 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, NextOffset>;
     };
 
+    struct ExitedWorkers: Table<11> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         Replications,
@@ -209,7 +217,8 @@ struct TControllerSchema: NIceDb::Schema {
         Workers,
         SchemaBarrierWorkers,
         IndexBuildWorkers,
-        ProcessedSourceOffsets
+        ProcessedSourceOffsets,
+        ExitedWorkers
     >;
 
 }; // TControllerSchema

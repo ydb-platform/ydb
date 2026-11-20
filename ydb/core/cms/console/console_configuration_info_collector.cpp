@@ -5,7 +5,7 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/configs_dispatcher_proxy.h>
-#include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT CMS_CONFIGS
 

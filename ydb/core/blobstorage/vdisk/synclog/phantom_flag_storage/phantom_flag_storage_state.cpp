@@ -1,7 +1,6 @@
 #include "phantom_flag_storage_state.h"
 #include "phantom_flag_storage_processor.h"
 
-#include <ydb/core/util/stlog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_STORAGE

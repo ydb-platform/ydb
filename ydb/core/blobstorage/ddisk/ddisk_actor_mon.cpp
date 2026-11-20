@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/library/pdisk_io/device_type.h>
 

@@ -29,7 +29,7 @@ While the hash table is built, the join sets two flags: `BuildNotEmpty_` when th
 | `3` | `1`, `2` | `false` |
 | null | empty | `false` |
 
-For a left value that is not null, the check is:
+The check is:
 
 - look up the full key. A hit is `true`
 - if there is no hit, look at `BuildHasNull_`. If it is set, the answer is `null`
@@ -56,7 +56,7 @@ The right rows are stored once in the main hash table, under the full key `(k, y
 
 In this case one returned row number is enough. `y` is not read again.
 
-For a left value that is not null, the check is:
+The check is:
 
 - look up the full key `(k, x)` in the main hash table. A hit is `true`
 - if there is no hit, look up `k` in `NullRows`. If it returns a row number, the answer is `null`
@@ -81,38 +81,51 @@ If the mark column cannot be null on either side, the second index is not built.
 #### Complexity
 Lookup: O(1). One lookup by the full key, and on a miss one lookup by the regular key. The second lookup stops at the first row with that key.
 
-## Several mark columns, with a group
+## Several mark columns and regular keys
 
 ```sql
 SELECT (a, b) IN (SELECT c, d FROM t2 WHERE t2.k = t1.k) FROM t1;
 ```
 
-The main table is searched by `(k, c, d)`. The second index is the same as above and is still searched by `k`. After a miss, the rows of that group are compared.
+The right rows are stored once in the main hash table, under the full key `(k, c, d)`.
 
-A null column is skipped. Every other column must be equal. Some null has to remain. Otherwise the main table would already have returned `true`.
+`NullRows` and `OtherRows` are the same two hash tables as above. A lookup of the regular key `k` returns row numbers in the main table:
 
-If every mark column on the left is null, there is nothing to compare. The group exists, so the answer is `null`.
+- `NullRows` returns the numbers of rows with this `k` that have a null in a mark column
+- `OtherRows` returns the numbers of the other rows with this `k`. This table is built only when the left side can contain null
 
-If the left row has no null, only the right rows with a null mark are compared. The other rows of the group are compared only when the left row itself has a null.
+A row number is not enough. The mark columns of that row are compared with the left row. A null column is skipped. Every other column must be equal. At least one null has to remain. Otherwise the main hash table would already have returned `true`.
 
-Group `k = 1` contains `(10, null)` and `(20, 30)`. Group `k = 2` contains `(5, 5)`.
+The check is:
+
+- look up the full key `(k, a, b)` in the main hash table. A hit is `true`
+- if there is no hit, look up `k` in `NullRows`. The lookup returns only the rows with this `k`. Compare the left row with them. The first row that passes the comparison makes the answer `null`
+- if no compared row passes, the answer is `false`
+
+A null in a left mark column is not looked up by the full key. That lookup cannot return `true`.
+
+If some mark columns on the left are null and some are not, `k` is looked up in both `NullRows` and `OtherRows`. Only the rows with this `k` are compared. A null column is skipped, and every other column must be equal. Take `(1, 20, null)`. `(10, null)` from `NullRows` differs on `20` and `10`. `(20, 30)` from `OtherRows` matches on `20`, and the second column is skipped. The answer is `null`.
+
+If every mark column on the left is null, there is nothing to compare. Any row number for this `k` makes the answer `null`. No row number makes it `false`. `(1, null, null)` finds rows for `k = 1`, so the answer is `null`.
+
+Right side. `k = 1`: `(10, null)` and `(20, 30)`. `k = 2`: `(5, 5)`.
 
 | left `(k, a, b)` | answer | why |
 |---|---|---|
 | `(1, 20, 30)` | `true` | the full key matches |
-| `(1, 10, 30)` | `null` | `(10, null)` agrees on `10` |
-| `(1, 20, 40)` | `false` | `(10, null)` differs on the first column |
-| `(1, 20, null)` | `null` | `(20, 30)` agrees on `20` |
-| `(1, null, null)` | `null` | the group exists |
-| `(2, 5, 6)` | `false` | group 2 has no null mark |
-| `(2, 5, null)` | `null` | `(5, 5)` agrees on `5` |
-| `(4, 1, 1)` | `false` | there is no such group |
+| `(1, 10, 30)` | `null` | `NullRows` returns `(10, null)`, and `10` equals `10` |
+| `(1, 20, 40)` | `false` | `(10, null)` differs on the first column. `(20, 30)` is not in `NullRows` |
+| `(1, 20, null)` | `null` | `OtherRows` returns `(20, 30)`, and `20` equals `20` |
+| `(1, null, null)` | `null` | a row number for `k = 1` is returned |
+| `(2, 5, 6)` | `false` | `NullRows` returns nothing for `k = 2` |
+| `(2, 5, null)` | `null` | `OtherRows` returns `(5, 5)`, and `5` equals `5` |
+| `(4, 1, 1)` | `false` | both tables return nothing for `k = 4` |
 
-G is the number of rows in the left row's group.
+#### Complexity
 
-Lookup: O(1) when the full key hits, and when every mark column on the left is null. Otherwise a miss reads rows of its group until it finds a null answer or the rows run out. A false answer has read every relevant row of the group, so that lookup is O(G).
-
-Whole join: building both indexes is O(R), then one lookup per left row. The worst case is O(L × G). Extra memory is the same as above: a hash and a row number per indexed row, not a copy of the row. DuckDB does not run this query.
+- The full key hits: O(1).
+- Every mark column on the left is null: O(1).
+- Otherwise look up `k` in `NullRows`. If the left row has a null, look it up in `OtherRows` too. Each lookup returns only the rows with this `k`, and those rows are compared until one of them makes the answer `null`. A `false` answer has compared all of them: O(N). N is the number of rows with this `k` in the tables that were looked up.
 
 ## Several mark columns, no group
 

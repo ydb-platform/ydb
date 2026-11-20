@@ -5150,8 +5150,6 @@ void TPartition::CreateMirrorerActor() {
     );
 }
 
-<<<<<<< HEAD
-=======
 void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
@@ -5165,7 +5163,6 @@ void TPartition::NotifyMirrorerPersistDone() {
     }
 }
 
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
 bool TPartition::IsQuotingEnabled() const
 {
     return NPQ::IsQuotingEnabled(AppData()->PQConfig,

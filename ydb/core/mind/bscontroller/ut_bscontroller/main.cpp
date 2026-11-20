@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
 #include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
@@ -964,12 +965,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         TVector<THolder<IEventHandle>> delayed;
         TTestActorRuntimeBase::TEventFilter previous;
         previous = env.Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
-                const auto& request = event->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
-                if (request.CommandSize() && request.GetCommand(0).HasDefineGroupState()) {
-                    delayed.emplace_back(event.Release());
-                    return true;
-                }
+            if (event->GetTypeRewrite() == NGroupSyncer::TEvGroupState::EvPropose) {
+                delayed.emplace_back(event.Release());
+                return true;
             }
             return previous(runtime, event);
         });

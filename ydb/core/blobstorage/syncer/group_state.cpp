@@ -1,14 +1,16 @@
 #include "group_state.h"
+#include "syncer.h"
+
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
-#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
+
 #include <map>
 #include <set>
 
-namespace NKikimr::NBsController {
+namespace NKikimr::NGroupSyncer {
 
 namespace {
 std::optional<TMirror3dcGroupConfiguration> GetConfiguration(const TGroupReplicationInfo& info) {
@@ -27,7 +29,7 @@ bool WaitForRecoveringVDiskStartup(EMirror3dcGroupState state) {
 } // namespace
 
 class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
-    const TActorId ControllerId;
+    const TActorId OwnerId;
     static constexpr ui32 GroupsPerRound = 64;
     static constexpr ui32 MaxRunningRepairs = 16;
     static constexpr TDuration PollInterval = TDuration::Seconds(5);
@@ -83,7 +85,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             return;
         }
         if (cancel) {
-            std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepair> request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+            std::unique_ptr<TEvRunMirror3dcRepair> request = std::make_unique<TEvRunMirror3dcRepair>();
             request->Record.SetGroupId(group->Info.VDisks.front().Id.GroupID.GetRawId());
             request->Record.SetGeneration(group->Info.Generation);
             request->Record.SetCancel(true);
@@ -117,6 +119,9 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void Handle(TEvGroupState::TEvUpdate::TPtr& ev) {
+        if (ev->Sender != OwnerId) {
+            return;
+        }
         const TEvGroupState::TEvUpdate& message = *ev->Get();
         if (auto it = Groups.find(message.GroupId); it != Groups.end() && message.Info
                 && it->second.Info.Generation == message.Info->Generation
@@ -190,7 +195,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             ++RepairNodeSubscriptions[group->RepairNode];
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
-        std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepair> request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+        std::unique_ptr<TEvRunMirror3dcRepair> request = std::make_unique<TEvRunMirror3dcRepair>();
         request->Record.SetGroupId(groupId);
         request->Record.SetGeneration(group->Info.Generation);
         Send(MakeBlobStorageNodeWardenID(group->RepairNode), request.release(), flags, group->RepairCookie);
@@ -202,19 +207,9 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         }
         const TMirror3dcGroupConfiguration& next = group->Next;
         Y_ABORT_UNLESS(IsAllowedMirror3dcGroupTransition(*group->Info.GroupState, next.State));
-        using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
-        std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request =
-            std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-        TDefinition* definition = request->Record.MutableRequest()->AddCommand()->MutableDefineGroupState()->AddGroups();
-        definition->SetGroupId(groupId);
-        definition->SetExpectedGroupGeneration(group->Info.Generation);
-        definition->SetGroupState(next.State);
-        for (EMirror3dcFailRealmState state : next.Realms) {
-            definition->AddFailRealmStates(state);
-        }
         group->ProposalCookie = ++NextCookie;
         Proposals.emplace(group->ProposalCookie, groupId);
-        Send(ControllerId, request.release(), 0, group->ProposalCookie);
+        Send(OwnerId, new TEvGroupState::TEvPropose(groupId, group->Info.Generation, next), 0, group->ProposalCookie);
     }
 
     void FinishStatusRound(ui32 groupId, TGroup* group) {
@@ -290,9 +285,9 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         Schedule(PollInterval, new TEvents::TEvWakeup);
     }
 
-    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
+    void Handle(TEvGroupState::TEvProposalResult::TPtr& ev) {
         const auto proposal = Proposals.find(ev->Cookie);
-        if (proposal == Proposals.end() || ev->Sender != ControllerId) {
+        if (proposal == Proposals.end() || ev->Sender != OwnerId) {
             return;
         }
         if (const auto group = Groups.find(proposal->second); group != Groups.end()
@@ -324,7 +319,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         }
     }
 
-    void Handle(NGroupSyncer::TEvRunMirror3dcRepairResult::TPtr& ev) {
+    void Handle(TEvRunMirror3dcRepairResult::TPtr& ev) {
         const auto running = RunningRepairs.find(ev->Cookie);
         if (running == RunningRepairs.end()) {
             return;
@@ -347,7 +342,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         const auto it = RunningRepairs.find(ev->Cookie);
-        if (it != RunningRepairs.end() && ev->Get()->SourceType == NGroupSyncer::TEvRunMirror3dcRepair::EventType) {
+        if (it != RunningRepairs.end() && ev->Get()->SourceType == TEvRunMirror3dcRepair::EventType) {
             ClearRepair(&Groups.at(it->second), true);
         }
     }
@@ -357,7 +352,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
 public:
-    explicit TGroupStateActor(const TActorId& controllerId) : ControllerId(controllerId) {}
+    explicit TGroupStateActor(const TActorId& ownerId) : OwnerId(ownerId) {}
 
     void Bootstrap() {
         Become(&TThis::StateWork);
@@ -367,8 +362,8 @@ public:
     STRICT_STFUNC(StateWork,
         hFunc(TEvGroupState::TEvUpdate, Handle)
         hFunc(TEvBlobStorage::TEvVStatusResult, Handle)
-        hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle)
-        hFunc(NGroupSyncer::TEvRunMirror3dcRepairResult, Handle)
+        hFunc(TEvGroupState::TEvProposalResult, Handle)
+        hFunc(TEvRunMirror3dcRepairResult, Handle)
         hFunc(TEvents::TEvUndelivered, Handle)
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
         IgnoreFunc(TEvInterconnect::TEvNodeConnected)
@@ -377,8 +372,8 @@ public:
     )
 };
 
-IActor* CreateGroupStateActor(const TActorId& controllerId) {
-    return new TGroupStateActor(controllerId);
+IActor* CreateGroupStateActor(const TActorId& ownerId) {
+    return new TGroupStateActor(ownerId);
 }
 
-} // namespace NKikimr::NBsController
+} // namespace NKikimr::NGroupSyncer

@@ -1190,6 +1190,7 @@ STFUNC(TBlobStorageController::StateWork) {
         fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
+        fFunc(NGroupSyncer::TEvGroupState::EvPropose, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
         fFunc(NSysView::TEvSysView::EvGetPDisksRequest, ForwardToSystemViewsCollector);
         fFunc(NSysView::TEvSysView::EvGetVSlotsRequest, ForwardToSystemViewsCollector);
@@ -1353,6 +1354,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerScrubReportQuantumInProgress: return 2;
         case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2;
         case TEvBlobStorage::EvControllerShredRequest:                 return 2;
+        case NGroupSyncer::TEvGroupState::EvPropose:                   return 2;
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;

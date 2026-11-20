@@ -1,6 +1,6 @@
-#include <ydb/core/mind/bscontroller/group_state.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
 #include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -9,7 +9,7 @@
 
 using namespace NActors;
 using namespace NKikimr;
-using namespace NKikimr::NBsController;
+using namespace NKikimr::NGroupSyncer;
 
 namespace {
 using TFailRealm = NKikimrBlobStorage::TDataCenterState;
@@ -126,22 +126,12 @@ public:
     }
 
     TMirror3dcGroupConfiguration GetProposal() {
-        TEvBlobStorage::TEvControllerConfigRequest::TPtr result =
-            Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(Controller);
-        const NKikimrBlobStorage::TConfigRequest& request = result->Get()->Record.GetRequest();
-        UNIT_ASSERT(!request.GetIgnoreGroupFailModelChecks());
-        UNIT_ASSERT(!request.GetIgnoreDegradedGroupsChecks());
-        UNIT_ASSERT(!request.GetIgnoreDisintegratedGroupsChecks());
-        const NKikimrBlobStorage::TDefineGroupState& command =
-            result->Get()->Record.GetRequest().GetCommand(0).GetDefineGroupState();
-        UNIT_ASSERT_VALUES_EQUAL(command.GroupsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(command.GetGroups(0).GetExpectedGroupGeneration(), Info.Generation);
-        TFailRealmStates states;
-        for (ui32 realm = 0; realm < 3; ++realm) {
-            states[realm] = static_cast<EMirror3dcFailRealmState>(command.GetGroups(0).GetFailRealmStates(realm));
-        }
-        UNIT_ASSERT(command.GetGroups(0).HasGroupState());
-        return {command.GetGroups(0).GetGroupState(), states};
+        auto event = Runtime.GrabEdgeEventRethrow<TEvGroupState::TEvPropose>(Controller);
+        UNIT_ASSERT_VALUES_EQUAL(event->Sender, Actor);
+        const auto& proposal = *event->Get();
+        UNIT_ASSERT_VALUES_EQUAL(proposal.GroupId, Info.VDisks.front().Id.GroupID.GetRawId());
+        UNIT_ASSERT_VALUES_EQUAL(proposal.Generation, Info.Generation);
+        return proposal.Next;
     }
 };
 }

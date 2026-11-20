@@ -1331,7 +1331,7 @@ namespace NKikimr::NBsController {
 
     std::expected<void, TString> TBlobStorageController::TConfigState::ValidateMirror3dcGroupStates(const TValidateConfigUpdatesParameters& parameters) {
         using TFailRealm = NKikimrBlobStorage::TDataCenterState;
-        TFailRealmStates normal{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED};
+        NGroupSyncer::TFailRealmStates normal{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED};
         TVector<TGroupId> groups;
         for (const auto& [base, overlay] : Groups.Diff()) {
             if (overlay->second) {
@@ -1367,7 +1367,7 @@ namespace NKikimr::NBsController {
                     if (!target) {
                         return std::unexpected<TString>("Missing host location for group state transition");
                     }
-                    next = NextDataCenterTransition(previous, *target);
+                    next = NGroupSyncer::NextDataCenterTransition(previous, *target);
                 }
                 if (!next) {
                     next = RecoveringComplete(previous);

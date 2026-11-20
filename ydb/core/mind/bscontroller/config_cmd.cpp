@@ -489,10 +489,31 @@ namespace NKikimr::NBsController {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
                 *Ev->Record.MutableResponse()->MutableAppliedDataCenterStates() = SerializeDataCenterStates(Self->DataCenterStates);
-                TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                if (NotifyId == Self->GroupStateActorId) {
+                    Self->Send(NotifyId, new NGroupSyncer::TEvGroupState::TEvProposalResult, 0, Cookie);
+                } else {
+                    TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                }
                 Self->UpdatePDisksCounters();
             }
         };
+
+        void TBlobStorageController::Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr& ev) {
+            if (ev->Sender != GroupStateActorId) {
+                return;
+            }
+            const auto& proposal = *ev->Get();
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* group = request.AddCommand()->MutableDefineGroupState()->AddGroups();
+            group->SetGroupId(proposal.GroupId);
+            group->SetExpectedGroupGeneration(proposal.Generation);
+            group->SetGroupState(proposal.Next.State);
+            for (EMirror3dcFailRealmState state : proposal.Next.Realms) {
+                group->AddFailRealmStates(state);
+            }
+            TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, false, false, std::nullopt, this));
+        }
 
         void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev) {
             TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);

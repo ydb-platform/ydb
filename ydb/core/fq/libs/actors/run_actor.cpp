@@ -4,7 +4,6 @@
 #include "table_bindings_from_bindings.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
@@ -23,6 +22,7 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -67,9 +67,9 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <yql/essentials/core/facade/yql_facade.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -144,8 +144,7 @@ bool IsPgProgram(TStringBuf program) {
         if (type->GetKind() == TType::EKind::Type) {
             return static_cast<const TType*>(node)->GetKind() == TType::EKind::Pg;
         }
-        return type->GetKind() == TType::EKind::Callable
-            && NKikimr::NKqp::IsPgCallable(static_cast<const TCallableType*>(type)->GetName());
+        return type->GetKind() == TType::EKind::Callable && NKikimr::NKqp::IsPgCallable(static_cast<const TCallableType*>(type)->GetName());
     });
 }
 
@@ -161,7 +160,8 @@ class TTraceOptPipelineConfigurator: public IPipelineConfigurator {
 public:
     explicit TTraceOptPipelineConfigurator(bool disablePgCompatibility)
         : DisablePgCompatibility(disablePgCompatibility)
-    {}
+    {
+    }
 
     void AfterCreate(TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
@@ -171,8 +171,8 @@ public:
         if (DisablePgCompatibility) {
             pipeline->Add(CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
-                return NKikimr::NKqp::ValidateOptimizedKqpPgTypes(input, ctx)
-                    ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error;
+                return NKikimr::NKqp::ValidateOptimizedKqpPgTypes(input, ctx) ? IGraphTransformer::TStatus::Ok
+                                                                              : IGraphTransformer::TStatus::Error;
             }), "CheckPgTypes");
         }
         pipeline->Add(TExprLogTransformer::Sync("OptimizedExpr", NYql::NLog::EComponent::Core, NYql::NLog::ELevel::TRACE), "OptTrace",
@@ -242,13 +242,13 @@ public:
 
                 if (SqlSettings.PGDisable) {
                     const auto invalid = FindNode(Program->ExprRoot(), [](const TExprNode::TPtr& node) {
-                        return node->IsCallable() && (NKikimr::NKqp::IsPgCallable(node->Content())
-                            || (node->IsCallable("Configure") && node->ChildrenSize() == 4
-                                && node->Child(2)->IsAtom("CostBasedOptimizer") && node->Child(3)->IsAtom("pg")));
+                        return node->IsCallable() && (NKikimr::NKqp::IsPgCallable(node->Content()) ||
+                                                         (node->IsCallable("Configure") && node->ChildrenSize() == 4 &&
+                                                             node->Child(2)->IsAtom("CostBasedOptimizer") && node->Child(3)->IsAtom("pg")));
                     });
                     if (invalid) {
-                        Issues.AddIssue(YqlIssue(Program->ExprCtx().GetPosition(invalid->Pos()),
-                            TIssuesIds::KIKIMR_BAD_REQUEST, PgCompatibilityDisabled));
+                        Issues.AddIssue(
+                            YqlIssue(Program->ExprCtx().GetPosition(invalid->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, PgCompatibilityDisabled));
                         SendStatusAndDie(TProgram::TStatus::Error, PgCompatibilityDisabled);
                         return;
                     }
@@ -993,6 +993,22 @@ private:
         return false;
     }
 
+    bool AbortOnUnsupportedDqGraph(const NFq::NProto::TGraphParams& graph) {
+        if (!DisablePgCompatibility) {
+            return false;
+        }
+        try {
+            if (!IsPgGraph(graph)) {
+                return false;
+            }
+        } catch (const std::exception& err) {
+            Abort("Could not validate the DQ program", FederatedQuery::QueryMeta::FAILED, { ExceptionToIssue(err) });
+            return true;
+        }
+        Abort(PgCompatibilityDisabled, FederatedQuery::QueryMeta::FAILED);
+        return true;
+    }
+
     void Handle(TEvents::TEvGraphParams::TPtr& ev) {
         YDB_LOG_DEBUG("Graph with",
             {"queryId", Params.QueryId},
@@ -1009,8 +1025,7 @@ private:
         }
 
         if (ev->Get()->IsEvaluation) {
-            if (DisablePgCompatibility && IsPgGraph(ev->Get()->GraphParams)) {
-                Abort(PgCompatibilityDisabled, FederatedQuery::QueryMeta::FAILED);
+            if (AbortOnUnsupportedDqGraph(ev->Get()->GraphParams)) {
                 return;
             }
             auto info = RunEvalDqGraph(ev->Get()->GraphParams);
@@ -1683,8 +1698,7 @@ private:
 
     void RunNextDqGraph() {
         auto& dqGraphParams = DqGraphParams.at(DqGraphIndex);
-        if (DisablePgCompatibility && IsPgGraph(dqGraphParams)) {
-            Abort(PgCompatibilityDisabled, FederatedQuery::QueryMeta::FAILED);
+        if (AbortOnUnsupportedDqGraph(dqGraphParams)) {
             return;
         }
         TDqConfiguration::TPtr dqConfiguration = MakeIntrusive<TDqConfiguration>();

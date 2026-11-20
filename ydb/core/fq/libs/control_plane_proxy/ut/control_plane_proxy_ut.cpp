@@ -531,10 +531,10 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyBindingUpdate) {
         computeConfig.MutableYdb()->MutableControlPlane()->SetEnable(true);
 
         const std::pair<const char*, bool> cases[] = {
-            {"new_name", false},
-            {"new_name", true},
-            {"old_name", false},
-            {"old_name", true},
+            { "new_name", false },
+            { "new_name", true },
+            { "old_name", false },
+            { "old_name", true },
         };
         for (const auto& [name, replay] : cases) {
             TTestBootstrap bootstrap({}, computeConfig);

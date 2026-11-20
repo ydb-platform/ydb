@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
             END DO;
         )");
         WriteTopicMessage("pgPolicyInput", R"({"value": "before"})");
-        ReadTopicMessages("pgPolicyOutput", {"before"}, TInstant::Now() - TDuration::Seconds(100));
+        ReadTopicMessages("pgPolicyOutput", { "before" }, TInstant::Now() - TDuration::Seconds(100));
 
         const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")->GetCounter("CompletedCheckpoints", true);
         const auto initial = completed->Val();
@@ -212,8 +212,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
 
         auto& featureFlags = GetRuntime().GetAppData().FeatureFlags;
         featureFlags.SetDisablePgCompatibility(true);
-        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = TRUE)", EStatus::UNSUPPORTED,
-            "PostgreSQL compatibility is disabled");
+        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = TRUE)", EStatus::UNSUPPORTED, "PostgreSQL compatibility is disabled");
         UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId("pgPolicyQuery"), checkpointId);
 
         featureFlags.SetDisablePgCompatibility(false);
@@ -221,7 +220,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
         ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = TRUE)");
         UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId("pgPolicyQuery"), checkpointId);
         WriteTopicMessage("pgPolicyInput", R"({"value": "after"})");
-        ReadTopicMessages("pgPolicyOutput", {"after"}, restartTime);
+        ReadTopicMessages("pgPolicyOutput", { "after" }, restartTime);
         ExecQuery("DROP STREAMING QUERY pgPolicyQuery");
     }
 

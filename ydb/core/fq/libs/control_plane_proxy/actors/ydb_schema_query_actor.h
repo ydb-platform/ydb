@@ -44,8 +44,7 @@ enum class EModifyBindingStage {
 };
 
 NActors::IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
-    TDuration requestTimeout, TCounters& counters, const TComputeConfig& computeConfig,
-    EModifyBindingStage stage = EModifyBindingStage::Modify);
+    TDuration requestTimeout, TCounters& counters, const TComputeConfig& computeConfig, EModifyBindingStage stage = EModifyBindingStage::Modify);
 
 NActors::IActor* MakeDeleteBindingActor(
     const TActorId& proxyActorId, TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr request, TDuration requestTimeout, TCounters& counters);

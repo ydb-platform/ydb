@@ -1479,12 +1479,21 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
     Y_UNIT_TEST(AnalyzePgKeyFallsBackToWholeTableScan) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
-            settings.SetEnableTablePgTypes(true).SetDisablePgCompatibility(false);
+            settings.SetEnableTablePgTypes(true);
             settings.AppConfig->MutableFeatureFlags()->SetEnableTablePgTypes(true);
             settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
+        auto setDisablePgCompatibility = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                auto& appData = runtime.GetAppData(node);
+                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+                flags.SetDisablePgCompatibility(disabled);
+                appData.UpdateRuntimeFlags(flags);
+            }
+        };
+        setDisablePgCompatibility(false);
         ExecuteYqlScript(env, R"(
             CREATE TABLE `Root/Database/Table` (
                 Key pgint8,
@@ -1499,6 +1508,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         )");
 
         const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
+        setDisablePgCompatibility(true);
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
         CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
     }

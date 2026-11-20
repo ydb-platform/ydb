@@ -498,6 +498,7 @@ private:
                     errorStatus = Ydb::StatusIds::UNAUTHORIZED;
                     return TConclusionStatus::Fail(errorMessage);
                 }
+                errorStatus = Ydb::StatusIds::BAD_REQUEST;
                 return TConclusionStatus::Fail("PostgreSQL compatibility is disabled");
             }
 

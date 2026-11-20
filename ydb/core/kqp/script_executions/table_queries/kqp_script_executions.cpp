@@ -780,8 +780,8 @@ public:
         if (ev.QueryPhysicalGraph) {
             disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
             if (*disablePgCompatibility && !ev.QueryPhysicalGraph->GetCompiledWithPgCompatibilityDisabled()) {
-                SendFailResponse(Ydb::StatusIds::UNSUPPORTED,
-                    "PostgreSQL compatibility is disabled and the saved plan was not compiled in that mode");
+                SendFailResponse(
+                    Ydb::StatusIds::UNSUPPORTED, "PostgreSQL compatibility is disabled and the saved plan was not compiled in that mode");
                 return;
             }
         }
@@ -1243,6 +1243,9 @@ private:
         request.SetPoolId(meta.GetResourcePoolId());
 
         const bool hasPhysicalGraph = physicalGraph.has_value();
+        // A retry of the same execution retains the policy of its saved graph.
+        const auto disablePgCompatibility =
+            physicalGraph ? std::optional{ physicalGraph->GetCompiledWithPgCompatibilityDisabled() } : std::nullopt;
         RunScriptActorId = Register(CreateRunScriptActor(queryRequest,
             {
                 .Database = request.GetDatabase(),
@@ -1256,6 +1259,7 @@ private:
                 .Counters = Counters,
                 .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
                 .PhysicalGraph = std::move(physicalGraph),
+                .DisablePgCompatibility = disablePgCompatibility,
                 .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
                 .CheckpointId = meta.GetCheckpointId(),
                 .StreamingQueryPath = meta.GetStreamingQueryPath(),

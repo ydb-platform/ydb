@@ -2115,15 +2115,15 @@ private:
 
         if (pgBinding && binding.BindingUpdateValidated && !binding.ComputeYDBOperationWasPerformed) {
             binding.YDBClient = CreateNewTableClient(ev, Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory);
-            Register(MakeModifyBindingActor(ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters,
-                Config.ComputeConfig, EModifyBindingStage::CreateOrReplace));
+            Register(MakeModifyBindingActor(ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters, Config.ComputeConfig,
+                EModifyBindingStage::CreateOrReplace));
             return;
         }
 
         if (!ev->Get()->ControlPlaneYDBOperationWasPerformed) {
             Register(new TRequestActor<TEvControlPlaneStorage::TEvModifyBindingRequest, TEvControlPlaneStorage::TEvModifyBindingResponse,
-                TEvControlPlaneProxy::TEvModifyBindingRequest, TEvControlPlaneProxy::TEvModifyBindingResponse>(
-                ev, Config, ControlPlaneStorageServiceActorId(), requestCounters, probe, availablePermissions, !isComputeYDBSyncEnabled, pgBinding));
+                TEvControlPlaneProxy::TEvModifyBindingRequest, TEvControlPlaneProxy::TEvModifyBindingResponse>(ev, Config,
+                ControlPlaneStorageServiceActorId(), requestCounters, probe, availablePermissions, !isComputeYDBSyncEnabled, pgBinding));
             return;
         }
 
@@ -2139,7 +2139,8 @@ private:
             if (pgRename && !binding.PgRenameCleanupStarted) {
                 binding.PgRenameCleanupStarted = true;
                 const auto stage = binding.Response->Issues.Empty() ? EModifyBindingStage::DropOld : EModifyBindingStage::DropNew;
-                Register(MakeModifyBindingActor(ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters, Config.ComputeConfig, stage));
+                Register(MakeModifyBindingActor(
+                    ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters, Config.ComputeConfig, stage));
                 return;
             }
             Send(sender, binding.Response.release());

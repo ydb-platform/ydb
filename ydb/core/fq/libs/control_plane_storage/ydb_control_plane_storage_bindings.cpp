@@ -436,7 +436,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
     auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request = request, validateOnly = event.ValidateOnly,
                              observedRevision = event.ObservedRevision, tablePathPrefix = YdbConnection->TablePathPrefix,
-                             idempotencyKeyTtl = Config->IdempotencyKeyTtl, commonCounters = requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+                             idempotencyKeyTtl = Config->IdempotencyKeyTtl,
+                             commonCounters = requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
                 << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";

@@ -223,13 +223,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto db = kikimr->GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        auto create = session.ExecuteQuery(fmt::format(R"(
+        auto create = session
+                          .ExecuteQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE `/Root/source` WITH (
                 SOURCE_TYPE="ObjectStorage", LOCATION="{location}", AUTH_METHOD="NONE"
             );
             CREATE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (
                 DATA_SOURCE="/Root/source", LOCATION="data.json", FORMAT="json_each_row"
-            );)", "location"_a = GetBucketLocation(bucket)), TTxControl::NoTx()).GetValueSync();
+            );)", "location"_a = GetBucketLocation(bucket)), TTxControl::NoTx())
+                          .GetValueSync();
         UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
 
         auto setFlag = [&](bool disabled) {
@@ -241,9 +243,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             }
         };
         auto check = [&](bool disabled) {
-            for (const auto* query : {"SELECT COUNT(*) FROM `/Root/mixed`;",
-                                      "SELECT id FROM `/Root/mixed`;",
-                                      "SELECT payload FROM `/Root/mixed`;"}) {
+            for (const auto* query :
+                { "SELECT COUNT(*) FROM `/Root/mixed`;", "SELECT id FROM `/Root/mixed`;", "SELECT payload FROM `/Root/mixed`;" }) {
                 auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
                 if (disabled) {
                     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
@@ -257,10 +258,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         check(false);
         setFlag(true);
         check(true);
-        const auto replace = session.ExecuteQuery(R"(
+        const auto replace = session
+                                 .ExecuteQuery(R"(
             CREATE OR REPLACE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (
                 DATA_SOURCE="/Root/source", LOCATION="replacement.json", FORMAT="json_each_row"
-            );)", TTxControl::NoTx()).GetValueSync();
+            );)", TTxControl::NoTx())
+                                 .GetValueSync();
         UNIT_ASSERT_C(!replace.IsSuccess(), replace.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(replace.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
         setFlag(false);

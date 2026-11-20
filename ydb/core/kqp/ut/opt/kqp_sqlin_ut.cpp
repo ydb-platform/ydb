@@ -704,6 +704,21 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         const auto explicitPgType = session.ExecuteDataQuery("SELECT PgType('int4');", txControl).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explicitPgType.GetStatus(), EStatus::BAD_REQUEST, explicitPgType.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(explicitPgType.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+
+        auto rows = TValueBuilder()
+                        .BeginList()
+                        .AddListItem()
+                        .BeginStruct()
+                        .AddMember("id")
+                        .Uint64(2)
+                        .AddMember("legacy")
+                        .Pg(TPgValue(TPgValue::VK_TEXT, "42", TPgType("pgint4")))
+                        .EndStruct()
+                        .EndList()
+                        .Build();
+        const auto bulk = kikimr.GetTableClient().BulkUpsert("/Root/Mixed", std::move(rows)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(bulk.GetStatus(), EStatus::BAD_REQUEST, bulk.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(bulk.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
     }
 
     Y_UNIT_TEST(SecondaryIndex_PgKey) {

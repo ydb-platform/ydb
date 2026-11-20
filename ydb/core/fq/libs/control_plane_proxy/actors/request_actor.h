@@ -149,11 +149,10 @@ public:
         Probe(delta, false, isTimeout);
         if constexpr (IsModifyBinding) {
             auto& binding = *RequestProxy->Get();
-            if (UpdateComputeBindingFirst && binding.BindingUpdateValidated
-                && binding.OldBindingContent->name() != binding.Request.content().name()
-                && !issues.Empty() && AllOf(issues, [](const auto& issue) {
-                return issue.GetCode() == TIssuesIds::BAD_REQUEST || issue.GetCode() == TIssuesIds::ACCESS_DENIED;
-            })) {
+            if (UpdateComputeBindingFirst && binding.BindingUpdateValidated &&
+                binding.OldBindingContent->name() != binding.Request.content().name() && !issues.Empty() && AllOf(issues, [](const auto& issue) {
+                    return issue.GetCode() == TIssuesIds::BAD_REQUEST || issue.GetCode() == TIssuesIds::ACCESS_DENIED;
+                })) {
                 binding.Response = std::make_unique<TResponseProxy>(issues, binding.SubjectType);
                 binding.ControlPlaneYDBOperationWasPerformed = true;
                 Send(RequestProxy->Forward(ControlPlaneProxyActorId()));

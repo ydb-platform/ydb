@@ -744,12 +744,12 @@ IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProx
 
         switch (stage) {
             case EModifyBindingStage::CreateOrReplace:
-                return {TSchemaQueryTask{.SQL = MakeCreateExternalDataTableQuery(content, sourceName, sameName)}};
+                return { TSchemaQueryTask{ .SQL = MakeCreateExternalDataTableQuery(content, sourceName, sameName) } };
             case EModifyBindingStage::DropOld:
             case EModifyBindingStage::DropNew:
-                return {TSchemaQueryTask{
-                    .SQL = MakeDeleteExternalDataTableQuery(stage == EModifyBindingStage::DropOld ? oldTableName : request->Get()->Request.content().name()),
-                    .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
+                return { TSchemaQueryTask{ .SQL = MakeDeleteExternalDataTableQuery(
+                                               stage == EModifyBindingStage::DropOld ? oldTableName : request->Get()->Request.content().name()),
+                    .ShouldSkipStepOnError = IsPathDoesNotExistIssue } };
             case EModifyBindingStage::Modify:
                 break;
         }

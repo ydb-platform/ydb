@@ -1,5 +1,6 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_pushdown.h"
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -54,35 +55,11 @@ const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& 
     }
 }
 
-struct TWatermarkPushdownSettings: public NPushdown::TSettings {
+struct TWatermarkPushdownSettings: public NPq::TCommonPushdownSettings {
     TWatermarkPushdownSettings()
-        : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
     {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
         Enable(
-            // Type features
-            EFlag::DateTimeTypes |
-            EFlag::DecimalType |
-            EFlag::StringTypes |
-            EFlag::TimestampCtor |
-            EFlag::IntervalCtor |
-            EFlag::DateCtor |
-            EFlag::ImplicitConversionToInt64 |
-            EFlag::DoNotCheckCompareArgumentsTypes |
-
-            // Expr features
-            EFlag::ArithmeticalExpressions |
-            EFlag::CastExpression |
-            EFlag::DivisionExpressions |
-            EFlag::ExpressionAsPredicate |
-            EFlag::JustPassthroughOperators |
-            EFlag::UnaryOperators |
-            EFlag::MinMax |
-            EFlag::IsDistinctOperator |
-            EFlag::ToBytesFromStringExpressions |
-            EFlag::ToStringFromStringExpressions |
-            EFlag::FlatMapOverOptionals |
-            EFlag::StructOperators |
             EFlag::NonDeterministic
         );
     }

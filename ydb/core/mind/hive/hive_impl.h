@@ -452,6 +452,7 @@ protected:
     std::queue<TTabletId> ResumeTenantTabletsQueue;
     bool NotEnoughResources = false;
     std::queue<TFullTabletId> ProcessTabletMetricsQueue;
+    ui64 LastProtoMetricsRevision = 0;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -743,6 +744,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
             const TMetrics& after,
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
+    void ResetTotalResourceValues();
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
@@ -777,6 +779,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     TTabletMetricsAggregates DefaultResourceMetricsAggregates;
     ui64 MetricsWindowSize = TDuration::Minutes(1).MilliSeconds();
     const TTabletMetricsAggregates& GetDefaultResourceMetricsAggregates() const;
+    ui64 AllocateProtoMetricsRevision() {
+        const ui64 revision = ++LastProtoMetricsRevision;
+        Y_ABORT_UNLESS(revision != 0);
+        return revision;
+    }
     bool CheckForForwardTabletRequest(TTabletId tabletId, NKikimrHive::TForwardRequest& forwardRequest);
     TSubDomainKey GetRootDomainKey() const;
     TString GetLogPrefix() const;

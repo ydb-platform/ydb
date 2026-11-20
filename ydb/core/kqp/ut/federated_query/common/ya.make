@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/kqp/rm_service
     ydb/core/kqp/ut/common
     ydb/library/yql/providers/pq/gateway/dummy
+    ydb/library/yql/providers/pq/transform
     ydb/library/yql/providers/s3/actors_factory
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/query

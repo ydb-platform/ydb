@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/util/backoff.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/algorithm.h>
@@ -43,7 +44,11 @@ inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::ESt
         return false;
     case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
         for (const auto& issue : status.GetIssues()) {
-            if (issue.GetMessage().contains("Misformatted domain name") || issue.GetMessage().contains("Domain name not found")) {
+            // A malformed name is an invalid setting. A missing DNS name can
+            // recover (including a discovered endpoint), like other outages.
+            if (issue.GetMessage().contains("Misformatted domain name")
+                || issue.GetMessage().contains("Client TLS credentials validation failed"))
+            {
                 return false;
             }
         }
@@ -56,6 +61,23 @@ inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::ESt
 inline bool IsRetryableError(const NYdb::TStatus status) {
     static auto defaultRetryableErrors = DefaultRetryableErrors();
     return IsRetryableError(status, defaultRetryableErrors);
+}
+
+inline bool IsRetryableError(const NYdb::TStatus& status, const TBackoff& backoff) {
+    if (!IsRetryableError(status)) {
+        return false;
+    }
+
+    // Endpoint availability has no finite recovery deadline. Preserve the
+    // discovery budget for server errors, and the terminal setting/auth checks.
+    switch (status.GetStatus()) {
+    case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
+    case NYdb::EStatus::CLIENT_DISCOVERY_FAILED:
+    case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+        return true;
+    default:
+        return backoff.HasMore();
+    }
 }
 
 }

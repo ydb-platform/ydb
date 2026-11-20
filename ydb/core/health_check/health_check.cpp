@@ -753,6 +753,7 @@ public:
             TTabletId TabletId;
             TString Key;
             TMonotonic StartTime;
+            bool Cancelled = false;
         };
 
         std::unordered_map<TTabletId, TTabletState> TabletStates;
@@ -792,6 +793,15 @@ public:
                 RequestsInFlight.erase(itRequest);
             }
             return tabletId;
+        }
+
+        bool CancelRequest(ui64 requestId) {
+            auto itRequest = RequestsInFlight.find(requestId);
+            if (itRequest == RequestsInFlight.end() || itRequest->second.Cancelled) {
+                return false;
+            }
+            itRequest->second.Cancelled = true;
+            return true;
         }
     };
 
@@ -1477,8 +1487,9 @@ public:
                 GetPartitionStatsResult[tabletId].Error(error);
             }
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
-            for (const auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
-                if (requestState.TabletId == tabletId) {
+            for (auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
+                if (requestState.TabletId == tabletId && !requestState.Cancelled) {
+                    requestState.Cancelled = true;
                     RequestDone("unsuccessful TEvClientConnected");
                 }
             }
@@ -1496,16 +1507,16 @@ public:
                         }
                     }
                     TString error = "Timeout";
-                    if (StoragePools && StoragePools->Error(error)) {
+                    if (StoragePools && StoragePools->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestStoragePools)) {
                         RequestDone("TEvGetStoragePoolsRequest");
                     }
-                    if (Groups && Groups->Error(error)) {
+                    if (Groups && Groups->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestGroups)) {
                         RequestDone("TEvGetGroupsRequest");
                     }
-                    if (VSlots && VSlots->Error(error)) {
+                    if (VSlots && VSlots->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestVSlots)) {
                         RequestDone("TEvGetVSlotsRequest");
                     }
-                    if (PDisks && PDisks->Error(error)) {
+                    if (PDisks && PDisks->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestPDisks)) {
                         RequestDone("TEvGetPDisksRequest");
                     }
                 }
@@ -3572,10 +3583,12 @@ public:
             }
             ui32 disabledRings = 0;
             ui32 badRings = 0;
-            auto statusBefore = currentContext->OverallStatus;
+            TSelfCheckResult ringGroupContext; // collects issues of this ring group only, without propagating their status upwards
+            ringGroupContext.Location.CopyFrom(currentContext->Location);
+            ringGroupContext.Level = currentContext->Level;
             for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
                 const auto& ring = ringGroup.Rings[ringIdx];
-                TSelfCheckContext ringContext(currentContext, TStringBuilder() << type << "_RING");
+                TSelfCheckContext ringContext(&ringGroupContext, TStringBuilder() << type << "_RING");
                 ringContext.Location.mutable_compute()->mutable_state_storage()->set_ring(ringIdx + 1);
                 if (ring.IsDisabled) {
                     ++disabledRings;
@@ -3594,14 +3607,14 @@ public:
                     ++badRings;
                 }
             }
-            currentContext->OverallStatus = statusBefore;
             if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage, {ETags::StateStorageRing}, ringGroupContext.IssueRecords);
             } else if (badRings > 1) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Multiple rings have unavailable replicas", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Multiple rings have unavailable replicas", ETags::StateStorage, {ETags::StateStorageRing}, ringGroupContext.IssueRecords);
             } else if (badRings > 0) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "One ring has unavailable replicas", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "One ring has unavailable replicas", ETags::StateStorage, {ETags::StateStorageRing}, ringGroupContext.IssueRecords);
             }
+            currentContext->IssueRecords.splice(currentContext->IssueRecords.end(), ringGroupContext.IssueRecords);
         }
         MergeRecords(ssContext.IssueRecords);
         context.UpdateMaxStatus(ssContext.GetOverallStatus());

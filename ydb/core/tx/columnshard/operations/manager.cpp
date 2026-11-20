@@ -11,6 +11,14 @@ void TLockFeatures::SetTxId(const ui64 txId) {
     TxId = txId;
 }
 
+bool TLockFeatures::TryProposeTransaction(const ui64 txId) {
+    if (NeedsAborting()) {
+        return false;
+    }
+    SetTxId(txId);
+    return true;
+}
+
 bool TLockFeatures::IsTxIdAssigned() const {
     return TxId != 0;
 }
@@ -77,7 +85,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             auto& lock = it->second;
 
-            lock.SetTxId(txId);
+            AFL_VERIFY(lock.TryProposeTransaction(txId))("lock_id", lockId)("tx_id", txId);
             // we cannot persist the lock state reliably and cheaply enough,
             // so if the shard restarted/crashed/whatever, we assume the lock is broken
             lock.SetBroken();
@@ -89,6 +97,25 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     }
 
     return true;
+}
+
+std::vector<ui64> TOperationsManager::GetLockIdsOfNotProposedTransactions() const {
+    std::vector<ui64> result;
+    for (const auto& [lockId, lock] : LockFeatures) {
+        if (!lock.IsTxIdAssigned()) {
+            result.push_back(lockId);
+        }
+    }
+    return result;
+}
+
+bool TOperationsManager::HasWriteOperations(const TInternalPathId pathId) const {
+    for (const auto& [_, operation] : Operations) {
+        if (operation->GetPathId().InternalPathId == pathId) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {

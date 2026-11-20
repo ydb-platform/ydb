@@ -1418,6 +1418,16 @@ public:
                 }
 
                 if (buildSettings.has_column_build_operation()) {
+                    if (!NSchemeHelpers::ValidateColumnBuildAlter(modifyScheme,
+                        buildSettings.column_build_operation(), code, error))
+                    {
+                        IKqpGateway::TGenericResult errResult;
+                        const auto issueCode = NYql::YqlStatusFromYdbStatus(code);
+                        errResult.AddIssue(NYql::TIssue(error).SetCode(issueCode, NYql::TSeverityIds::S_ERROR));
+                        errResult.SetStatus(issueCode);
+                        tablePromise.SetValue(errResult);
+                        return;
+                    }
                     buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
                     phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
                 } else {
@@ -1763,8 +1773,7 @@ public:
                     } else {
                         for (const auto& sid : settings.Roles) {
                             for (const auto& permission : settings.Permissions) {
-                                TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
-                                acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                                RevokeYdbPermission(permission, sid, acl);
                             }
                         }
                     }
@@ -3141,6 +3150,12 @@ public:
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
             }
+            if (const auto& initialScan = settings.Settings.InitialScan) {
+                config.SetInitialScan(*initialScan);
+            }
+            if (const auto& availabilityPeriod = settings.Settings.AvailabilityPeriod) {
+                config.MutableAvailabilityPeriod()->CopyFrom(*availabilityPeriod);
+            }
 
             if (params.GetDatabase().empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
@@ -3290,6 +3305,8 @@ public:
 
             auto& op = *tx.MutableDrop();
             op.SetName(pathPair.second);
+
+            op.SetReplicationSourceCleanup(settings.SourceCleanup);
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

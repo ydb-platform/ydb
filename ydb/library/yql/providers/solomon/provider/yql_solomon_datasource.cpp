@@ -42,10 +42,24 @@ public:
         cluster.SetToken(token);
         cluster.SetUseSsl(properties.Value("use_tls", "true") == "true"sv);
 
-        if (properties.Value("project", "") && properties.Value("cluster", "")) {
+        const TString& project = properties.Value("project", "");
+        const TString& clusterName = properties.Value("cluster", "");
+
+        if (project && clusterName) {
+            // Cloud monitoring: PROJECT is the cloud id, CLUSTER the folder id.
             cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
-            cluster.MutablePath()->SetProject(properties.Value("project", ""));
-            cluster.MutablePath()->SetCluster(properties.Value("cluster", ""));
+            cluster.MutablePath()->SetProject(project);
+            cluster.MutablePath()->SetCluster(clusterName);
+        } else if (project) {
+            // Monium project addressed by its own id: the cluster is a plain selector
+            // label there, not a container, so it belongs in the query.
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+            cluster.MutablePath()->SetProject(project);
+            cluster.MutablePath()->SetCluster("");
+
+            auto moniumProject = cluster.MutableSettings()->Add();
+            *moniumProject->MutableName() = "monium_project";
+            *moniumProject->MutableValue() = "true";
         } else {
             cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
         }

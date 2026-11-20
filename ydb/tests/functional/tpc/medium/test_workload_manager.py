@@ -1,5 +1,8 @@
 import ydb.tests.olap.load.lib.workload_manager as wm
 import yatest.common
+import pytest
+import time
+from pathlib import Path
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
 
@@ -62,8 +65,13 @@ class TestClickbenchWMComputeSchedulerP1T1(wm.TestWorkloadManagerClickbenchCompu
 #         super().setup_class()
 
 class TestWMOltp50(wm.TestWorkloadManagerOltp50, FunctionalTestBase):
-    timeout: float = 60
+    timeout: float = 30
     tpcc_warehouses: int = 10
+    tpcc_warmup: float = 2
+
+    @classmethod
+    def before_stop_checking(cls):
+        cls.wait_tpcc()
 
     @classmethod
     def setup_class(cls) -> None:
@@ -79,7 +87,7 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
     }
     scale: float = 0.1
     iterations: int = 1
-    tpcc_warehouses: int = 10
+    tpcc_warehouses: int = 5
 
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:
@@ -100,6 +108,23 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
 class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
     tpcc_warehouses: int = 10
     iterations = 3
+
+    @classmethod
+    def before_workload(cls, result):
+        super().before_workload(result)
+        deadline = time.monotonic() + 20
+        execution = cls._tpcc_executions[0][1]
+        log = Path(execution._err_path)
+        while time.monotonic() < deadline:
+            try:
+                if 'WM_TPCC_OK' in log.read_text():
+                    return
+            except FileNotFoundError:
+                pass
+            time.sleep(0.05)
+        cls.terminate_tpcc()
+        cls.wait_tpcc()
+        pytest.fail('TPC-C did not complete a transaction before the readiness timeout')
 
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:

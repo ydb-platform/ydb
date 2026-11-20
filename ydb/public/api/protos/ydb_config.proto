@@ -167,8 +167,8 @@ message FetchConfigRequest {
         FetchModeByIdentity target = 3;
     }
 
-    // This is filled in when the config is being fetched from seed node. It will block until requestor is available
-    // in reported config node list.
+    // This is present when a node fetches its startup config from a seed node, including an empty message for dynamic nodes.
+    // If requestor hosts are specified, the request blocks until the requestor is available in the reported config node list.
     SeedNodeFetchRequestor seed_node_fetch_requestor = 4;
 }
 
@@ -197,6 +197,8 @@ message BootstrapClusterRequest {
     // This field used to make this request indempotent
     // Must be set to arbitrary **unique** string
     string self_assembly_uuid = 2;
+
+    bool allow_unknown_fields = 3;
 }
 
 message BootstrapClusterResponse {

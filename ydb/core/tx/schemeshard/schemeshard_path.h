@@ -190,6 +190,8 @@ public:
     bool IsBackupTable() const;
     bool IsReadOnlyColumnTable() const;
     bool IsAsyncReplicaTable() const;
+    bool IsWaitingImportReplica() const;
+    bool IsImportingReplica() const;
     bool IsCdcStream() const;
     bool IsSequence() const;
     bool IsReplication() const;

@@ -3,6 +3,7 @@
 #include "private_events.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -17,6 +18,8 @@ using namespace NSchemeShard;
 
 class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     void AllocateTxId() {
+        TxId = 0;
+        WaitingForCompletion = false;
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
         Become(&TThis::StateAllocateTxId);
     }
@@ -44,6 +47,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
+        if (ReplicationPathId) {
+            ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwnerPathId());
+        }
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -67,7 +73,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            sFunc(TEvents::TEvWakeup, AllocateTxId);
         default:
             return StateBase(ev);
         }
@@ -78,15 +83,56 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
+        // A reply from a previous proposal can arrive after its retry started.
+        if (record.GetTxId() != TxId) {
+            return;
+        }
+
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
-            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
+            WaitingForCompletion = true;
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
+        case NKikimrScheme::StatusResourceExhausted:
+            // Concurrent DDL and SchemeShard in-flight limits are temporary.
             return Retry();
+        case NKikimrScheme::StatusSuccess:
+            // SchemeShard completed the conditional cleanup without changes.
+            return Success();
+        case NKikimrScheme::StatusPathDoesNotExist:
+            // A deleted destination has nothing left to detach.
+            return Success();
+        case NKikimrScheme::StatusNameConflict:
+            // An already collected path id resolves to an empty path, which
+            // ALTER reports as a name conflict. Confirm that it is absent.
+            AlterError = record.GetReason();
+            Send(PipeCache, new TEvPipeCache::TEvForward(
+                new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId));
+            return Become(&TThis::StateCheckDst);
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
+    }
+
+    STATEFN(StateCheckDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCheckDst"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            return Success();
+        }
+
+        return Error(NKikimrScheme::StatusNameConflict, AlterError);
     }
 
     void SubscribeTx(ui64 txId) {
@@ -98,6 +144,10 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
+        if (!WaitingForCompletion || ev->Get()->Record.GetTxId() != TxId) {
+            return;
+        }
+
         Success();
     }
 
@@ -105,7 +155,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
-        if (SchemeShardId == ev->Get()->TabletId) {
+        if (SchemeShardId != ev->Get()->TabletId) {
             return;
         }
 
@@ -136,7 +186,18 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
     void Retry() {
         YDB_LOG_DEBUG("Retry");
+        WaitingForCompletion = false;
         Schedule(RetryInterval, new TEvents::TEvWakeup);
+        Become(&TThis::StateRetry);
+    }
+
+    STATEFN(StateRetry) {
+        // Retired proposals and duplicate delivery failures cannot complete the
+        // operation or schedule additional retries while the backoff is pending.
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, AllocateTxId);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
 public:
@@ -151,13 +212,15 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
-            const TReplication::EState desiredState)
+            const TReplication::EState desiredState,
+            const TPathId& replicationPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
+        , ReplicationPathId(replicationPathId)
         , DesiredState(desiredState)
         , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
@@ -203,11 +266,14 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
+    const TPathId ReplicationPathId;
     const TReplication::EState DesiredState;
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
+    bool WaitingForCompletion = false;
     TActorId PipeCache;
+    TString AlterError;
     static constexpr auto RetryInterval = TDuration::Seconds(10);
 
 }; // TDstAlterer
@@ -216,13 +282,15 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState(),
+        replication->GetPathId());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState,
+        const TPathId& replicationPathId)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId);
 }
 
 }

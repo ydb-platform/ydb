@@ -4,12 +4,14 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 ENV(YDB_ERASURE=block_4-2)
 
-ENV(YDB_FEATURE_FLAGS="enable_topic_transfer")
+ENV(YDB_FEATURE_FLAGS="enable_topic_transfer,enable_topic_retention_delete_last_blob")
 ENV(YDB_GRPC_SERVICES="replication")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TRANSFER:DEBUG,REPLICATION_CONTROLLER:DEBUG,REPLICATION_SERVICE:DEBUG,PERSQUEUE:DEBUG,PQ_SCHEMA:DEBUG")
 
 PEERDIR(
+    ydb/core/testlib/pg
     ydb/core/transfer/ut/common
+    ydb/library/testlib/common
 )
 
 SRCS(

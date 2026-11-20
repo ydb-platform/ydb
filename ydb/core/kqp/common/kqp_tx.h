@@ -154,11 +154,20 @@ public:
 
         FinishTime = TInstant::Now();
 
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+
         if (Implicit) {
             Reset();
         } else {
             Closed = true;
         }
+    }
+
+    void Invalidate() override {
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        TKikimrTransactionContextBase::Invalidate();
     }
 
     void Touch() {

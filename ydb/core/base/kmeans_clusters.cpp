@@ -5,6 +5,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/vector_distance/type_traits.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 #include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
@@ -69,6 +70,10 @@ namespace {
         const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        else if (vectorType == "float8_e4m3")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        else if (vectorType == "float8_e5m2")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
         else if (vectorType == "uint8")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         else if (vectorType == "int8")
@@ -116,7 +121,10 @@ namespace {
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
+    // Reduced-precision coordinates use float arithmetic and double sums.
+    using TArithmeticCoord = NVectorDistance::TArithmeticCoord<TCoord>;
+    static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
+    using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
     static constexpr bool AggregateNormalized = false;
 };
 
@@ -142,7 +150,7 @@ struct TCosineDistance : TMetric<TCoord> {
 template <typename TCoord>
 struct TL1Distance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, ui64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, ui64>;
 
     static TRes Init()
     {
@@ -159,7 +167,7 @@ struct TL1Distance : TMetric<TCoord> {
 template <typename TCoord>
 struct TL2Distance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, ui64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, ui64>;
 
     static TRes Init()
     {
@@ -176,7 +184,7 @@ struct TL2Distance : TMetric<TCoord> {
 template <typename TCoord>
 struct TMaxInnerProductSimilarity : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, i64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, i64>;
 
     static TRes Init()
     {
@@ -196,6 +204,7 @@ class TClusters: public IClusters {
     static constexpr double MinVectorsNeedsReassigned = 0.01;
 
     using TCoord = TMetric::TCoord_;
+    using TArithmeticCoord = TMetric::TArithmeticCoord;
     using TSum = TMetric::TSum;
     using TEmbedding = TVector<TSum>;
 
@@ -410,7 +419,7 @@ public:
                 }
             } else {
                 for (const auto coord : this->GetCoords(embedding.data())) {
-                    *coords++ += norm != 0 ? static_cast<TSum>(coord * (weight / norm)) : 0;
+                    *coords++ += norm != 0 ? static_cast<TSum>(static_cast<TArithmeticCoord>(coord) * (weight / norm)) : 0;
                 }
             }
         } else {
@@ -422,7 +431,7 @@ public:
                 }
             } else {
                 for (const auto coord : this->GetCoords(embedding.data())) {
-                    *coords++ += static_cast<TSum>(coord) * weight;
+                    *coords++ += static_cast<TSum>(static_cast<TArithmeticCoord>(coord)) * weight;
                 }
             }
         }
@@ -446,8 +455,7 @@ public:
             return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
         }
         if (FormatByte != data.back()) {
-            return TStringBuilder() << "Invalid vector format byte, got " << static_cast<ui8>(data.back())
-                << " expected " << static_cast<ui8>(FormatByte);
+            return Sprintf("Invalid vector format byte, got %02x, expected %02x", static_cast<ui8>(data.back()), FormatByte);
         }
         if (IsBitQuantized()) {
             auto actualDim = 0;
@@ -497,7 +505,7 @@ private:
             }
         } else {
             for (const auto coord : GetCoords(embedding.data())) {
-                const double value = static_cast<double>(coord);
+                const double value = static_cast<TArithmeticCoord>(coord);
                 normSquared += value * value;
             }
         }
@@ -551,11 +559,11 @@ private:
             }
 
             auto data = GetData(d.MutRef().data());
-            if constexpr (std::is_floating_point_v<TCoord>) {
+            if constexpr (TMetric::IsFloatingPoint) {
                 for (auto& coord : data) {
                     coord = norm != 0
                         ? static_cast<TCoord>(static_cast<double>(*embedding) / (static_cast<double>(c) * norm))
-                        : 0;
+                        : TCoord{};
                     ++embedding;
                 }
             } else {
@@ -587,7 +595,7 @@ private:
         } else {
             auto data = GetData(d.MutRef().data());
             for (auto& coord : data) {
-                coord = *embedding / count;
+                coord = static_cast<TCoord>(*embedding / count);
                 embedding++;
             }
         }
@@ -624,6 +632,10 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
     switch (settings.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return handleMetric.template operator()<float>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return handleMetric.template operator()<TFloat8E4M3>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return handleMetric.template operator()<TFloat8E5M2>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return handleMetric.template operator()<ui8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -656,6 +668,16 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
     switch (formatByte) {
         case EFormat::FloatVector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, sizeof(float), "float")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E4M3Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3, sizeof(TFloat8E4M3), "float8_e4m3")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E5M2Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2, sizeof(TFloat8E5M2), "float8_e5m2")) {
                 return nullptr;
             }
             break;
@@ -913,6 +935,20 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
             vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(float));
         }
         break;
+    case EFormat::Float8E4M3Vector:
+    case EFormat::Float8E5M2Vector:
+        if (embedding.size() <= HeaderLen) {
+            return false;
+        }
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Float8E4M3Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3
+                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2);
+        }
+        if (!hasVectorDimension) {
+            vectorSettings.set_vector_dimension(embedding.size() - HeaderLen);
+        }
+        break;
     case EFormat::Uint8Vector:
         if (!hasVectorType) {
             vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
@@ -1101,7 +1137,7 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
     } else if (nameLower =="levels") {
         settings.set_levels(ParseUInt32(nameLower, value, MinLevels, MaxLevels, error));
     } else if (nameLower == "overlap_clusters") {
-        settings.set_overlap_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
+        settings.set_overlap_clusters(ParseUInt32(nameLower, value, 1, MaxClusters, error));
     } else if (nameLower == "overlap_ratio") {
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else if (nameLower == "adaptive_clusters") {

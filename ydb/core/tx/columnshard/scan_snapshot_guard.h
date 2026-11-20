@@ -31,7 +31,8 @@ std::unique_ptr<IScanSnapshotGuard> CreateLocalScanSnapshotGuard(ui64 passedStep
 std::unique_ptr<IScanSnapshotGuard> CreateRegistryNotReadySnapshotGuard();
 
 std::unique_ptr<IScanSnapshotGuard> CreateRegistryScanSnapshotGuard(ui64 passedStep, ui64 schemeShardId,
-    const NOlap::TSnapshot& lastCleanupSnapshot, const NOlap::IPathIdTranslator& pathIdTranslator,
-    TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const NKikimrConfig::TLongTxServiceConfig& longTxConfig);
+    const NOlap::TSnapshot& lastCleanupSnapshot, const TInFlightReadsTracker& inFlightReadsTracker,
+    const NOlap::IPathIdTranslator& pathIdTranslator, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
+    const NKikimrConfig::TLongTxServiceConfig& longTxConfig);
 
 }   // namespace NKikimr::NColumnShard

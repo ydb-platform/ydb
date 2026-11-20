@@ -3,10 +3,14 @@
 #include "operation_helpers.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <util/system/hostname.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -62,6 +66,19 @@ public:
 private:
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev);
 
+    void PassAway() override {
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest);
+        TBase::PassAway();
+    }
+
+    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        if (ev->Get()->PathNormalizer.has_value()) {
+            PathNormalizer = *ev->Get()->PathNormalizer;
+        }
+        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(ev->Get()->Record), 0, ev->Cookie);
+    }
+
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext&) {
@@ -105,6 +122,8 @@ private:
     template <typename TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->InitializePathNormalization(PathNormalizer);
+        requestBaseCtx->CountRequestPaths();
 
         LogRequest(event);
 
@@ -152,12 +171,18 @@ private:
     const NKikimrConfig::TAppConfig AppConfig;
     std::atomic<ui64> ChannelBufferSize;
     IGRpcProxyCounters::TPtr Counters;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
 };
 
 void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
+    PathNormalizer = AppData(ctx)->GetPathNormalizer();
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+             NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}), IEventHandle::FlagTrackDelivery);
     auto nodeID = SelfId().NodeId();
 
-    LOG_NOTICE(ctx, NKikimrServices::GRPC_SERVER, "Grpc simple request proxy started, nodeid# %d", nodeID);
+    YDB_LOG_NOTICE_CTX(ctx, "Grpc simple request proxy started",
+        {"nodeid", nodeID});
 
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
     InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
@@ -167,9 +192,11 @@ void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
 
 void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            break;
         default:
-            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                "Undelivered event with unexpected source type: %d", ev->Get()->SourceType);
+            YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source type",
+                {"type", ev->Get()->SourceType});
             break;
     }
 }
@@ -214,15 +241,18 @@ void LogRequest(const TEvent& event) {
     };
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        YDB_LOG_INFO_CTX(*TlsActivationContext, getDebugString());
     }
     else {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        YDB_LOG_DEBUG_CTX(*TlsActivationContext, getDebugString());
     }
 }
 
 void TGRpcRequestProxySimple::StateFunc(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+        IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+        cFunc(TEvents::TSystem::Poison, PassAway);
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);

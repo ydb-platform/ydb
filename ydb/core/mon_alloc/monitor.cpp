@@ -434,7 +434,7 @@ namespace NKikimr {
                 if (action == "log" && relPath == "/memory/heap") {
                     LogMemoryStats(ctx, 2048);
                     out << "<p>Output dumped to log</p>"
-                        << "<p><a href=\"/memory/heap\">Return</a></p>\n";
+                        << "<p><a href=\"" << NActors::GetRelativeRoot(relPath) << "memory/heap\">Return</a></p>\n";
                 } else {
                     AllocMonitor->Dump(out, relPath);
                 }

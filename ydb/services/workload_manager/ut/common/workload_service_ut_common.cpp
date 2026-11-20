@@ -12,7 +12,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/http_gateway/ut_helpers/http_gateway_holder.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/services/metadata/service.h>
 
@@ -248,45 +248,7 @@ IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
     return new TFakeTicketParserActor();
 }
 
-///
-/// The HttpGateway is created as a singleton and stored in a shared_ptr.
-/// The HttpGateway is destroyed when its reference count reaches zero.
-///
-/// Destruction triggers the cleanup of libcurl, which in turn clears c-ares.
-/// During tests, this can race with gRPC threads that also use c-ares.
-///
-/// This class holds a reference to the HttpGateway during test execution
-/// to prevent repeated create/destroy/create cycles.
-///
-/// HttpGateway requires logging, so LoggerScope must be created before
-/// the HttpGateway is initialized
-///
-struct TGlobalObjectHolder {
-    std::shared_ptr<NYql::NLog::YqlLoggerScope> LoggerScope;
-    NYql::IHTTPGateway::TPtr HttpGateway;
-
-    TGlobalObjectHolder()
-        : LoggerScope(std::make_shared<NYql::NLog::YqlLoggerScope>(
-            new NYql::NLog::TTlsLogBackend(new TNullLogBackend())
-          ))
-        , HttpGateway(NYql::IHTTPGateway::Make())
-    {}
-
-    ~TGlobalObjectHolder() {
-        // By this point, all threads using c-ares must be stopped.
-        // Use this line to set a breakpoint while debugging c-ares races.
-        HttpGateway.reset();
-        LoggerScope.reset();
-    }
-};
-
 // Ydb setup
-const TGlobalObjectHolder& GetGlobalObjectHolder() {
-    static const TGlobalObjectHolder holder_;
-    Y_ENSURE(holder_.HttpGateway);
-    return holder_;
-}
-
 class TWorkloadServiceYdbSetup : public IYdbSetup {
 private:
     TAppConfig GetAppConfig() const {
@@ -339,7 +301,7 @@ private:
             .SetInitializeFederatedQuerySetupFactory(true);
 
         if (Settings_.WorkSafeWithGlobalObjects_) {
-            serverSettings.SetKqpLoggerScope(GetGlobalObjectHolder().LoggerScope);
+            serverSettings.SetKqpLoggerScope(NYql::NTestHelpers::GetGlobalHttpGatewayHolder().LoggerScope);
         }
 
         if (Settings_.CreateSampleTenants_) {
@@ -444,7 +406,7 @@ public:
         , SettingsTweakFnc_(fnc)
     {
         if (Settings_.WorkSafeWithGlobalObjects_) {
-            GetGlobalObjectHolder();
+            NYql::NTestHelpers::GetGlobalHttpGatewayHolder();
         }
 
         EnableYDBBacktraceFormat();

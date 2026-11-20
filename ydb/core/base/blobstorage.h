@@ -616,6 +616,7 @@ struct TEvBlobStorage {
         EvNodeWardenListLocalDDisksResult,
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
+        EvNodeConfigGetSelfHealState,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -639,6 +640,13 @@ struct TEvBlobStorage {
 
         EvIncrHugeReadLogResult,
         EvIncrHugeScanResult,
+
+        // Skipped during backport
+        // // Device overestimation sample transport (DDisk/PersistentBuffer -> PDisk)
+        // EvDeviceOverestimationSamples,
+
+        EvVRestorePart = EvIncrHugeScanResult + 2,
+        EvVRestorePartResult,
 
         EvEnd
     };

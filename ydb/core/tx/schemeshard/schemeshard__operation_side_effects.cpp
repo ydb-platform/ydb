@@ -39,6 +39,15 @@ void TSideEffects::Send(TActorId dst, IEventBase* message, ui64 cookie, ui32 fla
     Messages.push_back(TSendRec(dst, message, cookie, flags));
 }
 
+void TSideEffects::BindMsgToPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie, ui32 msgType, TPipeMessageFragments&& fragments) {
+    BindedDeferredMessages.push_back(TBindDeferredMsgRec(opId, dst, cookie, msgType, std::move(fragments)));
+    AttachOperationToPipe(opId, dst);
+}
+
+void TSideEffects::BindMsgToPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx, ui32 msgType, TPipeMessageFragments&& fragments) {
+    BindMsgToPipe(opId, dst, TPipeMessageId(shardIdx.GetOwnerId(), shardIdx.GetLocalId()), msgType, std::move(fragments));
+}
+
 void TSideEffects::BindMsgToPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie, TAutoPtr<IEventBase> message) {
     BindedMessages.push_back(TBindMsgRec(opId, dst, cookie, message));
     AttachOperationToPipe(opId, dst);
@@ -661,24 +670,20 @@ void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
 }
 
 void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
-    for (auto& rec: BindedMessages) {
-        TOperationId opId;
-        TTabletId tablet;
-        TPipeMessageId cookie;
-        THolder<::NActors::IEventBase> message;
-        std::tie(opId, tablet, cookie, message) = rec;
-
-        const ui32 msgType = message->Type();
-
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send tablet strongly msg"
-                        << " operationId: " << opId
-                        << " from tablet: " << ss->TabletID()
-                        << " to tablet: " << tablet
-                        << " cookie: " << cookie
-                        << " msg type: " << msgType);
-
-        Y_ABORT_UNLESS(message->IsSerializable());
+    auto bindOne = [ss, &ctx](
+            TOperationId opId,
+            TTabletId tablet,
+            TPipeMessageId cookie,
+            ui32 msgType,
+            TOperation::TPreSerializedMessage&& msg) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Send tablet strongly msg"
+            << " operationId: " << opId
+            << " from tablet: " << ss->TabletID()
+            << " to tablet: " << tablet
+            << " cookie: " << cookie
+            << " msg type: " << msgType
+            << " deferred: " << !msg.IsMaterialized()
+        );
 
         if (!ss->Operations.contains(opId.GetTxId())) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -692,16 +697,46 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
             return;
         }
 
-        Y_ABORT_UNLESS(ss->Operations.contains(opId.GetTxId()));
         TOperation::TPtr operation = ss->Operations.at(opId.GetTxId());
+
+        // Materialize at the send — the first moment the wire bytes are needed.
+        // Each fragment becomes a rope chunk referencing the same payload
+        // holder, so the entry parked below costs only its own bytes plus
+        // those chunk headers. Storing it already materialized: pipe resends
+        // need no re-composition. See the lifecycle comment in
+        // schemeshard__pipe_messages.h.
+        const TIntrusivePtr<TEventSerializedData> data = msg.Materialize();
+        operation->PipeBindedMessages[tablet][cookie] = std::move(msg);
+
+        ss->PipeClientCache->Send(ctx, ui64(tablet), msgType, data, cookie.second);
+    };
+
+    for (auto& rec: BindedMessages) {
+        TOperationId opId;
+        TTabletId tablet;
+        TPipeMessageId cookie;
+        THolder<::NActors::IEventBase> message;
+        std::tie(opId, tablet, cookie, message) = rec;
+
+        Y_ABORT_UNLESS(message->IsSerializable());
 
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
         TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
-        operation->PipeBindedMessages[tablet][cookie] = TOperation::TPreSerializedMessage(msgType, data, opId);
 
-        ss->PipeClientCache->Send(ctx, ui64(tablet), msgType,  data, cookie.second);
+        bindOne(opId, tablet, cookie, message->Type(), TOperation::TPreSerializedMessage(message->Type(), std::move(data), opId));
+    }
+
+    for (auto& rec: BindedDeferredMessages) {
+        TOperationId opId;
+        TTabletId tablet;
+        TPipeMessageId cookie;
+        ui32 msgType = 0;
+        TPipeMessageFragments fragments;
+        std::tie(opId, tablet, cookie, msgType, fragments) = rec;
+
+        bindOne(opId, tablet, cookie, msgType, TOperation::TPreSerializedMessage(msgType, std::move(fragments), opId));
     }
 }
 

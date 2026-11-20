@@ -2,6 +2,8 @@
 
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -16,8 +18,8 @@ TDataShard::TTxStoreTablePath::TTxStoreTablePath(TDataShard *self, ui64 pathId, 
 
 bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxStoreTablePath::Execute at " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "TTxStoreTablePath::Execute",
+        {"tabletId", Self->TabletID()});
 
     Y_ENSURE(Self->TableInfos.contains(PathId));
 
@@ -35,8 +37,8 @@ bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TAct
 
 void TDataShard::TTxStoreTablePath::Complete(const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxStoreTablePath::Complete at " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "TTxStoreTablePath::Complete",
+        {"tabletId", Self->TabletID()});
 }
 
 }}

@@ -1,7 +1,7 @@
 #include "kqp_write_actor.h"
 
-#include "kqp_buffer_lookup_actor.h"
 #include "kqp_buffer_lock_actor.h"
+#include "kqp_buffer_lookup_actor.h"
 #include "kqp_write_actor_settings.h"
 #include "kqp_write_table.h"
 
@@ -16,6 +16,8 @@
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
@@ -24,10 +26,8 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/public/write_id.h>
+#include <ydb/core/tx/tx.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -485,6 +485,7 @@ public:
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                .ColumnShardMaxOperationBytes = MessageSettings.ColumnShardMaxOperationBytes,
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -893,7 +894,18 @@ public:
 
             const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                YDB_LOG_INFO("Waiting for overloaded shard.",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablePath", TablePath},
+                    {"shardID", ev->Get()->Record.GetOrigin()},
+                    {"sink", this->SelfId()});
+                // The shard acknowledged the wait. Don't reset the retry counter here:
+                // the batch is still unacknowledged, and zeroing the accumulated attempts
+                // would re-baseline the exponential backoff and the bounded resend budget
+                // on every subscribed rejection (pacing would collapse to the initial retry
+                // delay under sustained overload). No sends happen while we wait, so the
+                // attempts are merely frozen; OnOverloadReady resets them right before the
+                // resend, once the shard reports it is ready.
             }
 
             return;
@@ -1960,6 +1972,12 @@ public:
 
     std::vector<std::pair<TPathId, TString>> SendGenSequenceRequests() {
         std::vector<std::pair<TPathId, TString>> res;
+        // Compact fulltext generations are consumed only once a task participates in a write flush.
+        // Do not reserve them while the task is still buffering/looking up rows: an UPDATE/DELETE that
+        // matches nothing may otherwise finish before its asynchronous sequence response arrives.
+        if (State != EState::WRITING) {
+            return res;
+        }
         for (auto& [pathId, info] : PathWriteInfo) {
             if (!info.GenSequencePath.empty()) {
                 size_t n = (!info.DeleteKeysIndexes.empty() ? 2 : 1);
@@ -3024,12 +3042,6 @@ private:
             }
 
             const bool outOfMemory = GetFreeSpace() <= 0;
-            if (outOfMemory) {
-                WaitingForTableActor = true;
-            } else if (WaitingForTableActor) {
-                ResumeExecution();
-            }
-
             if (outOfMemory && !Settings.GetEnableStreamWrite()) {
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
@@ -3042,6 +3054,14 @@ private:
 
             if (!WriteTableActor->IsClosed() && (outOfMemory || CheckpointInProgress)) {
                 WriteTableActor->FlushBuffers();
+            }
+
+            // Flushing column batches can increase their accounted memory.
+            // Decide whether to resume only after that memory change.
+            if (GetFreeSpace() <= 0) {
+                WaitingForTableActor = true;
+            } else if (WaitingForTableActor) {
+                ResumeExecution();
             }
 
             if (Closed || outOfMemory || CheckpointInProgress) {
@@ -3417,6 +3437,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, HandleRollback);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleRollback);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleRollback);
 
@@ -4222,6 +4243,15 @@ public:
         }
         auto [taskCookie, pathId] = it->second;
         SeqCookies.erase(it);
+        auto taskIt = WriteTasks.find(taskCookie);
+        // A task may be cancelled by an error/rollback after its asynchronous request was sent. Sequence
+        // values may have gaps, so any late response has no state left to update and is safe to discard.
+        if (taskIt == WriteTasks.end()) {
+            YDB_LOG_DEBUG("Ignoring generation sequence result for a finished write task",
+                {"taskCookie", taskCookie},
+                {"pathId", pathId});
+            return;
+        }
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -4230,8 +4260,6 @@ public:
                 ev->Get()->Issues);
             return;
         }
-        auto taskIt = WriteTasks.find(taskCookie);
-        YQL_ENSURE(taskIt != WriteTasks.end());
         taskIt->second.OnGenSequenceAllocated(pathId, ev->Get()->Value);
         Process();
     }
@@ -4431,6 +4459,9 @@ public:
         });
 
         if (!TxManager->NeedCommit()) {
+            ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
+                AFL_ENSURE(actor->IsEmpty());
+            });
             Rollback(std::move(traceId), /* waitForResult */ true);
         } else if (TxManager->BrokenLocks()) {
             NYql::TIssues issues;
@@ -5240,6 +5271,11 @@ public:
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         Rollback(std::move(ev->TraceId), /* waitForResult */ true);
+    }
+
+    void HandleRollback(TEvKqpBuffer::TEvRollback::TPtr& ev) {
+        // A timeout can replace the executer while rollback is in progress.
+        ExecuterActorId = ev->Get()->ExecuterActorId;
     }
 
     void OnAllTasksFinised() {
@@ -6594,17 +6630,26 @@ private:
         Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
     }
 
+    ~TKqpForwardWriteActor() override {
+        CleanupMiniKQLObjects();
+    }
+
     void PassAway() override {
         Counters->ForwardActorsCount->Dec();
 
-        if (TransformOutput) {
-            AFL_ENSURE(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            PendingResult.Reset();
-            TransformOutput.Reset();
-        }
+        CleanupMiniKQLObjects();
 
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
+    }
+
+    void CleanupMiniKQLObjects() {
+        if (!TransformOutput && !PendingResult) {
+            return;
+        }
+        AFL_ENSURE(Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+        PendingResult.Reset();
+        TransformOutput.Reset();
     }
 
     TString LogPrefix;

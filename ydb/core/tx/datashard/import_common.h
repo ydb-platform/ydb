@@ -12,24 +12,6 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-#if defined IMPORT_LOG_T || \
-    defined IMPORT_LOG_D || \
-    defined IMPORT_LOG_I || \
-    defined IMPORT_LOG_N || \
-    defined IMPORT_LOG_W || \
-    defined IMPORT_LOG_E || \
-    defined IMPORT_LOG_C
-#error log macro redefinition
-#endif
-
-#define IMPORT_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
-#define IMPORT_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
-#define IMPORT_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
-#define IMPORT_LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
-#define IMPORT_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
-#define IMPORT_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
-#define IMPORT_LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << stream)
-
 namespace NKikimr {
 namespace NDataShard {
 

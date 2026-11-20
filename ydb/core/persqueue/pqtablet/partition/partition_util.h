@@ -165,6 +165,7 @@ struct TPartition::THasDataReq {
     TMaybe<ui64> Cookie;
     TString ClientId;
     TMaybe<TInstant> ReadTimestamp;
+    TInstant Deadline;
 
     bool operator < (const THasDataReq& req) const {
         return std::tuple(Offset, Num) < std::tuple(req.Offset, req.Num);

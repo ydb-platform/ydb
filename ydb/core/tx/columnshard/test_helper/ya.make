@@ -18,6 +18,7 @@ PEERDIR(
 )
 
 SRCS(
+    inflight_test_enums.h
     helper.cpp
     controllers.cpp
     columnshard_ut_common.cpp
@@ -26,6 +27,8 @@ SRCS(
     kernels_wrapper.cpp
     program_constructor.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION(inflight_test_enums.h)
 
 IF (OS_WINDOWS)
     CFLAGS(

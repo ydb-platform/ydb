@@ -134,6 +134,21 @@ TTableInfo PrepareMultiColumnColumnTable(
 // multi-column statistic (see MultiColumnValueColumns), and insert ColumnTableRowsNumber rows.
 TTableInfo PrepareMultiColumnUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
 
+// Create a datashard table with 4 uniform shards and insert ColumnTableRowsNumber rows
+// (Value = key % 10, matching PrepareColumnTable's data pattern).
+TTableInfo PrepareUniformTableWithData(TTestEnv& env, const TString& databaseName, const TString& tableName);
+
+// Create a table of the requested type and insert ColumnTableRowsNumber rows.
+TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TString& tableName, bool columnShard);
+
+// Type-independent assertion: checks the saved count-min sketch has the expected
+// element count / probe values for the data inserted by PrepareTable.
+// TAnalyzeActor builds CMS based on column cardinality, not index declarations,
+// so both ColumnShard and DataShard produce the same statistics for the same data.
+// Key column (tag 1) has high cardinality -> no CMS (nullopt);
+// Value column (tag 2) has low cardinality (10 distinct values) -> CMS with probes.
+void ValidateStatistics(TTestActorRuntime& runtime, const TPathId& pathId, ui64 N = ColumnTableRowsNumber);
+
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 
 NKikimrScheme::TEvDescribeSchemeResult DescribeTable(

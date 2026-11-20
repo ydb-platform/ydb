@@ -71,6 +71,7 @@ class TSchemeShard;
 struct TForceShardSplitSettings {
     ui64 ForceShardSplitDataSize;
     bool DisableForceShardSplit;
+    bool MergeBySizeEnabled;
 };
 
 struct TSplitSettings {
@@ -84,6 +85,7 @@ struct TSplitSettings {
     TControlWrapper MergeByLoadMinLowLoadDurationSec;
     TControlWrapper ForceShardSplitDataSize;
     TControlWrapper DisableForceShardSplit;
+    TControlWrapper MergeBySizeEnabled;
 
     TSplitSettings()
         : SplitMergePartCountLimit(2000, -1, 1000000)
@@ -96,6 +98,7 @@ struct TSplitSettings {
         , MergeByLoadMinLowLoadDurationSec(1*60*60, 0, 4ll*1000*1000*1000)
         , ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
         , DisableForceShardSplit(0, 0, 1)
+        , MergeBySizeEnabled(1, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -111,12 +114,15 @@ struct TSplitSettings {
 
         TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
         TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
+
+        TControlBoard::RegisterSharedControl(MergeBySizeEnabled,               icb->SchemeShardControls.MergeBySizeEnabled);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
             .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+            .MergeBySizeEnabled = ui64(MergeBySizeEnabled) != 0,
         };
     }
 };
@@ -137,6 +143,8 @@ struct TBackupToS3Settings {
     // System Views
     TControlWrapper EnableSysViewPermissionsExport;
     TControlWrapper EnableSysViewPermissionsImport;
+    // Coordination Nodes
+    TControlWrapper EnableKesusExport;
 
     TBackupToS3Settings()
         : EnableAsyncReplicationExport(1, 0, 1)
@@ -149,6 +157,7 @@ struct TBackupToS3Settings {
         , EnableExternalTableImport(1, 0, 1)
         , EnableSysViewPermissionsExport(1, 0, 1)
         , EnableSysViewPermissionsImport(1, 0, 1)
+        , EnableKesusExport(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -166,6 +175,8 @@ struct TBackupToS3Settings {
 
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
         TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+        TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
     }
 };
 
@@ -872,6 +883,14 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         }
     }
 
+    bool IsWaitingImportReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
+    }
+
+    bool IsImportingReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+    }
+
     bool HasIncrementalBackupConfig() const { return TableDescription.HasIncrementalBackupConfig(); }
     const NKikimrSchemeOp::TTableIncrementalBackupConfig& IncrementalBackupConfig() const { return TableDescription.GetIncrementalBackupConfig(); }
     NKikimrSchemeOp::TTableIncrementalBackupConfig& MutableIncrementalBackupConfig() { return *TableDescription.MutableIncrementalBackupConfig(); }
@@ -1025,7 +1044,8 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         const TCreateAlterDataFeatureFlags& featureFlags,
-        TString& errStr, const THashSet<TString>& localSequences = {});
+        TString& errStr, const THashSet<TString>& localSequences = {},
+        bool allowReplicationMode = false);
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
         if (descr.HasUniformPartitionsCount()) {
@@ -1216,6 +1236,10 @@ public:
     }
 
     bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
+        // Global switch: merge by size can be disabled cluster-wide via ICB
+        if (!params.MergeBySizeEnabled) {
+            return false;
+        }
         // Auto merge is only enabled when auto split is also enabled
         if (!IsSplitBySizeEnabled(params)) {
             return false;
@@ -1460,7 +1484,8 @@ public:
     bool IsUsingSequence(const TString& name) {
         for (const auto& pr : Columns) {
             if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
-                pr.second.DefaultValue == name)
+                pr.second.DefaultValue == name &&
+                !pr.second.IsDropped())
             {
                 // A column scheduled to be dropped by the pending alter no longer keeps the
                 // sequence alive. This lets a single ALTER drop a serial column and cascade
@@ -2404,7 +2429,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     bool CheckSmallBlobsQuotas(IQuotaCounters* counters);
 
     /*
-    Rechecks disk space and small blobs quotas in one go. 
+    Rechecks disk space and small blobs quotas in one go.
     Returns true when any flag changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckQuotas(IQuotaCounters* counters);
@@ -3710,6 +3735,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         BuildIndexes = 5,
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
+        DropPlaceholder = 8,
+        FinalizeImport = 9,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -3739,12 +3766,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
+        TMaybe<NKikimrSchemeOp::TImportKesus> Kesus;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
         TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
+        TMaybe<NKikimrSchemeOp::TTableReplicationConfig> ReplicationConfig;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
@@ -3752,6 +3781,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
+        TActorId KesusRestorer;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
@@ -3792,6 +3822,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
+    bool CanRestoreRateLimiterMetering = false;
 
     EState State = EState::Invalid;
     TString Issue;

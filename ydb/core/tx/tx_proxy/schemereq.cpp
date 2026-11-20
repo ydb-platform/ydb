@@ -301,6 +301,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable:
             Y_ABORT("no implementation for ESchemeOpFinalizeBuildIndexImplTable");
 
+        case NKikimrSchemeOp::ESchemeOpRepairIndexShadowData:
+            Y_ABORT("no implementation for ESchemeOpRepairIndexShadowData");
+
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable:
             Y_ABORT("no implementation for ESchemeOpInitiateBuildIndexImplTable");
 
@@ -1209,6 +1212,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterTableIndex:
         case NKikimrSchemeOp::ESchemeOpDropLock:
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable:
+        case NKikimrSchemeOp::ESchemeOpRepairIndexShadowData:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable:
         case NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable:
         case NKikimrSchemeOp::ESchemeOpCancelIndexBuild:

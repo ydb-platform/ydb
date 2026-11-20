@@ -91,19 +91,21 @@ TConclusionStatus TScanHead::Start() {
         context.OnStartPoint(point);
         if (context.GetIsSpecialPoint()) {
             for (auto&& i : context.GetCurrentSources()) {
-                i.second->IncIntervalsCount();
+                MutableNotStartedSource(i.first).IncIntervalsCount();
             }
         }
         const bool isExclusive = context.GetCurrentSources().size() == 1;
         for (auto&& i : context.GetCurrentSources()) {
-            i.second->SetExclusiveIntervalOnly((isExclusive && i.second->GetExclusiveIntervalOnly() && !context.GetIsSpecialPoint()));
+            auto& source = MutableNotStartedSource(i.first);
+            source.SetExclusiveIntervalOnly((isExclusive && source.GetExclusiveIntervalOnly() && !context.GetIsSpecialPoint()));
         }
 
         for (auto&& i : point.GetFinishSources()) {
-            if (!i->NeedAccessorsFetching()) {
-                i->SetSourceInMemory(true);
+            auto& source = MutableNotStartedSource(i->GetSourceIdx());
+            if (!source.NeedAccessorsFetching()) {
+                source.SetSourceInMemory(true);
             }
-            i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i, true));
+            source.InitFetchingPlan(Context->GetColumnsFetchingPlan(source, true));
         }
         context.OnFinishPoint(point);
         if (context.GetCurrentSources().size()) {
@@ -111,7 +113,7 @@ TConclusionStatus TScanHead::Start() {
             Y_ABORT_UNLESS(++itPointNext != BorderPoints.end());
             context.OnNextPointInfo(itPointNext->second);
             for (auto&& i : context.GetCurrentSources()) {
-                i.second->IncIntervalsCount();
+                MutableNotStartedSource(i.first).IncIntervalsCount();
             }
         }
     }
@@ -133,10 +135,12 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, co
         InFlightLimit = MaxInFlight;
     }
     while (!sources->IsFinished()) {
-        auto source = std::static_pointer_cast<IDataSource>(sources->TryExtractNext(context, InFlightLimit));
-        AFL_VERIFY(source);
+        auto lease = sources->TryExtractNext(context, InFlightLimit);
+        AFL_VERIFY(lease);
+        const auto source = lease->ShareReadOnlyAs<IDataSource>();
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
+        AFL_VERIFY(NotStartedSources.emplace(source->GetSourceIdx(), std::move(lease)).second);
     }
 }
 
@@ -165,6 +169,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
                 {"event", "new_interval"},
                 {"intervalIdx", intervalIdx},
                 {"interval", interval->DebugJson()});
+            StartIntervalSources(*interval);
         }
 
         CurrentState.OnFinishPoint(firstBorderPointInfo);
@@ -184,6 +189,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
                 {"event", "new_interval"},
                 {"intervalIdx", intervalIdx},
                 {"interval", interval->DebugJson()});
+            StartIntervalSources(*interval);
             return true;
         } else {
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);
@@ -200,27 +206,43 @@ bool TScanHead::IsReverse() const {
     return GetContext().GetReadMetadata()->IsDescSorted();
 }
 
+void TScanHead::StartIntervalSources(TFetchingInterval& interval) {
+    for (auto&& [sourceIdx, source] : interval.GetSources()) {
+        if (source->IsDataReady()) {
+            continue;
+        }
+        WaitingIntervals[sourceIdx].emplace_back(interval.GetIntervalIdx());
+        auto it = NotStartedSources.find(sourceIdx);
+        if (it != NotStartedSources.end()) {
+            IDataSource::StartProcessing(std::move(it->second), interval.GetIntervalId());
+            NotStartedSources.erase(it);
+        }
+    }
+}
+
+void TScanHead::OnSourceReady(std::unique_ptr<NCommon::TDataSourceLease> lease) {
+    const ui32 sourceIdx = lease->GetSource().GetSourceIdx();
+    lease.reset();
+    std::vector<ui32> intervalIdxs;
+    if (auto it = WaitingIntervals.find(sourceIdx); it != WaitingIntervals.end()) {
+        intervalIdxs = std::move(it->second);
+        WaitingIntervals.erase(it);
+    }
+    YDB_LOG_DEBUG("",
+        {"event", "source_ready"},
+        {"intervalsCount", intervalIdxs.size()},
+        {"sourceIdx", sourceIdx});
+    for (const ui32 intervalIdx : intervalIdxs) {
+        auto it = FetchingIntervals.find(intervalIdx);
+        AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", intervalIdx);
+        it->second->OnSourceFetchStageReady(sourceIdx);
+    }
+}
+
 void TScanHead::Abort() {
     AFL_VERIFY(Context->IsAborted());
-    THashSet<ui32> sourceIds;
-    for (auto&& i : FetchingIntervals) {
-        for (auto&& s : i.second->GetSources()) {
-            sourceIds.emplace(s.first);
-        }
-        i.second->Abort();
-    }
-    for (auto&& i : BorderPoints) {
-        for (auto&& s : i.second.GetStartSources()) {
-            if (sourceIds.emplace(s->GetSourceIdx()).second) {
-                s->Abort();
-            }
-        }
-        for (auto&& s : i.second.GetFinishSources()) {
-            if (sourceIds.emplace(s->GetSourceIdx()).second) {
-                s->Abort();
-            }
-        }
-    }
+    WaitingIntervals.clear();
+    NotStartedSources.clear();
     FetchingIntervals.clear();
     BorderPoints.clear();
     Y_ABORT_UNLESS(IsFinished());

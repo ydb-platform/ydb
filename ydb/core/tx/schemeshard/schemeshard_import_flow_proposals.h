@@ -5,6 +5,14 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+);
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,

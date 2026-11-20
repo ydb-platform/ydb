@@ -1,8 +1,13 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
+#include <optional>
 
 namespace NKikimr::NReplication {
+
+// The SDK does not expose the original codec for decompressed messages.
+TString MakeDecompressionIssue(const TString& topic, ui64 partition, ui64 offset,
+    const TString& reason, std::optional<ui32> codec = std::nullopt);
 
 class TTopicMessage: protected NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation {
     using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;

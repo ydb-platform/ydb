@@ -29,7 +29,9 @@ struct TFetchAllConfigsSettings : public NYdb::TOperationRequestSettings<TFetchA
     FLUENT_SETTING_DEFAULT(EFetchAllConfigsTransform, Transform, EFetchAllConfigsTransform::NONE);
 };
 
-struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
+struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {
+    FLUENT_SETTING_FLAG(AllowUnknownFields);
+};
 
 struct TMainConfigIdentity {
     std::uint64_t Version;
@@ -115,7 +117,8 @@ public:
     // Fetch current cluster storage config
     TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {});
 
-    // Fetch current cluster storage config
+    // Fetch current cluster storage config for node startup.
+    // An empty host list skips waiting for the requestor to appear in the config.
     TAsyncFetchConfigResult FetchAllConfigs(const std::vector<std::string>& requestor_host_options,
         std::int32_t requestor_port,
         const TFetchAllConfigsSettings& settings = {});

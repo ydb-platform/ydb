@@ -51,7 +51,7 @@ struct TSchemeShard::TIndexBuilder::TTxForgetSetColumnConstraint: public TRwTxBa
             );
         }
 
-        if (!operationInfo.IsFinished()) {
+        if (!operationInfo.IsFinished() && !operationInfo.IsBroken) {
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::PRECONDITION_FAILED,

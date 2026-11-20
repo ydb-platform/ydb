@@ -26,7 +26,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::DisconnectFromConsole() {
         NTabletPipe::CloseAndForgetClient(SelfId(), ConsolePipeId);
-        ConsoleConnected = false;
+        ResetConsoleSession();
     }
 
     void TDistributedConfigKeeper::SendConfigProposeRequest() {
@@ -34,8 +34,8 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        if (ProposeRequestInFlight) {
-            return; // still waiting for previous one
+        if (ProposeRequestInFlight || CommitRequestInFlight) {
+            return;
         }
 
         ProposeRequestInFlight = true;
@@ -57,9 +57,9 @@ namespace NKikimr::NStorage {
             {"proposedConfigHashVersion", ProposedConfigHashVersion},
             {"proposeRequestCookie", ProposeRequestCookie + 1});
 
-        Y_DEBUG_ABORT_UNLESS(!ProposedConfigHashVersion || ProposedConfigHashVersion == std::make_tuple(
-            MainConfigFetchYamlHash, *MainConfigYamlVersion));
+        Y_DEBUG_ABORT_UNLESS(!ProposedConfigHashVersion);
         ProposedConfigHashVersion.emplace(MainConfigFetchYamlHash, *MainConfigYamlVersion);
+        ProposedConfigYaml = MainConfigYaml;
         NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerProposeConfigRequest(
             MainConfigFetchYamlHash, *MainConfigYamlVersion, true), ++ProposeRequestCookie);
     }
@@ -74,7 +74,7 @@ namespace NKikimr::NStorage {
 
         auto& q = ConsoleConfigValidationQ;
         auto pred = [&](const auto& item) {
-            const auto& [actorId, yaml, cookie] = item;
+            const auto& [actorId, yaml, allowUnknownFields, cookie] = item;
             const bool match = cookie == ev->Cookie;
             if (match) {
                 TActivationContext::Send(ev->Forward(actorId));
@@ -99,17 +99,18 @@ namespace NKikimr::NStorage {
         }
         ProposeRequestInFlight = false;
 
+        const bool configChanged = ProposedConfigHashVersion != (StorageConfig && StorageConfig->HasConfigComposite()
+            ? std::make_optional(std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) : std::nullopt);
+
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch:
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::UnexpectedConfig:
                 // TODO: error condition; restart?
-                ProposedConfigHashVersion.reset();
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded: {
-                if (!StorageConfig || !StorageConfig->HasConfigComposite() || ProposedConfigHashVersion !=
-                        std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) {
+                if (!ProposedConfigHashVersion) {
                     const char *err = "proposed config, but something has gone awfully wrong";
                     YDB_LOG_CRIT(err,
                         {"marker", "NWDC69"},
@@ -121,20 +122,26 @@ namespace NKikimr::NStorage {
                     return;
                 }
 
+                CommitRequestInFlight = true;
                 NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                    MainConfigYaml), // FIXME: probably should propagate force here
+                    ProposedConfigYaml), // FIXME: probably should propagate force here
                         ++CommitRequestCookie);
-                break;
+                return;
             }
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded:
                 // it's okay, just wait for another configuration change or something like that
-                ProposedConfigHashVersion.reset();
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
                 // just do nothing, we didn't have the config in distconf, possibly it is being enabled
                 break;
+        }
+
+        ProposedConfigHashVersion.reset();
+        ProposedConfigYaml.clear();
+        if (configChanged) {
+            SendConfigProposeRequest();
         }
     }
 
@@ -146,16 +153,21 @@ namespace NKikimr::NStorage {
             {"commitRequestCookie", CommitRequestCookie},
             {"record", ev->Get()->Record});
 
-        if (!ConsoleConnected || ev->Cookie != CommitRequestCookie) {
+        if (!ConsoleConnected || !CommitRequestInFlight || ev->Cookie != CommitRequestCookie) {
             return;
         }
+        CommitRequestInFlight = false;
+        const bool configChanged = ProposedConfigHashVersion != (StorageConfig && StorageConfig->HasConfigComposite()
+            ? std::make_optional(std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) : std::nullopt);
+        ProposedConfigHashVersion.reset();
+        ProposedConfigYaml.clear();
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::SessionMismatch:
                 DisconnectFromConsole();
                 ConnectToConsole();
-                break;
+                return;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
                 YDB_LOG_ERROR("Failed to commit config to Console",
@@ -167,7 +179,9 @@ namespace NKikimr::NStorage {
                 break;
         }
 
-        ProposedConfigHashVersion.reset();
+        if (configChanged) {
+            SendConfigProposeRequest();
+        }
     }
 
     void TDistributedConfigKeeper::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
@@ -183,11 +197,11 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(!ConsoleConnected);
                 ConsoleConnected = true;
                 SendConfigProposeRequest();
-                for (auto& [actorId, yaml, cookie] : ConsoleConfigValidationQ) {
+                for (auto& [actorId, yaml, allowUnknownFields, cookie] : ConsoleConfigValidationQ) {
                     Y_ABORT_UNLESS(!cookie);
                     cookie = ++ValidateRequestCookie;
-                    NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerValidateConfigRequest(
-                        yaml), cookie);
+                    NTabletPipe::SendData(SelfId(), ConsolePipeId,
+                        new TEvBlobStorage::TEvControllerValidateConfigRequest(yaml, allowUnknownFields), cookie);
                 }
             } else {
                 OnConsolePipeError();
@@ -209,20 +223,27 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::OnConsolePipeError() {
         ConsolePipeId = {};
+        ResetConsoleSession();
+        ConnectToConsole();
+    }
+
+    void TDistributedConfigKeeper::ResetConsoleSession() {
+        // the next pipe has to start the session anew with the propose request, as Console accepts requests only through
+        // the pipe of the session; the request in flight through the previous pipe gets no answer that would be processed
         ConsoleConnected = false;
         ProposedConfigHashVersion.reset();
+        ProposedConfigYaml.clear();
         ProposeRequestInFlight = false;
+        CommitRequestInFlight = false;
         ++CommitRequestCookie; // to prevent processing any messages
 
         // cancel any pending requests
-        for (const auto& [actorId, yaml, cookie] : ConsoleConfigValidationQ) {
+        for (const auto& [actorId, yaml, allowUnknownFields, cookie] : ConsoleConfigValidationQ) {
             auto ev = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
             ev->InternalError = "pipe disconnected";
             Send(actorId, ev.release());
         }
         ConsoleConfigValidationQ.clear();
-
-        ConnectToConsole();
     }
 
     std::optional<TString> TDistributedConfigKeeper::UpdateConfigComposite(NKikimrBlobStorage::TStorageConfig& config,
@@ -254,7 +275,8 @@ namespace NKikimr::NStorage {
         return {};
     }
 
-    bool TDistributedConfigKeeper::EnqueueConsoleConfigValidation(TActorId actorId, bool enablingDistconf, TString yaml) {
+    bool TDistributedConfigKeeper::EnqueueConsoleConfigValidation(TActorId actorId, bool enablingDistconf, TString yaml,
+        bool allowUnknownFields) {
         if (!ConsolePipeId) {
             ConnectToConsole(enablingDistconf);
             if (!ConsolePipeId) {
@@ -262,12 +284,13 @@ namespace NKikimr::NStorage {
             }
         }
 
-        auto& [qActorId, qYaml, qCookie] = ConsoleConfigValidationQ.emplace_back(actorId, std::move(yaml), 0);
+        auto& [qActorId, qYaml, qAllowUnknownFields, qCookie] =
+            ConsoleConfigValidationQ.emplace_back(actorId, std::move(yaml), allowUnknownFields, 0);
 
         if (ConsoleConnected) {
             qCookie = ++ValidateRequestCookie;
-            NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerValidateConfigRequest(qYaml),
-                qCookie);
+            NTabletPipe::SendData(SelfId(), ConsolePipeId,
+                new TEvBlobStorage::TEvControllerValidateConfigRequest(qYaml, qAllowUnknownFields), qCookie);
         }
 
         return true;

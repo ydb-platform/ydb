@@ -54,7 +54,7 @@ public:
                 NIceDb::TUpdate<Schema::Node::Statistics>(node.Statistics),
                 NIceDb::TUpdate<Schema::Node::Name>(name)
             );
- 
+
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
@@ -83,6 +83,16 @@ public:
             }
 
             Self->UpdateNodeSegments(&node);
+
+            // Restore metrics accounting cleared by BecomeDisconnected().
+            // The new Local cannot restore it: the tablet is managed by an external owner.
+            if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                for (TLeaderTabletInfo* tablet : node.LockedTablets) {
+                    if (!tablet->IsDeleting()) {
+                        tablet->BecomeUnknown(&node);
+                    }
+                }
+            }
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
             node.Location = TNodeLocation(Record.GetSystemLocation());

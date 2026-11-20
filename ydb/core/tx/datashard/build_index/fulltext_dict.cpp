@@ -19,6 +19,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 using namespace NTableIndex::NFulltext;
 using namespace NKikimr::NFulltext;
@@ -149,7 +151,8 @@ public:
         , ResponseActorId(responseActorId)
         , Response(std::move(response))
     {
-        LOG_I("Create " << Debug());
+        YDB_LOG_INFO("Scan actor created",
+            {"debug", Debug()});
 
         NumPrefixColumns = request.PrefixColumnsSize();
 
@@ -241,7 +244,8 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_I("Prepare " << Debug());
+        YDB_LOG_INFO("Scan actor prepared",
+            {"debug", Debug()});
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -277,9 +281,13 @@ public:
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            YDB_LOG_NOTICE("Scan completed successfully",
+                {"debug", Debug()},
+                {"responseRecord", Response->Record.ShortDebugString()});
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            YDB_LOG_ERROR("Scan failed",
+                {"debug", Debug()},
+                {"responseRecord", Response->Record.ShortDebugString()});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -304,13 +312,16 @@ public:
 
     EScan PageFault() final
     {
-        LOG_T("PageFault " << Debug());
+        YDB_LOG_TRACE("Page fault",
+            {"debug", Debug()});
         return EScan::Feed;
     }
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_T("Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seekSequence", seq},
+            {"debug", Debug()});
 
         if (IsExhausted) {
             return Uploader.CanFinish()
@@ -325,8 +336,6 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_T("Feed " << Debug());
-
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
@@ -337,7 +346,8 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_T("Exhausted " << Debug());
+        YDB_LOG_TRACE("Scan range exhausted",
+            {"debug", Debug()});
 
         IsExhausted = true;
         if (LastTokenRows > 0) {
@@ -358,22 +368,26 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString() << " " << Debug());
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
+                    {"debug", Debug()});
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_D("Retry upload " << Debug());
+        YDB_LOG_DEBUG("Retrying row upload",
+            {"debug", Debug()});
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug()
-            << " ev->Sender: " << ev->Sender.ToString());
+        YDB_LOG_DEBUG("Received row upload response",
+            {"debug", Debug()},
+            {"senderActorId", ev->Sender});
 
         if (!Driver) {
             return;
@@ -387,12 +401,16 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            YDB_LOG_NOTICE("Row upload failed with retriable error",
+                {"debug", Debug()},
+                {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+        YDB_LOG_NOTICE("Row upload failed, aborting scan",
+            {"debug", Debug()},
+            {"uploadStatus", Uploader.GetUploadStatus()});
 
         Driver->Touch(EScan::Final);
     }
@@ -576,9 +594,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
         auto response = MakeHolder<TEvDataShard::TEvBuildFulltextDictResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TBuildFulltextDictScan TabletId: " << TabletID()
-            << " " << request.ShortDebugString()
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting fulltext dictionary build scan",
+            {"tabletId", TabletID()},
+            {"request", request.ShortDebugString()},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -594,9 +613,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TBuildFulltextDictScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
-                    << " with response " << response->Record.ShortDebugString());
+                YDB_LOG_ERROR("Rejecting invalid fulltext dictionary build scan request",
+                    {"tabletId", TabletID()},
+                    {"request", request.ShortDebugString()},
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

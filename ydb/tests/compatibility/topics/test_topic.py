@@ -1,10 +1,44 @@
 # -*- coding: utf-8 -*-
-import pytest
+import asyncio
+import datetime
+import struct
 import time
 import uuid
 
-from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture, RollingDowngradeAndUpgradeFixture, string_version_to_tuple
+import pytest
+
+from ydb.tests.library.compatibility.fixtures import (
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+    RollingDowngradeAndUpgradeFixture,
+    current_binary_path,
+    current_name,
+    path_to_version,
+    string_version_to_tuple,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb._grpc.grpcwrapper.ydb_topic import StreamWriteMessage
+from ydb._topic_writer.topic_writer import InternalMessage, PublicMessage
+from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIOStream
+
+
+OFFSET_DELTA_FLAG = "enable_topic_write_offset_delta_in_keys"
+BATCHING_FLAG = "enable_topic_messages_batching"
+TOPIC_BATCHING_CODEC = 5
+
+STABLE_26_3 = string_version_to_tuple("stable-26-3")
+
+
+class CurrentToCurrentVersionFixture(RestartToAnotherVersionFixture):
+    @pytest.fixture(
+        autouse=True,
+        params=[[current_binary_path, current_binary_path]],
+        ids=[f"restart_{current_name}_to_{current_name}"],
+    )
+    def base_setup(self, request):
+        self.current_binary_paths_index = 0
+        self.all_binary_paths = request.param
+        self.versions = [path_to_version[path] for path in self.all_binary_paths]
 
 
 class Workload:
@@ -109,6 +143,184 @@ class Workload:
 
             if self.processed_message_count == total_count:
                 break
+
+
+def _make_crc32c_table():
+    polynomial = 0x82F63B78
+    table = []
+    for i in range(256):
+        crc = i
+        for _ in range(8):
+            crc = (crc >> 1) ^ (polynomial & -(crc & 1))
+        table.append(crc)
+    return table
+
+
+_CRC32C_TABLE = _make_crc32c_table()
+
+
+def _crc32c(data):
+    crc = 0xFFFFFFFF
+    for byte in data:
+        crc = _CRC32C_TABLE[(crc ^ byte) & 0xFF] ^ (crc >> 8)
+    return crc ^ 0xFFFFFFFF
+
+
+def _varint(value, bits=64):
+    value = (value << 1) ^ (value >> (bits - 1))
+    result = bytearray()
+    while value & ~0x7F:
+        result.append((value & 0x7F) | 0x80)
+        value >>= 7
+    result.append(value)
+    return bytes(result)
+
+
+def _kafka_bytes(value):
+    if value is None:
+        return _varint(-1, bits=32)
+    return _varint(len(value), bits=32) + value
+
+
+def _kafka_record(value, offset_delta, timestamp_delta=0):
+    record_body = b"".join([
+        struct.pack(">b", 0),  # attributes
+        _varint(timestamp_delta),
+        _varint(offset_delta),
+        _kafka_bytes(None),  # key
+        _kafka_bytes(value),
+        _varint(0, bits=32),  # headers
+    ])
+    return _varint(len(record_body), bits=32) + record_body
+
+
+def make_kafka_batch_payload(values, base_sequence=1):
+    records = b"".join(
+        _kafka_record(value, offset_delta=i, timestamp_delta=i)
+        for i, value in enumerate(values)
+    )
+    records_array = struct.pack(">i", len(values)) + records
+
+    base_timestamp = 1000
+    crc_body = b"".join([
+        struct.pack(">h", 0),  # attributes: no compression
+        struct.pack(">i", len(values) - 1),
+        struct.pack(">q", base_timestamp),
+        struct.pack(">q", base_timestamp + len(values) - 1),
+        struct.pack(">q", 42),  # producer id
+        struct.pack(">h", 0),  # producer epoch
+        struct.pack(">i", base_sequence),
+        records_array,
+    ])
+    prefix_after_length = struct.pack(">ib", -1, 2)
+    batch_length = len(prefix_after_length) + 4 + len(crc_body)
+    crc = _crc32c(crc_body)
+
+    return b"".join([
+        struct.pack(">q", 0),  # base offset
+        struct.pack(">i", batch_length),
+        prefix_after_length,
+        struct.pack(">I", crc),
+        crc_body,
+    ])
+
+
+async def _write_kafka_batch_async(driver, topic_name, values, base_sequence):
+    stream = await WriterAsyncIOStream.create(
+        driver,
+        StreamWriteMessage.InitRequest(
+            path=topic_name,
+            producer_id=f"kafka-batch-producer-{uuid.uuid4().hex}",
+            write_session_meta={},
+            partitioning=StreamWriteMessage.PartitioningPartitionID(0),
+            get_last_seq_no=True,
+        ),
+    )
+    try:
+        payload = make_kafka_batch_payload(values, base_sequence=base_sequence)
+        message = InternalMessage(
+            PublicMessage(
+                payload,
+                seqno=base_sequence + len(values) - 1,
+                created_at=datetime.datetime.now(datetime.timezone.utc),
+            )
+        )
+        message.codec = TOPIC_BATCHING_CODEC
+        stream.write([message])
+        response = await stream.receive()
+        assert len(response.acks) == 1
+        assert isinstance(
+            response.acks[0].message_write_status,
+            StreamWriteMessage.WriteResponse.WriteAck.StatusWritten,
+        )
+    finally:
+        await stream.close()
+
+
+def write_kafka_batch(driver, topic_name, values, base_sequence=1):
+    asyncio.run(_write_kafka_batch_async(driver, topic_name, values, base_sequence))
+
+
+def write_raw_messages_in_transaction(driver, topic_name, values, producer_id=None, partition_id=0):
+    with ydb.QuerySessionPool(driver) as session_pool:
+        def callee(tx):
+            writer = driver.topic_client.tx_writer(
+                tx,
+                topic_name,
+                producer_id=producer_id or f"tx-producer-{uuid.uuid4().hex}",
+                partition_id=partition_id,
+                codec=ydb.TopicCodec.RAW,
+            )
+            for value in values:
+                writer.write(ydb.TopicWriterMessage(value), timeout=30)
+            writer.flush(timeout=30)
+            writer.close(flush=False)
+
+        session_pool.retry_tx_sync(callee)
+
+
+def read_messages(driver, topic_name, consumer, expected_count, timeout=60):
+    messages = []
+    with driver.topic_client.reader(topic_name, consumer=consumer) as reader:
+        deadline = time.time() + timeout
+        while len(messages) < expected_count and time.time() < deadline:
+            try:
+                message = reader.receive_message(timeout=1)
+            except TimeoutError:
+                continue
+            messages.append(message.data)
+            reader.commit(message)
+
+    assert len(messages) == expected_count
+    return messages
+
+
+def write_raw_messages(driver, topic_name, values, producer_id=None):
+    with driver.topic_client.writer(
+        topic_name,
+        producer_id=producer_id or f"producer-{uuid.uuid4().hex}",
+        codec=ydb.TopicCodec.RAW,
+    ) as writer:
+        for value in values:
+            writer.write(ydb.TopicWriterMessage(value))
+
+
+def wait_topic_end_offset(driver, topic_name, expected_count, timeout=90):
+    deadline = time.time() + timeout
+    last_count = 0
+    while time.time() < deadline:
+        description = driver.topic_client.describe_topic(topic_name, include_stats=True)
+        last_count = sum(partition.partition_stats.partition_end for partition in description.partitions)
+        if last_count >= expected_count:
+            return last_count
+        time.sleep(1)
+    raise AssertionError(f"{topic_name} end offset did not reach {expected_count}: got {last_count}")
+
+
+def set_feature_flags(config, **values):
+    flags = config.yaml_config.setdefault("feature_flags", {})
+    for name, value in values.items():
+        flags[name] = value
 
 
 class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):

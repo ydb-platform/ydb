@@ -418,7 +418,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
 
                 if (checks) {
                     // DROP TABLE statement has no info is it a drop of row or column table
-                    return {CreateDropColumnTable(nextId, tx)};
+                    return DropColumnTableWithLocalIndexes(nextId, tx, context);
                 }
             } else {
                 checks
@@ -440,6 +440,16 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
             }
 
             return {CreateReject(nextId, std::move(result))};
+        }
+    }
+
+    // Check before expanding DROP into operations on the table and its indexes.
+    if (tx.HasExpectedReplicationOwnerPathId()) {
+        const auto& config = context.SS->Tables.at(table->PathId)->ReplicationConfig();
+        if (config.HasOwnerPathId()
+            && TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())) {
+            return {CreateReject(nextId, NKikimrScheme::StatusSuccess,
+                "Table is owned by another replication; cleanup skipped")};
         }
     }
 

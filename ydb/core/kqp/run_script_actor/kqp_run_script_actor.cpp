@@ -142,6 +142,8 @@ private:
     )
 
     void HandleCreatingFinished() {
+        CreationFinished = true;
+
         if (FinishInfo.IsFinished()) {
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
                 {"logPrefix", LogPrefix()});
@@ -166,7 +168,14 @@ private:
     }
 
     void HandleCreatingFailed() {
-        Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
+        if (!CreationFinished) {
+            // Failed to save script execution entry into database
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Failed to save script execution entry",
+                {"logPrefix", LogPrefix()});
+            PassAway();
+        } else {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
+        }
     }
 
     void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
@@ -472,6 +481,7 @@ private:
     TActorState ScriptLeaseWatcherActor;
     TActorState ScriptResultHandlerActor;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
+    bool CreationFinished = false;
     bool WaitFinalizationRequest = false;
 };
 

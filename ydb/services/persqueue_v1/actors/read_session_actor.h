@@ -350,7 +350,7 @@ private:
 
     void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
     void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);
-    void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
+    bool SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
     void InformBalancerAboutRelease(TPartitionsMapIterator it, const TActorContext& ctx);
 
     std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const;
@@ -382,6 +382,7 @@ private:
     bool ReadWithoutConsumer;
 
     bool InitDone;
+    bool Dead = false;
     bool RangesMode;
 
     ui32 MaxReadMessagesCount;
@@ -406,6 +407,7 @@ private:
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
+    THashMap<TString, TString> AliasedTopicPaths;
     THashMap<TString, i64> ReadFromTimestamp;
     THashMap<TString, i64> MaxLagByTopic;
 

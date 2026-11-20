@@ -25,7 +25,11 @@
                 ],
                 "Operators" : [
                     {
-                        "Inputs" : [ ],
+                        "Inputs" : [
+                            {
+                                "ExternalPlanNodeId" : 2
+                            }
+                        ],
                         "ExternalDataSource" : "pq",
                         "Name" : "Write pq",
                         "SinkType" : "pq"
@@ -50,6 +54,19 @@
         "Plans" : [
             {
                 "PlanNodeId" : 1,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 3,
+                        "Operators" : [
+                            {
+                                "ExternalDataSource" : "pq",
+                                "Name" : "Read pq",
+                                "SourceType" : "pq"
+                            }
+                        ],
+                        "Node Type" : "Read pq"
+                    }
+                ],
                 "Operators" : [
                     {
                         "ExternalDataSource" : "pq",

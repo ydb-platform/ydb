@@ -104,6 +104,10 @@ private:
     }
 
     bool DoValidate() override {
+        if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+            MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, "Client data writes are disabled");
+            return false;
+        }
         const size_t maxMessageSize = Min(TLimits::MaxMessageSize, QueueAttributes_->MaximumMessageSize);
         if (IsBatch_) {
             size_t size  = 0;

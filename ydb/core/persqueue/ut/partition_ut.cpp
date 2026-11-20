@@ -104,6 +104,10 @@ public:
         return partition.CleanUpBlobs(nullptr, ctx);
     }
 
+    static TInstant GetWriteTimeEstimate(TPartition& partition, ui64 offset) {
+        return partition.GetWriteTimeEstimate(offset);
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -2400,6 +2404,29 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
+Y_UNIT_TEST_F(ExpiredHasDataDeadlineIsAnsweredImmediately, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const ui64 hasDataCookie = 42;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end});
+
+    auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+    event->Record.SetPartition(partition.InternalPartitionId);
+    event->Record.SetOffset(end);
+    event->Record.SetDeadline(0);
+    event->Record.SetCookie(hasDataCookie);
+    ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(2));
+    UNIT_ASSERT_C(response, "Expired HasData deadline must not wait for the periodic partition wakeup");
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetEndOffset(), end);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSizeLag(), 0);
+}
+
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
     const TPartitionId partition{3};
@@ -3984,6 +4011,104 @@ Y_UNIT_TEST_F(EndWriteTimestamp_HeadKeys, TPartitionFixture) {
     UNIT_ASSERT_C(now - TDuration::Seconds(2) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(2)) << " < " << endWriteTimestamp << " < " << now );
 } // EndWriteTimestamp_HeadKeys
 
+Y_UNIT_TEST_F(WriteQuota_ChargesSecondBlob_WhenFirstKvCompletesFirst, TPartitionFixture)
+{
+    // BlobQuotaSize belongs to the in-flight quota cookie. Completing the previous KV write
+    // must not drop it while the next cookie is still waiting, or TEvConsumed charges 0.
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+    Ctx->Runtime->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    Ctx->Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+
+    CreatePartition({.Partition = TPartitionId{1}});
+
+    struct THeldQuotaRequest {
+        ui64 Cookie = 0;
+        TActorId Partition;
+    };
+    TDeque<THeldQuotaRequest> heldQuotaRequests;
+    TVector<ui64> consumedBytes;
+
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvRequestQuota>()) {
+            heldQuotaRequests.push_back(THeldQuotaRequest{.Cookie = event->Cookie, .Partition = ev->Sender});
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvConsumed>(); event && !event->IsOverhead) {
+            consumedBytes.push_back(event->ConsumedBytes);
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    auto approveHeldQuota = [&] {
+        UNIT_ASSERT(!heldQuotaRequests.empty());
+        const auto held = heldQuotaRequests.front();
+        heldQuotaRequests.pop_front();
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(
+            held.Partition,
+            Ctx->Edge,
+            new TEvPQ::TEvApproveWriteQuota(held.Cookie, TDuration::Zero(), TDuration::Zero())));
+    };
+
+    const TString data1(1024, 'a');
+    const TString data2(4096, 'b');
+    const ui64 expectedSize1 = TString("SourceId").size() + data1.size();
+    const ui64 expectedSize2 = TString("SourceId").size() + data2.size();
+
+    SendWrite(1, 0, "owner", 0, data1, false, 1, true);
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return !heldQuotaRequests.empty();
+        };
+        UNIT_ASSERT_C(
+            Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)),
+            "partition did not request write quota for the first blob");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(heldQuotaRequests.size(), 1u);
+
+    SendWrite(2, 1, "owner", 1, data2, false, 2, true);
+
+    approveHeldQuota();
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return consumedBytes.size() >= 1 && !heldQuotaRequests.empty();
+        };
+        UNIT_ASSERT_C(
+            Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)),
+            "expected first TEvConsumed and a quota request for the second blob");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(consumedBytes.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(consumedBytes[0], expectedSize1);
+    UNIT_ASSERT_VALUES_EQUAL(heldQuotaRequests.size(), 1u);
+
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK});
+
+    approveHeldQuota();
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return consumedBytes.size() >= 2;
+        };
+        UNIT_ASSERT_C(
+            Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)),
+            "partition did not consume quota for the second blob");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(consumedBytes.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        consumedBytes[1],
+        expectedSize2,
+        "second TEvConsumed must charge the second blob, not 0 after the previous KV response");
+}
+
 Y_UNIT_TEST_F(The_DeletePartition_Message_Arrives_Before_The_ApproveWriteQuota_Message, TPartitionFixture)
 {
     // create a supportive partition
@@ -5026,10 +5151,14 @@ void AddBodyKeyToEncoder(
     TPartitionBlobEncoder& encoder,
     const TPartitionId& partitionId,
     ui64 offset,
-    ui32 size)
+    ui32 size,
+    TInstant timestamp = TInstant::MilliSeconds(1),
+    ui16 partNo = 0,
+    ui32 count = 1,
+    ui16 internalPartsCount = 0)
 {
-    const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
-    encoder.DataKeysBody.push_back(TDataKey{key, size, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, partNo, count, internalPartsCount);
+    encoder.DataKeysBody.push_back(TDataKey{key, size, timestamp, 0, MakeTestBlobKeyToken()});
     encoder.BodySize += size;
 }
 
@@ -5041,7 +5170,8 @@ void AddHeadKeyWithPartNo(
     ui16 partNo,
     char fill,
     ui64 seqNo,
-    ui32 levelIndex = 0)
+    ui32 levelIndex = 0,
+    TInstant timestamp = TInstant::MilliSeconds(1))
 {
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
@@ -5057,10 +5187,23 @@ void AddHeadKeyWithPartNo(
         }
     }
     encoder.DataKeysHead[levelIndex].AddKey(key, blobSize);
-    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, timestamp, 0, MakeTestBlobKeyToken()});
     encoder.Head.AddBatch(batch);
     encoder.Head.Offset = offset;
     encoder.Head.PartNo = partNo;
+}
+
+void SetEncoderRange(TPartitionBlobEncoder& encoder, ui64 startOffset, ui64 endOffset) {
+    encoder.StartOffset = startOffset;
+    encoder.EndOffset = endOffset;
+    encoder.Head.Offset = endOffset;
+    encoder.Head.PartNo = 0;
+}
+
+void ClearEncoderKeys(TPartitionBlobEncoder& encoder) {
+    encoder.DataKeysBody.clear();
+    encoder.HeadKeys.clear();
+    encoder.BodySize = 0;
 }
 
 Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetUsesFwzBodyStart, TPartitionFixture) {
@@ -5127,6 +5270,228 @@ private:
     TActorId Edge;
     std::function<void(const TActorContext&)> Body;
 };
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateEmptyCompactionZoneUsesFastWriteHead, TPartitionFixture) {
+    // YDBBUGS-824: compacted zone reports [0, End) with no keys after body compaction,
+    // fast-write zone keeps data only in HeadKeys. GetWriteTimeEstimate used to pick the
+    // empty compacted zone because BlobEncoder.DataKeysBody was empty and abort.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 compactedEnd = 273561;
+    constexpr ui64 fastWriteEnd = 282336;
+    constexpr ui64 laggingOffset = 272449;
+    const TInstant headTs = TInstant::MilliSeconds(42);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, compactedEnd, fastWriteEnd);
+    AddHeadKeyWithPartNo(fwz, 8_MB, partitionId, compactedEnd, 0, 'm', 1, 0, headTs);
+
+    UNIT_ASSERT(cz.IsEmpty());
+    UNIT_ASSERT(!fwz.IsEmpty());
+    UNIT_ASSERT(fwz.DataKeysBody.empty());
+    UNIT_ASSERT(!fwz.HeadKeys.empty());
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, laggingOffset), headTs);
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, compactedEnd), headTs);
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, fastWriteEnd), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateSnapsAcrossGapBeforeFirstCompactedKey, TPartitionFixture) {
+    // YDBBUGS-824 / #27934: mirroring leaves a hole before the first compacted blob while
+    // CompactionBlobEncoder.StartOffset stays 0. Offset inside the hole must not abort.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 firstCompactedOffset = 273000;
+    constexpr ui64 compactedEnd = 273561;
+    constexpr ui64 fastWriteEnd = 282336;
+    constexpr ui64 offsetInGap = 272449;
+    const TInstant compactedTs = TInstant::MilliSeconds(11);
+    const TInstant fastWriteTs = TInstant::MilliSeconds(22);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+    AddBodyKeyToEncoder(cz, partitionId, firstCompactedOffset, 1000, compactedTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, compactedEnd, fastWriteEnd);
+    AddBodyKeyToEncoder(fwz, partitionId, compactedEnd, 1000, fastWriteTs);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, offsetInGap), compactedTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateGapBetweenZonesUsesFastWriteStart, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 compactedEnd = 200;
+    constexpr ui64 fastWriteStart = 300;
+    constexpr ui64 fastWriteEnd = 400;
+    const TInstant compactedTs = TInstant::MilliSeconds(11);
+    const TInstant fastWriteTs = TInstant::MilliSeconds(22);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+    AddBodyKeyToEncoder(cz, partitionId, 100, 1000, compactedTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, fastWriteStart, fastWriteEnd);
+    AddBodyKeyToEncoder(fwz, partitionId, fastWriteStart, 1000, fastWriteTs);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 250), fastWriteTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateEmptyZonesReturnsZero, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 273561);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 273561, 282336);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateCompactionHeadOnlyGapBeforeHead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 headOffset = 273000;
+    constexpr ui64 compactedEnd = 273561;
+    constexpr ui64 fastWriteEnd = 282336;
+    const TInstant headTs = TInstant::MilliSeconds(17);
+    const TInstant fastWriteTs = TInstant::MilliSeconds(33);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+    AddHeadKeyWithPartNo(cz, 8_MB, partitionId, headOffset, 0, 'h', 1, 0, headTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, compactedEnd, fastWriteEnd);
+    AddBodyKeyToEncoder(fwz, partitionId, compactedEnd, 1000, fastWriteTs);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), headTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateNativeSmallAndKafkaBatch, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant smallTs = TInstant::MilliSeconds(5);
+    const TInstant batchTs = TInstant::MilliSeconds(7);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 100, smallTs, 0, 1);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 1, 1);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), smallTs);
+
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 10, 20);
+    AddBodyKeyToEncoder(cz, partitionId, 10, 1000, batchTs, 0, 10);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 20, 20);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 10), batchTs);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 15), batchTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateLargeMessagePartsInOneBlob, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant ts = TInstant::MilliSeconds(9);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 600_KB, ts, 0, 1, /*internalPartsCount=*/3);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 1, 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), ts);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateLargeMessagePartsAcrossBlobs, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant firstPartTs = TInstant::MilliSeconds(3);
+    const TInstant secondPartTs = TInstant::MilliSeconds(4);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 300_KB, firstPartTs, 0, 1, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 300_KB, secondPartTs, 1, 1, 0);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 1, 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), firstPartTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateFirstKeyWithPartNoDoesNotAbort, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant ts = TInstant::MilliSeconds(8);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 273561);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 273561, 282336);
+    AddHeadKeyWithPartNo(fwz, 8_MB, partitionId, 273561, 2, 'm', 1, 0, ts);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), ts);
+}
 
 Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());

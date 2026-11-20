@@ -77,8 +77,10 @@ namespace NKikimr::NBlobDepot {
         void NotifyPutSlowDown();
         void HandlePutThrottleWakeup();
         void RunPendingPrepareWritesIfPossible();
+        void DropPendingPrepareWrites(const TActorId& pipeServerId);
         void OnS3WriteInFlightAdded(ui32 count);
         void OnS3WriteInFlightRemoved(bool success);
+        void OnS3WritesInFlightAbandoned(ui32 count);
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TUploaderActor;

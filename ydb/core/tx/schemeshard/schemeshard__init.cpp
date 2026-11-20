@@ -26,6 +26,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TStorageChanges DbChanges;
     THashMap<TTxId, TDeque<TPathId>> Publications;
     TVector<TPathId> TablesToClean;
+    TVector<TPathId> TablesWithShadowData;
     TDeque<TPathId> BlockStoreVolumesToClean;
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
@@ -1900,6 +1901,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", read records: " << tableRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
+            TablesWithShadowData.clear();
             for (const auto& rec: tableRows) {
                 TPathId pathId = std::get<0>(rec);
 
@@ -1924,6 +1926,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (config.HasCrossDataCenterFollowerCount()) {
                         config.ClearFollowerCount();
+                    }
+                    if (config.HasShadowData()) {
+                        TablesWithShadowData.push_back(pathId);
                     }
                 }
 
@@ -4071,6 +4076,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                         txState.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
                     }
+                } else if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TDrop drop;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(drop, extraData));
+                        txState.ReplicationSourceCleanup = drop.GetReplicationSourceCleanup();
+                    }
                 } else if (txState.TxType == TTxState::TxForceDropSubDomain || txState.TxType == TTxState::TxForceDropExtSubDomain) {
                     forceDropOpIds.push_back(operationId);
                 } else if (txState.TxType == TTxState::TxAlterUserAttributes) {
@@ -5200,6 +5211,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
                     }
                     importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>();
+                    importInfo->CanRestoreRateLimiterMetering = rowset.GetValueOrDefault<Schema::Imports::CanRestoreRateLimiterMetering>(false);
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);
@@ -5252,6 +5264,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.DstPathId = TPathId(rowset.GetValueOrDefault<Schema::ImportItems::DstPathOwnerId>(InvalidOwnerId),
                                              rowset.GetValueOrDefault<Schema::ImportItems::DstPathLocalId>(InvalidLocalPathId));
 
+                    if (rowset.HaveValue<Schema::ImportItems::ReplicationConfig>()) {
+                        NKikimrSchemeOp::TTableReplicationConfig config;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(config, rowset.GetValue<Schema::ImportItems::ReplicationConfig>()));
+                        item.ReplicationConfig = std::move(config);
+                    }
+
                     if (rowset.HaveValue<Schema::ImportItems::Scheme>()) {
                         Ydb::Table::CreateTableRequest table;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(table, rowset.GetValue<Schema::ImportItems::Scheme>()));
@@ -5298,6 +5316,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
+                    if (rowset.HaveValue<Schema::ImportItems::Kesus>()) {
+                        NKikimrSchemeOp::TImportKesus kesus;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(kesus, rowset.GetValue<Schema::ImportItems::Kesus>()));
+                        item.Kesus = std::move(kesus);
+                    }
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
@@ -5586,6 +5609,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // Read SetColumnConstraint operations
         {
             THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> loadedOperations;
+            TVector<std::shared_ptr<TSetColumnConstraintOperationInfo>> operationsWithoutPersistedDomain;
 
             {
                 auto rowset = db.Table<Schema::SetColumnConstraint>().Range().Select();
@@ -5604,9 +5628,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SetColumnConstraint::TableLocalId>()
                     );
 
+                    const bool tableExists = Self->PathsById.contains(operationInfo->TablePathId);
+
+                    if (rowset.HaveValue<Schema::SetColumnConstraint::DomainOwnerId>()
+                        && rowset.HaveValue<Schema::SetColumnConstraint::DomainLocalId>())
                     {
-                        TPath tablePath = TPath::Init(operationInfo->TablePathId, Self);
-                        operationInfo->DomainPathId = tablePath.GetPathIdForDomain();
+                        operationInfo->DomainPathId = TPathId(
+                            rowset.GetValue<Schema::SetColumnConstraint::DomainOwnerId>(),
+                            rowset.GetValue<Schema::SetColumnConstraint::DomainLocalId>()
+                        );
+                    } else if (tableExists) {
+                        // Backward compatibility: records created before DomainOwnerId/DomainLocalId were persisted
+                        operationInfo->DomainPathId = TPath::Init(operationInfo->TablePathId, Self).GetPathIdForDomain();
+                        operationsWithoutPersistedDomain.push_back(operationInfo);
+                    } else {
+                        // The domain of a dropped table is not recoverable
+                        operationInfo->DomainPathId = Self->RootPathId();
+                    }
+
+                    if (!tableExists) {
+                        operationInfo->IsBroken = true;
+                        operationInfo->AddIssue(TStringBuilder() << "Table path id not found: " << operationInfo->TablePathId.ToString());
                     }
 
                     TString serializedColumns = rowset.GetValue<Schema::SetColumnConstraint::SerializedColumnNames>();
@@ -5721,6 +5763,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         return false;
                     }
                 }
+            }
+
+            for (const auto& operationInfo : operationsWithoutPersistedDomain) {
+                db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo->Id)).Update(
+                    NIceDb::TUpdate<Schema::SetColumnConstraint::DomainOwnerId>(operationInfo->DomainPathId.OwnerId),
+                    NIceDb::TUpdate<Schema::SetColumnConstraint::DomainLocalId>(operationInfo->DomainPathId.LocalPathId)
+                );
             }
 
             for (auto& [id, operationInfo] : loadedOperations) {
@@ -6748,6 +6797,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .ImportsIds = ImportsToResume,
             .CdcStreamScans = std::move(cdcStreamScansToResume),
             .TablesToClean = std::move(TablesToClean),
+            .TablesWithShadowData = std::move(TablesWithShadowData),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
             .IncrementalBackupIds = std::move(IncrementalBackupsToResume),

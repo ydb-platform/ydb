@@ -116,4 +116,35 @@ Y_UNIT_TEST_SUITE(TPartitionGraphTest) {
             UNIT_ASSERT(traversedNodes.contains(5));
         }
     }
+
+    Y_UNIT_TEST(MissingPartitionIsNotCreated) {
+        NKikimrPQ::TPQTabletConfig config;
+        for (ui32 i = 0; i < 32; ++i) {
+            auto* partition = config.AddAllPartitions();
+            partition->SetPartitionId(i);
+            if (i + 1 < 32) {
+                partition->AddChildPartitionIds(i + 1);
+            }
+        }
+        auto* first = config.MutableAllPartitions(0);
+        for (ui32 i = 0; i < 1000; ++i) {
+            first->AddChildPartitionIds(100000 + i);
+        }
+
+        TPartitionGraph graph = MakePartitionGraph(config);
+
+        const auto* head = graph.GetPartition(0);
+        UNIT_ASSERT(head);
+        UNIT_ASSERT_VALUES_EQUAL(head->DirectChildren.size(), 1);
+        UNIT_ASSERT_EQUAL(head->DirectChildren[0], graph.GetPartition(1));
+        UNIT_ASSERT(!graph.GetPartition(100000));
+
+        std::set<ui32> traversed;
+        graph.Travers(0, [&](ui32 id) {
+            traversed.insert(id);
+            return true;
+        }, true);
+        UNIT_ASSERT_VALUES_EQUAL(traversed.size(), 32);
+        UNIT_ASSERT(!traversed.contains(100000));
+    }
 }

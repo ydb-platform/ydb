@@ -6,6 +6,8 @@
 
 #include "interconnect_common.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
+
 namespace NActors {
     TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
         : TActor(&TThis::Initial)
@@ -29,7 +31,8 @@ namespace NActors {
     }
 
     void TInterconnectListenerTCP::Die(const TActorContext& ctx) {
-        LOG_DEBUG_IC("ICL08", "Dying");
+        YDB_LOG_DEBUG("Dying",
+            {"marker", "ICL08"});
         TActor::Die(ctx);
     }
 
@@ -77,7 +80,11 @@ namespace NActors {
     void TInterconnectListenerTCP::Bootstrap(const TActorContext& ctx) {
         if (!Listener) {
             if (const int err = Bind()) {
-                LOG_ERROR_IC("ICL01", "Bind failed: %s (%s:%u)", strerror(err), Address.data(), Port);
+                YDB_LOG_ERROR("Bind",
+                    {"marker", "ICL01"},
+                    {"failed", strerror(err)},
+                    {"address", Address.data()},
+                    {"port", Port});
                 Listener.Reset();
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);
                 return;
@@ -101,13 +108,19 @@ namespace NActors {
             NInterconnect::TAddress address;
             const int r = Listener->Accept(address);
             if (r >= 0) {
-                LOG_DEBUG_IC("ICL04", "Accepted from: %s", address.ToString().data());
+                YDB_LOG_DEBUG("Accepted",
+                    {"marker", "ICL04"},
+                    {"from", address});
                 auto socket = MakeIntrusive<NInterconnect::TStreamSocket>(static_cast<SOCKET>(r));
                 ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket)));
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
                 Y_ABORT_UNLESS(-r != ENFILE && -r != EMFILE && !ExternalSocket);
-                LOG_ERROR_IC("ICL06", "Listen failed: %s (%s:%u)", strerror(-r), Address.data(), Port);
+                YDB_LOG_ERROR("Listen",
+                    {"marker", "ICL06"},
+                    {"failed", strerror(-r)},
+                    {"address", Address.data()},
+                    {"port", Port});
                 Listener.Reset();
                 PollerToken.Reset();
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);

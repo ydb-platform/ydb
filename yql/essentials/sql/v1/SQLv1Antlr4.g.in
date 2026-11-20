@@ -1073,7 +1073,7 @@ alter_replication_action:
 
 alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
-drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
+drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE? FORCE?;
 
 lambda_or_parameter:
     lambda
@@ -1550,6 +1550,7 @@ keyword_as_compat:
   | FOLLOWING
   | FOR
   | FOREIGN
+  | FORCE
   | FUNCTION
   | GLOB
   | GLOBAL
@@ -1791,6 +1792,7 @@ keyword_compat: (
   | FOLLOWING
   | FOR
   | FOREIGN
+  | FORCE
   | FUNCTION
   | GLOB
   | GLOBAL
@@ -2156,6 +2158,7 @@ FLOW: F L O W;
 FOLLOWING: F O L L O W I N G;
 FOR: F O R;
 FOREIGN: F O R E I G N;
+FORCE: F O R C E;
 FROM: F R O M;
 FULL: F U L L;
 FUNCTION: F U N C T I O N;

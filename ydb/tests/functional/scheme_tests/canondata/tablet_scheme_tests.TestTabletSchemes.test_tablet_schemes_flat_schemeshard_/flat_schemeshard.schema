@@ -6534,6 +6534,11 @@
                 "ColumnId": 14,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "CanRestoreRateLimiterMetering",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6553,7 +6558,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6691,6 +6697,16 @@
                 "ColumnId": 22,
                 "ColumnName": "SysView",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "ReplicationConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "Kesus",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6718,7 +6734,9 @@
                     19,
                     20,
                     21,
-                    22
+                    22,
+                    23,
+                    24
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10387,6 +10405,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "DomainLocalId",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OperationId",
                 "ColumnType": "Uint64"
@@ -10460,12 +10483,18 @@
                 "ColumnId": 15,
                 "ColumnName": "CancellationReason",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "DomainOwnerId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -10480,7 +10509,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

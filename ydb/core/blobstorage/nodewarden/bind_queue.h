@@ -14,6 +14,7 @@ namespace NKikimr::NStorage {
         struct TItem {
             ui32 NodeId;
             TMonotonic NextTryTimestamp = TMonotonic::Zero();
+            TMonotonic PostponedUntil = TMonotonic::Zero();
 
             TItem(ui32 nodeId)
                 : NodeId(nodeId)
@@ -74,9 +75,24 @@ namespace NKikimr::NStorage {
             // ensure item is disabled
             Y_ABORT_UNLESS(ProcessedEnd <= index);
 
-            // move it back to processed and then to active
             Swap(index, ProcessedEnd++);
-            Swap(ProcessedEnd - 1, ActiveEnd++);
+            if (!BindQueue[ProcessedEnd - 1].PostponedUntil) {
+                Swap(ProcessedEnd - 1, ActiveEnd++);
+            }
+        }
+
+        void Postpone(ui32 nodeId, TMonotonic until) {
+            const auto it = NodeIdToBindQueue.find(nodeId);
+            if (it == NodeIdToBindQueue.end()) {
+                return;
+            }
+            const size_t index = it->second;
+            TItem& item = BindQueue[index];
+            item.PostponedUntil = Max(item.PostponedUntil, until);
+            item.NextTryTimestamp = Max(item.NextTryTimestamp, item.PostponedUntil);
+            if (index < ActiveEnd) {
+                Swap(index, --ActiveEnd);
+            }
         }
 
         std::optional<ui32> Pick(TMonotonic now, TMonotonic *closest) {
@@ -84,6 +100,7 @@ namespace NKikimr::NStorage {
             if (!ActiveEnd) {
                 for (size_t k = 0; k < ProcessedEnd; ++k) {
                     if (BindQueue[k].NextTryTimestamp <= now) {
+                        BindQueue[k].PostponedUntil = TMonotonic::Zero();
                         // make it active
                         Swap(k, ActiveEnd++);
                     }

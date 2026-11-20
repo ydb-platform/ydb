@@ -67,7 +67,8 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
     // IAM token is not ready yet), which in turn calls OnFederationDiscovery that
     // tries to acquire Lock.  Holding Lock here would cause a spin-deadlock on
     // the single gRPC event-loop thread.
-    Y_ABORT_UNLESS(!Lock.IsLocked());
+    // TSpinLock::IsLocked cannot validate this caller contract because it also
+    // returns true when another thread owns Lock.
 
     NYdbGrpc::IQueueClientContextPtr ctx;
     {

@@ -444,7 +444,7 @@ void TCompactionLogic::ResubmitCompactions(TCompactionLogicState::TTableInfo &ta
     }
 }
 
-void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
+void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size, bool compactionComplete) {
     auto *info = State->Tables.FindPtr(table);
     Y_ENSURE(info);
     auto &mem = info->InMem;
@@ -453,7 +453,7 @@ void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
 
     if (auto& consumer = info->MemTableMemoryConsumer) {
         consumer->SetConsumption(size);
-        if (steps == 0) {
+        if (compactionComplete) {
             MemTableMemoryConsumersCollection->CompactionComplete(consumer);
         }
     }

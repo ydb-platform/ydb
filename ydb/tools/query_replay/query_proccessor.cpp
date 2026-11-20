@@ -142,6 +142,9 @@ public:
             case TQueryReplayEvents::UncategorizedPlanMismatch:
                 failReason = "uncategorized_plan_mismatch";
                 break;
+            case TQueryReplayEvents::QrInternalError:
+                failReason = "qr_internal_error";
+                break;
             default:
                 failReason = "unspecified";
         }

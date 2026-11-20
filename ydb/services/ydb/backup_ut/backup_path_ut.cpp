@@ -7,6 +7,10 @@
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+#include <ydb/library/backup/proto/proto.h>
+#include <ydb/core/backup/common/metadata.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
 #include <arrow/api.h>
 
@@ -16,6 +20,17 @@ using namespace NYdb;
 
 using TBackupPathTestFixture = TS3BackupTestFixture;
 using TBackupPathTestFixtureFs = TFsBackupTestFixture;
+
+class TPathAliasExplicitExportFixture : public TFsBackupTestFixture {
+public:
+    TPathAliasExplicitExportFixture() {
+        AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
+        Table0Path = "/export-alias";
+        auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
+        alias->SetSrc(Table0Path);
+        alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
+    }
+};
 
 namespace {
 
@@ -52,7 +67,12 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
         return f.YdbImportClient().ImportFromS3(settings).GetValueSync();
     }
 
-    void ValidateFileList(TS3BackupTestFixture& f, const TSet<TString>& paths) {
+    void ValidateFileList(
+        TS3BackupTestFixture& f,
+        TSet<TString> paths,
+        const TSet<TString>& completionMarkers)
+    {
+        paths.insert(completionMarkers.begin(), completionMarkers.end());
         f.ValidateS3FileList(paths);
     }
 
@@ -155,7 +175,11 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
         return f.YdbImportClient().ImportFromFs(settings).GetValueSync();
     }
 
-    void ValidateFileList(TFsBackupTestFixture& f, const TSet<TString>& paths) {
+    void ValidateFileList(
+        TFsBackupTestFixture& f,
+        const TSet<TString>& paths,
+        const TSet<TString>& /*completionMarkers*/)
+    {
         f.ValidateFileList(paths);
     }
 
@@ -253,6 +277,158 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
 };
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
+    TBackupTraits<TExportSettings> traits;
+    auto& runtime = *f.Server().GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+
+    auto status = f.YdbSchemeClient().MakeDirectory("/Root/KesusExport").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NCoordination::TClient coordination(f.YdbDriver());
+    status = coordination.CreateNode("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NRateLimiter::TRateLimiterClient rateLimiter(f.YdbDriver());
+    status = rateLimiter.CreateResource("/Root/KesusExport/Coordination", "limit",
+        NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(100)).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+    auto sessionResult = coordination.StartSession("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.ExtractResult();
+    const std::string semaphoreData("a\0\xffz", 4);
+    status = session.CreateSemaphore("../persistent", 3, semaphoreData).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto acquired = session.AcquireSemaphore("../persistent",
+        NCoordination::TAcquireSemaphoreSettings().Count(2)).GetValueSync();
+    UNIT_ASSERT_C(acquired.IsSuccess(), acquired.GetIssues().ToString());
+    UNIT_ASSERT(acquired.GetResult());
+    const auto ephemeral = session.AcquireSemaphore("ephemeral",
+        NCoordination::TAcquireSemaphoreSettings().Count(1).Ephemeral()).GetValueSync();
+    UNIT_ASSERT_C(ephemeral.IsSuccess(), ephemeral.GetIssues().ToString());
+    UNIT_ASSERT(ephemeral.GetResult());
+
+    auto settings = traits.MakeExportSettingsRaw(f);
+    settings.AppendItem(typename TExportSettings::TItem{
+        .Src = throughDirectory ? "/Root/KesusExport" : "/Root/KesusExport/Coordination",
+        .Dst = "coordination",
+    });
+    f.WaitOpSuccess(traits.Export(f, settings));
+
+    const TString prefix = traits.FilePrefixRaw() + "coordination/" + (throughDirectory ? "Coordination/" : "");
+    auto readFile = [&](const TString& name) -> TString {
+        const TString path = prefix + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            const auto& data = f.GetS3Data();
+            UNIT_ASSERT_C(data.contains(path), path);
+            return data.at(path);
+        } else {
+            return TFileInput(TFsPath(f.GetTempDir().Path()) / path).ReadAll();
+        }
+    };
+    Ydb::Coordination::CreateNodeRequest node;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile("create_coordination_node.pb"), node));
+    UNIT_ASSERT(node.has_config());
+    const auto metadata = NKikimr::NBackup::TMetadata::Deserialize(readFile("metadata.json"));
+    UNIT_ASSERT(metadata.GetRateLimiterResources());
+    UNIT_ASSERT_VALUES_EQUAL(metadata.GetRateLimiterResources()->size(), 1);
+    const auto& entry = metadata.GetRateLimiterResources()->front();
+    UNIT_ASSERT_VALUES_EQUAL(entry.ResourcePath, "limit");
+    UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix, "rate_limiter_resources/001");
+    Ydb::RateLimiter::CreateResourceRequest resource;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(entry.ExportPrefix + "/create_rate_limiter.pb"), resource));
+    UNIT_ASSERT(resource.coordination_node_path().empty());
+    UNIT_ASSERT(resource.resource().resource_path().empty());
+    UNIT_ASSERT_VALUES_EQUAL(resource.resource().hierarchical_drr().max_units_per_second(), 100);
+
+    UNIT_ASSERT(metadata.GetSemaphores());
+    UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
+    const auto& semaphoreEntry = metadata.GetSemaphores()->front();
+    UNIT_ASSERT_VALUES_EQUAL(semaphoreEntry.Name, "../persistent");
+    UNIT_ASSERT_VALUES_EQUAL(semaphoreEntry.ExportPrefix, "semaphores/001");
+    Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(semaphoreEntry.ExportPrefix + "/create_semaphore.pb"), semaphore));
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "../persistent");
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), semaphoreData);
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+
+    // Replay the exported public definition in a new node; no owners or waiters are restored.
+    status = coordination.CreateNode("/Root/RestoredCoordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    auto restoredSessionResult = coordination.StartSession("/Root/RestoredCoordination").GetValueSync();
+    UNIT_ASSERT_C(restoredSessionResult.IsSuccess(), restoredSessionResult.GetIssues().ToString());
+    auto restoredSession = restoredSessionResult.ExtractResult();
+    status = restoredSession.CreateSemaphore(semaphore.name(), semaphore.limit(), semaphore.data()).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto restored = restoredSession.DescribeSemaphore(semaphore.name(),
+        NCoordination::TDescribeSemaphoreSettings().IncludeOwners().IncludeWaiters()).GetValueSync();
+    UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetLimit(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetData(), semaphoreData);
+    UNIT_ASSERT(!restored.GetResult().IsEphemeral());
+    UNIT_ASSERT(restored.GetResult().GetOwners().empty());
+    UNIT_ASSERT(restored.GetResult().GetWaiters().empty());
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportKesusIcbImpl(TBackupTestFixture& f, bool throughDirectory) {
+    TBackupTraits<TExportSettings> traits;
+    auto& runtime = *f.Server().GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+    auto status = f.YdbSchemeClient().MakeDirectory("/Root/KesusExport").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NCoordination::TClient coordination(f.YdbDriver());
+    status = coordination.CreateNode("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    if (throughDirectory) {
+        auto session = f.YdbTableClient().CreateSession().GetValueSync();
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+        status = session.GetSession().CreateTable("/Root/KesusExport/Table", NYdb::NTable::TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("Key")
+            .Build()).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    }
+
+    auto settings = traits.MakeExportSettingsRaw(f);
+    settings.AppendItem(typename TExportSettings::TItem{
+        .Src = throughDirectory ? "/Root/KesusExport" : "/Root/KesusExport/Coordination",
+        .Dst = "coordination",
+    });
+    auto hasFile = [&](const TString& name) {
+        const TString path = traits.FilePrefixRaw() + "coordination/" + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            return f.GetS3Data().contains(path);
+        } else {
+            return (TFsPath(f.GetTempDir().Path()) / path).Exists();
+        }
+    };
+    const TString nodeFile = throughDirectory
+        ? "Coordination/create_coordination_node.pb" : "create_coordination_node.pb";
+
+    auto& control = runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport;
+    UNIT_ASSERT_VALUES_EQUAL(control.AtomicLoad()->Get(), 0);
+    const auto disabled = traits.Export(f, settings);
+    if (throughDirectory) {
+        // RPC must exclude Kesus before sending the expanded item list to SchemeShard.
+        f.WaitOpSuccess(disabled);
+        UNIT_ASSERT(hasFile("Table/scheme.pb"));
+    } else {
+        UNIT_ASSERT(disabled.Ready());
+        UNIT_ASSERT_VALUES_EQUAL_C(disabled.Status().GetStatus(), EStatus::UNSUPPORTED,
+            disabled.Status().GetIssues().ToString());
+    }
+    UNIT_ASSERT(!hasFile(nodeFile));
+
+    NKikimr::TControlBoard::SetValue(1, control);
+    f.WaitOpSuccess(traits.Export(f, settings));
+    UNIT_ASSERT(hasFile(nodeFile));
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -300,6 +476,11 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "Table2_Prefix/scheme.pb.sha256",
             prefix + "Table2_Prefix/permissions.pb.sha256",
             prefix + "Table2_Prefix/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0_Prefix/data_complete.json",
+            prefix + "Table1_Prefix/data_complete.json",
+            prefix + "Table2_Prefix/data_complete.json",
         });
     }
 
@@ -428,6 +609,11 @@ void ExportWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -489,6 +675,11 @@ void ExportWholeDatabaseByExplicitRootItemImpl(TBackupTestFixture& f, bool isOla
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -561,6 +752,11 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -652,6 +848,9 @@ void ExportParquetTableWithCompressionImpl(TBackupTestFixture &f, bool isOlap) {
             prefix + "Table0/scheme.pb.sha256",
             prefix + "Table0/permissions.pb.sha256",
             prefix + "Table0/data_00.parquet.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
         });
     }
 
@@ -703,6 +902,10 @@ void ExportWithCommonSourcePathImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir2/Table2/scheme.pb.sha256",
             prefix + "dir2/Table2/permissions.pb.sha256",
             prefix + "dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table1/data_complete.json",
+            prefix + "dir2/Table2/data_complete.json",
         });
     }
 
@@ -771,6 +974,10 @@ void ExportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -827,6 +1034,10 @@ void ExportFilteringWithoutEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -887,6 +1098,10 @@ void ExportWithCommonSourcePathAndExplicitTableInsideImpl(TBackupTestFixture& f,
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "ExplicitTable1Prefix/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -940,6 +1155,10 @@ void RecursiveDirectoryPlusExplicitTableImpl(TBackupTestFixture& f, bool isOlap)
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -985,6 +1204,9 @@ void EmptyDirectoryIsOkImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "Table2/scheme.pb.sha256",
             prefix + "Table2/permissions.pb.sha256",
             prefix + "Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table2/data_complete.json",
         });
     }
 
@@ -1042,6 +1264,11 @@ void ImportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/Table1/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1136,6 +1363,11 @@ void ImportFilterByPrefixImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "Table2_Prefix/scheme.pb.sha256",
             prefix + "Table2_Prefix/permissions.pb.sha256",
             prefix + "Table2_Prefix/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0_Prefix/data_complete.json",
+            prefix + "Table1_Prefix/data_complete.json",
+            prefix + "Table2_Prefix/data_complete.json",
         });
     }
 
@@ -1183,6 +1415,9 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
             prefixRaw + "Prefix/t1/scheme.pb.sha256",
             prefixRaw + "Prefix/t1/permissions.pb.sha256",
             prefixRaw + "Prefix/t1/data_00.csv.sha256",
+        }, {
+            prefixRaw + "Prefix/t1/export_complete.json",
+            prefixRaw + "Prefix/t1/data_complete.json",
         });
     }
 
@@ -1249,6 +1484,10 @@ void CommonPrefixButExplicitImportItemsImpl(TBackupTestFixture& f, bool isOlap) 
             prefix + "dir2/Table2/scheme.pb.sha256",
             prefix + "dir2/Table2/permissions.pb.sha256",
             prefix + "dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table1/data_complete.json",
+            prefix + "dir2/Table2/data_complete.json",
         });
     }
 
@@ -1312,6 +1551,11 @@ void ExportCommonSourcePathImportExplicitlyImpl(TBackupTestFixture& f, bool isOl
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/Table1/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1369,6 +1613,10 @@ void ExportRecursiveWithoutDestinationPrefixImpl(TBackupTestFixture& f, bool isO
             prefixRaw + "Prefix/dir2/Table2/scheme.pb.sha256",
             prefixRaw + "Prefix/dir2/Table2/permissions.pb.sha256",
             prefixRaw + "Prefix/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefixRaw + "Prefix/export_complete.json",
+            prefixRaw + "Prefix/Table1/data_complete.json",
+            prefixRaw + "Prefix/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1434,6 +1682,10 @@ void ExportDirectoryWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "002/scheme.pb.sha256",
             prefix + "002/permissions.pb.sha256",
             prefix + "002/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
         });
     }
 
@@ -1495,6 +1747,11 @@ void ExportWholeDatabaseWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "003/scheme.pb.sha256",
             prefix + "003/permissions.pb.sha256",
             prefix + "003/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
+            prefix + "003/data_complete.json",
         });
     }
 
@@ -1560,6 +1817,11 @@ void EncryptedExportWithExplicitDestinationPathImpl(TBackupTestFixture& f, bool 
             prefix + "Dir1Prefix/dir2/Table2/scheme.pb.sha256",
             prefix + "Dir1Prefix/dir2/Table2/permissions.pb.sha256",
             prefix + "Dir1Prefix/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "UnsafeTableNameShownInEncryptedBackup/data_complete.json",
+            prefix + "Dir1Prefix/Table1/data_complete.json",
+            prefix + "Dir1Prefix/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1642,6 +1904,11 @@ void EncryptedExportWithExplicitObjectListImpl(TBackupTestFixture& f, bool isOla
             prefix + "003/scheme.pb.sha256",
             prefix + "003/permissions.pb.sha256",
             prefix + "003/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
+            prefix + "003/data_complete.json",
         });
     }
 
@@ -1705,6 +1972,11 @@ void EncryptedImportWithoutCommonPrefixImpl(TBackupTestFixture& f, bool /*isOlap
             prefix + "003/scheme.pb.sha256",
             prefix + "003/permissions.pb.sha256",
             prefix + "003/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
+            prefix + "003/data_complete.json",
         });
     }
 
@@ -1880,6 +2152,9 @@ void ChecksumsForSchemaMappingFilesImpl(TBackupTestFixture& f, bool /*isOlap*/) 
             prefix + "Table2/permissions.pb.sha256",
             prefix + "Table2/data_00.csv.zst",
             prefix + "Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table2/data_complete.json",
         });
     }
 
@@ -1978,7 +2253,26 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 
 } // anonymous namespace
 
+Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
+    Y_UNIT_TEST(ExplicitItemSourceAliasIsRewritten) {
+        auto settings = MakeExportSettings("/Root/RecursiveFolderProcessing");
+        settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/export-alias", .Dst = "archive"});
+        auto future = YdbExportClient().ExportToFs(settings);
+        UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "Export request did not complete");
+        WaitOpSuccess(future.ExtractValueSync());
+        UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "archive" / "scheme.pb").Exists());
+    }
+}
+
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
+    Y_UNIT_TEST_TWIN(ExportKesus, ThroughDirectory) {
+        ExportKesusImpl<NExport::TExportToFsSettings>(*this, ThroughDirectory);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportKesusIcb, ThroughDirectory) {
+        ExportKesusIcbImpl<NExport::TExportToFsSettings>(*this, ThroughDirectory);
+    }
+
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2054,6 +2348,14 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
 }
 
 Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
+    Y_UNIT_TEST_TWIN(ExportKesus, ThroughDirectory) {
+        ExportKesusImpl<NExport::TExportToS3Settings>(*this, ThroughDirectory);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportKesusIcb, ThroughDirectory) {
+        ExportKesusIcbImpl<NExport::TExportToS3Settings>(*this, ThroughDirectory);
+    }
+
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {
         ExportWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }

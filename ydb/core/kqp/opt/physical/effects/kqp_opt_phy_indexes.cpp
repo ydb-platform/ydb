@@ -80,11 +80,9 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
     const TKikimrTableDescription& table,
     TPositionHandle pos,
     TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx,
     const THashSet<TStringBuf>* filter,
     const std::function<TExprBase (const TKikimrTableMetadata&, TPositionHandle, TExprContext&)>& tableBuilder)
 {
-    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
     TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> result(::Reserve(table.Metadata->Indexes.size()));
     YQL_ENSURE(table.Metadata->Indexes.size() == table.Metadata->ImplTables.size());
     for (size_t i = 0; i < table.Metadata->Indexes.size(); i++) {
@@ -137,7 +135,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                 case TIndexDescription::EType::GlobalFulltextCompact:
                 case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                 case TIndexDescription::EType::GlobalJsonCompact:
-                    YQL_ENSURE(useStreamIndex, "Compact fulltext index update requires EnableIndexStreamWrite");
+                    // Compact indexes are always updated by the sink (KqpWriteActor)
                     continue;
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     if (index.KeyColumns.size() == 1) {
@@ -162,13 +160,13 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
 }
 
 TSecondaryIndexes BuildAffectedIndexTables(const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, const THashSet<TStringBuf>* filter)
+    TExprContext& ctx, const THashSet<TStringBuf>* filter)
 {
     static auto cb = [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
         return BuildTableMeta(meta, pos, ctx);
     };
 
-    return BuildAffectedIndexTables(table, pos, ctx, kqpCtx, filter, cb);
+    return BuildAffectedIndexTables(table, pos, ctx, filter, cb);
 }
 
 TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,

@@ -5,9 +5,105 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/hash.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr::NFulltext {
+
+namespace {
+
+TVector<TString> BuildLikeSearchTerms(TStringBuf query, const Ydb::Table::FulltextIndexSettings::Analyzers& settings,
+    std::optional<char> escape)
+{
+    return BuildStringMatchTerms(query, "LIKE", escape, settings);
+}
+
+TString EscapeLikePattern(TStringBuf text, char escape, bool startsWithAny = false, bool endsWithAny = false) {
+    TString result;
+    if (startsWithAny) {
+        result.push_back('%');
+    }
+    for (const char c : text) {
+        if (c == escape || c == '%' || c == '_') {
+            result.push_back(escape);
+        }
+        result.push_back(c);
+    }
+    if (endsWithAny) {
+        result.push_back('%');
+    }
+    return result;
+}
+
+struct TDeltaItem {
+    ui64 DocId;
+    ui32 Freq;
+};
+
+struct TGeneration {
+    bool Added;
+    TVector<TDeltaItem> Items;
+};
+
+TVector<ui8> Encode(const TVector<TDeltaItem>& items, bool withFreq = true) {
+    TDeltaWriter writer;
+    writer.Reset(withFreq, false);
+    for (const auto& item : items) {
+        writer.Add(item.DocId, item.Freq);
+    }
+    return TVector<ui8>(writer.GetBuf().begin(), writer.GetBuf().end());
+}
+
+TVector<TDeltaItem> Merge(const TVector<TGeneration>& generations, bool withFreq = true) {
+    TVector<TVector<ui8>> encoded;
+    encoded.reserve(generations.size());
+
+    TMultiDeltaReader reader;
+    reader.Reset(withFreq, false);
+    for (const auto& generation : generations) {
+        encoded.push_back(Encode(generation.Items, withFreq));
+        reader.Add(generation.Added, encoded.back());
+    }
+    reader.Start();
+
+    TVector<TDeltaItem> result;
+    ui64 docId = 0;
+    ui32 freq = 0;
+    while (reader.Read(docId, freq)) {
+        result.push_back({docId, freq});
+    }
+    return result;
+}
+
+TVector<TDeltaItem> RoundTrip(const TVector<TDeltaItem>& items, bool withFreq, bool sign = false) {
+    TDeltaWriter writer;
+    writer.Reset(withFreq, sign);
+    for (const auto& item : items) {
+        writer.Add(item.DocId, item.Freq);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(writer.GetCount(), items.size());
+    UNIT_ASSERT_VALUES_EQUAL(writer.GetMaxId(), items.empty() ? 0 : items.back().DocId);
+
+    TDeltaReader reader(writer.GetBuf(), withFreq, sign);
+    TVector<TDeltaItem> result;
+    ui64 docId = 0;
+    ui32 freq = 0;
+    while (reader.Read(docId, freq)) {
+        result.push_back({docId, freq});
+    }
+    return result;
+}
+
+void AssertDeltaItemsEqual(const TVector<TDeltaItem>& actual, const TVector<TDeltaItem>& expected) {
+    UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(actual[i].DocId, expected[i].DocId, "item " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(actual[i].Freq, expected[i].Freq, "item " << i);
+    }
+}
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
@@ -69,6 +165,272 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(freq, 1);
         }
         UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
+    Y_UNIT_TEST(DeltaCodecEmptyAndSingle) {
+        AssertDeltaItemsEqual(RoundTrip({}, false), {});
+        AssertDeltaItemsEqual(RoundTrip({{0, 1}}, false), {{0, 1}});
+        AssertDeltaItemsEqual(RoundTrip({{Max<ui64>(), 1}}, false), {{Max<ui64>(), 1}});
+
+        // Frequency one is implicit in relevance segments, while larger values are stored explicitly.
+        AssertDeltaItemsEqual(RoundTrip({{0, 1}}, true), {{0, 1}});
+        AssertDeltaItemsEqual(RoundTrip({{Max<ui64>(), Max<ui32>()}}, true),
+            {{Max<ui64>(), Max<ui32>()}});
+    }
+
+    Y_UNIT_TEST(DeltaCodecVarintBoundaries) {
+        // Exercise one-byte/multi-byte transitions for regular delta varints (7 payload bits).
+        const TVector<TDeltaItem> plain = {
+            {0, 1},
+            {127, 1},
+            {255, 1},       // delta 128
+            {16638, 1},     // delta 16383
+            {33022, 1},     // delta 16384
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(RoundTrip(plain, false), plain);
+
+        // Relevance doc-id varints reserve a flag bit, so their first transition is 63 -> 64.
+        // Frequencies independently cross the regular 127 -> 128 transition.
+        const TVector<TDeltaItem> relevance = {
+            {0, 1},
+            {63, 2},
+            {127, 127},     // delta 64
+            {8254, 128},    // delta 8127
+            {16446, Max<ui32>()}, // delta 8192
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(RoundTrip(relevance, true), relevance);
+    }
+
+    Y_UNIT_TEST(DeltaCodecSignedExtremes) {
+        const TVector<TDeltaItem> items = {
+            {static_cast<ui64>(Min<i64>()), 1},
+            {static_cast<ui64>(-1), 2},
+            {0, 127},
+            {static_cast<ui64>(Max<i64>()), Max<ui32>()},
+        };
+        AssertDeltaItemsEqual(RoundTrip(items, true, true), items);
+    }
+
+    Y_UNIT_TEST(DeltaCodecManyAndRandomizedRoundTrip) {
+        TVector<TDeltaItem> many;
+        many.reserve(10000);
+        for (ui64 i = 0; i < 10000; ++i) {
+            many.push_back({i * i + i, 1 + static_cast<ui32>(i % 257)});
+        }
+        AssertDeltaItemsEqual(RoundTrip(many, true), many);
+
+        // Fixed-seed xorshift64 property test. Generate strictly increasing ids with deltas spanning
+        // every varint width normally encountered by compact posting segments.
+        ui64 random = 0x9e3779b97f4a7c15ULL;
+        auto nextRandom = [&]() {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            return random;
+        };
+
+        for (ui32 iteration = 0; iteration < 100; ++iteration) {
+            TVector<TDeltaItem> items;
+            ui64 docId = nextRandom() & 0xFFFF;
+            const size_t count = 1 + nextRandom() % 500;
+            items.reserve(count);
+            for (size_t i = 0; i < count; ++i) {
+                const ui32 shift = nextRandom() % 28;
+                const ui64 delta = 1 + (nextRandom() & ((1ULL << shift) - 1));
+                if (Max<ui64>() - docId < delta) {
+                    break;
+                }
+                docId += delta;
+                const ui32 freq = 1 + static_cast<ui32>(nextRandom() % 100000);
+                items.push_back({docId, freq});
+            }
+            AssertDeltaItemsEqual(RoundTrip(items, true), items);
+            AssertDeltaItemsEqual(RoundTrip(items, false), [&] {
+                TVector<TDeltaItem> result = items;
+                for (auto& item : result) {
+                    item.Freq = 1;
+                }
+                return result;
+            }());
+        }
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderGenerationMerge) {
+        auto encode = [](std::initializer_list<TDeltaItem> items) {
+            TDeltaWriter writer;
+            writer.Reset(true, false);
+            for (const auto& item : items) {
+                writer.Add(item.DocId, item.Freq);
+            }
+            return TVector<ui8>(writer.GetBuf().begin(), writer.GetBuf().end());
+        };
+
+        const auto base = encode({{1, 2}, {2, 1}, {4, 5}, {8, 1}});
+        const auto deleted = encode({{1, 1}, {2, 1}, {4, 7}, {6, 1}});
+        const auto added = encode({{1, 3}, {3, 1}, {4, 2}, {6, 2}});
+
+        TMultiDeltaReader reader;
+        reader.Reset(true, false);
+        reader.Add(true, base);
+        reader.Add(false, deleted);
+        reader.Add(true, added);
+        reader.Start();
+
+        TVector<TDeltaItem> actual;
+        ui64 docId = 0;
+        ui32 freq = 0;
+        while (reader.Read(docId, freq)) {
+            actual.push_back({docId, freq});
+        }
+
+        // Frequencies from add generations are summed, deletes are subtracted, and non-positive
+        // totals disappear. A delete of an absent id is canceled if a later generation adds it.
+        const TVector<TDeltaItem> expected = {{1, 4}, {3, 1}, {6, 1}, {8, 1}};
+        AssertDeltaItemsEqual(actual, expected);
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderManyGenerationsDifferentialAndIdempotent) {
+        // Treat a simple posting map as the legacy/reference representation and compare it with compact
+        // add/delete segments over many generations. The fixed seed makes failures exactly reproducible.
+        TVector<TGeneration> generations;
+        TMap<ui64, i64> reference;
+        ui64 random = 0xd1b54a32d192ed03ULL;
+        auto nextRandom = [&]() {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            return random;
+        };
+
+        for (ui32 gen = 0; gen < 250; ++gen) {
+            TGeneration generation{.Added = (nextRandom() % 3) != 0};
+            TMap<ui64, ui32> uniqueItems;
+            for (ui32 i = 0, count = 1 + nextRandom() % 40; i < count; ++i) {
+                // Mix a dense head with a sparse tail. Repeated ids occur across generations, while
+                // every individual segment remains strictly sorted as required by TDeltaWriter.
+                const ui64 docId = (nextRandom() & 1)
+                    ? nextRandom() % 128
+                    : (nextRandom() % 128) * (1ULL << (nextRandom() % 40));
+                uniqueItems[docId] = 1 + nextRandom() % 31;
+            }
+            for (const auto& [docId, freq] : uniqueItems) {
+                generation.Items.push_back({docId, freq});
+                reference[docId] += generation.Added ? static_cast<i64>(freq) : -static_cast<i64>(freq);
+            }
+            generations.push_back(std::move(generation));
+        }
+
+        TVector<TDeltaItem> expected;
+        for (const auto& [docId, freq] : reference) {
+            if (freq > 0) {
+                expected.push_back({docId, static_cast<ui32>(freq)});
+            }
+        }
+        const auto compacted = Merge(generations);
+        AssertDeltaItemsEqual(compacted, expected);
+
+        // Compacting the canonical single add segment again is byte-for-byte and logically idempotent.
+        const auto compactedAgain = Merge({TGeneration{.Added = true, .Items = compacted}});
+        AssertDeltaItemsEqual(compactedAgain, compacted);
+        UNIT_ASSERT(Encode(compactedAgain) == Encode(compacted));
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderAddDeleteAddFrequencyExtremes) {
+        const ui32 maxFreq = Max<ui32>();
+        const TVector<TGeneration> generations = {
+            {true,  {{0, maxFreq}, {1, 7}, {64, 100}, {Max<ui64>(), 3}}},
+            {false, {{0, maxFreq}, {1, 7}, {64, 40}, {Max<ui64>(), 3}}},
+            {true,  {{0, maxFreq}, {1, 9}, {64, 2}, {Max<ui64>(), 1}}},
+            {false, {{1, 4}, {64, 62}}},
+            {true,  {{1, 1}, {64, 5}}},
+        };
+        const TVector<TDeltaItem> expected = {
+            {0, maxFreq},
+            {1, 6},
+            {64, 5},
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(Merge(generations), expected);
+    }
+
+    Y_UNIT_TEST(DeltaReaderMaxIdBoundaryDoesNotConsume) {
+        const auto encoded = Encode({{5, 1}, {10, 2}, {Max<ui64>(), 3}});
+        TDeltaReader reader(encoded, true, false);
+        reader.SetMaxId(7);
+
+        ui64 docId = 0;
+        ui32 freq = 0;
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, 5);
+        UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+
+        // Read() restores its cursor when MaxId rejects an otherwise valid item.
+        reader.SetMaxId(10);
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, 10);
+        UNIT_ASSERT_VALUES_EQUAL(freq, 2);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+        reader.SetMaxId(Max<ui64>());
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(freq, 3);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+
+    }
+
+    Y_UNIT_TEST(DeltaReaderRejectsMalformedSegments) {
+        ui64 docId = 0;
+        ui32 freq = 0;
+
+        const TVector<ui8> truncated = {0x80};
+        TDeltaReader truncatedReader(truncated, false, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(truncatedReader.Read(docId, freq), yexception, "truncated varint");
+
+        const TVector<ui8> overlong(10, 0x80);
+        TDeltaReader overlongReader(overlong, false, false);
+        UNIT_ASSERT_EXCEPTION(overlongReader.Read(docId, freq), yexception);
+
+        const TVector<ui8> nonCanonical = {0x80, 0x00};
+        TDeltaReader nonCanonicalReader(nonCanonical, false, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            nonCanonicalReader.Read(docId, freq), yexception, "non-canonical varint");
+
+        TVector<ui8> overflowingFlagged = {0x80};
+        overflowingFlagged.insert(overflowingFlagged.end(), 8, 0x80);
+        overflowingFlagged.push_back(0x04); // tail=2^58 cannot be shifted left by the reserved six bits
+        TDeltaReader flaggedReader(overflowingFlagged, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            flaggedReader.Read(docId, freq), yexception, "overflowing flagged varint");
+
+        const TVector<ui8> overflowingFrequency = {0x41, 0x80, 0x80, 0x80, 0x80, 0x10};
+        TDeltaReader frequencyReader(overflowingFrequency, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(frequencyReader.Read(docId, freq), yexception, "overflowing frequency");
+
+        TVector<ui8> overflowingDocId = Encode({{Max<ui64>(), 1}}, false);
+        overflowingDocId.push_back(1);
+        TDeltaReader docIdReader(overflowingDocId, false, false);
+        UNIT_ASSERT(docIdReader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, Max<ui64>());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(docIdReader.Read(docId, freq), yexception, "overflowing document id");
+
+        const TVector<ui8> explicitZeroFrequency = {0x41, 0x00};
+        TDeltaReader zeroFrequencyReader(explicitZeroFrequency, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            zeroFrequencyReader.Read(docId, freq), yexception, "non-canonical frequency");
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderRejectsFrequencyOverflow) {
+        const ui32 maxFreq = Max<ui32>();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            Merge({
+                {true, {{1, maxFreq}}},
+                {true, {{1, 1}}},
+            }),
+            yexception,
+            "exceeds ui32");
     }
 
     Y_UNIT_TEST(MultiDeltaReader2) {
@@ -223,6 +585,12 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         columnAnalyzers->set_use_filter_ngram(true);
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time");
+        for (bool edge : {false, true}) {
+            columnAnalyzers->set_use_filter_ngram(!edge);
+            columnAnalyzers->set_use_filter_edge_ngram(edge);
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time");
+        }
 
         columnSettings = settings.add_columns();
         columnSettings->set_column("text2");
@@ -551,6 +919,356 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         }
     }
 
+    Y_UNIT_TEST(BuildSearchTermsLikeEscape) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_lowercase(true);
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(3);
+        analyzers.set_filter_ngram_max_length(3);
+
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ab!_cd", analyzers, '!'),
+                                 (TVector<TString>{"ab_", "b_c", "_cd"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%ab!%cd%", analyzers, '!'),
+                                 (TVector<TString>{"ab%", "b%c", "%cd"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ab!!cd", analyzers, '!'),
+                                 (TVector<TString>{"ab!", "b!c", "!cd"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ab!Xcd", analyzers, '!'),
+                                 (TVector<TString>{"abx", "bxc", "xcd"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ab?_cd", analyzers, '?'),
+                                 (TVector<TString>{"ab_", "b_c", "_cd"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("Ма!_Ша", analyzers, '!'),
+                                 (TVector<TString>{"ма_", "а_ш", "_ша"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ab!!!%cd", analyzers, '!'),
+                                 (TVector<TString>{"ab!", "b!%", "!%c", "%cd"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc!", analyzers, '!'),
+                                 (TVector<TString>{"abc"}));
+
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc!%def", analyzers, '!'),
+                                 (TVector<TString>{"abc", "def"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ab!_cd", analyzers, '!'),
+                                 (TVector<TString>{"ab_", "b_c", "_cd"}));
+
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%!_abc%", analyzers, '!'),
+                                 (TVector<TString>{"abc"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%\u0301!_abc%", analyzers, '!'),
+                                 (TVector<TString>{"abc"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%カタカナ%", analyzers, std::nullopt),
+                                 (TVector<TString>{"タカナ"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%가나다라%", analyzers, std::nullopt),
+                                 (TVector<TString>{"나다라"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%カ_タabc%", analyzers, std::nullopt),
+                                 (TVector<TString>{"abc"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%カ\u3000タ%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%#\u200Dカタカナ%", analyzers, std::nullopt),
+                                 (TVector<TString>{"タカナ"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%カ\u200Dタ\u200Dカタカナ%", analyzers, std::nullopt),
+                                 (TVector<TString>{"タカナ"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%foo's%", analyzers, std::nullopt),
+                                 (TVector<TString>{"foo", "oo'", "o's"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%א'ב'%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%א\"ב%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%\"א\"ב def%", analyzers, std::nullopt),
+                                 (TVector<TString>{"def"}));
+
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_stopwords(true);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%the% cats", analyzers, '!'),
+                                 (TVector<TString>{"cat", "ats"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("the cats", analyzers, '!'),
+                                 (TVector<TString>{"cat", "ats"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("foo !_%the cats", analyzers, '!'),
+                                 (TVector<TString>{"foo", "cat", "ats"}));
+
+        analyzers.set_use_filter_stopwords(false);
+        analyzers.set_use_filter_ngram(false);
+        analyzers.set_use_filter_edge_ngram(true);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("!%Abc%", analyzers, '!'),
+                                 (TVector<TString>{"%ab"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("!_Abc%", analyzers, '!'),
+                                 (TVector<TString>{"_ab"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("!!Abc%", analyzers, '!'),
+                                 (TVector<TString>{"!ab"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ab%longword", analyzers, '!'),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("% ab!c% def", analyzers, '!'),
+                                 (TVector<TString>{"abc", "def"}));
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("_\u3000abc", analyzers),
+                                 (TVector<TString>{"_\u3000a"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%\u3000abc", analyzers, '!'),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%\u3000abc def", analyzers, '!'),
+                                 (TVector<TString>{"def"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("% abc", analyzers, '!'),
+                                 (TVector<TString>{"abc"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%abc", analyzers, '!'),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%x.abc", analyzers, '!'),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%12.345", analyzers, '!'),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%.ab!c def", analyzers, '!'),
+                                 (TVector<TString>{"def"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("a%#abc!%def", analyzers, '!'),
+                                 (TVector<TString>{"def"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("a%#abc!_def", analyzers, '!'),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("a%\u200D!%def ghi", analyzers, '!'),
+                                 (TVector<TString>{"ghi"}));
+
+        analyzers.set_use_filter_edge_ngram(false);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("ABC!_def", analyzers, '!'),
+                                 (TVector<TString>{"abc_def"}));
+    }
+
+    Y_UNIT_TEST(BuildSearchTermsLikeWithoutNgrams) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        analyzers.set_use_filter_lowercase(true);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%abc def", analyzers, std::nullopt),
+                                 (TVector<TString>{"def"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc def%", analyzers, std::nullopt),
+                                 (TVector<TString>{"abc"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%abc def%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        analyzers.set_use_filter_snowball(true);
+        analyzers.set_language("english");
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%cars driving", analyzers, std::nullopt),
+                                 (TVector<TString>{"drive"}));
+
+        analyzers.set_use_filter_snowball(false);
+        analyzers.clear_language();
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%abc", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("", analyzers, std::nullopt),
+                                 (TVector<TString>{""}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc!%def", analyzers, '!'),
+                                 (TVector<TString>{"abc%def"}));
+    }
+
+    Y_UNIT_TEST(BuildSearchTermsLikeFilteredTokens) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(3);
+        analyzers.set_filter_ngram_max_length(3);
+        analyzers.set_use_filter_stopwords(true);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%her%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%learn%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%her% food", analyzers, std::nullopt),
+                                 (TVector<TString>{"foo", "ood"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("foo there", analyzers, std::nullopt),
+                                 (TVector<TString>{"foo"}));
+
+        analyzers.set_use_filter_stopwords(false);
+        analyzers.set_use_filter_length(true);
+        analyzers.set_filter_length_min(4);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("cat food", analyzers, std::nullopt),
+                                 (TVector<TString>{"foo", "ood"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("cat%", analyzers, std::nullopt),
+                                 (TVector<TString>{}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("cat% food", analyzers, std::nullopt),
+                                 (TVector<TString>{"foo", "ood"}));
+        analyzers.clear_filter_length_min();
+        analyzers.set_filter_length_max(4);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("cats other", analyzers, std::nullopt),
+                                 (TVector<TString>{"cat", "ats"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%oth% cats", analyzers, std::nullopt),
+                                 (TVector<TString>{"cat", "ats"}));
+    }
+
+    Y_UNIT_TEST(BuildSearchTermsLikeSyntax) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(3);
+        analyzers.set_filter_ngram_max_length(3);
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc!", analyzers, '!'),
+                                 (TVector<TString>{"abc"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc!!", analyzers, '!'),
+                                 (TVector<TString>{"abc", "bc!"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc!!!", analyzers, '!'),
+                                 (TVector<TString>{"abc", "bc!"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("abc!", analyzers, std::nullopt),
+                                 (TVector<TString>{"abc", "bc!"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("ab_cd", "EXACT", std::nullopt, analyzers),
+                                 (TVector<TString>{"ab_", "b_c", "_cd"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("ab_cd", "LIKE", std::nullopt, analyzers),
+                                 (TVector<TString>{}));
+    }
+
+    Y_UNIT_TEST(BuildStringMatchTermsLegacyEscape) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+        analyzers.set_use_filter_lowercase(true);
+        const TString nul("abc\0def", 7);
+        const TString backslash = "abc\\def";
+        for (const auto* mode : {"LIKE", "ILIKE"}) {
+            for (const char escape : {'x', '0'}) {
+                UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(nul, mode, escape, analyzers), (TVector<TString>{}));
+            }
+            for (const auto* pattern : {"abc!\\!def", "abc!\\%def", "abc!\\_def", "abc!\\"}) {
+                UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(pattern, mode, '!', analyzers), (TVector<TString>{}));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(backslash, mode, '!', analyzers), (TVector<TString>{backslash}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(backslash, mode, std::nullopt, analyzers), (TVector<TString>{backslash}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(nul, mode, '!', analyzers), (TVector<TString>{nul}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(nul, mode, std::nullopt, analyzers), (TVector<TString>{nul}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(TString("abc!\0def", 8), mode, '!', analyzers), (TVector<TString>{nul}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(nul, mode, '\0', analyzers), (TVector<TString>{nul}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(backslash, mode, '\\', analyzers), (TVector<TString>{backslash}));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("abc\\\\def", mode, '\\', analyzers), (TVector<TString>{"abc\\\\def"}));
+        }
+
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(3);
+        analyzers.set_filter_ngram_max_length(3);
+        for (const auto* mode : {"LIKE", "ILIKE"}) {
+            for (const char escape : {'%', '_'}) {
+                const TString pattern = TString("abc") + escape + "def";
+                const auto terms = BuildStringMatchTerms(pattern, mode, escape, analyzers);
+                // Cross-wildcard grams could exclude the matching row abcXdef.
+                UNIT_ASSERT_VALUES_EQUAL(terms, (TVector<TString>{"abc", "def"}));
+            }
+        }
+        for (const auto* mode : {"EXACT", "STARTS_WITH", "ENDS_WITH", "CONTAINS"}) {
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("abc!\\!def", mode, '!', analyzers), Analyze("abc!\\!def", analyzers));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(nul, mode, 'x', analyzers), Analyze(nul, analyzers));
+            UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(nul, mode, '0', analyzers), Analyze(nul, analyzers));
+            for (const char escape : {'\0', '%', '_', '\\'}) {
+                const TString literal = TString("abc") + escape + "def";
+                UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms(literal, mode, escape, analyzers), Analyze(literal, analyzers));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(BuildStringMatchTermsLowercase) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_lowercase(true);
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(3);
+        analyzers.set_filter_ngram_max_length(3);
+        UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("%ΛΟΓΟΣ%", "ILIKE", std::nullopt, analyzers),
+                                 (TVector<TString>{"λογ", "ογο", "γοσ"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("%STONE%", "ILIKE", std::nullopt, analyzers),
+                                 (TVector<TString>{"sto", "ton", "one"}));
+        // RE2-only fold equivalents keep distinct lowercase index terms.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("λογος", analyzers), (TVector<TString>{"λογ", "ογο", "γος"}));
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("ſtone", analyzers), (TVector<TString>{"ſto", "ton", "one"}));
+
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("%ДОСТОЕВСКИЙ%", "ILIKE", std::nullopt, analyzers),
+                                 (TVector<TString>{"дос", "ост", "сто", "тое", "оев", "евс", "вск", "ски", "кий"}));
+        analyzers.set_use_filter_ngram(false);
+        UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("Достоевский Толстой", "ILIKE", std::nullopt, analyzers),
+                                 (TVector<TString>{"достоевский", "толстой"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildStringMatchTerms("Новости спорта", "ILIKE", std::nullopt, analyzers),
+                                 (TVector<TString>{"новости", "спорта"}));
+    }
+
+    Y_UNIT_TEST(BuildSearchTermsLikeBoundaryContexts) {
+        TVector<TString> literals = {"_abc", "\u0301_abc", "\u200D_abc", "abc_", "abc_\u0301",
+                                     "カ_abc", "abc_カ", "カ_タabc", "カ\u3000タ", "カタカナ", "가나다라", "กขคง",
+                                     "カ\u200D가나다", "カ\u200D\u200Dタ\u3000ナ", "#\u200Dカタカナ", "🙂\u200Dカタカナ",
+                                     "א\"ב", "\"א\"ב", "א\"ב def", "カ\"א\"ב", "カ\"א\"ב def", "א'ב'", "א'ב' def", "foo's"};
+        const TVector<TString> symbols = {"a", "1", "א", "カ", "_", "\"", "'", ".", "\u200D", "\u0301", "\u3000"};
+        for (const auto& first : symbols) {
+            for (const auto& second : symbols) {
+                literals.push_back(first + second);
+                literals.push_back(first + second + "b");
+            }
+        }
+        for (const auto tokenizer : {Ydb::Table::FulltextIndexSettings::STANDARD, Ydb::Table::FulltextIndexSettings::WHITESPACE,
+                                     Ydb::Table::FulltextIndexSettings::ALPHANUMERIC, Ydb::Table::FulltextIndexSettings::KEYWORD}) {
+            for (ui32 gram : {1u, 2u, 3u}) {
+                for (ui32 mode : {0u, 1u, 2u}) {
+                    if (mode == 0 && gram != 1) {
+                        continue;
+                    }
+                    for (ui32 filter : {0u, 1u, 2u, 3u}) {
+                        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+                        analyzers.set_tokenizer(tokenizer);
+                        analyzers.set_use_filter_ngram(mode == 1);
+                        analyzers.set_use_filter_edge_ngram(mode == 2);
+                        analyzers.set_use_filter_stopwords(filter == 1);
+                        analyzers.set_use_filter_length(filter >= 2);
+                        if (filter == 2) {
+                            analyzers.set_filter_length_min(4);
+                        } else if (filter == 3) {
+                            analyzers.set_filter_length_max(4);
+                        }
+                        if (mode != 0) {
+                            analyzers.set_filter_ngram_min_length(gram);
+                            analyzers.set_filter_ngram_max_length(gram);
+                        }
+                        for (const auto& literal : literals) {
+                            THashMap<TString, THashSet<TString>> indexedByDocument;
+                            for (bool anchoredStart : {false, true}) {
+                                for (bool anchoredEnd : {false, true}) {
+                                    const TString pattern = (anchoredStart ? "" : "%") + EscapeLikePattern(literal, '!') + (anchoredEnd ? "" : "%");
+                                    const auto terms = BuildLikeSearchTerms(pattern, analyzers, '!');
+                                    const char* matchMode = anchoredStart
+                                        ? (anchoredEnd ? "EXACT" : "STARTS_WITH")
+                                        : (anchoredEnd ? "ENDS_WITH" : "CONTAINS");
+                                    const auto literalTerms = BuildStringMatchTerms(literal, matchMode, std::nullopt, analyzers);
+                                    UNIT_ASSERT_VALUES_EQUAL(literalTerms, terms);
+                                    if (terms.empty()) {
+                                        continue;
+                                    }
+                                    for (const TString prefix : {"", "x", "9", "ג", "ג\"", "カ", "、", "x\u200D", "ג\u200D", "a.", "1,"}) {
+                                        if (anchoredStart && !prefix.empty()) {
+                                            continue;
+                                        }
+                                        for (const TString suffix : {"", "x", "9", "א", "カ", "、", "_", "'", "\"", "\u0301"}) {
+                                            if (anchoredEnd && !suffix.empty()) {
+                                                continue;
+                                            }
+                                            const TString document = prefix + literal + suffix;
+                                            auto [it, inserted] = indexedByDocument.try_emplace(document);
+                                            if (inserted) {
+                                                const auto tokens = Analyze(document, analyzers);
+                                                it->second.insert(tokens.begin(), tokens.end());
+                                            }
+                                            const auto& indexed = it->second;
+                                            for (const auto& term : terms) {
+                                                UNIT_ASSERT_C(indexed.contains(term), "tokenizer=" << static_cast<ui32>(tokenizer) << " gram=" << gram << " mode=" << mode << " filter=" << filter
+                                                    << " literal=" << literal << " pattern=" << pattern << " term=" << term << " document=" << document);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(BuildSearchTermsLegacyNgramKeywords) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(3);
+        analyzers.set_filter_ngram_max_length(3);
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTerms("%abc%", analyzers), (TVector<TString>{"abc"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+%abc% def", analyzers),
+                                 (TVector<TSearchTerm>{{"abc", true}, {"def", false}}));
+    }
+
     Y_UNIT_TEST(BuildSearchTermsStructured) {
         using T = TSearchTerm;
         Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
@@ -667,6 +1385,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         }
         UNIT_ASSERT(!failed);
     }
+
 }
 
 }

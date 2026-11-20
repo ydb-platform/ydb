@@ -52,10 +52,8 @@
 #include <util/generic/ymath.h>
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_BACKUP
 
-#define LOG_BACKUP_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
-#define LOG_BACKUP_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
-#define LOG_BACKUP_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -378,8 +376,7 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
-    Y_ASSERT(yellowChannels);
-    if (Owner->ReassignChannelsEnabled()) {
+    if (Owner->ReassignChannelsEnabled() && !yellowChannels.empty()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
             if (auto logl = Logger->Log(ELnLev::Notice)) {
@@ -536,7 +533,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     CompactionLogic->Start();
 
     for (const auto &it: Database->GetScheme().Tables)
-        CompactionLogic->UpdateInMemStatsStep(it.first, 0, Database->GetTableMemSize(it.first));
+        CompactionLogic->UpdateInMemStatsStep(it.first, 0, Database->GetTableMemAllocatedSize(it.first));
 
     UpdateCompactions();
 
@@ -1989,6 +1986,34 @@ ui64 TExecutor::EnqueueLowPriority(TAutoPtr<ITransaction> self) {
     return DoExecute(self, ETxMode::LowPriority);
 }
 
+bool TExecutor::TryExecuteReadyTransaction() {
+    if (ActiveTransaction || !CanExecuteTransaction()) {
+        return false;
+    }
+
+    TSeat* seat;
+    if (ActivationQueue) {
+        seat = ActivationQueue.PopFront();
+        Y_ENSURE(seat->State == ESeatState::Active);
+        Y_ENSURE(ActivateTransactionWaiting > 0);
+        --ActivateTransactionWaiting;
+    } else if (ActivationLowQueue) {
+        seat = ActivationLowQueue.PopFront();
+        Y_ENSURE(seat->State == ESeatState::ActiveLow);
+        Y_ENSURE(ActivateLowTransactionWaiting > 0);
+        --ActivateLowTransactionWaiting;
+    } else {
+        return false;
+    }
+
+    // Posted activation events remain in the mailbox; only their handlers
+    // decrement the corresponding InFlight counters.
+    seat->State = ESeatState::None;
+    seat->FinishEnqueuedSpan();
+    ExecuteTransaction(seat);
+    return true;
+}
+
 bool TExecutor::CancelTransaction(ui64 id) {
     auto it = Transactions.find(id);
     if (it == Transactions.end()) {
@@ -2083,6 +2108,7 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
 
     auto *annex = CommitManager ? CommitManager->Annex.Get() : nullptr;
     auto prod = Database->Commit(Stamp(), done && !failed, annex);
+    auto rollbackAffects = std::move(prod.Change->RollbackAffects);
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
@@ -2134,6 +2160,14 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
                     << NFmt::Do(*seat->Self) << " postponed w/o demands");
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer);
+    }
+
+    if (CompactionLogic) {
+        for (ui32 table : rollbackAffects) {
+            if (Scheme().Tables.contains(table)) {
+                CompactionLogic->UpdateInMemStatsStep(table, 0, Database->GetTableMemAllocatedSize(table));
+            }
+        }
     }
 
     activeTransaction.Done();
@@ -2774,6 +2808,17 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             const ui32 attachTableId = attached.TableId;
             auto &result = attached.Result;
 
+            if (result->Parts.empty()) {
+                // An empty writer has no blobs to attach or protect until commit.
+                // Leave the table's epoch and redo log intact, and do not persist
+                // a part switch without any introduced parts.
+                ReleaseWritePart(result->Step);
+                if (result->YellowMoveChannels || result->YellowStopChannels) {
+                    CheckYellow(std::move(result->YellowMoveChannels), std::move(result->YellowStopChannels));
+                }
+                continue;
+            }
+
             // Place the part at the table's current head epoch and advance the
             // head above it, so it merges below the (new) mutable memtable. For
             // the empty restore target this is the table's only layer; the general
@@ -2888,7 +2933,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
         }
 
         for (auto &affectedTable : change->Affects)
-            CompactionLogic->UpdateInMemStatsStep(affectedTable, 1, Database->GetTableMemSize(affectedTable));
+            CompactionLogic->UpdateInMemStatsStep(affectedTable, 1, Database->GetTableMemAllocatedSize(affectedTable));
 
         if (commitResult.NeedFlush && !LogBatchFlushScheduled) {
             LogBatchFlushScheduled = true;
@@ -2952,7 +2997,7 @@ void TExecutor::MakeLogSnapshot() {
         version->SetHead(ui32(NTable::ECompatibility::Edge));
     }
 
-    LogicAlter->SnapToLog(snap);
+    LogicAlter->SnapToLog(snap, *commit);
     LogicRedo->SnapToLog(snap);
 
     bool haveTxStatus = false;
@@ -3063,11 +3108,7 @@ void TExecutor::Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorC
         seat->FinishEnqueuedSpan();
         ExecuteTransaction(seat);
     } else {
-        // N.B. it should actually never happen, since ActivationQueue size
-        // is always exactly equal to ActivateTransactionWaiting and we never
-        // have more ActivateTransactionInFlight events that these waiting
-        // transactions, so when we handle this event we must have at least
-        // one transaction in queue.
+        // Cancellation or helping may have consumed the queued transactions.
         Y_ENSURE(ActivateTransactionWaiting == 0);
     }
 }
@@ -3974,7 +4015,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     CommitManager->Commit(commit);
 
     if (hadFrozen || logicResult.MemCompacted)
-        CompactionLogic->UpdateInMemStatsStep(tableId, 0, Database->GetTableMemSize(tableId));
+        CompactionLogic->UpdateInMemStatsStep(tableId, 0, Database->GetTableMemAllocatedSize(tableId), true);
 
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
 
@@ -4030,6 +4071,12 @@ void TExecutor::UpdateUsedTabletMemory() {
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
+    if (GcLogic && Counters) {
+        if (const ui64 dropped = GcLogic->TakeSentinelDroppedMarks()) {
+            Counters->Cumulative()[TExecutorCounters::GC_SENTINEL_DROPPED_MARKS].Increment(dropped);
+        }
+    }
+
     TAutoPtr<TTabletCountersBase> executorCounters;
     TAutoPtr<TTabletCountersBase> externalTabletCounters;
 
@@ -4438,6 +4485,8 @@ STFUNC(TExecutor::StateInit) {
 }
 
 STFUNC(TExecutor::StateBoot) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     Y_ENSURE(BootLogic);
     switch (ev->GetTypeRewrite()) {
         // N.B. must work during follower promotion to leader
@@ -4452,6 +4501,8 @@ STFUNC(TExecutor::StateBoot) {
 }
 
 STFUNC(TExecutor::StateWork) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateWork"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4492,6 +4543,8 @@ STFUNC(TExecutor::StateWork) {
 }
 
 STFUNC(TExecutor::StateFollower) {
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateFollower"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
@@ -4512,6 +4565,8 @@ STFUNC(TExecutor::StateFollower) {
 
 STFUNC(TExecutor::StateFollowerBoot) {
     Y_ENSURE(BootLogic);
+    YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+        {"actorStateFunc", "StateBoot"});
     switch (ev->GetTypeRewrite()) {
         // N.B. must handle activities started before resync
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
@@ -5394,8 +5449,12 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-TStringBuilder TExecutor::BackupLogPrefix() const {
-    return TStringBuilder() << "[" << Owner->TabletID() << ":" << Generation0 << "] ";
+NActors::NStructuredLog::TStructuredMessage TExecutor::GetLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TExecutor"},
+        {"selfId", SelfId()},
+        {"tabletId", Owner->TabletID()},
+        {"generation", Generation0});
 }
 
 void TExecutor::StartNewBackup() {
@@ -5412,7 +5471,7 @@ void TExecutor::StartNewBackup() {
     ui64 tabletId = Owner->TabletID();
 
     if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
-        LOG_BACKUP_D("Tablet excluded from backup");
+        YDB_LOG_DEBUG("Tablet excluded from backup");
         return;
     }
 
@@ -5435,7 +5494,10 @@ void TExecutor::StartNewBackup() {
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        LOG_BACKUP_N("Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
+        YDB_LOG_NOTICE("Starting new backup",
+            {"type", tabletType},
+            {"gen", Generation0},
+            {"step", Step0});
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         const ui32 workBudgetPercent = std::clamp<ui32>(backupConfig.GetSnapshotWorkBudgetPercent(), 1, 100);
         for (const auto& [tableId, table] : tables) {
@@ -5452,7 +5514,8 @@ void TExecutor::StartNewBackup() {
         auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->SystemPoolId);
         CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor);
     } else {
-        LOG_BACKUP_D("Backup not configured");
+        YDB_LOG_DEBUG("Backup not configured",
+            {"backupLogPrefix", GetLogPrefix()});
     }
 }
 
@@ -5460,7 +5523,8 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     BackupSnapshotInProgress = false;
     Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
-        LOG_BACKUP_N("Snapshot completed" << " Bytes# " << ev->Get()->WrittenBytes);
+        YDB_LOG_NOTICE("Snapshot completed",
+            {"bytes", ev->Get()->WrittenBytes});
         Owner->BackupSnapshotComplete(OwnerCtx());
 
         if (CommitManager->BackupLogic.IsRunning()) {
@@ -5491,7 +5555,8 @@ void TExecutor::FailBackup(const TString& error) {
         Y_TABLET_ERROR(error);
     }
 
-    LOG_BACKUP_E(error);
+    YDB_LOG_ERROR("Backup failed",
+        {"error", error});
     CommitManager->BackupLogic.Stop();
     ScheduleRetryBackup();
 }
@@ -5506,9 +5571,9 @@ void TExecutor::ScheduleRetryBackup() {
         }
 
         auto retryTimeout = BackupRetry->Next();
-        LOG_BACKUP_N("Scheduling backup retry"
-            << " Timeout# " << retryTimeout
-            << " Attempt# " << BackupRetry->GetIteration());
+        YDB_LOG_NOTICE("Scheduling backup retry",
+            {"timeout", retryTimeout},
+            {"attempt", BackupRetry->GetIteration()});
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
     }
 }

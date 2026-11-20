@@ -1873,6 +1873,28 @@ bool TPath::IsAsyncReplicaTable() const {
     return tableInfo->IsAsyncReplica();
 }
 
+bool TPath::IsWaitingImportReplica() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto& tableInfo = SS->Tables.at(Base()->PathId);
+    return tableInfo->IsWaitingImportReplica();
+}
+
+bool TPath::IsImportingReplica() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto& tableInfo = SS->Tables.at(Base()->PathId);
+    return tableInfo->IsImportingReplica();
+}
+
 bool TPath::IsCdcStream() const {
     Y_ABORT_UNLESS(IsResolved());
 
@@ -1921,6 +1943,8 @@ bool TPath::IsSupportedInExports() const {
             return SS->BackupSettings.S3Settings.EnableExternalTableExport;
         case NKikimrSchemeOp::EPathTypeSysView:
             return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
+        case NKikimrSchemeOp::EPathTypeKesus:
+            return SS->BackupSettings.S3Settings.EnableKesusExport;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
         case NKikimrSchemeOp::EPathTypeTable:
             return true;

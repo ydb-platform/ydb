@@ -78,7 +78,11 @@
                 ],
                 "Operators" : [
                     {
-                        "Inputs" : [ ],
+                        "Inputs" : [
+                            {
+                                "ExternalPlanNodeId" : 7
+                            }
+                        ],
                         "ExternalDataSource" : "pq",
                         "Name" : "Write pq",
                         "SinkType" : "pq"
@@ -103,6 +107,41 @@
         "Plans" : [
             {
                 "PlanNodeId" : 1,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 2,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 5,
+                                "Operators" : [
+                                    {
+                                        "ExternalDataSource" : "pq",
+                                        "Name" : "Read pq",
+                                        "SourceType" : "pq"
+                                    }
+                                ],
+                                "Node Type" : "Read pq"
+                            },
+                            {
+                                "PlanNodeId" : 8,
+                                "Operators" : [
+                                    {
+                                        "ExternalDataSource" : "pq",
+                                        "Name" : "Read pq",
+                                        "SourceType" : "pq"
+                                    }
+                                ],
+                                "Node Type" : "Read pq"
+                            }
+                        ],
+                        "Operators" : [
+                            {
+                                "Name" : "Union"
+                            }
+                        ],
+                        "Node Type" : "Union"
+                    }
+                ],
                 "Operators" : [
                     {
                         "ExternalDataSource" : "pq",

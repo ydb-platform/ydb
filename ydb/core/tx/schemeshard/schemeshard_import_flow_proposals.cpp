@@ -120,7 +120,7 @@ bool CheckIndexMaterializationCompatible(
         NKikimrSchemeOp::TTableDescription backupDesc;
         Ydb::StatusIds::StatusCode status;
         TString parseError;
-        if (!FillColumnDescription(backupDesc, scheme.columns(), status, error)) {
+        if (!FillColumnDescription(backupDesc, scheme.columns(), status, parseError)) {
             error = TStringBuilder() << "cannot parse the materialized scheme of '" << metadata.ImplTablePrefix
                 << "': " << parseError;
             return false;
@@ -131,9 +131,10 @@ bool CheckIndexMaterializationCompatible(
         // TypeId is redundant with Type, and the backup scheme is parsed without it.
         diff.IgnoreField(NKikimrSchemeOp::TColumnDescription::descriptor()->FindFieldByName("TypeId"));
         if (!std::equal(backupDesc.GetColumns().begin(), backupDesc.GetColumns().end(),
-                expectedIt->second.GetColumns().begin(), [&](const auto& a, const auto& b) { return diff.Compare(a, b); }) ||
+                expectedIt->second.GetColumns().begin(), expectedIt->second.GetColumns().end(),
+                [&](const auto& a, const auto& b) { return diff.Compare(a, b); }) ||
             !std::equal(backupDesc.GetKeyColumnNames().begin(), backupDesc.GetKeyColumnNames().end(),
-                expectedIt->second.GetKeyColumnNames().begin())) {
+                expectedIt->second.GetKeyColumnNames().begin(), expectedIt->second.GetKeyColumnNames().end())) {
             error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
                 << "' has a scheme incompatible with this database";
             return false;

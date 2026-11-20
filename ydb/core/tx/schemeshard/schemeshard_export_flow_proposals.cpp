@@ -356,16 +356,20 @@ void FillEncryptionSettings(
                         *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
                     }
                 }
-                // Async indexes do not reserve export prefixes. Restore their definitions
-                // from the same copy as the base table data.
-                EraseIf(indexes, [](const auto& index) {
-                    return index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync;
-                });
+                // Only materialized indexes reserve prefixes. Other definitions belong
+                // to the same consistent copy as the table columns and rows.
+                const auto useCopiedIndex = [](const auto& index) {
+                    return index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync
+                        || TTableIndexInfo::IsLocalIndex(index.GetType());
+                };
+                EraseIf(indexes, useCopiedIndex);
                 for (const auto& index : copiedTable.GetTableIndexes()) {
-                    if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                    if (useCopiedIndex(index)) {
                         *indexes.Add() = index;
                     }
                 }
+                table.MutablePartitionConfig()->MutableByKeyFilterPrefixes()->CopyFrom(
+                    copiedTable.GetPartitionConfig().GetByKeyFilterPrefixes());
                 table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
                 table.MutableKeyColumnNames()->CopyFrom(copiedTable.GetKeyColumnNames());
                 table.MutableKeyColumnIds()->CopyFrom(copiedTable.GetKeyColumnIds());
@@ -428,6 +432,26 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         && exportInfo.ExportMetadata.HasIV()
         && !ValidateIndexImplTableDescriptions(task.GetTable().GetTable(), error)) {
         return nullptr;
+    }
+
+    // Backup copies disable TTL. Its live definition must still be usable with
+    // the copied columns that FillEncryptionSettings puts into the backup.
+    const auto& ttl = task.GetTable().GetTable().GetTTLSettings();
+    if (ttl.HasEnabled() && item.ParentIdx == Max<ui32>()
+            && itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()
+            && exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).HasIndexExportSnapshot()) {
+        const auto copyPath = exportPath.Child(ToString(itemIdx));
+        const auto& columns = ss->Tables.at(copyPath.Base()->PathId)->Columns;
+        THashMap<TString, ui32> columnIds;
+        for (const auto& [id, column] : columns) {
+            if (!column.IsDropped()) {
+                columnIds.emplace(column.Name, id);
+            }
+        }
+        if (!ValidateTtlSettings(ttl, columns, {}, columnIds, *copyPath.DomainInfo(), error)) {
+            error = TStringBuilder() << "TTL is incompatible with the exported table copy: " << error;
+            return nullptr;
+        }
     }
 
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));

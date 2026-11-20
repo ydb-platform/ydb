@@ -585,9 +585,9 @@ private:
         }
     }
 
-    bool FillExportMetadata(TExportInfo& exportInfo, TString& issues) {
+    bool FillExportMetadata(TExportInfo& exportInfo, ui64 metadataBudget, TString& issues) {
         return DispatchByExportKind([&]<typename TSettings>() {
-            return FillExportMetadata<TSettings>(exportInfo, issues);
+            return FillExportMetadata<TSettings>(exportInfo, metadataBudget, issues);
         }, exportInfo);
     }
 
@@ -650,7 +650,7 @@ private:
     }
 
     template <typename TSettings>
-    bool FillExportMetadata(TExportInfo& exportInfo, TString& issues) {
+    bool FillExportMetadata(TExportInfo& exportInfo, ui64 metadataBudget, TString& issues) {
         TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
@@ -666,22 +666,23 @@ private:
             commonDestinationPrefix = NBackup::NormalizeExportPrefix(destination);
         }
 
+        NKikimrSchemeOp::TExportMetadata metadata;
         TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
             iv = NBackup::TEncryptionIV::Generate();
-            exportInfo.ExportMetadata.SetIV(iv->GetBinaryString());
-            exportInfo.ExportMetadata.SetEncryptionAlgorithm(NBackup::NormalizeEncryptionAlgorithmName(exportSettings.encryption_settings().encryption_algorithm()));
+            metadata.SetIV(iv->GetBinaryString());
+            metadata.SetEncryptionAlgorithm(NBackup::NormalizeEncryptionAlgorithmName(exportSettings.encryption_settings().encryption_algorithm()));
         }
 
         if (!exportSettings.compression().empty()) {
-            exportInfo.ExportMetadata.SetCompressionAlgorithm(exportSettings.compression());
+            metadata.SetCompressionAlgorithm(exportSettings.compression());
         }
 
         const TString sourcePathRoot = exportSettings.source_path().empty() ? CanonizePath(Self->RootPathElements) : CanonizePath(exportSettings.source_path());
 
         for (ui32 itemIndex = 1; itemIndex <= static_cast<ui32>(exportSettings.items_size()); ++itemIndex) {
             auto& exportItem = *exportSettings.mutable_items(itemIndex - 1);
-            NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem& schemaMappingItem = *exportInfo.ExportMetadata.AddSchemaMapping();
+            NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem& schemaMappingItem = *metadata.AddSchemaMapping();
 
             // remove source path prefix
             TString exportPath = CanonizePath(exportItem.source_path());
@@ -724,7 +725,7 @@ private:
             for (ui32 indexIdx : xrange(exportInfo.Items.size())) {
                 const auto& indexItem = exportInfo.Items[indexIdx];
                 if (indexItem.ParentIdx != Max<ui32>()) {
-                    auto& parent = *exportInfo.ExportMetadata.MutableSchemaMapping(indexItem.ParentIdx);
+                    auto& parent = *metadata.MutableSchemaMapping(indexItem.ParentIdx);
                     (*parent.MutableIndexIVs()->MutableIVs())[indexItem.SourcePathName] =
                         MakeExportIndexItemIV(*iv, indexIdx).GetBinaryString();
                     indexItemsByParent[indexItem.ParentIdx].insert(indexItem.SourcePathName);
@@ -735,7 +736,7 @@ private:
             // scheme, which can be changed during the export. Fix them once here and use
             // the same list for index items and for the table metadata written by DataShard.
             for (const auto& [parentIdx, implTables] : indexItemsByParent) {
-                auto& mapping = *exportInfo.ExportMetadata.MutableSchemaMapping(parentIdx);
+                auto& mapping = *metadata.MutableSchemaMapping(parentIdx);
                 auto& prefixes = *mapping.MutableIndexExportPrefixes();
                 const auto& parentItem = exportInfo.Items.at(parentIdx);
                 const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true,
@@ -752,18 +753,22 @@ private:
                     }
                 }
             }
+            if (!indexItemsByParent.empty() && metadata.ByteSizeLong() + exportSettings.ByteSizeLong() >= metadataBudget) {
+                issues = "Encrypted index export metadata exceeds the maximum SchemeShard commit size";
+                return false;
+            }
         }
         if (!exportSettings.SerializeToString(&exportInfo.Settings)) {
             issues = "Failed to serialize settings";
             return false;
         }
+        exportInfo.ExportMetadata.Swap(&metadata);
         return true;
     }
 
     template <>
-    bool FillExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, TString& issues) {
-        Y_UNUSED(exportInfo);
-        Y_UNUSED(issues);
+    bool FillExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, ui64 metadataBudget, TString& issues) {
+        Y_UNUSED(exportInfo, metadataBudget, issues);
         return true;
     }
 
@@ -1766,7 +1771,10 @@ private:
             exportInfo->WaitTxId = InvalidTxId;
 
             const bool supportExportFiltering = NBackup::IsExportFilteringEnabled(*AppData());
-            if (TString issues; supportExportFiltering && !FillExportMetadata(*exportInfo, issues)) {
+            // Leave the same 1 MiB margin as IsCommitRedoSizeOverLimit for the remaining writes.
+            const ui64 limit = (ui64(Self->MaxCommitRedoMB) - 1) << 20;
+            const ui64 metadataBudget = limit - Min<ui64>(limit, txc.DB.GetCommitRedoBytes());
+            if (TString issues; supportExportFiltering && !FillExportMetadata(*exportInfo, metadataBudget, issues)) {
                 exportInfo->State = EState::Cancelled;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
                 exportInfo->Issue = issues;

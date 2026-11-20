@@ -13918,6 +13918,25 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
         }
     }
 
+    if (toggleCompactForExport) {
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(!compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        ui32 indexBuilds = 0;
+        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](auto&) { ++indexBuilds; });
+        restore("/MyRoot/OtherLayout", TSettings::INDEX_POPULATION_MODE_AUTO);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table"),
+            ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OtherLayout"));
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/OtherLayout/index1"), {
+            NLs::IndexType(compact ? NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    }
+
     if (toggleCompactForExport && !compact) {
         // A legacy DataShard lists three consecutive prefixes, with no dictionary.
         const TString path = (isFs ? TString("backup/") : TString("export/backup/")) + "metadata.json.enc";
@@ -14297,13 +14316,14 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Restored/vector_idx/indexImplPostingTable"), 200);
     }
 
-    Y_UNIT_TEST(DropAsyncIndexAndColumnBeforeEncryptedTableCopy) {
+    Y_UNIT_TEST(DropAsyncIndexAndLocalBloomBeforeEncryptedTableCopy) {
         TBackupStorage storage(true);
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -14313,6 +14333,11 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
                 Columns { Name: "stable" Type: "Utf8" }
                 Columns { Name: "old_value" Type: "Utf8" }
                 KeyColumnNames: ["id"]
+                PartitionConfig { ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 } }
+            }
+            IndexDescription {
+                Name: "old_bloom" Type: EIndexTypeLocalBloomFilter KeyColumnNames: ["id"]
+                BloomFilterDescription { FalsePositiveProbability: 0.01 }
             }
             IndexDescription { Name: "by_region" Type: EIndexTypeGlobal KeyColumnNames: ["region"] }
             IndexDescription { Name: "by_stable" Type: EIndexTypeGlobalAsync KeyColumnNames: ["stable"] }
@@ -14340,6 +14365,8 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
             }
         )", storage.Settings().c_str(), encryptionSettings.c_str()));
         runtime.WaitFor("index descriptions persisted before copy", [&] { return !uploaded.empty(); });
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(TableName: "Table" IndexName: "old_bloom")");
+        env.TestWaitNotification(runtime, txId);
         TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(TableName: "Table" IndexName: "by_old")");
         env.TestWaitNotification(runtime, txId);
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(Name: "Table" DropColumns { Name: "old_value" })");
@@ -14374,6 +14401,120 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/by_stable"),
             {NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+    }
+
+    Y_UNIT_TEST(TtlColumnAddedAfterEncryptedTableCopy) {
+        TBackupStorage storage(true);
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableFsBackups(true);
+        flags.SetEnableEncryptedExport(true);
+        flags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription { Name: "by_value" Type: EIndexTypeGlobal KeyColumnNames: ["value"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        ui64 copyTxId = 0;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](const auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                    copyTxId = ev->Get()->Record.GetTxId();
+                }
+            }
+        });
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> copyComplete(runtime, [&](const auto& ev) {
+            return copyTxId && ev->Get()->Record.GetTxId() == copyTxId;
+        });
+        const auto exportTable = [&](const char* destination) {
+            TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ExportToFsSettings {
+                    %s
+                    encryption_settings { encryption_algorithm: "AES-128-GCM" symmetric_key { key: "0123456789012345" } }
+                    include_index_data: true
+                    items { source_path: "/MyRoot/Table" destination_path: "%s" }
+                }
+            )", storage.Settings().c_str(), destination));
+            return txId;
+        };
+        const ui64 firstExport = exportTable("before");
+        runtime.WaitFor("table copied", [&] { return !copyComplete.empty(); });
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "expires_at" Type: "Timestamp" }
+            TTLSettings { Enabled { ColumnName: "expires_at" ExpireAfterSeconds: 3600 } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        copyComplete.Stop().Unblock();
+        env.TestWaitNotification(runtime, firstExport);
+        const auto result = TestGetExport(runtime, firstExport, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()),
+            "Cannot enable TTL on unknown column: 'expires_at'");
+
+        const ui64 retry = exportTable("after");
+        env.TestWaitNotification(runtime, retry);
+        TestGetExport(runtime, retry, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(EncryptedIndexMetadataCommitLimit) {
+        TBackupStorage storage(true);
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableFsBackups(true);
+        flags.SetEnableEncryptedExport(true);
+        flags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+        const TString boundary(192 * 1024, 'x');
+        for (const char* name : {"First", "Second"}) {
+            TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableDescription {
+                    Name: "%s"
+                    Columns { Name: "id" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["id"]
+                }
+                IndexDescription {
+                    Name: "by_value" Type: EIndexTypeGlobal KeyColumnNames: ["value"]
+                    IndexImplTableDescriptions {
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "a%s" } } } }
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "b%s" } } } }
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "c%s" } } } }
+                    }
+                }
+            )", name, boundary.c_str(), boundary.c_str(), boundary.c_str()));
+            env.TestWaitNotification(runtime, txId);
+        }
+        // Each snapshot fits in the 1 MiB payload budget, the two together exceed it.
+        TControlWrapper limit;
+        TControlBoard::RegisterSharedControl(limit, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
+        limit.Reset(2, 1, 4096);
+        const auto runExport = [&](const char* secondItem) {
+            TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ExportToFsSettings {
+                    %s
+                    encryption_settings { encryption_algorithm: "AES-128-GCM" symmetric_key { key: "0123456789012345" } }
+                    include_index_data: true
+                    items { source_path: "/MyRoot/First" destination_path: "first" }
+                    %s
+                }
+            )", storage.Settings().c_str(), secondItem));
+            env.TestWaitNotification(runtime, txId);
+        };
+        runExport(R"(items { source_path: "/MyRoot/Second" destination_path: "second" })");
+        const auto result = TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()),
+            "Encrypted index export metadata exceeds the maximum SchemeShard commit size");
+        limit = 256;
+        runExport("");
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST_FLAG(FulltextRelevanceLayoutChangedBeforeExport, Compact) {

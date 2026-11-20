@@ -526,7 +526,8 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
             return true;
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
-            return item.ChildItems.empty();
+            // During scheme validation the impl tables have been downloaded but have no child items yet.
+            return item.MaterializedIndexes.empty() && item.ChildItems.empty();
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
             return false;
         default:

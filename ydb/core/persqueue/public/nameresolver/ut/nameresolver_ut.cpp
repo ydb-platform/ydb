@@ -540,6 +540,29 @@ Y_UNIT_TEST_F(FederationExplicitLegacyWithEmptyPqRoot, TNameResolverFixture) {
         "/Root/topic1");
 }
 
+Y_UNIT_TEST_F(ResolveSchemePathKeepsLegacyPrimary, TNameResolverFixture) {
+    SetFcc(false);
+    const auto legacy = ResolveSchemePath("/Root", "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(legacy.Path, "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(legacy.NavigateDatabase, "/Root");
+
+    const auto modern = ResolveSchemePath("/Root", "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+    UNIT_ASSERT_VALUES_EQUAL(modern.Path, "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+    UNIT_ASSERT_VALUES_EQUAL(modern.NavigateDatabase, "/Root/LbCommunal/account");
+
+    SetLbRoot("");
+    const auto withoutLb = ResolveSchemePath("/Root", "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(withoutLb.Path, "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(withoutLb.NavigateDatabase, "/Root");
+}
+
+Y_UNIT_TEST_F(ResolveSchemePathKeepsRequestDatabaseInFcc, TNameResolverFixture) {
+    SetFcc(true);
+    const auto resolved = ResolveSchemePath("/Root/Db", "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
+}
+
 Y_UNIT_TEST_F(TryFederationAccountTarget, TNameResolverFixture) {
     SetFcc(false);
     {

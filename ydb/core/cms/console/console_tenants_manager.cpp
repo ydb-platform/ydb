@@ -12,6 +12,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
@@ -747,10 +748,9 @@ public:
             {"tenantPath", Tenant->Path},
             {"ev", resp->ToString()});
 
+        const bool isSuccess = (typeid(*resp) != typeid(TTenantsManager::TEvPrivate::TEvSubdomainFailed));
         using TAuditFunc = decltype(AuditLogEndConfigureDatabase);
         auto audit = [&](TAuditFunc auditFunc) {
-            bool isSuccess = (typeid(*resp) != typeid(TTenantsManager::TEvPrivate::TEvSubdomainFailed));
-
             TString issue = "";
             if (!isSuccess) {
                 issue = dynamic_cast<TTenantsManager::TEvPrivate::TEvSubdomainFailed*>(resp)->Issue;
@@ -766,7 +766,7 @@ public:
             );
         };
 
-        if (Action == CONFIGURE) {
+        if (Action == CONFIGURE || (Action == CREATE && !isSuccess)) {
             audit(AuditLogEndConfigureDatabase);
         } else if (Action == REMOVE) {
             audit(AuditLogEndRemoveDatabase);
@@ -894,8 +894,8 @@ public:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied:
             {
                 auto issue = BuildErrorMsg(rec);
-                ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvSubdomainFailed
-                         (Tenant, issue, Ydb::StatusIds::UNAUTHORIZED));
+                ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed
+                            (Tenant, issue, Ydb::StatusIds::UNAUTHORIZED), ctx);
                 break;
             }
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
@@ -975,6 +975,8 @@ public:
     {
         if (rec.GetSchemeShardReason())
             return rec.GetSchemeShardReason();
+        if (!rec.GetIssues().empty())
+            return NYql::IssuesFromMessageAsString(rec.GetIssues());
         if (IssuesMap.contains(rec.GetStatus()))
             return IssuesMap.at(rec.GetStatus());
         return TString();

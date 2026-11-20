@@ -26,6 +26,18 @@ namespace NKikimr::NKqp::NScheduler {
 
         struct TStaticAttributes;
 
+        namespace NStatic {
+            struct TTreeElement;
+
+            class TPool;
+            class TDatabase;
+            class TRoot;
+
+            using TPoolPtr = std::shared_ptr<const TPool>;
+            using TDatabasePtr = std::shared_ptr<const TDatabase>;
+            using TRootPtr = std::shared_ptr<const TRoot>;
+        } // namespace NStatic
+
         namespace NDynamic {
             struct TTreeElement;
 

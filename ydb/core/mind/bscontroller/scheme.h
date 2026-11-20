@@ -8,6 +8,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>

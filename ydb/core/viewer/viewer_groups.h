@@ -2210,6 +2210,7 @@ public:
         if (GroupsByGroupId.empty()) {
             RebuildGroupsByGroupId();
         }
+        VDisksByVSlotId.clear();
         for (const auto& [nodeId, vDiskStateResponse] : VDiskStateResponse) {
             if (vDiskStateResponse.IsOk()) {
                 for (const NKikimrWhiteboard::TVDiskStateInfo& info : vDiskStateResponse->Record.GetVDiskStateInfo()) {

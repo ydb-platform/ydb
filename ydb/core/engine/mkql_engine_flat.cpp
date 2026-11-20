@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/mkql_opt_literal.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
@@ -287,6 +288,7 @@ public:
         , NeedDiagnostics(false)
         , Status(EStatus::Unknown)
         , AreAffectedShardsPrepared(false)
+        , ShareShardedMkqlProgram(false)
         , AreShardProgramsExtracted(false)
         , IsResultBuilt(false)
         , IsProgramValidated(false)
@@ -500,40 +502,55 @@ public:
                 }
             }
 
-            TIdsByShard readIdsByShard;
-            TIdsByShard writeIdsByShard;
-            CollectShardCallableIds(readIdsByShard, writeIdsByShard);
-            absl::flat_hash_map<TShardProgramSignature, ui32, TShardProgramSignatureHash> representativeBySignature;
-            TProgramRepresentative representative(AffectedShards.size());
-            TVector<TVector<ui32>> selectIdsByRepresentative(AffectedShards.size());
-            for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
-                const ui64 shardId = AffectedShards[shardIndex].ShardId;
-                TShardProgramSignature signature = MakeShardProgramSignature(IdsForShard(readIdsByShard, shardId), IdsForShard(writeIdsByShard, shardId));
-                const auto [it, uniqueSignature] = representativeBySignature.try_emplace(std::move(signature), shardIndex);
-                const ui32 representativeShardIndex = it->second;
-                representative.Of[shardIndex] = representativeShardIndex;
-                if (!uniqueSignature) {
-                    representative.Shared[representativeShardIndex] = true;
-                    continue;
+            ShareShardedMkqlProgram = HasAppData() && AppData()->FeatureFlags.GetShareShardedMkqlProgram() == true;
+            if (ShareShardedMkqlProgram) {
+                TIdsByShard readIdsByShard;
+                TIdsByShard writeIdsByShard;
+                CollectShardCallableIds(readIdsByShard, writeIdsByShard);
+                absl::flat_hash_map<TShardProgramSignature, ui32, TShardProgramSignatureHash> representativeBySignature;
+                TProgramRepresentative representative(AffectedShards.size());
+                TVector<TVector<ui32>> selectIdsByRepresentative(AffectedShards.size());
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    const ui64 shardId = AffectedShards[shardIndex].ShardId;
+                    TShardProgramSignature signature = MakeShardProgramSignature(IdsForShard(readIdsByShard, shardId), IdsForShard(writeIdsByShard, shardId));
+                    const auto [it, uniqueSignature] = representativeBySignature.try_emplace(std::move(signature), shardIndex);
+                    const ui32 representativeShardIndex = it->second;
+                    representative.Of[shardIndex] = representativeShardIndex;
+                    if (!uniqueSignature) {
+                        representative.Shared[representativeShardIndex] = true;
+                        continue;
+                    }
+                    PrepareShardProgram(shardId, proxyShards, SpecializedParts[shardIndex], readsets);
+                    CollectSelectIds(SpecializedParts[shardIndex].Write, selectIdsByRepresentative[shardIndex]);
                 }
-                PrepareShardProgram(shardId, proxyShards, SpecializedParts[shardIndex], readsets, selectIdsByRepresentative[shardIndex]);
-            }
-            // Shards with the same reads and writes share one program. Readset pairs and ShardsToWrite still name every shard.
-            for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
-                const ui32 representativeShardIndex = representative.Of[shardIndex];
-                if (representativeShardIndex != shardIndex) {
-                    RecordSiblingReadsets(AffectedShards[shardIndex].ShardId, selectIdsByRepresentative[representativeShardIndex], readsets);
+                // Shards with the same reads and writes share one program. Readset pairs and ShardsToWrite still name every shard.
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    const ui32 representativeShardIndex = representative.Of[shardIndex];
+                    if (representativeShardIndex != shardIndex) {
+                        RecordSiblingReadsets(AffectedShards[shardIndex].ShardId, selectIdsByRepresentative[representativeShardIndex], readsets);
+                    }
                 }
-            }
 
-            BuildAllReads();
+                BuildAllReads();
 
-            for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
-                if (representative.Of[shardIndex] == shardIndex) {
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    if (representative.Of[shardIndex] == shardIndex) {
+                        FinalizeShardProgram(SpecializedParts[shardIndex]);
+                    }
+                }
+                ProgramRepresentative = std::move(representative);
+            } else {
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    PrepareShardProgram(AffectedShards[shardIndex].ShardId, proxyShards, SpecializedParts[shardIndex],
+                        readsets);
+                }
+
+                BuildAllReads();
+
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
                     FinalizeShardProgram(SpecializedParts[shardIndex]);
                 }
             }
-            ProgramRepresentative = std::move(representative);
 
             ProgramExplorer.Clear();
         }
@@ -588,25 +605,26 @@ public:
         Y_ABORT_UNLESS(index < AffectedShards.size(), "Bad index");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         data = AffectedShards[index];
-        const ui32 representative = ProgramRepresentative.Of[index];
-
-        TString* cacheSlot = nullptr;
-        bool cached = false;
-        if (ProgramRepresentative.Shared[representative]) {
-            auto [it, inserted] = SerializedPrograms.try_emplace(representative);
-            cacheSlot = &it->second;
-            cached = !inserted;
-        }
-        TString serializedProgram;
-        if (cached) {
-            serializedProgram = *cacheSlot;
-        } else {
-            serializedProgram = SerializeRuntimeNode(SpecializedParts[representative].Program, Env);
-            if (cacheSlot) {
-                *cacheSlot  = serializedProgram;
+        if (ShareShardedMkqlProgram) {
+            const ui32 representative = ProgramRepresentative.Of[index];
+            TString* cacheSlot = nullptr;
+            bool cached = false;
+            if (ProgramRepresentative.Shared[representative]) {
+                auto [it, inserted] = SerializedPrograms.try_emplace(representative);
+                cacheSlot = &it->second;
+                cached = !inserted;
             }
+            if (cached) {
+                data.Program = *cacheSlot;
+            } else {
+                data.Program = SerializeRuntimeNode(SpecializedParts[representative].Program, Env);
+                if (cacheSlot) {
+                    *cacheSlot = data.Program;
+                }
+            }
+        } else {
+            data.Program = SerializeRuntimeNode(SpecializedParts[index].Program, Env);
         }
-        data.Program = std::move(serializedProgram);
         return EResult::Ok;
     }
 
@@ -1621,7 +1639,23 @@ private:
         }
     }
 
-    void ExtractShardsToWrite(ui64 shard, TExploringNodeVisitor& writeExplorer, TVector<ui32>& selectIds) {
+    void CollectSelectIds(const TRuntimeNode& write, TVector<ui32>& selectIds) {
+        TExploringNodeVisitor writeExplorer;
+        writeExplorer.Walk(write.GetNode(), Env);
+        for (auto& node : writeExplorer.GetNodes()) {
+            if (!node->GetType()->IsCallable()) {
+                continue;
+            }
+            auto callable = static_cast<TCallable*>(node);
+            auto name = callable->GetType()->GetNameStr();
+            if (name == Strings.SelectRow || name == Strings.SelectRange) {
+                selectIds.push_back(callable->GetUniqueId());
+            }
+        }
+        SortUnique(selectIds);
+    }
+
+    void ExtractShardsToWrite(ui64 shard, TExploringNodeVisitor& writeExplorer) {
         for (auto& node : writeExplorer.GetNodes()) {
             if (!node->GetType()->IsCallable()) {
                 continue;
@@ -1633,21 +1667,19 @@ private:
                 auto ctxIt = ProxyCallables.find(callable->GetUniqueId());
                 Y_ABORT_UNLESS(ctxIt != ProxyCallables.end());
                 ctxIt->second.ShardsToWrite.insert(shard);
-                selectIds.push_back(callable->GetUniqueId());
             }
         }
-        SortUnique(selectIds);
     }
 
     void PrepareShardProgram(ui64 shard, const THashMap<ui32, const TVector<TKeyDesc::TPartitionInfo>*>& proxyShards,
-        TProgramParts& parts, THashSet<std::pair<ui64, ui64>>& readsets, TVector<ui32>& selectIds) {
+        TProgramParts& parts, THashSet<std::pair<ui64, ui64>>& readsets) {
         parts.Write = BuildWriteProgram(shard, proxyShards);
 
         TExploringNodeVisitor writeExplorer;
         writeExplorer.Walk(parts.Write.GetNode(), Env);
 
         BuildMyKeysAndReplies(shard, writeExplorer, parts, readsets);
-        ExtractShardsToWrite(shard, writeExplorer, selectIds);
+        ExtractShardsToWrite(shard, writeExplorer);
     }
 
     void BuildAllReads() {
@@ -2243,6 +2275,7 @@ private:
     THashMap<ui32, TCallable*> ProxyRepliesReads;
     TRuntimeNode ShardsToWrite;
     bool AreAffectedShardsPrepared;
+    bool ShareShardedMkqlProgram;
     bool AreShardProgramsExtracted;
     TSet<ui64> FinalizedShards;
     bool IsResultBuilt;

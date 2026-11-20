@@ -9,6 +9,11 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/core/mailbox.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -455,6 +460,60 @@ TString ProgramText(const TString& serialized, TTypeEnvironment& env) {
     TStringBuilder out;
     PrintProgram(out, DeserializeRuntimeNode(serialized, env).GetNode(), 0);
     return TString(out);
+}
+
+// AppData() reads the flag from the actor system bound to the current activation context.
+struct TShareShardedMkqlProgramContext {
+    TAppData Data{0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr};
+    THolder<NActors::TActorSystem> System;
+    NActors::TMailbox Mailbox;
+    THolder<NActors::TExecutorThread> Thread;
+    THolder<NActors::TActorContext> Context;
+    NActors::TActivationContext* Previous = NActors::TlsActivationContext;
+
+    explicit TShareShardedMkqlProgramContext(bool share) {
+        Data.FeatureFlags.SetShareShardedMkqlProgram(share);
+        THolder<NActors::TActorSystemSetup> setup(new NActors::TActorSystemSetup);
+        System.Reset(new NActors::TActorSystem(setup, &Data));
+        Thread.Reset(new NActors::TExecutorThread(0, System.Get(), nullptr, "mkql-flag-test"));
+        Context.Reset(new NActors::TActorContext(Mailbox, *Thread, GetCycleCountFast(), NActors::TActorId()));
+        NActors::TlsActivationContext = Context.Get();
+    }
+
+    ~TShareShardedMkqlProgramContext() {
+        NActors::TlsActivationContext = Previous;
+    }
+};
+
+struct TPreparedShardPrograms {
+    TRuntimeNode Program;
+    std::function<void(TKeyDesc&)> Resolve;
+};
+
+TMap<ui64, TString> CollectProgramsWithFlag(bool share, const std::function<TPreparedShardPrograms(TDriver&)>& build) {
+    TShareShardedMkqlProgramContext context(share);
+    TDriver driver;
+    TPreparedShardPrograms prepared = build(driver);
+    return driver.CollectShardPrograms(prepared.Program, prepared.Resolve);
+}
+
+void AssertSameSerializedPrograms(TStringBuf title, const TMap<ui64, TString>& plain, const TMap<ui64, TString>& shared) {
+    UNIT_ASSERT_C(!plain.empty(), title);
+    UNIT_ASSERT_EQUAL_C(shared.size(), plain.size(), title);
+    for (const auto& [shardId, program] : plain) {
+        const TString* sharedProgram = shared.FindPtr(shardId);
+        UNIT_ASSERT_C(sharedProgram, title << " missing shard " << shardId);
+        UNIT_ASSERT_C(!program.empty(), title << " empty program for shard " << shardId);
+        if (program == *sharedProgram) {
+            continue;
+        }
+        size_t mismatchAt = 0;
+        const size_t common = program.size() < sharedProgram->size() ? program.size() : sharedProgram->size();
+        while (mismatchAt < common && program[mismatchAt] == (*sharedProgram)[mismatchAt]) {
+            ++mismatchAt;
+        }
+        UNIT_FAIL(title << " serialized program mismatch for shard " << shardId << " sizes " << program.size() << " and " << sharedProgram->size() << " at offset " << mismatchAt);
+    }
 }
 
 using TShardsByKey = TMap<std::pair<ui64, TKeyDesc::ERowOperation>, TVector<ui64>>; // (local table id, operation) -> shards
@@ -7087,6 +7146,86 @@ Value {
         AssertReadsetsOnlyFrom(capture, Shard1, readsetTargets);
 
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, resolver, IEngineFlat::TShardLimits(6, 4)), IEngineFlat::EStatus::Error);
+    }
+
+    // Every shard program, with the flag and without it, must be the same byte string.
+    Y_UNIT_TEST(ShareShardedMkqlProgramSerializesTheSamePrograms) {
+        const auto buildDelete = [](TDriver& driver) {
+            auto& pgmBuilder = driver.PgmBuilder;
+            TVector<TTypeInfo> readKeyTypes{TTypeInfo(NUdf::TDataType<ui64>::Id)};
+            TVector<TSelectColumn> columns;
+            columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, TTypeInfo(Schema1::Table1::Value::ColumnType), EColumnTypeConstraint::Nullable);
+            TRuntimeNode::TList effects;
+            for (ui64 key : {ui64(1), ui64(2), ui64(3)}) {
+                TRuntimeNode::TList row{pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(key)};
+                effects.push_back(pgmBuilder.SetResult(TStringBuilder() << "row" << key, pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), readKeyTypes, columns, row)));
+            }
+            TVector<TTypeInfo> eraseKeyTypes{TTypeInfo(NUdf::TDataType<ui64>::Id)};
+            TRuntimeNode::TList eraseRow{pgmBuilder.Add(pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2))};
+            effects.push_back(pgmBuilder.EraseRow(TTableId(OwnerId, Table2Id), eraseKeyTypes, eraseRow));
+            const ui64 writeShardA = 201;
+            const ui64 writeShardB = 202;
+            const ui64 writeShardC = 203;
+            return TPreparedShardPrograms{
+                .Program = pgmBuilder.Build(pgmBuilder.AsList(effects)),
+                .Resolve = [=](TKeyDesc& key) {
+                    key.Status = TKeyDesc::EStatus::Ok;
+                    TVector<TKeyDesc::TPartitionInfo> partitions;
+                    if (key.RowOperation == TKeyDesc::ERowOperation::Read) {
+                        partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+                    } else {
+                        partitions.push_back(TKeyDesc::TPartitionInfo(writeShardA));
+                        partitions.push_back(TKeyDesc::TPartitionInfo(writeShardB));
+                        partitions.push_back(TKeyDesc::TPartitionInfo(writeShardC));
+                    }
+                    key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+                },
+            };
+        };
+        {
+            const TMap<ui64, TString> plain = CollectProgramsWithFlag(false, buildDelete);
+            const TMap<ui64, TString> shared = CollectProgramsWithFlag(true, buildDelete);
+            UNIT_ASSERT_VALUES_EQUAL(plain.size(), 4);
+            AssertSameSerializedPrograms("delete", plain, shared);
+        }
+
+        const ui64 shardA = 201;
+        const ui64 shardB = 202;
+        const ui64 shardC = 203;
+        const ui64 shardD = 204;
+        const auto buildMixed = [=](TDriver& driver) {
+            auto& pgmBuilder = driver.PgmBuilder;
+            TVector<TTypeInfo> key1Types{TTypeInfo(NUdf::TDataType<ui32>::Id)};
+            TVector<TTypeInfo> key2Types{TTypeInfo(NUdf::TDataType<ui64>::Id)};
+            auto rows = SelectTable1Rows(pgmBuilder, {1});
+            auto update1 = pgmBuilder.Map(rows, [&](TRuntimeNode item) {
+                auto update = pgmBuilder.GetUpdateRowBuilder();
+                TRuntimeNode::TList row{pgmBuilder.Add(pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))};
+                return pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id), key1Types, row, update);
+            });
+            auto erase = pgmBuilder.Map(rows, [&](TRuntimeNode item) {
+                return pgmBuilder.EraseRow(TTableId(OwnerId, Table2Id), key2Types, Table2KeyFromRead(pgmBuilder, item, 10));
+            });
+            auto update2 = pgmBuilder.Map(rows, [&](TRuntimeNode item) {
+                auto update = pgmBuilder.GetUpdateRowBuilder();
+                return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), key2Types, Table2KeyFromRead(pgmBuilder, item, 20), update);
+            });
+            return TPreparedShardPrograms{
+                .Program = pgmBuilder.Build(pgmBuilder.Extend({update1, erase, update2})),
+                .Resolve = MakeShardResolver({
+                    {{Table1Id, TKeyDesc::ERowOperation::Read}, {Shard1}},
+                    {{Table1Id, TKeyDesc::ERowOperation::Update}, {Shard1, Shard2}},
+                    {{Table2Id, TKeyDesc::ERowOperation::Erase}, {shardA, shardB, shardD}},
+                    {{Table2Id, TKeyDesc::ERowOperation::Update}, {shardB, shardC}},
+                }),
+            };
+        };
+        {
+            const TMap<ui64, TString> plain = CollectProgramsWithFlag(false, buildMixed);
+            const TMap<ui64, TString> shared = CollectProgramsWithFlag(true, buildMixed);
+            UNIT_ASSERT_VALUES_EQUAL(plain.size(), 6);
+            AssertSameSerializedPrograms("mixed", plain, shared);
+        }
     }
 }
 

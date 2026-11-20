@@ -1,5 +1,11 @@
 #include <ydb/core/engine/kikimr_program_builder.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/base/appdata.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/core/mailbox.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -119,7 +125,31 @@ namespace {
         return SerializeRuntimeNode(factory(pgmBuilder, keyCount), env);
     }
 
+    // Same activation context the engine uses to read ShareShardedMkqlProgram.
+    struct TShareShardedMkqlProgramContext {
+        TAppData Data{0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr};
+        THolder<NActors::TActorSystem> System;
+        NActors::TMailbox Mailbox;
+        THolder<NActors::TExecutorThread> Thread;
+        THolder<NActors::TActorContext> Context;
+        NActors::TActivationContext* Previous = NActors::TlsActivationContext;
+
+        explicit TShareShardedMkqlProgramContext(bool share) {
+            Data.FeatureFlags.SetShareShardedMkqlProgram(share);
+            THolder<NActors::TActorSystemSetup> setup(new NActors::TActorSystemSetup);
+            System.Reset(new NActors::TActorSystem(setup, &Data));
+            Thread.Reset(new NActors::TExecutorThread(0, System.Get(), nullptr, "mkql-flag-bench"));
+            Context.Reset(new NActors::TActorContext(Mailbox, *Thread, GetCycleCountFast(), NActors::TActorId()));
+            NActors::TlsActivationContext = Context.Get();
+        }
+
+        ~TShareShardedMkqlProgramContext() {
+            NActors::TlsActivationContext = Previous;
+        }
+    };
+
     void PrepareAndSerialize(benchmark::State& state, const TProgramFactory& factory, ui32 keyCount, TShardLayout layout) {
+        TShareShardedMkqlProgramContext context(true);
         const TString program = CompileProgram(factory, keyCount);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         auto randomProvider = CreateDeterministicRandomProvider(1);

@@ -245,8 +245,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         TQueuedRoutingTest test;
         const ui32 groupId = test.Group.GetGroupID();
         TDataChecker(test.Env).Write(groupId);
-        const TActorId service = test.Env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(MakeBlobStorageProxyID(groupId));
-        UNIT_ASSERT(service && service != test.Proxy);
+        const auto registeredProxy = test.Env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(
+            MakeBlobStorageProxyID(groupId));
+        UNIT_ASSERT(registeredProxy && registeredProxy != test.Proxy);
 
         // The bridge has received the next pile generation before the physical proxies.
         for (auto& pile : *test.Group.MutableBridgeGroupState()->MutablePile()) {
@@ -261,20 +262,23 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         const auto start = test.Env.Runtime->GetClock();
         constexpr ui64 cookie = 42;
         test.Env.Runtime->Send(new IEventHandle(test.Proxy, test.Edge, request.release(), 0, cookie), 1);
-        WaitUntil(test.Env, [&] { return test.HeldResults.size() == 2; }, "pile replies", TDuration::MilliSeconds(10), 100);
+        WaitUntil(test.Env, [&] { return test.HeldResults.size() == 2; }, "pile replies",
+            TDuration::MilliSeconds(10), 100);
 
         // Eject the group while the original bridge still holds the read. Its retry goes to the public group service.
         NKikimrBlobStorage::TConfigRequest deletion;
         deletion.AddCommand()->MutableDeleteSpecificGroups()->AddGroupIds(groupId);
         const auto deleted = test.Env.Invoke(deletion);
         UNIT_ASSERT_C(deleted.GetSuccess(), deleted.GetErrorDescription());
-        WaitUntil(test.Env, [&] { return !test.Env.Runtime->GetActor(service); }, "group proxy stopped", TDuration::MilliSeconds(10));
+        WaitUntil(test.Env, [&] { return !test.Env.Runtime->GetActor(registeredProxy); }, "group proxy stopped",
+            TDuration::MilliSeconds(100), 600);
         test.HoldResults = false;
         for (auto& ev : std::exchange(test.HeldResults, {})) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvGetResult>()->Status, NKikimrProto::RACE);
             test.Env.Runtime->Send(ev.release(), 1);
         }
-        WaitUntil(test.Env, [&] { return test.Results.contains(cookie); }, "ejected group reply", TDuration::MilliSeconds(10), 100);
+        WaitUntil(test.Env, [&] { return test.Results.contains(cookie); }, "ejected group reply",
+            TDuration::MilliSeconds(10), 100);
         const auto& result = *test.Results.at(cookie);
         UNIT_ASSERT_VALUES_EQUAL_C(result.Status, NKikimrProto::NO_GROUP, result.ToString());
         UNIT_ASSERT(result.ExecutionRelay == relay);

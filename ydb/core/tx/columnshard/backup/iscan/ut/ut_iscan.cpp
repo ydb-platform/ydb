@@ -456,8 +456,6 @@ Y_UNIT_TEST_SUITE(IScan) {
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
-        // The uploader talks to the real S3 recipe: do not spin the simulated timers while waiting for it.
-        runtime->SetFastSimulatedTime(false);
 
         const TString injectedError = "injected export buffer failure";
         const auto edge = runtime->AllocateEdgeActor(0);

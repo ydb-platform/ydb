@@ -391,6 +391,11 @@ public:
             return result;
         }
 
+        const bool keyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(newStreamDesc);
+        if (keyRangeHeartbeats && !CheckCdcKeyRangeHeartbeatsCanBeUsed(newStreamOp, result)) {
+            return result;
+        }
+
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(newStreamDesc)) {
             aggregatorChannels = CheckCdcAggregatorCanBeCreated(newStreamOp, newStreamPath, context, result);
@@ -447,6 +452,10 @@ public:
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
         context.SS->CdcStreams.Set(pathId, newStream);
+
+        if (keyRangeHeartbeats) {
+            newStream->AlterData->HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+        }
 
         if (aggregatorChannels) {
             PlanCdcAggregatorCreation(OperationId, newStreamPath, *aggregatorChannels, context);

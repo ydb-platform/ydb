@@ -480,6 +480,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
+    ydb/core/persqueue/public/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme

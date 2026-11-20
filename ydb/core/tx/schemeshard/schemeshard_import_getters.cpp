@@ -1040,7 +1040,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         auto& changefeeds = *ImportInfo->Items.at(ItemIdx).Changefeeds.MutableChangefeeds();
 
         for (int i = 0; i < changefeeds.size();) {
-            if (!::NKikimr::NBackup::IsChangefeedOmittedFromBackup(changefeeds.Get(i).GetChangefeed())) {
+            if (!::NKikimr::NBackup::IsChangefeedOmittedFromBackup(changefeeds.Get(i).GetChangefeed(), true)) {
                 ++i;
                 continue;
             }

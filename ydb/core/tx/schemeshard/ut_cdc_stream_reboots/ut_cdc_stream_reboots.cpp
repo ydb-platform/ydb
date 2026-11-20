@@ -233,6 +233,46 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithKeyRangeHeartbeats, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCdcKeyRangeHeartbeats(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeUpdate
+                  Format: ECdcStreamFormatJson
+                  VirtualTimestamps: true
+                  ResolvedTimestampsIntervalMs: 1000
+                  UserAttributes {
+                    Key: "__async_replication"
+                    Value: "{\"id\":\"1\",\"path\":\"/Root/replica\",\"supports_key_range_autopartitioning\":true}"
+                  }
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+                });
+            }
+        });
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithSchemaChanges, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -840,6 +880,79 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         }
     }
 
+    bool CheckKeyRangeRegistrations(TTestActorRuntime& runtime,
+            const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTablePartition>& tablePartitions,
+            const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition>& topicPartitions)
+    {
+        for (const auto& topicPartition : topicPartitions) {
+            google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> partition;
+            *partition.Add() = topicPartition;
+
+            for (int i = 0; i < tablePartitions.size(); ++i) {
+                google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTablePartition> source;
+                *source.Add() = tablePartitions.Get(i);
+
+                const auto expectedState = static_cast<ui32>(i) == topicPartition.GetPartitionId()
+                    ? NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED
+                    : NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN;
+                if (!CheckRegistrations(runtime, expectedState, source, partition)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldRegisterDataShardsOnlyInPartitionsOfTheirRangeWhenKeyRangeHeartbeats, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCdcKeyRangeHeartbeats(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Uint32" }
+                    KeyColumnNames: ["key"]
+                    UniformPartitionsCount: 3
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeUpdate
+                  Format: ECdcStreamFormatJson
+                  VirtualTimestamps: true
+                  ResolvedTimestampsIntervalMs: 1000
+                  UserAttributes {
+                    Key: "__async_replication"
+                    Value: "{\"id\":\"1\",\"path\":\"/Root/replica\",\"supports_key_range_autopartitioning\":true}"
+                  }
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                const auto tableDesc = DescribePath(runtime, "/MyRoot/Table", true, true);
+                const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+                UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 3);
+
+                const auto topicDesc = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+                const auto& topicPartitions = topicDesc.GetPathDescription().GetPersQueueGroup().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(topicPartitions.size(), 3);
+
+                while (!CheckKeyRangeRegistrations(runtime, tablePartitions, topicPartitions)) {
+                    runtime.SimulateSleep(TDuration::Seconds(1));
+                }
+            }
+        });
+    }
+
     void SplitTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
         RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
@@ -964,6 +1077,105 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
               ResolvedTimestampsIntervalMs: 1000
             }
         )");
+    }
+
+    bool IsRegistrationInState(TTestActorRuntime& runtime,
+            const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& topicPartition,
+            const NKikimrSchemeOp::TTablePartition& tablePartition,
+            NKikimrPQ::TMessageGroupInfo::EState expectedState)
+    {
+        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition> partition;
+        *partition.Add() = topicPartition;
+        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTablePartition> source;
+        *source.Add() = tablePartition;
+        return CheckRegistrations(runtime, expectedState, source, partition);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldRegisterSplitChildrenOnlyInPartitionsOfTheirRangeWhenKeyRangeHeartbeats, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCdcKeyRangeHeartbeats(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            NKikimrScheme::TEvDescribeSchemeResult mergedTableDesc;
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Uint32" }
+                    KeyColumnNames: ["key"]
+                    UniformPartitionsCount: 2
+                    PartitionConfig {
+                      PartitioningPolicy {
+                        MinPartitionsCount: 1
+                      }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeUpdate
+                      Format: ECdcStreamFormatJson
+                      VirtualTimestamps: true
+                      ResolvedTimestampsIntervalMs: 1000
+                      UserAttributes {
+                        Key: "__async_replication"
+                        Value: "{\"id\":\"1\",\"path\":\"/Root/replica\",\"supports_key_range_autopartitioning\":true}"
+                      }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                    SourceTabletId: %lu
+                    SourceTabletId: %lu
+                )", TTestTxConfig::FakeHiveTablets + 0, TTestTxConfig::FakeHiveTablets + 1));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                mergedTableDesc = DescribePath(runtime, "/MyRoot/Table", true, true);
+                UNIT_ASSERT_VALUES_EQUAL(mergedTableDesc.GetPathDescription().GetTablePartitions().size(), 1);
+            }
+
+            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary {
+                    KeyPrefix {
+                        Tuple { Optional { Uint32: 3000000000 } }
+                    }
+                }
+            )", mergedTableDesc.GetPathDescription().GetTablePartitions(0).GetDatashardId()));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                const auto& merged = mergedTableDesc.GetPathDescription().GetTablePartitions(0);
+
+                const auto tableDesc = DescribePath(runtime, "/MyRoot/Table", true, true);
+                const auto& children = tableDesc.GetPathDescription().GetTablePartitions();
+                UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+
+                const auto topicDesc = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+                const auto& topicPartitions = topicDesc.GetPathDescription().GetPersQueueGroup().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(topicPartitions.size(), 2);
+
+                for (const auto& topicPartition : topicPartitions) {
+                    const bool firstPartition = topicPartition.GetPartitionId() == 0;
+                    const auto rightChildState = firstPartition
+                        ? NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN
+                        : NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED;
+
+                    while (!IsRegistrationInState(runtime, topicPartition, children.Get(0), NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED)
+                        || !IsRegistrationInState(runtime, topicPartition, children.Get(1), rightChildState)
+                        || !IsRegistrationInState(runtime, topicPartition, merged, NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN))
+                    {
+                        runtime.SimulateSleep(TDuration::Seconds(1));
+                    }
+                }
+            }
+        });
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RacySplitTableAndCreateStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {

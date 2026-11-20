@@ -60,6 +60,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableRebuildIndex, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedInitialScan, std::nullopt);
         OPTION(std::optional<bool>, EnableCdcAggregator, std::nullopt);
+        OPTION(std::optional<bool>, EnableCdcKeyRangeHeartbeats, std::nullopt);
         OPTION(std::optional<bool>, EnableNotNullDataColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableAlterDatabaseCreateHiveFirst, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicDiskSubDomainQuota, std::nullopt);

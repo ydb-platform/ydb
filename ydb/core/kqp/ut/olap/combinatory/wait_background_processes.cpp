@@ -35,18 +35,12 @@ TBackgroundProcessesState WaitBackgroundProcesses(const TDuration timeout) {
     return state;
 }
 
-<<<<<<< HEAD
-    AFL_VERIFY(processScopeCount == 0 && dataSourceCount == 0)("error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds")(
-        "ProcessScopeCount", processScopeCount)("DataSourceCount", dataSourceCount);
-=======
 TConclusionStatus TWaitBackgroundProcessesCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     const TBackgroundProcessesState state = WaitBackgroundProcesses(TDuration::Seconds(TimeoutSeconds));
 
-    YDB_LOG_VERIFY(state.IsClean(),
-        {"error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds"},
-        {"processScopeCount", state.ProcessScopeCount},
-        {"dataSourceCount", state.DataSourceCount});
->>>>>>> 76133326817 (Asan tests fix (#60079))
+    AFL_VERIFY(state.IsClean())
+        ("error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds")
+        ("ProcessScopeCount", state.ProcessScopeCount)("DataSourceCount", state.DataSourceCount);
 
     Cerr << "WAIT_BACKGROUND_PROCESSES: All background processes completed successfully" << Endl;
     return TConclusionStatus::Success();

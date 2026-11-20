@@ -334,7 +334,8 @@ void TestRestartWithTwoUnavailablePeers(ui32 legacyGuidPeers = 0) {
     const auto actor = info->GetActorId(stopped.front());
     const auto disk = info->GetVDiskId(stopped.front());
     std::set<ui32> legacyPeers;
-    // Keep self history-capable in the mixed case; it is selected last.
+    // Select self last. Four legacy replies leave self history-capable;
+    // six cover every live responder, including self.
     for (ui32 offset = 1; offset <= 8 && legacyPeers.size() < legacyGuidPeers; ++offset) {
         const ui32 order = (stopped.front() + offset) % 8;
         if (order != stopped[1] && order != stopped[2]) {
@@ -382,6 +383,40 @@ void TestRestartWithTwoUnavailablePeers(ui32 legacyGuidPeers = 0) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
+    Y_UNIT_TEST(ReadOnlyRetainsReplicationStatus) {
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+        const ui32 groupId = env.GetGroups().front();
+        const auto info = env.GetGroupInfo(groupId);
+        const auto config = env.FetchBaseConfig();
+        for (const auto& slot : config.GetVSlot()) {
+            if (slot.GetGroupId() != groupId || slot.GetVSlotId().GetNodeId() == env.Settings.ControllerNodeId) {
+                continue;
+            }
+            const TVDiskID disk(slot.GetGroupId(), slot.GetGroupGeneration(), slot.GetFailRealmIdx(),
+                slot.GetFailDomainIdx(), slot.GetVDiskIdx());
+            const auto actor = info->GetActorId(info->GetOrderNumber(disk));
+            env.WaitForVDiskRepl(actor, disk);
+            const auto& location = slot.GetVSlotId();
+            env.SetVDiskReadOnly(location.GetNodeId(), location.GetPDiskId(), location.GetVSlotId(), disk, true);
+            env.StopNode(location.GetNodeId());
+            env.StartNode(location.GetNodeId());
+            env.Sim(TDuration::Seconds(30));
+            const auto result = env.SyncQuery<TEvBlobStorage::TEvVStatusResult, TEvBlobStorage::TEvVStatus>(actor, disk);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT(result->Record.GetIsReadOnly());
+            UNIT_ASSERT(result->Record.GetJoinedGroup());
+            UNIT_ASSERT(result->Record.GetReplicated());
+            UNIT_ASSERT(result->Record.GetDurabilityReplicated());
+            return;
+        }
+        UNIT_FAIL("Group must have a VSlot");
+    }
+
     Y_UNIT_TEST(RestartWithTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(); }
     Y_UNIT_TEST(RestartWithLegacyGuidRepliesAndTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(6); }
     Y_UNIT_TEST(RestartWithMixedGuidRepliesAndTwoUnavailablePeers) { TestRestartWithTwoUnavailablePeers(4); }

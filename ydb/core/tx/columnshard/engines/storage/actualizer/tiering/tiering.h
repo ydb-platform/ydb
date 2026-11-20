@@ -120,7 +120,6 @@ private:
     std::optional<TTiering> Tiering;
     std::optional<ui32> TieringColumnId;
 
-    std::shared_ptr<ISnapshotSchema> TargetCriticalSchema;
     const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
     const std::shared_ptr<IStoragesManager>& StoragesManager;
@@ -129,8 +128,6 @@ private:
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
     THashSet<ui64> NewPortionIds;
     THashMap<ui64, std::shared_ptr<arrow::Scalar>> MaxByPortionId;
-
-    std::shared_ptr<ISnapshotSchema> GetTargetSchema(const std::shared_ptr<ISnapshotSchema>& portionSchema) const;
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const;
 

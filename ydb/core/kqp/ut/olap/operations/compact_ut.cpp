@@ -26,7 +26,7 @@ std::vector<ui64> GetPortionSchemaVersions(TTestHelper& helper) {
     return versions;
 }
 
-// Active portions of `/Root/ColumnTable` that store chunks of the column `columnName`.
+// Active portions of `/Root/ColumnTable` that store chunks of the column `columnName` (named by the portion's own schema).
 ui64 CountPortionsWithColumn(TTestHelper& helper, const TString& columnName) {
     auto result = helper.GetKikimr().GetQueryClient()
                       .ExecuteQuery(TStringBuilder() << "SELECT COUNT(DISTINCT PortionId) FROM `/Root/ColumnTable/.sys/primary_index_stats` "
@@ -51,7 +51,8 @@ void Compact(TTestHelper& helper, const bool cascade) {
 
 Y_UNIT_TEST_SUITE(KqpOlapCompact) {
     // ALTER TABLE ... COMPACT WITH (CASCADE = true) on a column table also rewrites every portion to the current
-    // schema, materializing the columns added since, and completes only once that is done.
+    // schema (the chunks of a dropped column go, an added column gets none: its default is applied on read) and
+    // completes only once that is done.
     Y_UNIT_TEST(CascadeActualizesSchema) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
@@ -88,11 +89,12 @@ Y_UNIT_TEST_SUITE(KqpOlapCompact) {
         UNIT_ASSERT(!versionsBefore.empty());
         const ui64 oldVersion = *std::max_element(versionsBefore.begin(), versionsBefore.end());
 
-        // A new schema version: without CASCADE the existing portions are left as they are.
+        // New schema versions: without CASCADE the existing portions are left as they are, dropped column included.
         testHelper.ExecuteQuery("ALTER TABLE `/Root/ColumnTable` ADD COLUMN Extra Uint64;");
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/ColumnTable` DROP COLUMN Value;");
         Compact(testHelper, /*cascade=*/false);
         UNIT_ASSERT_EQUAL(GetPortionSchemaVersions(testHelper), versionsBefore);
-        UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Extra"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Value"), versionsBefore.size());
 
         Compact(testHelper, /*cascade=*/true);
         const auto versionsAfter = GetPortionSchemaVersions(testHelper);
@@ -100,9 +102,10 @@ Y_UNIT_TEST_SUITE(KqpOlapCompact) {
         for (const ui64 version : versionsAfter) {
             UNIT_ASSERT_GT(version, oldVersion);
         }
-        // the added column is materialized in every portion
-        UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Extra"), versionsAfter.size());
-        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTable`", "[[1000u]]");
+        // the dropped column's chunks are gone; the added column has none and reads as its default
+        UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Value"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Extra"), 0);
+        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTable` WHERE Extra IS NULL", "[[1000u]]");
     }
 }
 

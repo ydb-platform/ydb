@@ -443,6 +443,12 @@ public:
 
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
+    // schema actualization: the stored version is below the index's threshold (not the resolved schema's version: with
+    // schema collapsing a collapsed version resolves to its surviving successor)
+    bool NeedSchemeActualization(const TVersionedIndex& index) const;
+    // the schema a rewrite of the portion writes: the latest when the portion needs actualization, its own otherwise
+    ISnapshotSchema::TPtr GetRewriteSchema(const TVersionedIndex& index) const;
+
     ui32 GetRecordsCount() const {
         return GetMeta().GetRecordsCount();
     }

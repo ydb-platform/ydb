@@ -66,8 +66,10 @@ private:
     std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, TSchemaInfoByVersion> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
-    std::optional<ui64> SchemeVersionForActualization;
-    ISnapshotSchema::TPtr SchemeForActualization;
+    // schema actualization (the SchemeNeedActualization option, ALTER TABLE ... COMPACT WITH (CASCADE = true)): every
+    // portion whose stored version is below the threshold is rewritten with the latest schema at the time of the
+    // rewrite, see TPortionInfo::NeedSchemeActualization and TSchemeActualizer
+    std::optional<ui64> SchemeActualizationThreshold;
 
     TVersionedIndex(const TVersionedIndex& base) = default;
     TVersionedIndex& operator=(const TVersionedIndex&) = delete;
@@ -108,26 +110,19 @@ public:
 
     bool IsEqualTo(const TVersionedIndex& vIndex) const {
         return LastSchemaVersion == vIndex.LastSchemaVersion && SnapshotByVersion.size() == vIndex.SnapshotByVersion.size() &&
-               ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeVersionForActualization == vIndex.SchemeVersionForActualization;
+               ShardingInfo.size() == vIndex.ShardingInfo.size() && SchemeActualizationThreshold == vIndex.SchemeActualizationThreshold;
     }
 
-    ISnapshotSchema::TPtr GetLastCriticalSchema() const {
-        return SchemeForActualization;
+    const std::optional<ui64>& GetSchemeActualizationThreshold() const {
+        return SchemeActualizationThreshold;
     }
 
-    ISnapshotSchema::TPtr GetLastCriticalSchemaDef(const ISnapshotSchema::TPtr defaultSchema) const {
-        auto result = GetLastCriticalSchema();
-        return result ? result : defaultSchema;
-    }
-
-    // true: rewrite every portion older than the current schema (with the newest schema at the time), false: stop that
+    // true: the current schema version becomes the threshold, false: no actualization
     void SetSchemeNeedActualization(const bool value) {
         if (value) {
-            SchemeVersionForActualization = LastSchemaVersion;
-            SchemeForActualization = GetLastSchema();
+            SchemeActualizationThreshold = LastSchemaVersion;
         } else {
-            SchemeVersionForActualization.reset();
-            SchemeForActualization = nullptr;
+            SchemeActualizationThreshold.reset();
         }
     }
 

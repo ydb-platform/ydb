@@ -40,21 +40,10 @@ bool NeedsTierChange(const TString& current, const TString& target, const TTieri
 
 }   // namespace
 
-std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSchema(
-    const std::shared_ptr<ISnapshotSchema>& portionSchema) const {
-    if (!TargetCriticalSchema) {
-        return portionSchema;
-    }
-    if (portionSchema->GetVersion() < TargetCriticalSchema->GetVersion()) {
-        return TargetCriticalSchema;
-    }
-    return portionSchema;
-}
-
 std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::BuildActualizationInfo(
     const TPortionInfo& portion, const TInstant now) const {
     std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
-    std::shared_ptr<ISnapshotSchema> targetSchema = GetTargetSchema(portionSchema);
+    std::shared_ptr<ISnapshotSchema> targetSchema = portion.GetRewriteSchema(VersionedIndex);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
 
     if (Tiering) {
@@ -324,7 +313,6 @@ void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAdd
     if (Tiering) {
         newTieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
     }
-    TargetCriticalSchema = VersionedIndex.GetLastCriticalSchema();
     PortionsInfo.clear();
     NewPortionIds.clear();
     PortionIdByWaitDuration.clear();

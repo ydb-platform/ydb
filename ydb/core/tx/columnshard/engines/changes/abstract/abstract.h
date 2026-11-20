@@ -43,19 +43,19 @@ class TVersionedIndex;
 
 class TPortionEvictionFeatures {
 private:
-    // the version stored in the portion: with schema collapsing CurrentScheme (the lookup of that version) may be newer
-    YDB_READONLY(ui64, PortionSchemaVersion, 0);
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+    YDB_READONLY(ui64, PortionSchemaVersion, 0);   // stored in the portion
+    // the portion's resolved schema, its blobs are read with it (newer than the stored version after a schema collapse)
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ReadScheme);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);   // the rewrite writes with it
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
 
 public:
-    TPortionEvictionFeatures(const ui64 portionSchemaVersion, const std::shared_ptr<ISnapshotSchema>& currentScheme,
+    TPortionEvictionFeatures(const ui64 portionSchemaVersion, const std::shared_ptr<ISnapshotSchema>& readScheme,
         const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
         : PortionSchemaVersion(portionSchemaVersion)
-        , CurrentScheme(currentScheme)
+        , ReadScheme(readScheme)
         , TargetScheme(targetScheme)
         , CurrentTierName(currentTierName)
     {
@@ -91,8 +91,8 @@ public:
     NActualizer::TRWAddress GetRWAddress() {
         if (!RWAddress) {
             YDB_LOG_VERIFY(TargetTierName);
-            RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName),
-                TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
+            RWAddress = NActualizer::TRWAddress(
+                ReadScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName), TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
         }
         return *RWAddress;
     }

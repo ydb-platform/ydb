@@ -128,6 +128,15 @@ ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) cons
     return schema;
 }
 
+bool TPortionInfo::NeedSchemeActualization(const TVersionedIndex& index) const {
+    const auto& threshold = index.GetSchemeActualizationThreshold();
+    return threshold && GetSchemaVersionVerified() < *threshold;
+}
+
+ISnapshotSchema::TPtr TPortionInfo::GetRewriteSchema(const TVersionedIndex& index) const {
+    return NeedSchemeActualization(index) ? index.GetLastSchema() : GetSchema(index);
+}
+
 bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {
     if (ShardingVersion && shardingInfo.GetSnapshotVersion() <= *ShardingVersion) {
         return false;

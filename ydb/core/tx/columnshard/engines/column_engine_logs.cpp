@@ -305,7 +305,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
-    const auto criticalSchemaBefore = vIndex.GetLastCriticalSchema();
+    const auto thresholdBefore = vIndex.GetSchemeActualizationThreshold();
     const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme || switchTieringActualization) {
@@ -313,7 +313,8 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
     }
     // re-targets (or stops) the scheme actualizer and makes the tiering actualizer pick up its option; a schema change
     // without either keeps the target of ALTER TABLE ... COMPACT WITH (CASCADE = true) and its queue
-    if (isCriticalScheme || switchTieringActualization || (ActualizationStarted && vIndex.GetLastCriticalSchema() != criticalSchemaBefore)) {
+    if (isCriticalScheme || switchTieringActualization ||
+        (ActualizationStarted && vIndex.GetSchemeActualizationThreshold() != thresholdBefore)) {
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }

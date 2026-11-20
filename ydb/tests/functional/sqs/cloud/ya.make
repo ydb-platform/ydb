@@ -1,6 +1,7 @@
 PY3TEST()
 
 TEST_SRCS(
+    test_audit.py
     test_common.py
     test_yandex_cloud_mode.py
     test_yandex_cloud_queue_counters.py

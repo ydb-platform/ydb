@@ -24,6 +24,7 @@ class TestSqsActionAudit(get_test_with_sqs_tenant_installation(KikimrSqsTestBase
     @classmethod
     def _setup_config_generator(cls):
         config = super()._setup_config_generator()
+        config.yaml_config['sqs_config']['cloud_events_config'] = {'enable_cloud_events': False}
         # Allow anonymous requests, but require supplied tokens to pass authentication.
         config.yaml_config['sqs_config']['force_access_control'] = False
         config.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True

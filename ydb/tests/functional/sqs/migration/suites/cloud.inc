@@ -2,6 +2,7 @@ SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 TEST_SRCS(
+    ydb/tests/functional/sqs/cloud/test_audit.py
     ydb/tests/functional/sqs/cloud/test_common.py
     ydb/tests/functional/sqs/cloud/test_yandex_cloud_mode.py
     ydb/tests/functional/sqs/cloud/test_yandex_cloud_queue_counters.py

@@ -121,6 +121,16 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         if (it != columnChunks.end()) {
             newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
             YDB_LOG_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+        } else {
+            const auto fromFill = ISnapshotSchema::GetAbsentColumnFill(*from, *to, i);
+            const auto toFill = ISnapshotSchema::GetAbsentColumnFill(*to, *to, i);
+            if (!NArrow::ScalarEqualsNullable(fromFill, toFill)) {
+                auto constructed = ISnapshotSchema::BuildAbsentColumnPortionChunks(
+                    to->GetIndexInfo(), i, fromFill, source.PortionInfo.GetPortionInfo().GetRecordsCount());
+                YDB_LOG_VERIFY(constructed.IsSuccess(),
+                    {"reason", constructed.GetErrorMessage()});
+                YDB_LOG_VERIFY(entityChunksNew.emplace(i, constructed.DetachResult()).second);
+            }
         }
     }
 

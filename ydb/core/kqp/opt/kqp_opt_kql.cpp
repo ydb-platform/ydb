@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -72,9 +74,16 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
 {
     TVector<TString> maybeMissingColumnsToReplace;
     const auto op = GetTableOp(write);
+    THashSet<TStringBuf> inputColumnsSet;
+    for (const auto& name : inputColumns) {
+        inputColumnsSet.insert(name.Value());
+    }
     if (op == TYdbOperation::Replace) {
         for (const auto& [name, column] : tableDesc.Metadata->Columns) {
             if (column.IsDefaultFromExpression() && !column.DefaultExpression->Stored) {
+                continue;
+            }
+            if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && column.IsDefaultFromLiteral() && !inputColumnsSet.contains(name)) {
                 continue;
             }
             maybeMissingColumnsToReplace.push_back(name);
@@ -92,11 +101,6 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
 
     if (maybeMissingColumnsToReplace.size() == 0) {
         return {input, inputColumns};
-    }
-
-    THashSet<TStringBuf> inputColumnsSet;
-    for (const auto& name : inputColumns) {
-        inputColumnsSet.insert(name.Value());
     }
 
     auto rowArg = Build<TCoArgument>(ctx, pos)
@@ -431,6 +435,9 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 {
     TExprBase input = write.Input();
     std::optional<TCoAtomList> inputCols;
+    const auto isKeyColumn = [&](TStringBuf name) {
+        return Find(table.Metadata->KeyColumnNames, name) != table.Metadata->KeyColumnNames.end();
+    };
 
     // Split autoIncrement into sequence columns (handled at runtime by TKqlSequencer) and
     // literal defaults (inlined at compile time into the row struct via TCoMap/TCoAsStruct).
@@ -440,6 +447,11 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
 
         for (const auto& colAtom : autoIncrement) {
             const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
+            const bool olapLiteral = table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral()
+                && !isKeyColumn(colAtom.Value());
+            if (olapLiteral) {
+                continue;
+            }
             if (colMeta && colMeta->IsDefaultFromLiteral() && !colMeta->DefaultFromLiteral.type().has_pg_type()) {
                 literalDefaultColNodes.push_back(colAtom.Ptr());
             } else {
@@ -459,9 +471,19 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
         std::tie(input, inputCols) = ExtendInputRowsWithDefaultLiteralColumns(input, inputColsAfterSequencer,
             literalDefaultCols, table, pos, ctx);
     } else {
-        inputCols = BuildUpsertInputColumns(inputColumns, autoIncrement, pos, ctx);
-        if (autoIncrement.Ref().ChildrenSize() > 0) {
-            input = BuildKqlSequencer(input, table, inputCols.value(), autoIncrement, pos, ctx);
+        TVector<TExprNode::TPtr> columnsToGenerate;
+        for (const auto& colAtom : autoIncrement) {
+            const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
+            if (table.Metadata->Kind == EKikimrTableKind::Olap && colMeta && colMeta->IsDefaultFromLiteral()
+                && !isKeyColumn(colAtom.Value())) {
+                continue;
+            }
+            columnsToGenerate.push_back(colAtom.Ptr());
+        }
+        auto generateColumns = Build<TCoAtomList>(ctx, pos).Add(columnsToGenerate).Done();
+        inputCols = BuildUpsertInputColumns(inputColumns, generateColumns, pos, ctx);
+        if (generateColumns.Ref().ChildrenSize() > 0) {
+            input = BuildKqlSequencer(input, table, inputCols.value(), generateColumns, pos, ctx);
         }
     }
 

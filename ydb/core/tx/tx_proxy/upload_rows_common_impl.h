@@ -19,6 +19,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_counters.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -453,6 +454,9 @@ private:
                     if (accessor->HasInternalConversion()) {
                         HasInternalConversion.emplace(name);
                     }
+                }
+                if (colInfo.HasDefaultValue() && colInfo.GetDefaultValue().HasScalar()) {
+                    defaultColumnsLeft.insert(name);
                 }
             }
         }

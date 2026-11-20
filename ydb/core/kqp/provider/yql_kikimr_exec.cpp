@@ -282,57 +282,14 @@ namespace {
         return dropGroupSettings;
     }
 
-    TCreateTableStoreSettings ParseCreateTableStoreSettings(
-        TKiCreateTable create, const TTableSettings& settings, const TVector<TColumnFamily>& columnFamilies) {
+    TCreateTableStoreSettings ParseCreateTableStoreSettings(TKiCreateTable create, const TKikimrTableMetadata& meta) {
         TCreateTableStoreSettings out;
         out.TableStore = TString(create.Table());
-        out.ShardsCount = settings.MinPartitions ? *settings.MinPartitions : 0;
-
-        for (auto atom : create.PrimaryKey()) {
-            out.KeyColumnNames.emplace_back(atom.Value());
-        }
-
-        for (auto item : create.Columns()) {
-            auto columnTuple = item.Cast<TExprList>();
-            auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
-            auto typeNode = columnTuple.Item(1);
-
-            auto columnName = TString(nameNode.Value());
-            auto columnType = typeNode.Ref().GetTypeAnn();
-            YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
-
-            const auto type = columnType->Cast<TTypeExprType>()->GetType();
-            TKikimrColumnMetadata columnMeta;
-            columnMeta.Name = columnName;
-            if (ETypeAnnotationKind::Pg == type->GetKind()) {
-                const auto pgType = type->Cast<TPgExprType>();
-                columnMeta.Type = TString("pg") += pgType->GetName();
-                columnMeta.NotNull = false;
-            } else {
-                const auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-                const auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-                const auto dataType = actualType->Cast<TDataExprType>();
-                columnMeta.Type = dataType->GetName();
-                columnMeta.NotNull = notNull;
-            }
-
-            if (columnTuple.Size() > 3) {
-                auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                for (auto family : families) {
-                    columnMeta.Families.push_back(TString(family.Value()));
-                }
-            }
-
-            out.ColumnOrder.push_back(columnName);
-            out.Columns.insert(std::make_pair(columnName, columnMeta));
-        }
-#if 0 // TODO
-        for (const auto& index : create.Indexes()) {
-            TIndexDescription indexDesc;
-            out.Indexes.push_back(indexDesc);
-        }
-#endif
-        out.ColumnFamilies = columnFamilies;
+        out.ShardsCount = meta.TableSettings.MinPartitions ? *meta.TableSettings.MinPartitions : 0;
+        out.Columns = meta.Columns;
+        out.ColumnOrder = meta.ColumnOrder;
+        out.KeyColumnNames = meta.KeyColumnNames;
+        out.ColumnFamilies = meta.ColumnFamilies;
         return out;
     }
 
@@ -1983,8 +1940,7 @@ public:
                             TStringBuilder() << "TABLESTORE with not COLUMN store"));
                         return SyncError();
                     }
-                    future = Gateway->CreateTableStore(cluster, ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings,
-                                                                    table.Metadata->ColumnFamilies), existingOk);
+                    future = Gateway->CreateTableStore(cluster, ParseCreateTableStoreSettings(maybeCreate.Cast(), *table.Metadata), existingOk);
                     break;
                 }
                 case ETableType::Table:
@@ -2162,9 +2118,19 @@ public:
                                     }
 
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                            "Default values are not supported in column tables"));
-                                        return SyncError();
+                                        if (!NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
+                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                                "Default values for column tables are disabled"));
+                                            return SyncError();
+                                        }
+                                        auto err = FillLiteralProto(constraint.Value().Cast(), actualType, *add_column->MutableDefaultFromLiteral());
+                                        if (err) {
+                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), err.value()));
+                                            return SyncError();
+                                        }
+                                        add_column->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                                        hasDefaultValue = true;
+                                        continue;
                                     }
 
                                     if (columnBuild == nullptr) {
@@ -2181,12 +2147,15 @@ public:
                                     hasDefaultValue = true;
 
                                 } else if (constraint.Name().Value() == "not_null") {
+                                    hasNotNull = true;
+                                    if (table.Metadata->IsOlap()) {
+                                        continue;
+                                    }
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
 
                                     columnBuild->SetNotNull(true);
-                                    hasNotNull = true;
                                 }
                             }
                         }
@@ -2223,10 +2192,15 @@ public:
                             return SyncError();
                         }
 
-                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
-                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
-                                "Cannot add not null column with NULL default value"));
-                            return SyncError();
+                        if (hasNotNull && hasDefaultValue) {
+                            const Ydb::TypedValue& literal = columnBuild
+                                ? columnBuild->default_from_literal()
+                                : add_column->GetDefaultFromLiteral();
+                            if (literal.value().has_null_flag_value()) {
+                                ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                    "Cannot add not null column with NULL default value"));
+                                return SyncError();
+                            }
                         }
 
                         for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {
@@ -2406,10 +2380,24 @@ public:
                                 return SyncError();
                             }
                         } else if (alterColumnAction == "setDefaultValue") {
-                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                    "Default values are not supported in column tables"));
+                                    "Default values for column tables are disabled"));
                                 return SyncError();
+                            }
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                const auto* column = table.Metadata->Columns.FindPtr(columnNameStr);
+                                if (!column) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                        << "Column " << columnNameStr << " does not exist"));
+                                    return SyncError();
+                                }
+                                alter_columns->SetType(column->Type);
+                                auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(column->TypeInfo, column->TypeMod);
+                                alter_columns->SetTypeId(columnType.TypeId);
+                                if (columnType.TypeInfo) {
+                                    *alter_columns->MutableTypeInfo() = *columnType.TypeInfo;
+                                }
                             }
 
                             auto defaultExpr = TExprBase(alterColumnList.Item(1));
@@ -2430,9 +2418,9 @@ public:
                                 }
                             }
                         } else if (alterColumnAction == "dropDefault") {
-                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                    "Default values are not supported in column tables"));
+                                    "Default values for column tables are disabled"));
                                 return SyncError();
                             }
 

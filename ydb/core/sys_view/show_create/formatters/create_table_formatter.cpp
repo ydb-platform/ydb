@@ -4,7 +4,10 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
@@ -25,6 +28,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <cmath>
 #include <limits>
 
 namespace NKikimr {
@@ -116,6 +120,16 @@ void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isParti
             ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported value type for SHOW CREATE TABLE");
     }
 }
+static void FormatFloating(const TString& typeName, const bool isFinite, const TString& value, TStringStream& stream) {
+    if (isFinite) {
+        stream << value;
+        return;
+    }
+    stream << typeName << "(";
+    EscapeString(value, stream);
+    stream << ")";
+}
+
 void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
     switch (parser.GetPrimitiveType()) {
         case NYdb::EPrimitiveType::Bool: {
@@ -175,15 +189,17 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             break;
         }
         case NYdb::EPrimitiveType::Float: {
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(parser.GetFloat()));
+            const float value = parser.GetFloat();
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(value));
             Y_ENSURE(str.HasValue(), "Failed to convert Float value to string");
-            Stream << TString(str.AsStringRef());
+            FormatFloating("Float", std::isfinite(value), TString(str.AsStringRef()), Stream);
             break;
         }
         case NYdb::EPrimitiveType::Double: {
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(parser.GetDouble()));
+            const double value = parser.GetDouble();
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(value));
             Y_ENSURE(str.HasValue(), "Failed to convert Double value to string");
-            Stream << TString(str.AsStringRef());
+            FormatFloating("Double", std::isfinite(value), TString(str.AsStringRef()), Stream);
             break;
         }
         case NYdb::EPrimitiveType::Utf8: {
@@ -260,6 +276,12 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         case NYdb::EPrimitiveType::DyNumber: {
             Stream << "DyNumber(";
             EscapeString(TString(parser.GetDyNumber()), Stream);
+            Stream << ")";
+            break;
+        }
+        case NYdb::EPrimitiveType::JsonDocument: {
+            Stream << "JsonDocument(";
+            EscapeString(TString(parser.GetJsonDocument()), Stream);
             Stream << ")";
             break;
         }
@@ -1811,6 +1833,26 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         Stream << " NOT NULL";
     }
 
+    const bool hasDefault = olapColumnDesc.HasDefaultValue() && olapColumnDesc.GetDefaultValue().HasScalar();
+    if (hasDefault) {
+        NOlap::TColumnDefaultScalarValue scalar;
+        if (scalar.DeserializeFromProto(olapColumnDesc.GetDefaultValue()).IsFail() || !scalar.GetValue()) {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported default value");
+        }
+        const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(olapColumnDesc.GetTypeId(),
+            olapColumnDesc.HasTypeInfo() ? &olapColumnDesc.GetTypeInfo() : nullptr);
+        const auto arrowType = NArrow::GetArrowType(typeInfoMod.TypeInfo);
+        if (arrowType.ok()) {
+            scalar.AlignToColumnType(*arrowType);
+        }
+        auto typed = scalar.SerializeToTypedValue(typeInfoMod.TypeInfo);
+        if (typed.IsFail()) {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, typed.GetErrorMessage());
+        }
+        Stream << " DEFAULT ";
+        Format(typed.GetResult());
+    }
+
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }
@@ -1848,90 +1890,6 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         }
         Stream << ')';
     }
-}
-
-TString TCreateTableFormatter::ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue) {
-    TStringStream stream;
-    if (!defaultValue.HasScalar()) {
-        return "";
-    }
-
-    TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
-    const auto& scalar = defaultValue.GetScalar();
-    if (scalar.HasBool()) {
-        if (scalar.GetBool() == true) {
-            stream << "true";
-        } else {
-            stream << "false";
-        }
-    } else if (scalar.HasUint8()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint8, NUdf::TUnboxedValuePod(scalar.GetUint8()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Uint8 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasUint16()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint16, NUdf::TUnboxedValuePod(scalar.GetUint16()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Uint16 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasUint32()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint32, NUdf::TUnboxedValuePod(scalar.GetUint32()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Uint32 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasUint64()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint64, NUdf::TUnboxedValuePod(static_cast<ui64>(scalar.GetUint64())));
-        Y_ENSURE(str.HasValue(), "Failed to convert Uint64 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasInt8()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int8, NUdf::TUnboxedValuePod(scalar.GetInt8()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Int8 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasInt16()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int16, NUdf::TUnboxedValuePod(scalar.GetInt16()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Int16 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasInt32()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int32, NUdf::TUnboxedValuePod(scalar.GetInt32()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Int32 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasInt64()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int64, NUdf::TUnboxedValuePod(static_cast<i64>(scalar.GetInt64())));
-        Y_ENSURE(str.HasValue(), "Failed to convert Int64 value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasDouble()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(scalar.GetDouble()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Double value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasFloat()) {
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(scalar.GetFloat()));
-        Y_ENSURE(str.HasValue(), "Failed to convert Float value to string");
-        stream << TString(str.AsStringRef());
-    } else if (scalar.HasTimestamp()) {
-        ui64 value = scalar.GetTimestamp().GetValue();
-        arrow::TimeUnit::type unit = arrow::TimeUnit::type(scalar.GetTimestamp().GetUnit());
-        switch (unit) {
-            case arrow::TimeUnit::SECOND:
-                value *= 1000000;
-                break;
-            case arrow::TimeUnit::MILLI:
-                value *= 1000;
-                break;
-            case arrow::TimeUnit::MICRO:
-                break;
-            case arrow::TimeUnit::NANO:
-                value /= 1000;
-                break;
-        }
-        stream << "TIMESTAMP(";
-        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(value));
-        Y_ENSURE(str.HasValue(), "Failed to convert Timestamp value to string");
-        EscapeString(TString(str.AsStringRef()), stream);
-        stream << ")";
-    } else if (scalar.HasString()) {
-        EscapeString(TString(scalar.GetString()), stream);
-    } else {
-        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported type for default value");
-    }
-
-    return stream.Str();
 }
 
 void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnTableSharding& sharding) {
@@ -2019,16 +1977,6 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
 void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc) {
     TStringStream paramsStr;
     TString del = "";
-
-    if (columnDesc.HasDefaultValue()) {
-        auto defaultValue = ValueToString(columnDesc.GetDefaultValue());
-        if (defaultValue) {
-            EscapeName("DEFAULT_VALUE", paramsStr);
-            paramsStr << "=";
-            EscapeValue(defaultValue, paramsStr);
-            del = ", ";
-        }
-    }
 
     if (columnDesc.HasStorageId() && !columnDesc.GetStorageId().empty()) {
         paramsStr << del;

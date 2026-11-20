@@ -16,6 +16,8 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
+    YDB_READONLY_DEF(std::optional<NOlap::TColumnDefaultScalarValue>, DefaultScalar);
+    YDB_READONLY_DEF(std::optional<bool>, DropDefault);
     YDB_READONLY_DEF(std::optional<NArrow::NAccessor::TRequestedConstructorContainer>, AccessorConstructor);
     YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
     YDB_READONLY_DEF(std::optional<bool>, NotNull);
@@ -34,6 +36,7 @@ private:
     YDB_FLAG_ACCESSOR(NotNull, false);
     YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
+    YDB_READONLY_DEF(std::optional<NOlap::TColumnDefaultScalarValue>, CreatedDefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
 
 public:

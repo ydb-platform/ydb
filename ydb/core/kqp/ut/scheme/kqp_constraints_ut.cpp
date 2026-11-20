@@ -2588,7 +2588,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values are not supported in column tables");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values for column tables are disabled");
         }
     }
 
@@ -3591,7 +3591,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             )";
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values are not supported in column tables");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values for column tables are disabled");
         }
     }
 
@@ -3697,7 +3697,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             )";
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values are not supported in column tables");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values for column tables are disabled");
         }
     }
 

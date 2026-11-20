@@ -12,7 +12,11 @@ PEERDIR(
     library/cpp/json
     ydb/core/base
     ydb/core/tx/columnshard/engines/storage/indexes/helper
+    ydb/core/formats/arrow
     ydb/core/formats/arrow/serializer
+    ydb/core/scheme
+    ydb/core/scheme_types
+    ydb/core/tx/columnshard/engines/scheme/defaults/common
     ydb/core/protos
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/tx/sequenceproxy

@@ -210,11 +210,22 @@ public:
 class TMergingContext {
 private:
     std::vector<std::shared_ptr<NArrow::TGeneralContainer>> InputContainers;
+    std::vector<ISnapshotSchema::TPtr> PortionSchemas;
 
 public:
-    TMergingContext(const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& inputContainers)
+    TMergingContext(
+        const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& inputContainers, std::vector<ISnapshotSchema::TPtr> portionSchemas = {})
         : InputContainers(inputContainers)
+        , PortionSchemas(std::move(portionSchemas))
     {
+    }
+
+    const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& GetInputContainers() const {
+        return InputContainers;
+    }
+
+    const std::vector<ISnapshotSchema::TPtr>& GetPortionSchemas() const {
+        return PortionSchemas;
     }
 };
 

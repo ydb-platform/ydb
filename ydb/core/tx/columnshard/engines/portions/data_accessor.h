@@ -178,14 +178,16 @@ private:
     ui32 RecordsCountByChunks = 0;
     const std::shared_ptr<TColumnLoader> DataLoader;
     const std::shared_ptr<TColumnLoader> ResultLoader;
+    const std::shared_ptr<arrow::Scalar> AbsentFill;
 
 public:
-    TColumnAssemblingInfo(
-        const ui32 recordsCount, const std::shared_ptr<TColumnLoader>& dataLoader, const std::shared_ptr<TColumnLoader>& resultLoader)
+    TColumnAssemblingInfo(const ui32 recordsCount, const std::shared_ptr<TColumnLoader>& dataLoader,
+        const std::shared_ptr<TColumnLoader>& resultLoader, const std::shared_ptr<arrow::Scalar>& absentFill)
         : ColumnId(resultLoader->GetColumnId())
         , RecordsCount(recordsCount)
         , DataLoader(dataLoader)
         , ResultLoader(resultLoader)
+        , AbsentFill(absentFill)
     {
         YDB_LOG_VERIFY(ResultLoader);
         if (DataLoader) {
@@ -209,8 +211,7 @@ public:
 
     TPreparedColumn Compile() {
         if (BlobsInfo.empty()) {
-            BlobsInfo.emplace_back(
-                TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
+            BlobsInfo.emplace_back(TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : AbsentFill));
             return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
         } else {
             YDB_LOG_VERIFY(RecordsCountByChunks == RecordsCount,

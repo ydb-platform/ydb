@@ -1,18 +1,80 @@
 #include "logic.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NCompaction {
 
-void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergingContext*/) {
+void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergingContext) {
+    Inputs = input;
     ui32 idx = 0;
-    for (auto&& p : input) {
+    const auto outputDefault = Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue();
+    for (auto&& p : Inputs) {
+        std::shared_ptr<arrow::Scalar> fill = Context.GetDefaultValue();
+        const auto& portionSchemas = mergingContext.GetPortionSchemas();
+        const bool hasPortionSchema = idx < portionSchemas.size() && portionSchemas[idx] && Context.GetSchemaInfo();
+        if (hasPortionSchema) {
+            fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
+        }
+        if (!p) {
+            if (!NArrow::ScalarEqualsNullable(fill, outputDefault)) {
+                const auto& containers = mergingContext.GetInputContainers();
+                const ui32 rows = idx < containers.size() && containers[idx] ? containers[idx]->num_rows() : 0;
+                if (rows) {
+                    p = ISnapshotSchema::BuildAbsentColumnArray(Context.GetResultField()->type(), fill, rows);
+                }
+            }
+        }
+        const auto materializeMismatched = [&](std::shared_ptr<NArrow::NAccessor::IChunkedArray>& item) {
+            const auto expand = [&](auto&& self, std::shared_ptr<NArrow::NAccessor::IChunkedArray>& current) -> void {
+                if (!current) {
+                    return;
+                }
+                using EType = NArrow::NAccessor::IChunkedArray::EType;
+                if (current->GetType() == EType::CompositeChunkedArray) {
+                    const auto composite = std::static_pointer_cast<NArrow::NAccessor::TCompositeChunkedArray>(current);
+                    auto chunks = composite->GetChunks();
+                    bool changed = false;
+                    for (auto& chunk : chunks) {
+                        const auto before = chunk;
+                        self(self, chunk);
+                        changed = changed || chunk != before;
+                    }
+                    if (changed) {
+                        if (chunks.size() == 1) {
+                            current = std::move(chunks.front());
+                        } else {
+                            current = std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(
+                                std::move(chunks), current->GetRecordsCount(), current->GetDataType());
+                        }
+                    }
+                    return;
+                }
+                if (current->GetType() == EType::SerializedChunkedArray) {
+                    current = current->GetArraySlow(0, current).GetArray();
+                    self(self, current);
+                    return;
+                }
+                if (current->GetType() == EType::SparsedArray) {
+                    const auto sparsed = std::static_pointer_cast<NArrow::NAccessor::TSparsedArray>(current);
+                    if (!NArrow::ScalarEqualsNullable(sparsed->GetDefaultValue(), outputDefault)) {
+                        current = std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(sparsed->GetChunkedArray());
+                    }
+                }
+            };
+            expand(expand, item);
+        };
+        if (!hasPortionSchema || !NArrow::ScalarEqualsNullable(fill, outputDefault)) {
+            materializeMismatched(p);
+        }
         Cursors.emplace_back(TSparsedChunkCursor(p, Context.GetLoader(), idx++));
     }
-    Inputs = input;
 }
 
 TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& /*mergeContext*/) {

@@ -606,6 +606,134 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
+    Y_UNIT_TEST(DefaultValueRequiresFlags) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(false));
+        runtime.GetAppData().FeatureFlags.SetEnableSparsedColumns(false);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString column = R"({ Name: "value" Type: "Uint32" DefaultValue { Scalar { Uint32: 5 } } })";
+        const TString schema = TStringBuilder() << R"(
+            Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+            KeyColumnNames: "timestamp"
+            Columns )" << column;
+        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "Default values for column tables are disabled");
+
+        auto tryAll = [&](const TString& suffix, const TVector<TExpectedResult>& expected) {
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"DefTable" << suffix << "\" ColumnShardCount: 1 Schema { " << schema << " }", expected);
+            env.TestWaitNotification(runtime, txId);
+            TestCreateOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"DefStore" << suffix << "\" ColumnShardCount: 1 SchemaPresets { Name: \"default\" Schema { "
+                    << schema << " } }", expected);
+            env.TestWaitNotification(runtime, txId);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"ColumnTable\" AlterSchema { AddColumns { Name: \"value" << suffix
+                    << "\" Type: \"Uint32\" DefaultValue { Scalar { Uint32: 5 } } } }", expected);
+            env.TestWaitNotification(runtime, txId);
+        };
+
+        tryAll("Off", {rejected});
+        TestLs(runtime, "/MyRoot/DefTableOff", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/DefStoreOff", false, NLs::PathNotExist);
+
+        runtime.GetAppData().FeatureFlags.SetEnableCsDefaultValues(true);
+        tryAll("Cs", {NKikimrScheme::StatusAccepted});
+
+        runtime.GetAppData().FeatureFlags.SetEnableCsDefaultValues(false);
+        runtime.GetAppData().FeatureFlags.SetEnableSparsedColumns(true);
+        tryAll("Sparsed", {NKikimrScheme::StatusAccepted});
+    }
+
+    Y_UNIT_TEST(SetAndDropDefaultRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(true));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "data" DefaultScalar { Scalar { String: "a" } } DropDefault: true } }
+        )", {{NKikimrScheme::StatusSchemeError, "Cannot set and drop default value of column 'data' in one request"}});
+    }
+
+    Y_UNIT_TEST(InvalidEncodedDefaultsRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(true));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "Invalid JsonDocument default");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "doc" Type: "JsonDocument" DefaultValue { Scalar { Bytes: "" } } } }
+        )", {rejected});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "doc" Type: "JsonDocument" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "doc" DefaultScalar { Scalar { Bytes: "" } } } }
+        )", {rejected});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "text" Type: "Utf8" DefaultValue { Scalar { String: "\xff" } } } }
+        )", {{NKikimrScheme::StatusSchemeError, "Invalid Utf8 default"}});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "day" Type: "Date" DefaultValue { Scalar { Uint16: 65000 } } } }
+        )", {{NKikimrScheme::StatusSchemeError, "Invalid Date default"}});
+    }
+
+    Y_UNIT_TEST(TtlOnDefaultColumnRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCsDefaultValues(true));
+        ui64 txId = 100;
+
+        const TString ttl = R"(TtlSettings { Enabled { ColumnName: "ts" ExpireAfterSeconds: 300 ColumnUnit: UNIT_SECONDS } })";
+        const auto schema = [](const TString& name, const TString& tsDefault) {
+            return TStringBuilder() << R"(
+                Name: ")" << name << R"("
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Id: 2 Name: "ts" Type: "Uint64" )" << tsDefault << R"( }
+                    KeyColumnNames: "id"
+                    Indexes {
+                        Id: 3 Name: "ttl_max" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnId: 2 }
+                    }
+                }
+            )";
+        };
+        const TString withDefault = "DefaultValue { Scalar { Uint64: 5 } }";
+        const TExpectedResult rejected(NKikimrScheme::StatusSchemeError, "Default value is not supported for the TTL column");
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema("CreateTtl", withDefault) + ttl, {rejected});
+        TestLs(runtime, "/MyRoot/CreateTtl", false, NLs::PathNotExist);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema("AlterTtl", withDefault));
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(Name: "AlterTtl" Alter)" + ttl, {rejected});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema("SetDefault", "") + ttl);
+        env.TestWaitNotification(runtime, txId);
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SetDefault"
+            AlterSchema { AlterColumns { Name: "ts" DefaultScalar { Scalar { Uint64: 5 } } } }
+        )", {rejected});
+    }
+
     Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));

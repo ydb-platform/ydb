@@ -1,12 +1,16 @@
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_diff.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/hash.h>
 #include <util/string/join.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NKikimr::NOlap::NTest {
 
@@ -28,7 +32,9 @@ TString Describe(const TIndexInfo& info) {
            << " storage=" << features.GetOperator()->GetStorageId()
            << " serializer=" << features.GetSerializer().SerializeToProto().ShortDebugString()
            << " accessor=" << features.GetDataAccessorConstructor().SerializeToProto().ShortDebugString()
-           << " default=" << features.GetDefaultValue().SerializeToProto().ShortDebugString() << " " << features.DebugString() << "\n";
+           << " default=" << features.GetDefaultValue().SerializeToProto().ShortDebugString() << " created="
+           << (features.GetCreatedDefaultValue() ? features.GetCreatedDefaultValue()->SerializeToProto().ShortDebugString() : "none") << " "
+           << features.DebugString() << "\n";
     }
     for (const std::string& name : info.GetColumnSTLNames(true)) {
         sb << "by name " << name << " id=" << info.GetColumnIdOptional(name).value_or(0)
@@ -145,6 +151,21 @@ public:
 
     TSchemaHistory& SetDefault(const ui32 columnId, const ui64 value) {
         MutableColumn(columnId).MutableDefaultValue()->MutableScalar()->SetUint64(value);
+        return *this;
+    }
+
+    TSchemaHistory& SetEmptyDefault(const ui32 columnId) {
+        MutableColumn(columnId).MutableDefaultValue();
+        return *this;
+    }
+
+    TSchemaHistory& ClearDefault(const ui32 columnId) {
+        MutableColumn(columnId).ClearDefaultValue();
+        return *this;
+    }
+
+    TSchemaHistory& SetCreatedDefault(const ui32 columnId, const ui64 value) {
+        MutableColumn(columnId).MutableCreatedDefaultValue()->MutableScalar()->SetUint64(value);
         return *this;
     }
 
@@ -310,6 +331,88 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         CheckDiffsBuildSchemas(history);
     }
 
+    Y_UNIT_TEST(CreatedDefaultSurvivesSetDefault) {
+        TSchemaHistory history;
+        history.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 42).SetCreatedDefault(4, 42);
+        history.NextVersion().SetDefault(4, 7);
+        CheckDiffsBuildSchemas(history);
+
+        const auto& versions = history.GetVersions();
+        auto cache = std::make_shared<TSchemaObjectsCache>();
+        auto older = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.front())), TSnapshot(versions.front().GetVersion(), 1));
+        auto current = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.back())), TSnapshot(versions.back().GetVersion(), 1));
+
+        const auto absent = ISnapshotSchema::GetAbsentColumnFill(*older, *current, 4);
+        const auto* absentScalar = dynamic_cast<const arrow::UInt64Scalar*>(absent.get());
+        UNIT_ASSERT(absentScalar);
+        UNIT_ASSERT_VALUES_EQUAL(absentScalar->value, 42);
+
+        const auto present = ISnapshotSchema::GetAbsentColumnFill(*current, *current, 4);
+        const auto* presentScalar = dynamic_cast<const arrow::UInt64Scalar*>(present.get());
+        UNIT_ASSERT(presentScalar);
+        UNIT_ASSERT_VALUES_EQUAL(presentScalar->value, 7);
+
+        const auto& created = current->GetIndexInfo().GetColumnFeaturesVerified(4).GetCreatedDefaultValue();
+        UNIT_ASSERT(created);
+        UNIT_ASSERT(created->GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Scalar&>(*created->GetValue()).value, 42);
+    }
+
+    Y_UNIT_TEST(DifferentDefaultsIncludeSingleInput) {
+        TSchemaHistory history;
+        history.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 42).SetCreatedDefault(4, 42);
+        history.NextVersion().SetDefault(4, 7);
+        const auto& versions = history.GetVersions();
+        auto cache = std::make_shared<TSchemaObjectsCache>();
+        auto born =
+            std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(BuildFromSchema(versions[1])), TSnapshot(versions[1].GetVersion(), 1));
+        auto current = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.back())), TSnapshot(versions.back().GetVersion(), 1));
+        auto before = std::make_shared<TSnapshotSchema>(
+            cache->GetOrInsertIndexInfo(BuildFromSchema(versions.front())), TSnapshot(versions.front().GetVersion(), 1));
+
+        THashMap<ui64, ISnapshotSchema::TPtr> onlyBirth{ { 2, born } };
+        UNIT_ASSERT(ISnapshotSchema::GetColumnsWithDifferentDefaults(onlyBirth, current).contains(4));
+
+        THashMap<ui64, ISnapshotSchema::TPtr> mixed{ { 1, before }, { 2, born } };
+        UNIT_ASSERT(ISnapshotSchema::GetColumnsWithDifferentDefaults(mixed, current).contains(4));
+
+        THashMap<ui64, ISnapshotSchema::TPtr> onlyCurrent{ { 3, current } };
+        UNIT_ASSERT(!ISnapshotSchema::GetColumnsWithDifferentDefaults(onlyCurrent, current).contains(4));
+    }
+
+    Y_UNIT_TEST(CreatedDefaultBlocksSchemaGc) {
+        TSchemaHistory mismatched;
+        mismatched.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 7).SetCreatedDefault(4, 5);
+        const auto mismatchDiff = TSchemaDiffView::MakeSchemasDiff(mismatched.GetVersions()[0], mismatched.GetVersions()[1]);
+        TSchemaDiffView mismatchView;
+        mismatchView.DeserializeFromProto(mismatchDiff).Validate();
+        UNIT_ASSERT(!mismatchView.IsCorrectToIgnorePreviouse(BuildFromSchema(mismatched.GetVersions()[0])));
+
+        TSchemaHistory matched;
+        matched.NextVersion().AddColumn(4, "with_default", NScheme::NTypeIds::Uint64).SetDefault(4, 5).SetCreatedDefault(4, 5);
+        const auto matchDiff = TSchemaDiffView::MakeSchemasDiff(matched.GetVersions()[0], matched.GetVersions()[1]);
+        TSchemaDiffView matchView;
+        matchView.DeserializeFromProto(matchDiff).Validate();
+        UNIT_ASSERT(matchView.IsCorrectToIgnorePreviouse(BuildFromSchema(matched.GetVersions()[0])));
+    }
+
+    Y_UNIT_TEST(LegacyEmptyDefaultRewrittenOnUpgrade) {
+        TSchemaHistory history;
+        history.SetEmptyDefault(KeyColumnId).SetEmptyDefault(2).SetEmptyDefault(3);
+        history.NextVersion().ClearDefault(KeyColumnId).ClearDefault(2).ClearDefault(3).AddColumn(4, "added", NScheme::NTypeIds::Uint64);
+        CheckDiffsBuildSchemas(history);
+
+        const auto& versions = history.GetVersions();
+        const auto diff = TSchemaDiffView::MakeSchemasDiff(versions[0], versions[1]);
+        UNIT_ASSERT_VALUES_EQUAL(diff.UpsertColumnsSize(), 4u);
+        TSchemaDiffView view;
+        view.DeserializeFromProto(diff).Validate();
+        UNIT_ASSERT(!view.IsCorrectToIgnorePreviouse(BuildFromSchema(versions[0])));
+    }
+
     Y_UNIT_TEST(ChangeColumnToSparsed) {
         TSchemaHistory history;
         history.NextVersion().SetAccessor(2, NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
@@ -417,6 +520,51 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         history.NextVersion().AddMaxIndex(10, "max_ts", KeyColumnId).SetCompression(3, NKikimrSchemeOp::ColumnCodecZSTD);
         history.NextVersion().SetDefaultCompression(NKikimrSchemeOp::ColumnCodecZSTD).AddColumn(5, "a_first", NScheme::NTypeIds::Uint64);
         CheckMergedDiffBuildsSchema(history);
+    }
+
+    Y_UNIT_TEST(TemporalDefaultRejectsOutOfRange) {
+        auto parse = [](Ydb::Type::PrimitiveTypeId typeId, NScheme::TTypeId schemeType, auto setValue) {
+            Ydb::TypedValue typed;
+            typed.mutable_type()->set_type_id(typeId);
+            setValue(*typed.mutable_value());
+            TColumnDefaultScalarValue scalar;
+            return scalar.ParseFromTypedValue(typed, NScheme::TTypeInfo(schemeType));
+        };
+        UNIT_ASSERT(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
+            value.set_uint32_value(0);
+        }).IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
+            value.set_uint32_value(65535);
+        }).GetErrorMessage(), "Invalid Date");
+        UNIT_ASSERT(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
+            value.set_uint32_value(NYql::NUdf::MAX_DATE - 1);
+        }).IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATETIME, NScheme::NTypeIds::Datetime, [](Ydb::Value& value) {
+            value.set_uint32_value(NYql::NUdf::MAX_DATETIME);
+        }).GetErrorMessage(), "Invalid Datetime");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::TIMESTAMP, NScheme::NTypeIds::Timestamp, [](Ydb::Value& value) {
+            value.set_uint64_value(NYql::NUdf::MAX_TIMESTAMP);
+        }).GetErrorMessage(), "Invalid Timestamp");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::INTERVAL, NScheme::NTypeIds::Interval, [](Ydb::Value& value) {
+            value.set_int64_value(Min<i64>());
+        }).GetErrorMessage(), "Invalid Interval");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::INTERVAL64, NScheme::NTypeIds::Interval64, [](Ydb::Value& value) {
+            value.set_int64_value(Min<i64>());
+        }).GetErrorMessage(), "Invalid Interval64");
+    }
+
+    Y_UNIT_TEST(DecimalDefaultRejectsOutOfPrecision) {
+        auto parse = [](ui64 low, ui32 precision, ui32 scale) {
+            Ydb::TypedValue typed;
+            auto* decimal = typed.mutable_type()->mutable_decimal_type();
+            decimal->set_precision(precision);
+            decimal->set_scale(scale);
+            typed.mutable_value()->set_low_128(low);
+            TColumnDefaultScalarValue scalar;
+            return scalar.ParseFromTypedValue(typed, NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale)));
+        };
+        UNIT_ASSERT_STRING_CONTAINS(parse(123, 1, 0).GetErrorMessage(), "Invalid Decimal");
+        UNIT_ASSERT(parse(9, 1, 0).IsSuccess());
     }
 }
 

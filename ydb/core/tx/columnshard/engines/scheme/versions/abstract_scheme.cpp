@@ -1,6 +1,7 @@
 #include "abstract_scheme.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/config.pb.h>
@@ -71,10 +72,12 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             }
         }
         if (restoreColumnIds.contains(columnId)) {
-            YDB_LOG_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId),
+            const auto fill = GetAbsentColumnFill(dataSchema, *this, columnId);
+            YDB_LOG_VERIFY(!!fill || GetIndexInfo().IsNullableVerified(columnId),
                 {"columnName", GetIndexInfo().GetColumnName(columnId, false)},
                 {"id", columnId});
-            result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
+            auto array = NArrow::TThreadSimpleArraysCache::Get(resultField->type(), fill, batch->num_rows());
+            result->AddField(resultField, std::make_shared<NArrow::NAccessor::TTrivialArray>(array)).Validate();
         }
     }
     return result;
@@ -124,10 +127,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                 case NEvWrite::EModificationType::Replace:
                 case NEvWrite::EModificationType::Insert:
                 case NEvWrite::EModificationType::Upsert:
-                    if (!GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
-                        return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
-                    }
-                    break;
+                    return TConclusionStatus::Fail("null data for not null column '" + dstSchema.field(targetIdx)->name() + "'");
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
                 case NEvWrite::EModificationType::Increment:
@@ -272,6 +272,79 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
 }
 
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetAbsentColumnFill(
+    const ISnapshotSchema& portionSchema, const ISnapshotSchema& resultSchema, const ui32 columnId) {
+    if (portionSchema.HasColumnId(columnId)) {
+        return portionSchema.GetIndexInfo().GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
+    }
+    const auto& created = resultSchema.GetIndexInfo().GetColumnFeaturesVerified(columnId).GetCreatedDefaultValue();
+    if (!created) {
+        return nullptr;
+    }
+    return created->GetValue();
+}
+
+std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> ISnapshotSchema::BuildAbsentColumnChunks(
+    const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
+    static constexpr ui64 MaxChunkBytes = 1 << 20;
+    ui64 valueBytes = 8;
+    if (fill && fill->is_valid) {
+        if (const auto* binary = dynamic_cast<const arrow::BaseBinaryScalar*>(fill.get()); binary && binary->value) {
+            valueBytes = binary->value->size() + sizeof(ui32);
+        } else if (const auto* fixed = dynamic_cast<const arrow::FixedWidthType*>(type.get())) {
+            valueBytes = std::max<ui64>(1, fixed->bit_width() / 8);
+        }
+    }
+    static constexpr ui64 MaxChunksCount = (ui64)std::numeric_limits<ui16>::max() + 1;
+    const ui64 minChunkRecords = (recordsCount + MaxChunksCount - 1) / MaxChunksCount;
+    const ui32 chunkRecords =
+        std::max<ui64>({ 1, minChunkRecords, std::min<ui64>(recordsCount, MaxChunkBytes / std::max<ui64>(1, valueBytes)) });
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> result;
+    if (!recordsCount) {
+        return result;
+    }
+    const auto full = NArrow::TThreadSimpleArraysCache::Get(type, fill, chunkRecords);
+    for (ui32 pos = 0; pos < recordsCount; pos += chunkRecords) {
+        const ui32 count = std::min(chunkRecords, recordsCount - pos);
+        result.emplace_back(std::make_shared<NArrow::NAccessor::TTrivialArray>(count == chunkRecords ? full : full->Slice(0, count)));
+    }
+    return result;
+}
+
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> ISnapshotSchema::BuildAbsentColumnArray(
+    const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
+    auto chunks = BuildAbsentColumnChunks(type, fill, recordsCount);
+    if (chunks.size() == 1) {
+        return chunks.front();
+    }
+    return std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(chunks), recordsCount, type);
+}
+
+TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> ISnapshotSchema::BuildAbsentColumnPortionChunks(
+    const TIndexInfo& indexInfo, const ui32 columnId, const std::shared_ptr<arrow::Scalar>& fill, const ui32 recordsCount) {
+    const auto loader = indexInfo.GetColumnLoaderVerified(columnId);
+    const auto& features = indexInfo.GetColumnFeaturesVerified(columnId);
+    THashMap<ui32, std::pair<std::shared_ptr<NArrow::NAccessor::IChunkedArray>, NArrow::NAccessor::TBlobWithAdditionalAccessorData>>
+        serializedBySize;
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    ui16 chunkIdx = 0;
+    for (auto&& chunk : BuildAbsentColumnChunks(features.GetArrowField()->type(), fill, recordsCount)) {
+        auto it = serializedBySize.find(chunk->GetRecordsCount());
+        if (it == serializedBySize.end()) {
+            const auto loadContext = loader->BuildAccessorContext(chunk->GetRecordsCount());
+            auto constructed = loader->GetAccessorConstructor()->Construct(chunk, loadContext);
+            if (constructed.IsFail()) {
+                return TConclusionStatus::Fail(constructed.GetErrorMessage());
+            }
+            auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
+            it = serializedBySize.emplace(chunk->GetRecordsCount(), std::make_pair(*constructed, std::move(blobAndMeta))).first;
+        }
+        result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+            it->second.second.Blob, it->second.first, TChunkAddress(columnId, chunkIdx++), features, it->second.second.Meta));
+    }
+    return result;
+}
+
 bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
     return GetIndexInfo().IsSpecialColumn(columnId);
 }
@@ -279,31 +352,17 @@ bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
 std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema) {
     std::set<ui32> result;
-    if (schemas.size() <= 1) {
-        return {};
+    if (!targetSchema) {
+        return result;
     }
-    std::map<ui32, std::shared_ptr<arrow::Scalar>> defaults;
-    for (auto& [_, blobSchema] : schemas) {
-        for (auto&& columnId : blobSchema->GetIndexInfo().GetColumnIds(true)) {
-            if (result.contains(columnId)) {
-                continue;
-            }
-            if (targetSchema && !targetSchema->HasColumnId(columnId)) {
-                continue;
-            }
-            auto def = blobSchema->GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
-            if (!blobSchema->GetIndexInfo().IsNullableVerified(columnId) && !def) {
-                continue;
-            }
-            auto it = defaults.find(columnId);
-            if (it == defaults.end()) {
-                defaults.emplace(columnId, def);
-            } else if (NArrow::ScalarCompareNullable(def, it->second) != 0) {
+    for (auto&& columnId : targetSchema->GetIndexInfo().GetColumnIds(false)) {
+        const auto resultFill = GetAbsentColumnFill(*targetSchema, *targetSchema, columnId);
+        for (auto& [_, blobSchema] : schemas) {
+            const auto inputFill = GetAbsentColumnFill(*blobSchema, *targetSchema, columnId);
+            if (!NArrow::ScalarEqualsNullable(inputFill, resultFill)) {
                 result.emplace(columnId);
+                break;
             }
-        }
-        if (targetSchema && result.size() == targetSchema->GetIndexInfo().GetColumnIds(true).size()) {
-            break;
         }
     }
     return result;

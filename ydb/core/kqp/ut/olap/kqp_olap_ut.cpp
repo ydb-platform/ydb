@@ -5412,7 +5412,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 );
             )", NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Default values are not supported in column tables", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Default values for column tables are disabled", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(WithDefaultValueEnabled) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCsDefaultValues(true);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        auto queryClient = kikimr->GetQueryClient();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/TestDef` (
+                    Id Uint32 NOT NULL,
+                    Value Utf8 DEFAULT 'aba',
+                    PRIMARY KEY (Id)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                INSERT INTO `/Root/TestDef` (Id) VALUES (1);
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Value FROM `/Root/TestDef` WHERE Id = 1;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[["aba"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/PkDef` (
+                    Id Uint32 NOT NULL DEFAULT 7,
+                    Value Utf8,
+                    PRIMARY KEY (Id)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                INSERT INTO `/Root/PkDef` (Value) VALUES ('v');
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Id FROM `/Root/PkDef`;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[7u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

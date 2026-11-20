@@ -2,14 +2,20 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-void TPlainMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mContext*/) {
+void TPlainMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mContext) {
+    ui32 idx = 0;
     for (auto&& p : input) {
         if (p) {
             Cursors.emplace_back(NCompaction::TPortionColumnCursor(p));
         } else {
-            Cursors.emplace_back(
-                NCompaction::TPortionColumnCursor(Context.GetLoader()->GetResultField()->type(), Context.GetLoader()->GetDefaultValue()));
+            std::shared_ptr<arrow::Scalar> fill = Context.GetDefaultValue();
+            const auto& portionSchemas = mContext.GetPortionSchemas();
+            if (idx < portionSchemas.size() && portionSchemas[idx] && Context.GetSchemaInfo()) {
+                fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
+            }
+            Cursors.emplace_back(NCompaction::TPortionColumnCursor(Context.GetResultField()->type(), fill));
         }
+        ++idx;
     }
 }
 

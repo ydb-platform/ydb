@@ -15,11 +15,11 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/compatibility/compatibility.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
-#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>

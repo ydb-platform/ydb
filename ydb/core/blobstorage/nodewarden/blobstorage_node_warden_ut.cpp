@@ -3835,7 +3835,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                     const auto id = Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(service);
                     Runtime.WrapInActorContext(id, [&](IActor* actor) {
                         auto& disk = *static_cast<NDDisk::TDDiskActor*>(actor);
-                        busy |= disk.GetDirectIoInflight() || !disk.FormattingChunks.empty() || !disk.LogWaiters.empty();
+                        busy |= disk.GetDirectIoInflight() || !disk.FormattingChunks.empty() || !disk.LogCallbacks.empty();
                     });
                 }
                 return busy;

@@ -862,6 +862,7 @@ PEERDIR(
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check
     ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/path_aliasing
@@ -891,6 +892,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/auth
+    yql/essentials/minikql
 )
 
 YQL_LAST_ABI_VERSION()

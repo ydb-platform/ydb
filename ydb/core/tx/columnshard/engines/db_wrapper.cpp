@@ -1,5 +1,6 @@
 #include "db_wrapper.h"
 #include "defs.h"
+#include "index_portions_by_last_key.h"
 
 #include "portions/constructor_portion.h"
 
@@ -92,6 +93,7 @@ void TDbWrapper::WriteColumn(
 void TDbWrapper::WritePortion(const std::vector<TUnifiedBlobId>& blobIds, const NOlap::TPortionInfo& portion) {
     NIceDb::TNiceDb db(Database);
     portion.SaveMetaToDatabase(blobIds, db);
+    TIndexPortionsByLastKey::Upsert(Database, portion);
 }
 
 void TDbWrapper::CommitPortion(const NOlap::TPortionInfo& portion, const TSnapshot& commitSnapshot) {
@@ -116,6 +118,7 @@ void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
     NIceDb::TNiceDb db(Database);
     db.Table<NColumnShard::Schema::IndexPortions>().Key(portion.GetPathId().GetRawValue(), portion.GetPortionId()).Delete();
     db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(portion.GetPathId().GetRawValue(), portion.GetPortionId()).Delete();
+    TIndexPortionsByLastKey::Erase(Database, portion);
 }
 
 void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {

@@ -87,6 +87,7 @@ namespace NFwd {
         const TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
         const THolder<IPageLoadingLogic> PageLoadingLogic;
         bool Grow = false;  /* Should call Forward(...) for preloading */
+        bool RowActive = false;
         TFetch GroupFetch;
         TFetch IndexFetch;
     };
@@ -127,6 +128,15 @@ namespace NFwd {
             return Pending == 0;
         }
 
+        void ReleaseRowHistory() override
+        {
+            for (auto* queue : RowBlobQueues) {
+                static_cast<TBlobs&>(*queue->PageLoadingLogic).ReleaseRowHistory();
+                queue->RowActive = false;
+            }
+            RowBlobQueues.clear();
+        }
+
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             Y_ENSURE(!IsIndexPage(location.Type), "Index page " << location << " is requested as a data page");
@@ -154,8 +164,13 @@ namespace NFwd {
 
             ui32 room = part->GroupsCount + (lob == ELargeObj::Extern ? 1 : 0);
 
+            auto& queue = GetQueue(part, room);
+            if (!std::exchange(queue.RowActive, true)) {
+                RowBlobQueues.push_back(&queue);
+            }
+
             // Blob fwd cache is keyed by page-index; TMeta::Bounds handles it as page-index too with the condition
-            return Get(GetQueue(part, room), TPageOffset::FromPageIndex(static_cast<ui32>(ref)), EPage::Opaque);
+            return Get(queue, TPageOffset::FromPageIndex(static_cast<ui32>(ref)), EPage::Opaque);
         }
 
         void Save(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TVector<NSharedCache::TEvResult::TLoaded> pages)
@@ -200,6 +215,7 @@ namespace NFwd {
             ++Epoch;
 
             Total = Stats();
+            RowBlobQueues.clear();
             PartGroupQueues.clear();
             PartIndexPageLocators.clear();
             GroupQueues.clear();
@@ -417,6 +433,7 @@ namespace NFwd {
         const TVector<ui32> Keys; /* Tags to expand ELargeObj references */
 
         TDeque<TPartGroupLoadingQueue> GroupQueues;
+        TVector<TPartGroupLoadingQueue*> RowBlobQueues;
         THashMap<const TPart*, TVector<TPartGroupLoadingQueue*>> PartGroupQueues;
         // Index pages of different groups may share offsets in different page collections
         THashMap<const TPart*, TMap<TGroupId, TIndexPageLocator>> PartIndexPageLocators;

@@ -2,11 +2,11 @@
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
-#include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/common/stats/query_stats.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_retries.h>
@@ -4329,7 +4329,7 @@ private:
         if (Request.QueryStats) {
             NJson::TJsonValue statsJson;
             Ydb::TableStats::QueryStats queryStats;
-            NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
+            FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
             TStringStream statsStream;
             NJson::WriteJson(&statsStream, &statsJson,

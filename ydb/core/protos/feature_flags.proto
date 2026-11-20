@@ -498,6 +498,7 @@ message TFeatureFlags {
     optional bool EnableColumnShardStats = 395 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
     optional bool EnableRebuildIndex = 397 [default = false];
+    optional bool EnableDefaultFromExpression = 398 [default = false];
     // Disables client access to built-in PostgreSQL compatibility in YDB.
-    optional bool DisablePgCompatibility = 398 [default = true];
+    optional bool DisablePgCompatibility = 399 [default = true];
 }

@@ -77,6 +77,14 @@ private:
         request->Record.SetIssuer(map["issuer"].GetString());
         request->Record.SetAction(map["action"].GetString());
 
+        if (map.contains("drain_data")) {
+            if (!map["drain_data"].IsBoolean()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\ndrain_data must be a boolean", ctx);
+                return;
+            }
+            request->Record.SetDrainData(map["drain_data"].GetBoolean());
+        }
+
         auto &hosts = map["hosts"].GetArray();
         for (auto &host : hosts)
             *request->Record.AddHosts() = host.GetString();

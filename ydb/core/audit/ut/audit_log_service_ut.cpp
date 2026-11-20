@@ -1,10 +1,12 @@
 #include <ydb/core/audit/audit_log_service.h>
 #include <ydb/core/audit/audit_log.h>
+#include <ydb/core/audit/login_op.h>
 
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/interconnect/address/interconnect_address.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -128,6 +130,27 @@ public:
         return LogQueue->Pop();
     }
 
+    template <typename TCallback>
+    TString InvokeAuditLog(TCallback callback) {
+        class TCallbackActor : public NActors::TActorBootstrapped<TCallbackActor> {
+        public:
+            explicit TCallbackActor(TCallback callback)
+                : Callback(std::move(callback))
+            {}
+
+            void Bootstrap() {
+                Callback();
+                this->PassAway();
+            }
+
+        private:
+            TCallback Callback;
+        };
+
+        Runtime.Register(new TCallbackActor(std::move(callback)));
+        return WaitAuditLog();
+    }
+
     NActors::TActorId MakeHeartbeatActor(const TAuditConfig& auditConfig,
             TNetworkInterfacesProvider networkInterfacesProvider) {
         auto actor = CreateHeartbeatActor(auditConfig, std::move(networkInterfacesProvider));
@@ -241,6 +264,35 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             R"("cloud_id":"cloud-abc","folder_id":"folder-abc","resource_id":"resource-abc",)"
             R"("database":"\/my\/db","paths":"\/my\/db\/table1, \/my\/db\/table2","tx_id":"281474976710656"})"
         );
+    }
+}
+
+Y_UNIT_TEST_SUITE(AuditLogLoginTest) {
+    Y_UNIT_TEST(ErrorWithoutDiagnosticsUsesStatus) {
+        TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
+        for (const TString component : {"grpc-login", "kafka-login"}) {
+            const TString line = test.InvokeAuditLog([&] {
+                LogLoginOperationResult(component, "ipv4:192.0.2.1:1234", "/Root", "alice",
+                    Ydb::StatusIds::UNAVAILABLE, {}, {}, {});
+            });
+            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+            UNIT_ASSERT_STRING_CONTAINS(line, "reason=UNAVAILABLE");
+        }
+    }
+
+    Y_UNIT_TEST(ErrorKeepsOriginalDiagnostics) {
+        TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
+        for (const TString component : {"grpc-login", "kafka-login"}) {
+            for (const TString reason : {"", "Authentication failed"}) {
+                const TString line = test.InvokeAuditLog([&] {
+                    LogLoginOperationResult(component, "ipv4:192.0.2.1:1234", "/Root", "alice",
+                        Ydb::StatusIds::UNAUTHORIZED, reason, "Invalid password", {});
+                });
+                UNIT_ASSERT_STRING_CONTAINS(line, reason
+                    ? "reason=Authentication failed: Invalid password"
+                    : "reason=Invalid password");
+            }
+        }
     }
 }
 

@@ -67,10 +67,7 @@ public:
             );
         }
 
-        auto oldSize = Data.size();
-        auto addSize = message.Data.size();
-        Data.resize(oldSize + addSize);
-        memcpy(Data.data() + oldSize, message.Data.data(), addSize);
+        Data.insert(Data.end(), message.Data.begin(), message.Data.end());
         AttachedValuesSorted = false;
 
         return *this;
@@ -88,9 +85,7 @@ public:
             );
         }
 
-        auto oldSize = Data.size();
-        Data.resize(oldSize + subMessage.Data.size());
-        std::memcpy(Data.data() + oldSize, subMessage.Data.data(), subMessage.Data.size());
+        Data.insert(Data.end(), subMessage.Data.begin(), subMessage.Data.end());
 
         AttachedValuesSorted = false;
 

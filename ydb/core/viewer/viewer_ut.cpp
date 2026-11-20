@@ -4116,6 +4116,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
             entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
             entry.Path = SplitPath("/Root");
             entry.DomainInfo = new NSchemeCache::TDomainInfo(rootKey, rootKey);
+            // The mocked groups have BoxId=0 and StoragePoolId=0, so their pool is "static".
+            auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+            description->Description.AddStoragePools()->SetName("static");
+            entry.DomainDescription = description;
             runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
                 new TEvTxProxySchemeCache::TEvNavigateKeySetResult(result.release()), 0, ev->Cookie));
             ev.Reset();
@@ -4134,16 +4138,23 @@ Y_UNIT_TEST_SUITE(Viewer) {
             const auto scoped = get(TStringBuilder()
                 << "?database=/Root&direct=true&filter_group_by=BridgeSyncStatus&filter_group=" << status,
                 token.SerializeAsString());
-            UNIT_ASSERT(scoped["NeedFilter"].GetBoolean());
-            UNIT_ASSERT_VALUES_EQUAL(scoped["FoundGroups"].GetStringRobust(), "7");
+            UNIT_ASSERT(!scoped.Has("NeedFilter"));
+            UNIT_ASSERT_VALUES_EQUAL(scoped["TotalGroups"].GetStringRobust(), "7");
+            std::set<TString> expectedIds;
+            for (size_t i = 0; i < std::size(statuses); ++i) {
+                if (TStringBuf(statuses[i]) == status) {
+                    expectedIds.insert(ToString(i + 1));
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(scoped["FoundGroups"].GetStringRobust(), ToString(expectedIds.size()));
             const auto& rows = scoped["StorageGroups"].GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), expectedIds.size());
             std::set<TString> ids;
             for (const auto& row : rows) {
-                UNIT_ASSERT(!row.Has("BridgeSyncStatus"));
+                UNIT_ASSERT_VALUES_EQUAL(row["BridgeSyncStatus"].GetString(), status);
                 ids.insert(row["GroupId"].GetString());
             }
-            UNIT_ASSERT(ids == std::set<TString>({"1", "2", "3", "4", "5", "6", "7"}));
+            UNIT_ASSERT(ids == expectedIds);
         }
     }
 

@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildLastKeyAckTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         SetupVectorTable(runtime, env, txId);
 
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildLastKeyAckTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         SetupVectorTable(runtime, env, txId);
 

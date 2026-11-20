@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildLastKeyAckTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
             // Skip for now - compact indexes don't support resume

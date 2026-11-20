@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 import logging
+import os
+import pytest
+import yatest.common as yc
+from google.protobuf import text_format
+from ydb.core.protos import config_pb2
 import yaml
 import time
 from hamcrest import assert_that
@@ -26,7 +31,7 @@ class AbstractKiKiMRTest(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = max(9 if cls.erasure == Erasure.MIRROR_3_DC else 1, cls.erasure.min_fail_domains)
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
@@ -103,3 +108,37 @@ class TestGenerateDynamicConfigFromConfigDir(AbstractKiKiMRTest):
             yaml.dump(yaml.safe_load(config), sort_keys=True) ==
             yaml.dump(yaml.safe_load(yaml.dump(node_config)), sort_keys=True)
         )
+
+
+class TestGenerateDynamicConfigBlock82(TestGenerateDynamicConfig):
+    erasure = Erasure.BLOCK_8_2
+
+
+@pytest.mark.parametrize('erasure,domains', [('block-4-2', 8), ('block-8-2', 12)])
+@pytest.mark.parametrize('missing_domain', [False, True])
+def test_generate_static_block_group(tmp_path, erasure, domains, missing_domain):
+    config = config_pb2.TBlobStorageFormatConfig()
+    for node in range(1, domains + 1 - int(missing_domain)):
+        config.Drive.add(RackId=node, NodeId=node, Hostname=f'node-{node}', Type='SSD',
+                         Path='/disk', Guid=node, PDiskId=1, DataCenterId=1, BodyId=node)
+    path = tmp_path / 'bs-format.txt'
+    path.write_text(text_format.MessageToString(config))
+    binary = os.environ.get('YDB_DRIVER_BINARY', 'ydb/apps/ydbd/ydbd')
+    result = yc.execute([yc.binary_path(binary), 'admin', 'bs', 'genconfig', 'static',
+                         '--bs-format-file', str(path), '--erasure', erasure,
+                         '--ring-level-begin', '10', '--ring-level-end', '20',
+                         '--domain-level-begin', '10', '--domain-level-end', '40',
+                         '--faildomains', str(domains), '--vdisks', '1', '--pdisktype', 'SSD'],
+                        check_exit_code=False)
+    if missing_domain:
+        assert result.exit_code > 0, result.std_err
+        return
+    assert result.exit_code == 0, result.std_err
+    output = config_pb2.TBlobStorageConfig()
+    text_format.Parse(result.std_out.decode(), output)
+    assert len(output.ServiceSet.Groups) == 1
+    group = output.ServiceSet.Groups[0]
+    assert group.ErasureSpecies == int(Erasure.from_string(erasure))
+    assert len(group.Rings) == 1
+    assert len(group.Rings[0].FailDomains) == domains
+    assert all(len(domain.VDiskLocations) == 1 for domain in group.Rings[0].FailDomains)

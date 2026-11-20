@@ -76,3 +76,11 @@ class TestBootstrapTablets:
         expected.Tablet.add().CopyFrom(expected_tablet("DBS_CONTROLLER", 0x0100000000002004))
         actual = generate_bootstrap(fixed_tablet_types, {"dbs_controller": {"enabled": True}})
         assert actual == expected
+
+
+def test_block82_erasure_metadata():
+    erasure = types.Erasure.from_string("block-8-2")
+    assert str(erasure) == "block-8-2"
+    assert int(erasure) == 19
+    assert erasure.min_fail_domains == 12
+    assert erasure.min_alive_replicas == 10

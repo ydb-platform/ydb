@@ -192,7 +192,10 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !TopicHolder->IsAsyncReplication
+        && !TopicHolder->IsReplicationConsumer)
+    {
         CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
         return;
     }

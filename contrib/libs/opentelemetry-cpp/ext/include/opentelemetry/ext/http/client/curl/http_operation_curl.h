@@ -294,12 +294,13 @@ public:
   void Abort();
 
   /**
-   * Perform curl message, this function only can be called in the polling thread and it can only
-   * be called when got a CURLMSG_DONE.
+   * Process a completed curl message. This is called directly by synchronous requests or from the
+   * polling thread after receiving CURLMSG_DONE.
    *
    * @param code CURLcode
+   * @return true if the request was re-armed for a retry, false if the operation was cleaned up
    */
-  void PerformCurlMessage(CURLcode code);
+  bool PerformCurlMessage(CURLcode code);
 
   inline CURL *GetCurlEasyHandle() noexcept { return curl_resource_.easy_handle; }
 
@@ -329,6 +330,8 @@ private:
 
   const char *GetCurlErrorMessage(CURLcode code);
 
+  std::chrono::system_clock::time_point CalculateNextRetryTime();
+
   std::atomic<bool> is_aborted_{false};   // Set to 'true' when async callback is aborted
   std::atomic<bool> is_finished_{false};  // Set to 'true' when async callback is finished.
   std::atomic<bool> is_cleaned_{false};   // Set to 'true' when async callback is cleaned.
@@ -338,7 +341,8 @@ private:
 
   char curl_error_message_[CURL_ERROR_SIZE]{};
   HttpCurlEasyResource curl_resource_;
-  CURLcode last_curl_result_{CURLE_OK};  // Curl result OR HTTP status code if successful
+  CURLcode last_curl_result_{CURLE_OK};     // Curl result OR HTTP status code if successful
+  CURLcode header_setup_result_{CURLE_OK};  // Construction-time header validation/allocation result
 
   opentelemetry::ext::http::client::EventHandler *event_handle_{nullptr};
 
@@ -361,7 +365,7 @@ private:
   const RetryPolicy retry_policy_;
   decltype(RetryPolicy::max_attempts) retry_attempts_;
   std::chrono::system_clock::time_point last_attempt_time_;
-  std::chrono::system_clock::time_point retry_after_time_point_{};
+  std::chrono::system_clock::time_point next_retry_time_point_{};
 
   // Processed response headers and body
   // See CURLINFO_RESPONSE_CODE, type is long

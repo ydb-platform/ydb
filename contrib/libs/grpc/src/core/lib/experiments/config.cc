@@ -26,7 +26,7 @@
 #include <utility>
 
 #include "y_absl/functional/any_invocable.h"
-#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_join.h"
 #include "y_absl/strings/str_split.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/strings/strip.h"
@@ -50,9 +50,16 @@ struct ForcedExperiment {
   bool forced = false;
   bool value;
 };
-ForcedExperiment g_forced_experiments[kNumExperiments];
 
-std::atomic<bool> g_loaded(false);
+ForcedExperiment* ForcedExperiments() {
+  static NoDestruct<ForcedExperiment> forced_experiments[kNumExperiments];
+  return &**forced_experiments;
+}
+
+std::atomic<bool>* Loaded() {
+  static NoDestruct<std::atomic<bool>> loaded(false);
+  return &*loaded;
+}
 
 y_absl::AnyInvocable<bool(struct ExperimentMetadata)>* g_check_constraints_cb =
     nullptr;
@@ -95,12 +102,11 @@ class TestExperiments {
 
 TestExperiments* g_test_experiments = nullptr;
 
-GPR_ATTRIBUTE_NOINLINE Experiments LoadExperimentsFromConfigVariable() {
-  g_loaded.store(true, std::memory_order_relaxed);
+GPR_ATTRIBUTE_NOINLINE Experiments LoadExperimentsFromConfigVariableInner() {
   // Set defaults from metadata.
   Experiments experiments;
   for (size_t i = 0; i < kNumExperiments; i++) {
-    if (!g_forced_experiments[i].forced) {
+    if (!ForcedExperiments()[i].forced) {
       if (g_check_constraints_cb != nullptr) {
         experiments.enabled[i] =
             (*g_check_constraints_cb)(g_experiment_metadata[i]);
@@ -108,7 +114,7 @@ GPR_ATTRIBUTE_NOINLINE Experiments LoadExperimentsFromConfigVariable() {
         experiments.enabled[i] = g_experiment_metadata[i].default_value;
       }
     } else {
-      experiments.enabled[i] = g_forced_experiments[i].value;
+      experiments.enabled[i] = ForcedExperiments()[i].value;
     }
   }
   // For each comma-separated experiment in the global config:
@@ -152,6 +158,11 @@ GPR_ATTRIBUTE_NOINLINE Experiments LoadExperimentsFromConfigVariable() {
   return experiments;
 }
 
+Experiments LoadExperimentsFromConfigVariable() {
+  Loaded()->store(true, std::memory_order_relaxed);
+  return LoadExperimentsFromConfigVariableInner();
+}
+
 Experiments& ExperimentsSingleton() {
   // One time initialization:
   static NoDestruct<Experiments> experiments{
@@ -175,59 +186,74 @@ bool IsExperimentEnabled(size_t experiment_id) {
   return ExperimentsSingleton().enabled[experiment_id];
 }
 
+bool IsExperimentEnabledInConfiguration(size_t experiment_id) {
+  return LoadExperimentsFromConfigVariableInner().enabled[experiment_id];
+}
+
 bool IsTestExperimentEnabled(size_t experiment_id) {
   return (*g_test_experiments)[experiment_id];
 }
 
 void PrintExperimentsList() {
-  size_t max_experiment_length = 0;
-  // Populate visitation order into a std::map so that iteration results in a
-  // lexical ordering of experiment names.
-  // The lexical ordering makes it nice and easy to find the experiment you're
-  // looking for in the output spam that we generate.
-  std::map<y_absl::string_view, size_t> visitation_order;
+  std::map<TString, TString> experiment_status;
+  std::set<TString> defaulted_on_experiments;
   for (size_t i = 0; i < kNumExperiments; i++) {
-    max_experiment_length =
-        std::max(max_experiment_length, strlen(g_experiment_metadata[i].name));
-    visitation_order[g_experiment_metadata[i].name] = i;
+    const char* name = g_experiment_metadata[i].name;
+    const bool enabled = IsExperimentEnabled(i);
+    const bool default_enabled = g_experiment_metadata[i].default_value;
+    const bool forced = ForcedExperiments()[i].forced;
+    if (!default_enabled && !enabled) continue;
+    if (default_enabled && enabled) {
+      defaulted_on_experiments.insert(name);
+      continue;
+    }
+    if (enabled) {
+      if (g_check_constraints_cb != nullptr &&
+          (*g_check_constraints_cb)(g_experiment_metadata[i])) {
+        experiment_status[name] = "on:constraints";
+        continue;
+      }
+      if (forced && ForcedExperiments()[i].value) {
+        experiment_status[name] = "on:forced";
+        continue;
+      }
+      experiment_status[name] = "on";
+    } else {
+      if (forced && !ForcedExperiments()[i].value) {
+        experiment_status[name] = "off:forced";
+        continue;
+      }
+      experiment_status[name] = "off";
+    }
   }
-  for (auto name_index : visitation_order) {
-    const size_t i = name_index.second;
-    gpr_log(
-        GPR_DEBUG, "%s",
-        y_absl::StrCat(
-            "gRPC EXPERIMENT ", g_experiment_metadata[i].name,
-            TString(max_experiment_length -
-                            strlen(g_experiment_metadata[i].name) + 1,
-                        ' '),
-            IsExperimentEnabled(i) ? "ON " : "OFF",
-            " (default:", g_experiment_metadata[i].default_value ? "ON" : "OFF",
-            (g_check_constraints_cb != nullptr
-                 ? y_absl::StrCat(
-                       " + ", g_experiment_metadata[i].additional_constaints,
-                       " => ",
-                       (*g_check_constraints_cb)(g_experiment_metadata[i])
-                           ? "ON "
-                           : "OFF")
-                 : TString()),
-            g_forced_experiments[i].forced
-                ? y_absl::StrCat(" force:",
-                               g_forced_experiments[i].value ? "ON" : "OFF")
-                : TString(),
-            ")")
-            .c_str());
+  if (experiment_status.empty()) {
+    if (!defaulted_on_experiments.empty()) {
+      gpr_log(GPR_INFO, "gRPC experiments enabled: %s",
+              y_absl::StrJoin(defaulted_on_experiments, ", ").c_str());
+    }
+  } else {
+    if (defaulted_on_experiments.empty()) {
+      gpr_log(GPR_INFO, "gRPC experiments: %s",
+              y_absl::StrJoin(experiment_status, ", ", y_absl::PairFormatter(":"))
+                  .c_str());
+    } else {
+      gpr_log(GPR_INFO, "gRPC experiments: %s; default-enabled: %s",
+              y_absl::StrJoin(experiment_status, ", ", y_absl::PairFormatter(":"))
+                  .c_str(),
+              y_absl::StrJoin(defaulted_on_experiments, ", ").c_str());
+    }
   }
 }
 
 void ForceEnableExperiment(y_absl::string_view experiment, bool enable) {
-  GPR_ASSERT(g_loaded.load(std::memory_order_relaxed) == false);
+  GPR_ASSERT(Loaded()->load(std::memory_order_relaxed) == false);
   for (size_t i = 0; i < kNumExperiments; i++) {
     if (g_experiment_metadata[i].name != experiment) continue;
-    if (g_forced_experiments[i].forced) {
-      GPR_ASSERT(g_forced_experiments[i].value == enable);
+    if (ForcedExperiments()[i].forced) {
+      GPR_ASSERT(ForcedExperiments()[i].value == enable);
     } else {
-      g_forced_experiments[i].forced = true;
-      g_forced_experiments[i].value = enable;
+      ForcedExperiments()[i].forced = true;
+      ForcedExperiments()[i].value = enable;
     }
     return;
   }

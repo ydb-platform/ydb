@@ -41,11 +41,10 @@
    g_thread_pool_fork_manager->RegisterForkable(
 --- contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc	(index)
 +++ contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc	(working tree)
-@@ -117,6 +117,14 @@
- // Maximum time the lifeguard thread should sleep between checking for new work.
- constexpr grpc_core::Duration kLifeguardMaxSleepBetweenChecks{
-     grpc_core::Duration::Seconds(1)};
-+
+@@ -166,6 +166,14 @@
+   grpc_core::Thread::Kill(gpr_thd_currentid());
+ }
+ 
 +size_t EffectiveThreadsLimit() {
 +  // The posix EventEngine TimerManager loop permanently occupies one pool
 +  // thread; do not count it against the configured limit, otherwise small
@@ -53,6 +52,7 @@
 +  constexpr size_t kTimerManagerThreads = 1;
 +  return ThreadPool::GetThreadsLimit() + kTimerManagerThreads;
 +}
++
  }  // namespace
  
  thread_local WorkQueue* g_local_queue = nullptr;

@@ -38,7 +38,7 @@ namespace NKikimr::NFulltext {
 
         struct TDeltaItem {
             ui64 DocId;
-            ui32 Freq;
+            i64 Freq;
         };
 
         struct TGeneration {
@@ -55,7 +55,7 @@ namespace NKikimr::NFulltext {
             return TVector<ui8>(writer.GetBuf().begin(), writer.GetBuf().end());
         }
 
-        TVector<TDeltaItem> Merge(const TVector<TGeneration>& generations, bool withFreq = true) {
+        TVector<TDeltaItem> MergeImpl(const TVector<TGeneration>& generations, bool withFreq, bool positiveOnly) {
             TVector<TVector<ui8>> encoded;
             encoded.reserve(generations.size());
 
@@ -69,11 +69,28 @@ namespace NKikimr::NFulltext {
 
             TVector<TDeltaItem> result;
             ui64 docId = 0;
-            ui32 freq = 0;
-            while (reader.Read(docId, freq)) {
-                result.push_back({docId, freq});
+            if (positiveOnly) {
+                ui32 freq = 0;
+                while (reader.ReadPositive(docId, freq)) {
+                    result.push_back({docId, freq});
+                }
+            } else {
+                i64 freq = 0;
+                while (reader.Read(docId, freq)) {
+                    result.push_back({docId, freq});
+                }
             }
             return result;
+        }
+
+        // Signed merge: negatives are nets canceled by deletes, not postings.
+        TVector<TDeltaItem> Merge(const TVector<TGeneration>& generations, bool withFreq = true) {
+            return MergeImpl(generations, withFreq, false);
+        }
+
+        // The path used by compaction and KQP: only positive frequencies become postings.
+        TVector<TDeltaItem> MergePositive(const TVector<TGeneration>& generations, bool withFreq = true) {
+            return MergeImpl(generations, withFreq, true);
         }
 
         TVector<TDeltaItem> RoundTrip(const TVector<TDeltaItem>& items, bool withFreq, bool sign = false) {
@@ -170,7 +187,7 @@ namespace NKikimr::NFulltext {
             rdr.Add(false, wr2.GetBuf());
             rdr.Start();
             ui64 docId;
-            ui32 freq;
+            i64 freq;
             for (ui64 i = 1; i <= 100; i++) {
                 if (i >= 5 && i <= 25 && !((i - 5) % 2)) {
                     continue;
@@ -295,7 +312,7 @@ namespace NKikimr::NFulltext {
 
             TVector<TDeltaItem> actual;
             ui64 docId = 0;
-            ui32 freq = 0;
+            i64 freq = 0;
             while (reader.Read(docId, freq)) {
                 actual.push_back({docId, freq});
             }
@@ -326,8 +343,8 @@ namespace NKikimr::NFulltext {
                     // Mix a dense head with a sparse tail. Repeated ids occur across generations, while
                     // every individual segment remains strictly sorted as required by TDeltaWriter.
                     const ui64 docId = (nextRandom() & 1)
-                                           ? nextRandom() % 128
-                                           : (nextRandom() % 128) * (1ULL << (nextRandom() % 40));
+                        ? nextRandom() % 128
+                        : (nextRandom() % 128) * (1ULL << (nextRandom() % 40));
                     uniqueItems[docId] = 1 + nextRandom() % 31;
                 }
                 for (const auto& [docId, freq] : uniqueItems) {
@@ -339,21 +356,31 @@ namespace NKikimr::NFulltext {
 
             TVector<TDeltaItem> expected;
             for (const auto& [docId, freq] : reference) {
-                if (freq > 0) {
-                    expected.push_back({docId, static_cast<ui32>(freq)});
+                if (freq != 0) {
+                    expected.push_back({docId, freq});
                 }
             }
             const auto compacted = Merge(generations);
             AssertDeltaItemsEqual(compacted, expected);
 
+            // Compaction writes only positive frequencies, so the canonical segment drops the
+            // negative nets that the signed merge reports.
+            TVector<TDeltaItem> canonical;
+            for (const auto& item : compacted) {
+                if (item.Freq > 0) {
+                    canonical.push_back(item);
+                }
+            }
+            AssertDeltaItemsEqual(MergePositive(generations), canonical);
+
             // Compacting the canonical single add segment again is byte-for-byte and logically idempotent.
-            const auto compactedAgain = Merge({TGeneration{.Added = true, .Items = compacted}});
-            AssertDeltaItemsEqual(compactedAgain, compacted);
-            UNIT_ASSERT(Encode(compactedAgain) == Encode(compacted));
+            const auto compactedAgain = Merge({TGeneration{.Added = true, .Items = canonical}});
+            AssertDeltaItemsEqual(compactedAgain, canonical);
+            UNIT_ASSERT(Encode(compactedAgain) == Encode(canonical));
         }
 
         Y_UNIT_TEST(MultiDeltaReaderAddDeleteAddFrequencyExtremes) {
-            const ui32 maxFreq = Max<ui32>();
+            const ui32 maxFreq = Max<i32>();
             const TVector<TGeneration> generations = {
                 {true, {{0, maxFreq}, {1, 7}, {64, 100}, {Max<ui64>(), 3}}},
                 {false, {{0, maxFreq}, {1, 7}, {64, 40}, {Max<ui64>(), 3}}},
@@ -439,12 +466,16 @@ namespace NKikimr::NFulltext {
         Y_UNIT_TEST(MultiDeltaReaderRejectsFrequencyOverflow) {
             const ui32 maxFreq = Max<ui32>();
             UNIT_ASSERT_EXCEPTION_CONTAINS(
-                Merge({
+                MergePositive({
                     {true, {{1, maxFreq}}},
                     {true, {{1, 1}}},
                 }),
                 yexception,
                 "exceeds ui32");
+            // The signed merge keeps the i64 sum; the ui32 boundary is enforced on conversion
+            // to a posting frequency.
+            AssertDeltaItemsEqual(Merge({{true, {{1, maxFreq}}}, {true, {{1, 1}}}}),
+                {{1, static_cast<i64>(maxFreq) + 1}});
         }
 
         Y_UNIT_TEST(MultiDeltaReader2) {
@@ -458,7 +489,7 @@ namespace NKikimr::NFulltext {
             rdr.Add(true, TConstArrayRef<ui8>((const ui8*)"dd\x01\x02", 4));
             rdr.Start();
             ui64 docId;
-            ui32 freq;
+            i64 freq;
             auto check = [&](ui64 expectedDoc) {
                 UNIT_ASSERT(rdr.Read(docId, freq));
                 Cerr << "Read: " << docId << " == " << expectedDoc << "\n";
@@ -496,7 +527,7 @@ namespace NKikimr::NFulltext {
             rdr.Add(false, wr2.GetBuf());
             rdr.Start();
             ui64 docId;
-            ui32 freq;
+            i64 freq;
             for (i64 i = -50; i <= 50; i++) {
                 if (i >= -25 && i <= 25 && !((i + 25) % 2)) {
                     continue;

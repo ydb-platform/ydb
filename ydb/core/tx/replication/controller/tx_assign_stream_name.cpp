@@ -6,8 +6,6 @@
 
 namespace NKikimr::NReplication::NController {
 
-extern const TString ReplicationConsumerName;
-
 class TController::TTxAssignStreamName: public TTxBase {
     TEvPrivate::TEvAssignStreamName::TPtr Ev;
     TReplication::TPtr Replication;
@@ -55,18 +53,7 @@ public:
 
         target->SetStreamName(CreateGuidAsString());
 
-        TString consumerName;
-        if (Replication->GetConfig().HasTransferSpecific()) {
-            auto& target = Replication->GetConfig().GetTransferSpecific().GetTarget();
-            if (target.HasConsumerName()) {
-                consumerName = target.GetConsumerName();
-            } else {
-                consumerName = CreateGuidAsString();
-            }
-        } else {
-            consumerName = ReplicationConsumerName;
-        }
-        target->SetStreamConsumerName(consumerName);
+        target->SetStreamConsumerName(target->BuildStreamConsumerName());
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::SrcStreams>().Key(rid, tid).Update(

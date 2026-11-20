@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/system/types.h>
 
 namespace NKikimr::NDDisk {
@@ -27,6 +28,9 @@ struct TDDiskConfig {
     // TIntegrityManager::DefaultChecksumCacheBytes by default. Zero disables caching;
     // state needed by in-flight operations is retained until they complete.
     ui64 IntegrityChecksumCacheBytes = 64ull << 20;
+
+    // Whiteboard health reporting interval for DDisk and PersistentBuffer.
+    TDuration HealthReportPeriod = TDuration::Seconds(5);
 };
 
 } // NKikimr::NDDisk

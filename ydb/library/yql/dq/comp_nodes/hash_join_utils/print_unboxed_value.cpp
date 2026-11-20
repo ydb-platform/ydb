@@ -20,6 +20,13 @@ struct TPrint: IPrint {
 };
 
 template<>
+struct TPrint<void>: IPrint {
+  TString Stringify(NYql::NUdf::TUnboxedValuePod) override {
+    return "null";
+  }
+};
+
+template<>
 struct TPrint<char*>: IPrint {
     TString Stringify(NYql::NUdf::TUnboxedValuePod value) override {
       return TString{value.AsStringRef()}.Quote() + ":string";
@@ -102,6 +109,9 @@ IPrint::TPtr MakePrinter(const TType *type) {
         case TTypeBase::EKind::Optional: {
           return new OptionalPrint(type);
         }
+        case TTypeBase::EKind::Null: {
+          return new TPrint<void>;
+        }
         case TTypeBase::EKind::Tuple: {
           return new TTuplePrint(type); 
         }
@@ -116,7 +126,6 @@ IPrint::TPtr MakePrinter(const TType *type) {
         case TTypeBase::EKind::Any:
         case TTypeBase::EKind::Resource:
         case TTypeBase::EKind::Flow:
-        case TTypeBase::EKind::Null:
         case TTypeBase::EKind::ReservedKind:
         case TTypeBase::EKind::EmptyList:
         case TTypeBase::EKind::EmptyDict:

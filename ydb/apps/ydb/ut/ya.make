@@ -25,6 +25,7 @@ SRCS(
     supported_codecs.cpp
     supported_codecs_fixture.cpp
     workload-topic.cpp
+    workload-scheme.cpp
     workload-transfer-topic-to-table.cpp
     ydb-dump.cpp
 )

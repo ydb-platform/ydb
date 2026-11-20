@@ -548,6 +548,9 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
+
+    // Disable monitoring metrics exported by PQRB, keeping internal topic statistics.
+    optional bool MetricsDisabled = 52 [default = false];
 }
 
 message THeartbeat {

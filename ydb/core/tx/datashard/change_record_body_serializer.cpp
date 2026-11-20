@@ -76,14 +76,14 @@ void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
     out.SetData(TSerializedCellVec::Serialize(cells));
 }
 
-void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
+void TChangeRecordBodySerializer::SerializeUpdates(TDataChange& out, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     SerializeCells(*out.MutableKey(), key, keyTags);
     SerializeCells(out, rop, updates, [](TTag) { return true; });
 }
 
-void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
+void TChangeRecordBodySerializer::SerializeUpdates(TDataChange& out, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         TArrayRef<const TUpdateOp> updates, TFunctionRef<bool(TTag)> includeColumn)
 {
@@ -91,11 +91,11 @@ void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
     SerializeCells(out, rop, updates, includeColumn);
 }
 
-void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
+void TChangeRecordBodySerializer::SerializeImages(TDataChange& out, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags)
 {
-    Serialize(out, rop, key, keyTags, {});
+    SerializeUpdates(out, rop, key, keyTags, {});
 
     if (oldState) {
         SerializeCells(*out.MutableOldImage(), *oldState, valueTags);

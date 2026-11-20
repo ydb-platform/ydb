@@ -179,18 +179,11 @@ public:
         , PoolGroup(counters->GetSubgroup("storagePool", storagePoolName))
     {
         for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
-            TString handleClassName = GetHandleClassName((EHandleClass)handleClass);
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> hcGroup = PoolGroup->GetSubgroup("handleClass", handleClassName);
-            if (IsReducedHandleClass((EHandleClass)handleClass)) {
-                for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxReducedSizeClassBucketIdx; ++sizeClassIdx) {
-                    TString sizeClassName = ReducedSizeClassName(sizeClassIdx);
-                    RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
-                }
-            } else {
-                for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxSizeClassBucketIdx; ++sizeClassIdx) {
-                    TString sizeClassName = SizeClassName(sizeClassIdx);
-                    RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
-                }
+            const auto hc = static_cast<EHandleClass>(handleClass);
+            const auto hcGroup = PoolGroup->GetSubgroup("handleClass", GetHandleClassName(hc));
+            const ui32 maxIdx = IsReducedHandleClass(hc) ? MaxReducedSizeClassBucketIdx : MaxSizeClassBucketIdx;
+            for (ui32 idx = 0; idx <= maxIdx; ++idx) {
+                RequestMon[handleClass][idx].Init(hcGroup->GetSubgroup("sizeClass", GetSizeClassName(hc, idx)), type);
             }
         }
 

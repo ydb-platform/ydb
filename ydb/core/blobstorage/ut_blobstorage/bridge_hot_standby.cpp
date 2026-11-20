@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         const auto piles = GetPileGroups(env, groupId);
         std::unique_ptr<IEventHandle> standbyWrite;
         const auto writtenBytes = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "PutTabletLog")
-            ->GetSubgroup("sizeClass", "256")->GetCounter("requestBytes", true);
+            ->GetSubgroup("sizeClass", "256")->GetCounter("bridgeRequestBytes", true);
         const auto bytesBefore = writtenBytes->Val();
         TMessageRelevanceOwner relevance = std::make_shared<TMessageRelevanceTracker>();
         ui32 standbyReads = 0;

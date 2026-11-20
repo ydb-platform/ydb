@@ -14,9 +14,20 @@
 // helpers shared by bridge tests
 namespace NBridgeTest {
 
-    inline ::NMonitoring::TDynamicCounterPtr GetBridgeRequestCounters(TEnvironmentSetup& env, ui32 nodeId) {
+    inline ::NMonitoring::TDynamicCounterPtr GetBridgeRequestCounters(TEnvironmentSetup& env, ui32 nodeId,
+            const TString& poolName) {
         return GetServiceCounters(env.Runtime->GetNode(nodeId)->AppData->Counters, "dsproxynode")
-            ->GetSubgroup("subsystem", "bridge_request")->GetSubgroup("storagePool", env.StoragePoolName);
+            ->GetSubgroup("subsystem", "bridge_request")->GetSubgroup("storagePool", poolName);
+    }
+
+    inline ::NMonitoring::TDynamicCounterPtr GetBridgeRequestCounters(TEnvironmentSetup& env, ui32 nodeId) {
+        return GetBridgeRequestCounters(env, nodeId, env.StoragePoolName);
+    }
+
+    // TDataChecker writes small blobs with the TabletLog handle class.
+    inline auto GetCompletedTestWrites(TEnvironmentSetup& env, ui32 nodeId, const TString& poolName) {
+        return GetBridgeRequestCounters(env, nodeId, poolName)->GetSubgroup("handleClass", "PutTabletLog")
+            ->GetSubgroup("sizeClass", "256")->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
     }
 
     // nodes of natively bridged cluster: 8 nodes per pile

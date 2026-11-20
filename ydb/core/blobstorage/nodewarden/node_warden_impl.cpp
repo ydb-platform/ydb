@@ -439,7 +439,7 @@ void TNodeWarden::PassAway() {
     WorkingSyncers.clear();
     UpdateSyncerCounters();
     if (BridgeSyncNodeCounters) {
-        BridgeSyncNodeCounters->GetCounter("SyncRateLimitBytesPerSecond")->Set(0);
+        BridgeSyncNodeCounters->RateLimit->Set(0);
     }
     StopInvalidGroupProxy();
     TerminateBlobDepotS3Routers();
@@ -1138,12 +1138,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         ApplyControllerServiceSet(record.GetServiceSet(), comprehensive);
     }
 
+    bool syncersChanged = false;
     for (const auto& item : record.GetGroupMetadata()) {
         const ui32 groupId = item.GetGroupId();
         const ui32 generation = item.GetCurrentGeneration();
         if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.MaxKnownGeneration < generation) {
-            ApplyGroupInfo(groupId, generation, nullptr, false, false);
+            syncersChanged |= ApplyGroupInfo(groupId, generation, nullptr, false, false);
         }
+    }
+    if (syncersChanged) {
+        UpdateSyncerCounters();
     }
 
     if (record.HasShredRequest()) {

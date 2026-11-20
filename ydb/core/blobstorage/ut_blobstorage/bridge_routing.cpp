@@ -197,7 +197,10 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
             const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
         }
-        UNIT_ASSERT_VALUES_EQUAL(put->GetCounter("requestBytes", true)->Val(), 2 * data.size());
+        UNIT_ASSERT_VALUES_EQUAL(put->GetCounter("bridgeRequestBytes", true)->Val(), 2 * data.size());
+        // The existing physical DSProxy selectors aggregate across subsystem labels.
+        UNIT_ASSERT(!put->FindCounter("requestBytes"));
+        UNIT_ASSERT(!put->FindHistogram("responseTimeMs"));
         UNIT_ASSERT_VALUES_EQUAL(put->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 2);
 
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[2]);
@@ -208,8 +211,8 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.size(), 13);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[1].Status, NKikimrProto::NODATA);
-        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("requestBytes", true)->Val(), 29);
-        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("responseBytes", true)->Val(), 13);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), 29);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeResponseBytes", true)->Val(), 13);
         UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
     }
 
@@ -232,9 +235,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         const auto pool = GetBridgeRequestCounters(test.Env, 1);
         UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingRestarts", true)->Val(), 1);
         const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
-        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("requestBytes", true)->Val(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), 10);
         UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val(), 1);
-        const auto hist = get->FindHistogram("responseTimeMs");
+        const auto hist = get->FindHistogram("bridgeResponseTimeMs");
         UNIT_ASSERT(hist);
         const auto snapshot = hist->Snapshot();
         ui64 samples = 0;
@@ -253,12 +256,16 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         test.RaceWithNewerPileGeneration = true;
         auto request = std::make_unique<TEvBlobStorage::TEvGet>(TLogoBlobID(100500, 1, 1, 0, 10, 0),
             0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+        const auto restarts = GetBridgeRequestCounters(test.Env, 1)->FindCounter("RoutingRestarts");
+        UNIT_ASSERT(restarts);
+        const auto before = restarts->Val();
         request->RestartCounter = 99; // the next RACE exhausts this request's retry budget
         test.Env.Runtime->Send(new IEventHandle(test.Proxy, test.Edge, request.release(), 0, 1), 1);
         WaitUntil(test.Env, [&] { return test.Results.contains(1); }, "restart limit error",
             TDuration::MilliSeconds(10), 100);
         UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
         UNIT_ASSERT_STRING_CONTAINS(test.Results.at(1)->ErrorReason, "too many restarts");
+        UNIT_ASSERT_VALUES_EQUAL(restarts->Val(), before);
         test.RaceWithNewerPileGeneration = false;
         test.SendGet(2);
         test.CheckSuccess(2);
@@ -281,7 +288,7 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingTimeouts", true)->Val(), 1);
         const auto get = pool->GetSubgroup("handleClass", "GetFast")->GetSubgroup("sizeClass", "256");
         UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "ERROR")->GetCounter("completedRequests", true)->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("requestBytes", true)->Val(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), 20);
     }
 
     Y_UNIT_TEST(QueuedDeadlineOvertakesEarlierRequest) {

@@ -21,6 +21,14 @@ namespace {
     return GetServiceCounters(env.Runtime->GetNode(nodeId)->AppData->Counters, "bridge|nodewarden");
 }
 
+i64 ReadWorkerGauge(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& mode, const TString& name) {
+    const auto group = counters->FindSubgroup("mode", mode);
+    UNIT_ASSERT_C(group, mode);
+    const auto gauge = group->FindCounter(name);
+    UNIT_ASSERT_C(gauge, mode << "/" << name);
+    return gauge->Val();
+}
+
 enum class ECompletionRace {
     NewGeneration,
     ReplacedActor,
@@ -118,20 +126,21 @@ void TestLateSyncerCompletion(ECompletionRace race) {
         }
         return true;
     };
-    auto assign = [&](ui32 nextGeneration, bool withConfig, bool enabled = true, bool withReconciler = false) {
+    enum class EWorkers { None, Sync, SyncAndReconcile };
+    auto assign = [&](ui32 nextGeneration, bool withConfig, EWorkers workers = EWorkers::Sync) {
         auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         auto& record = update->Record;
         if (withConfig) {
             record.MutableServiceSet()->CopyFrom(serviceSet);
         }
         record.SetUpdateSyncers(true);
-        if (enabled) {
+        if (workers != EWorkers::None) {
             auto *syncer = record.AddSyncers();
             syncer->SetBridgeProxyGroupId(groupId);
             syncer->SetBridgeProxyGroupGeneration(nextGeneration);
             syncer->SetSourceGroupId(sourceGroupId);
             syncer->SetTargetGroupId(targetGroupId);
-            if (withReconciler) {
+            if (workers == EWorkers::SyncAndReconcile) {
                 auto *reconciler = record.AddSyncers();
                 reconciler->CopyFrom(*syncer);
                 reconciler->SetTargetGroupId(piles[2].GetGroupId());
@@ -164,15 +173,12 @@ void TestLateSyncerCompletion(ECompletionRace race) {
 
     const auto counters = GetSyncNodeCounters(env, 1);
     auto checkWorkers = [&](ui32 running, ui32 waiting, ui32 reconciling = 0) {
-        const auto sync = counters->GetSubgroup("mode", "sync");
-        const auto reconcile = counters->GetSubgroup("mode", "reconcile");
-        UNIT_ASSERT_VALUES_EQUAL(sync->GetCounter("RunningSyncers")->Val(), running);
-        UNIT_ASSERT_VALUES_EQUAL(sync->GetCounter("SyncersWaitingForConfig")->Val(), waiting);
-        UNIT_ASSERT_VALUES_EQUAL(sync->GetCounter("SyncNodeActive")->Val(), running != 0);
-        UNIT_ASSERT_VALUES_EQUAL(reconcile->GetCounter("RunningSyncers")->Val(), reconciling);
-        UNIT_ASSERT_VALUES_EQUAL(reconcile->GetCounter("SyncNodeActive")->Val(), reconciling != 0);
-        UNIT_ASSERT_VALUES_EQUAL(counters->GetSubgroup("mode", "any")->GetCounter("SyncNodeActive")->Val(),
-            running || reconciling);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "sync", "RunningSyncers"), running);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "sync", "SyncersWaitingForConfig"), waiting);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "sync", "SyncNodeActive"), running != 0);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "reconcile", "RunningSyncers"), reconciling);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "reconcile", "SyncNodeActive"), reconciling != 0);
+        UNIT_ASSERT_VALUES_EQUAL(ReadWorkerGauge(counters, "any", "SyncNodeActive"), running || reconciling);
     };
     // A SYNCED target completes immediately; delay its notification to NodeWarden.
     assign(generation, true);
@@ -215,7 +221,7 @@ void TestLateSyncerCompletion(ECompletionRace race) {
         assign(nextGeneration, false);
     } else {
         // Reassignment at the same generation still creates a different actor incarnation.
-        assign(generation, false, false);
+        assign(generation, false, EWorkers::None);
         assign(generation, false);
     }
     deliver(std::move(oldCompletion));
@@ -238,9 +244,9 @@ void TestLateSyncerCompletion(ECompletionRace race) {
     UNIT_ASSERT_VALUES_EQUAL(finished.GetBridgeProxyGroupGeneration(), nextGeneration);
     checkWorkers(0, 0);
     if (race == ECompletionRace::ReplacedActor) {
-        assign(nextGeneration, false, true, true);
+        assign(nextGeneration, false, EWorkers::SyncAndReconcile);
         checkWorkers(1, 0, 1);
-        assign(nextGeneration, false, false);
+        assign(nextGeneration, false, EWorkers::None);
         checkWorkers(0, 0);
     }
     runtime->FilterFunction = nullptr;
@@ -884,7 +890,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             if (numSyncers) {
                 const auto limit = GetSyncNodeCounters(env, nodeId)->FindCounter("SyncRateLimitBytesPerSecond");
                 UNIT_ASSERT(limit);
-                UNIT_ASSERT_VALUES_EQUAL(limit->Val(), total / 2 / test.GetNumHostingNodes());
+                UNIT_ASSERT_VALUES_EQUAL(limit->Val(), test.Rates.at(nodeId));
             }
         }
 
@@ -1226,8 +1232,8 @@ Y_UNIT_TEST_SUITE(BridgeSyncerPlacement) {
         size_t participating = 0;
         for (ui32 nodeId : test.Env.Runtime->GetNodes()) {
             const auto counters = GetSyncNodeCounters(test.Env, nodeId);
-            const auto active = counters->GetSubgroup("mode", "any")->GetCounter("SyncNodeActive")->Val();
-            const auto running = counters->GetSubgroup("mode", "sync")->GetCounter("RunningSyncers")->Val();
+            const auto active = ReadWorkerGauge(counters, "any", "SyncNodeActive");
+            const auto running = ReadWorkerGauge(counters, "sync", "RunningSyncers");
             UNIT_ASSERT_VALUES_EQUAL_C(running, test.NumNodeSyncers[nodeId], nodeId);
             UNIT_ASSERT_VALUES_EQUAL_C(active, running != 0, nodeId);
             participating += active;

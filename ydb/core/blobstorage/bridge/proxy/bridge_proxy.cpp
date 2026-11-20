@@ -29,6 +29,7 @@ namespace NKikimr {
         // the group is an ordinary one now (the bridged cluster has been rolled back), its inline pile serves it as such
         // until node warden builds a plain DS proxy at the next start: requests go to the inner proxy as they are
         bool Passthrough = false;
+        std::shared_ptr<const TBridgeProxyPoolCounters> PoolCounters;
         TBridgeProxyCounters RequestCounters;
 
         using TClusterState = NKikimrBridge::TClusterState;
@@ -986,7 +987,7 @@ namespace NKikimr {
         }
 
         void Bootstrap() {
-            RequestCounters.SetPool(Info->GetStoragePoolName());
+            PoolCounters = std::make_shared<TBridgeProxyPoolCounters>(Info->GetStoragePoolName());
             // counters and the budget are shared by every bridge proxy of the node
             auto counters = GetServiceCounters(AppData()->Counters, "dsproxynode")->GetSubgroup("subsystem", "bridge_standby");
             StandbyBytesInFlight = counters->GetCounter("BytesInFlight");
@@ -1167,13 +1168,21 @@ namespace NKikimr {
             }
         }
 
-        // the handle restarting the request with its original sender and cookie, and its restart counter advanced
+        static bool TryRestart(TEvBlobStorage::TEvRequestCommon& request) {
+            if (++request.RestartCounter >= MaxRestarts) {
+                return false;
+            }
+            if (request.BridgeProxyPoolCounters) {
+                ++*request.BridgeProxyPoolCounters->RoutingRestarts;
+            }
+            return true;
+        }
+
+        // Keep the original sender and cookie when the request is routed again.
         std::tuple<std::unique_ptr<IEventHandle>, TEvBlobStorage::TEvRequestCommon*> MakeRestartHandle(TRequest& request) {
             auto& ev = request.OriginalRequest;
             auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
             Y_ABORT_UNLESS(common);
-            ++common->RestartCounter;
-            ++*RequestCounters.RoutingRestarts;
             return {std::make_unique<IEventHandle>(SelfId(), request.Sender, ev.release(), 0, request.Cookie), common};
         }
 
@@ -1201,7 +1210,7 @@ namespace NKikimr {
                 ForgetSubrequests(*request);
                 FinishRequest(*request);
                 auto [handle, common] = MakeRestartHandle(*request);
-                if (common->RestartCounter >= MaxRestarts) {
+                if (!TryRestart(*common)) {
                     ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
                 } else {
                     Redispatch(std::move(handle), request->RoutingBudget);
@@ -1212,11 +1221,11 @@ namespace NKikimr {
         void SendReply(IEventBase& request, TActorId sender, ui64 cookie, std::unique_ptr<IEventBase> response,
                 NKikimrProto::EReplyStatus status, bool routingTimeout = false) {
             auto& common = dynamic_cast<TEvBlobStorage::TEvRequestCommon&>(request);
-            if (common.BridgeProxyStartTime != TMonotonic::Max()) {
+            if (common.BridgeProxyPoolCounters) {
                 const TDuration latency = TActivationContext::Monotonic() - common.BridgeProxyStartTime;
-                RequestCounters.CountReply(request, *response, status, latency);
+                RequestCounters.CountReply(*common.BridgeProxyPoolCounters, request, *response, status, latency);
                 if (routingTimeout) {
-                    ++*RequestCounters.RoutingTimeouts;
+                    ++*common.BridgeProxyPoolCounters->RoutingTimeouts;
                 }
             }
             SetExecutionRelay(*response, std::exchange(common.ExecutionRelay, {}));
@@ -1298,9 +1307,10 @@ namespace NKikimr {
                 std::move(ev.TraceId));
         }
 
-        static void MarkReceived(TEvBlobStorage::TEvRequestCommon& request) {
-            if (!request.ForceGroupGeneration && request.BridgeProxyStartTime == TMonotonic::Max()) {
+        void MarkReceived(TEvBlobStorage::TEvRequestCommon& request) {
+            if (!request.ForceGroupGeneration && !request.IsPatchSubrequest && !request.BridgeProxyPoolCounters) {
                 request.BridgeProxyStartTime = TActivationContext::Monotonic();
+                request.BridgeProxyPoolCounters = PoolCounters;
             }
         }
 
@@ -1912,7 +1922,7 @@ namespace NKikimr {
                     const auto *groupPile = FindPart(pile.BridgePileId);
                     const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
 
-                    if (common->RestartCounter >= MaxRestarts) {
+                    if (!TryRestart(*common)) {
                         ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
                     } else if (Passthrough) {
                         // the group is an ordinary one now (our bridged info is not updated anymore), the inner proxy
@@ -1985,7 +1995,7 @@ namespace NKikimr {
                         STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "request restarted as its restoration source is out of"
                             " data quorum", (RequestId, request->RequestId), (GroupId, GroupId));
                         auto [handle, common] = MakeRestartHandle(*request);
-                        if (common->RestartCounter >= MaxRestarts) {
+                        if (!TryRestart(*common)) {
                             ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
                         } else {
                             redispatch = std::move(handle);
@@ -2061,7 +2071,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(prevInfo);
             Y_ABORT_UNLESS(Info);
             if (prevInfo->GetStoragePoolName() != Info->GetStoragePoolName()) {
-                RequestCounters.SetPool(Info->GetStoragePoolName());
+                PoolCounters = std::make_shared<TBridgeProxyPoolCounters>(Info->GetStoragePoolName());
             }
             if (prevInfo->GroupGeneration < Info->GroupGeneration) {
                 RetryPending(PendingForNextGeneration);
@@ -2144,7 +2154,7 @@ namespace NKikimr {
             }
         }
 
-        static void MarkPendingReceived(IEventHandle& ev) {
+        void MarkPendingReceived(IEventHandle& ev) {
             if (ev.GetTypeRewrite() == TEvBlobStorage::EvBunchOfEvents) {
                 for (const auto& item : ev.Get<TEvBlobStorage::TEvBunchOfEvents>()->Bunch) {
                     MarkPendingReceived(*item);

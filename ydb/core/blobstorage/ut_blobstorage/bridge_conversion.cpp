@@ -590,9 +590,9 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
         // replication sends phantom checks to the physical group with its own generation
         const auto reads = pool->GetSubgroup("handleClass", "GetAsync")->GetSubgroup("sizeClass", "262144")
-            ->GetCounter("requestBytes", true);
+            ->GetCounter("bridgeRequestBytes", true);
         const auto writes = pool->GetSubgroup("handleClass", "PutTabletLog")->GetSubgroup("sizeClass", "256")
-            ->GetCounter("requestBytes", true);
+            ->GetCounter("bridgeRequestBytes", true);
         const auto readBefore = reads->Val();
         const auto writtenBefore = writes->Val();
         {
@@ -620,6 +620,65 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+    Y_UNIT_TEST_TWIN(PatchCountsOnlyTheClientOperation, MovedPatch) {
+        TFeatureFlags flags;
+        flags.SetEnableVPatch(MovedPatch);
+        TEnvironmentSetup env({
+            .NodeCount = 9,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetUnbridgedLocation,
+            .FeatureFlags = flags,
+            .SelfManagementConfig = true,
+            .AutomaticBootstrap = true,
+        });
+        TDataChecker checker(env);
+        ConvertCluster(env, checker, 2);
+        const auto& [sourceGroup, originalId, data] = checker.GetWritten().front();
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        const ui32 targetGroup = groups.front() == sourceGroup ? groups.back() : groups.front();
+
+        // The moved patch reads and writes on the selected VDisk's node. The fallback reads on the client node.
+        auto traffic = [&](const char* handleClass, const char* sizeClass) {
+            std::pair<i64, i64> totals{};
+            for (ui32 nodeId : env.Runtime->GetNodes()) {
+                const auto counters = GetBridgeRequestCounters(env, nodeId)->GetSubgroup("handleClass", handleClass)
+                    ->GetSubgroup("sizeClass", sizeClass);
+                totals.first += counters->GetCounter("bridgeRequestBytes", true)->Val();
+                totals.second += counters->GetSubgroup("status", "OK")->GetCounter("completedRequests", true)->Val();
+            }
+            return totals;
+        };
+        const auto reads = traffic("GetAsync", "262144");
+        const auto writes = traffic("PutUserData", "256");
+        const auto patches = GetBridgeRequestCounters(env, 1)->GetSubgroup("operation", "Patch")
+            ->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+        const auto patchesBefore = patches->Val();
+        bool movedPatchSucceeded = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVMovedPatchResult) {
+                movedPatchSucceeded |= ev->Get<TEvBlobStorage::TEvVMovedPatchResult>()->Record.GetStatus() == NKikimrProto::OK;
+            }
+            return true;
+        };
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TLogoBlobID patchedId(originalId.TabletID(), 2, 1, 0, data.size(), 0);
+        using TDiff = TEvBlobStorage::TEvPatch::TDiff;
+        TArrayHolder<TDiff> diffs(new TDiff[1]);
+        diffs[0].Set(TString("X"), 0);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, targetGroup, new TEvBlobStorage::TEvPatch(sourceGroup, originalId, patchedId,
+                0, std::move(diffs), 1, TInstant::Max()));
+        });
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPatchResult>(edge, false);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(movedPatchSucceeded, MovedPatch);
+        UNIT_ASSERT_VALUES_EQUAL(patches->Val(), patchesBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(traffic("GetAsync", "262144"), reads);
+        UNIT_ASSERT_VALUES_EQUAL(traffic("PutUserData", "256"), writes);
     }
 
     // converted groups still have their VDisks laid out by the erasure of the pool, so it can't be changed

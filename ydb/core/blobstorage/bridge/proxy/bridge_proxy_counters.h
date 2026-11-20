@@ -6,6 +6,20 @@
 
 namespace NKikimr {
 
+    // Shared by requests admitted under this configuration, including ones restarted through another actor.
+    struct TBridgeProxyPoolCounters {
+        ::NMonitoring::TDynamicCounterPtr Pool;
+        ::NMonitoring::TDynamicCounters::TCounterPtr RoutingRestarts;
+        ::NMonitoring::TDynamicCounters::TCounterPtr RoutingTimeouts;
+
+        explicit TBridgeProxyPoolCounters(const TString& name)
+            : Pool(GetServiceCounters(AppData()->Counters, "dsproxynode")->GetSubgroup("subsystem", "bridge_request")
+                ->GetSubgroup("storagePool", name))
+            , RoutingRestarts(Pool->GetCounter("RoutingRestarts", true))
+            , RoutingTimeouts(Pool->GetCounter("RoutingTimeouts", true))
+        {}
+    };
+
     class TBridgeProxyCounters {
         using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
         using EHandleClass = TStoragePoolCounters::EHandleClass;
@@ -30,35 +44,29 @@ namespace NKikimr {
                 if (type == TEvBlobStorage::EvPut || type == TEvBlobStorage::EvGet) {
                     counters.Group = Pool->GetSubgroup("handleClass", TStoragePoolCounters::GetHandleClassName(handleClass))
                         ->GetSubgroup("sizeClass", TStoragePoolCounters::GetSizeClassName(handleClass, sizeClass));
-                    counters.RequestBytes = counters.Group->GetCounter("requestBytes", true);
+                    counters.RequestBytes = counters.Group->GetCounter("bridgeRequestBytes", true);
                     if (type == TEvBlobStorage::EvGet) {
-                        counters.ResponseBytes = counters.Group->GetCounter("responseBytes", true);
+                        counters.ResponseBytes = counters.Group->GetCounter("bridgeResponseBytes", true);
                     }
                 } else {
                     counters.Group = Pool->GetSubgroup("operation", TEvBlobStorage::TEvRequestCommon::GetRequestName(type));
                 }
-                counters.ResponseTime = counters.Group->GetHistogram("responseTimeMs",
+                counters.ResponseTime = counters.Group->GetHistogram("bridgeResponseTimeMs",
                     ::NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(NPDisk::DEVICE_TYPE_UNKNOWN)));
             }
             return counters;
         }
 
     public:
-        TCounterPtr RoutingRestarts;
-        TCounterPtr RoutingTimeouts;
-
-        void SetPool(const TString& name) {
-            Pool = GetServiceCounters(AppData()->Counters, "dsproxynode")->GetSubgroup("subsystem", "bridge_request")
-                ->GetSubgroup("storagePool", name);
-            RoutingRestarts = Pool->GetCounter("RoutingRestarts", true);
-            RoutingTimeouts = Pool->GetCounter("RoutingTimeouts", true);
-            Requests.clear();
-        }
-
-        void CountReply(const IEventBase& request, const IEventBase& response, NKikimrProto::EReplyStatus status,
-                TDuration latency) {
+        void CountReply(const TBridgeProxyPoolCounters& admitted, const IEventBase& request, const IEventBase& response,
+                NKikimrProto::EReplyStatus status, TDuration latency) {
+            if (Pool != admitted.Pool) {
+                Pool = admitted.Pool;
+                Requests.clear();
+            }
             EHandleClass handleClass = TStoragePoolCounters::HcCount;
             ui64 bytes = 0;
+            ui64 responseBytes = 0;
             if (request.Type() == TEvBlobStorage::EvPut) {
                 const auto& put = static_cast<const TEvBlobStorage::TEvPut&>(request);
                 handleClass = HandleClassToHandleClass(put.HandleClass);
@@ -67,6 +75,7 @@ namespace NKikimr {
                 const auto& get = static_cast<const TEvBlobStorage::TEvGet&>(request);
                 handleClass = HandleClassToHandleClass(get.GetHandleClass);
                 bytes = get.CountRequestBytes({get.Queries.Get(), get.QuerySize});
+                responseBytes = static_cast<const TEvBlobStorage::TEvGetResult&>(response).PayloadSizeBytes();
             }
             auto& counters = GetRequestCounters(request.Type(), handleClass, bytes);
             counters.ResponseTime->Collect(latency.MicroSeconds() / 1000.0);
@@ -74,7 +83,7 @@ namespace NKikimr {
                 *counters.RequestBytes += bytes;
             }
             if (counters.ResponseBytes) {
-                *counters.ResponseBytes += static_cast<const TEvBlobStorage::TEvGetResult&>(response).PayloadSizeBytes();
+                *counters.ResponseBytes += responseBytes;
             }
             auto& completed = counters.Completed[status];
             if (!completed) {

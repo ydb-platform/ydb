@@ -68,13 +68,26 @@ namespace NKikimr::NStorage {
         RepairSyncerGroups.erase(actor);
     }
 
+    TNodeWarden::TBridgeSyncNodeCounters::TBridgeSyncNodeCounters(const ::NMonitoring::TDynamicCounterPtr& root) {
+        for (const bool reconcile : {false, true}) {
+            const auto mode = root->GetSubgroup("mode", reconcile ? "reconcile" : "sync");
+            Modes[reconcile] = {
+                .Running = mode->GetCounter("RunningSyncers"),
+                .WaitingForConfig = mode->GetCounter("SyncersWaitingForConfig"),
+                .NodeActive = mode->GetCounter("SyncNodeActive"),
+            };
+        }
+        AnyNodeActive = root->GetSubgroup("mode", "any")->GetCounter("SyncNodeActive");
+        RateLimit = root->GetCounter("SyncRateLimitBytesPerSecond");
+    }
+
     void TNodeWarden::UpdateSyncRateQuoter() {
         const ui64 rate = !SyncRateConfigLimit ? SyncRateControllerLimit
             : !SyncRateControllerLimit ? SyncRateConfigLimit
             : Min(SyncRateConfigLimit, SyncRateControllerLimit);
         SyncRateQuoter->UpdateBytesPerSecond(rate);
         if (BridgeSyncNodeCounters) {
-            BridgeSyncNodeCounters->GetCounter("SyncRateLimitBytesPerSecond")->Set(rate);
+            BridgeSyncNodeCounters->RateLimit->Set(rate);
         }
     }
 
@@ -83,7 +96,7 @@ namespace NKikimr::NStorage {
             if (!AppData()->BridgeModeEnabled && WorkingSyncers.empty()) {
                 return;
             }
-            BridgeSyncNodeCounters = GetServiceCounters(AppData()->Counters, "bridge|nodewarden");
+            BridgeSyncNodeCounters.emplace(GetServiceCounters(AppData()->Counters, "bridge|nodewarden"));
             UpdateSyncRateQuoter();
         }
         std::array<ui32, 2> running{}, waiting{};
@@ -95,12 +108,12 @@ namespace NKikimr::NStorage {
             }
         }
         for (const bool reconcile : {false, true}) {
-            auto mode = BridgeSyncNodeCounters->GetSubgroup("mode", reconcile ? "reconcile" : "sync");
-            mode->GetCounter("RunningSyncers")->Set(running[reconcile]);
-            mode->GetCounter("SyncersWaitingForConfig")->Set(waiting[reconcile]);
-            mode->GetCounter("SyncNodeActive")->Set(running[reconcile] != 0);
+            const auto& mode = BridgeSyncNodeCounters->Modes[reconcile];
+            mode.Running->Set(running[reconcile]);
+            mode.WaitingForConfig->Set(waiting[reconcile]);
+            mode.NodeActive->Set(running[reconcile] != 0);
         }
-        BridgeSyncNodeCounters->GetSubgroup("mode", "any")->GetCounter("SyncNodeActive")->Set(running[0] || running[1]);
+        BridgeSyncNodeCounters->AnyNodeActive->Set(running[0] || running[1]);
     }
 
     void TNodeWarden::ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update) {

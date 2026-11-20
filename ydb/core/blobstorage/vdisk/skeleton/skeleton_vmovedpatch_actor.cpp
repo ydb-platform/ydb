@@ -211,6 +211,7 @@ namespace NKikimr {
 
                 std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0,
                         OriginalId.BlobSize(), Deadline, NKikimrBlobStorage::AsyncRead);
+                get->IsPatchSubrequest = true;
                 get->Orbit = std::move(Event->Get()->Orbit);
 
                 YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Send Get ub TEvVMovedPatch",

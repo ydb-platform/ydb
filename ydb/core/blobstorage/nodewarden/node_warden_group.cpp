@@ -100,11 +100,11 @@ namespace NKikimr::NStorage {
             : Cfg->TenantKey;
     }
 
-    void TNodeWarden::ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup,
+    bool TNodeWarden::ApplyGroupInfo(ui32 groupId, ui32 generation, const NKikimrBlobStorage::TGroupInfo *newGroup,
             bool fromController, bool fromResolver) {
         // if the group is marked as 'ejected', this is a race
         if (EjectedGroups.count(groupId)) {
-            return;
+            return false;
         }
 
         // some basic consistency checks
@@ -336,9 +336,7 @@ namespace NKikimr::NStorage {
                 it != WorkingSyncers.end() && it->BridgeProxyGroupId.GetRawId() == groupId; ++it) {
             syncersChanged |= StartSyncerIfNeeded(const_cast<TWorkingSyncer&>(*it));
         }
-        if (syncersChanged) {
-            UpdateSyncerCounters();
-        }
+        return syncersChanged;
     }
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
@@ -360,6 +358,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet,
             bool isStatic, bool comprehensive) {
+        bool syncersChanged = false;
         std::unordered_set<ui32> seenGroupIds;
         for (const auto& group : serviceSet.GetGroups()) {
             const ui32 groupId = group.GetGroupID();
@@ -369,8 +368,11 @@ namespace NKikimr::NStorage {
                 if (isStatic) {
                     seenGroupIds.insert(groupId);
                 }
-                ApplyGroupInfo(groupId, group.GetGroupGeneration(), &group, true, false);
+                syncersChanged |= ApplyGroupInfo(groupId, group.GetGroupGeneration(), &group, true, false);
             }
+        }
+        if (syncersChanged) {
+            UpdateSyncerCounters();
         }
         if (isStatic && comprehensive) {
             for (const ui32 groupId : StaticGroupIds) {
@@ -426,7 +428,10 @@ namespace NKikimr::NStorage {
             it->second.GroupResolver = {};
             fromResolver = true;
         }
-        ApplyGroupInfo(msg->GroupId.GetRawId(), msg->GroupGeneration, msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver);
+        if (ApplyGroupInfo(msg->GroupId.GetRawId(), msg->GroupGeneration,
+                msg->GroupInfo ? &*msg->GroupInfo : nullptr, false, fromResolver)) {
+            UpdateSyncerCounters();
+        }
     }
 
     void TNodeWarden::HandleGetGroup(TAutoPtr<IEventHandle> ev) {

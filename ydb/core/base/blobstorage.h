@@ -38,6 +38,8 @@ namespace NWilson {
 
 namespace NKikimr {
 
+struct TBridgeProxyPoolCounters;
+
 static constexpr ui32 MaxProtobufSize = 67108000;
 static constexpr ui32 MaxVDiskBlobSize = 10 << 20; // 10 megabytes
 static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
@@ -712,14 +714,16 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
         std::optional<ui32> ForceGroupGeneration;
-        // First receipt of this logical request by a bridge proxy. Restarts keep the original event;
-        // clones sent to the physical groups start with their own request state.
-        TMonotonic BridgeProxyStartTime = TMonotonic::Max();
+        // Capture time and pool on first receipt by the logical bridge. Restarts keep both on the original event.
+        TMonotonic BridgeProxyStartTime;
+        std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
 
         // Admission hint deciding whether the write this request performs -- the put itself, or the
         // restore a MustRestoreFirst read triggers -- is still accepted when the group is low on
         // space. It is never stored along with the blob.
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
+        // The logical bridge proxy accounts for the parent PATCH when its implementation issues GET/PUT.
+        bool IsPatchSubrequest = false;
 
         TEvRequestCommon() = default;
 
@@ -730,6 +734,7 @@ struct TEvBlobStorage {
         // A clone keeps the admission hint, but starts its own restart counter and execution relay.
         TEvRequestCommon(TCloneEventPolicy, const TEvRequestCommon& origin)
             : DataKind(origin.DataKind)
+            , IsPatchSubrequest(origin.IsPatchSubrequest)
         {}
 
         static TString GetRequestName(ui32 eventType) {
@@ -867,6 +872,7 @@ struct TEvBlobStorage {
             , FailOnSlowDown(parameters.FailOnSlowDown)
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
+            IsPatchSubrequest = WriteSource == TWriteSource::DSProxyPatch || WriteSource == TWriteSource::SkeletonVMovedPatch;
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
             Y_ABORT_UNLESS(Buffer.size() < (40 * 1024 * 1024),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",

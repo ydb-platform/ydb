@@ -25,6 +25,7 @@ class TGetImpl {
     const TNodeLayoutInfoPtr NodeLayout;
     const ui32 QuerySize;
     const bool IsInternal;
+    const bool IsPatchSubrequest;
     const bool IsVerboseNoDataEnabled;
     const bool CollectDebugInfo;
     const bool MustRestoreFirst;
@@ -77,6 +78,7 @@ public:
         , NodeLayout(std::move(nodeLayout))
         , QuerySize(ev->QuerySize)
         , IsInternal(ev->IsInternal)
+        , IsPatchSubrequest(ev->IsPatchSubrequest)
         , IsVerboseNoDataEnabled(ev->IsVerboseNoDataEnabled)
         , CollectDebugInfo(ev->CollectDebugInfo)
         , MustRestoreFirst(ev->MustRestoreFirst)
@@ -100,6 +102,7 @@ public:
             false /*isIndexOnly*/, ForceBlockTabletData, IsInternal, IsVerboseNoDataEnabled, CollectDebugInfo,
             ReportDetailedPartMap);
         ev->RestartCounter = counter;
+        ev->IsPatchSubrequest = IsPatchSubrequest;
         ev->PhantomCheck = PhantomCheck;
         ev->Decommission = Decommission;
         ev->ReaderTabletData = ReaderTabletData;

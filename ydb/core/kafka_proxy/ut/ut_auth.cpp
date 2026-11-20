@@ -5,6 +5,7 @@
 #include "test_server.h"
 
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/library/testlib/helpers.h>
@@ -44,6 +45,24 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
+    Y_UNIT_TEST_TWIN(AuditSubjectFromAuthentication, ValidPassword) {
+        auto auditLines = std::make_shared<std::vector<std::string>>();
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .AuditLogBackendLines = auditLines,
+        });
+        TKafkaTestClient client(testServer.Port);
+        client.SaslHandshake("PLAIN");
+        // SASLprep removes the soft hyphen from the authentication identity.
+        const auto response = client.SaslPlainAuthenticate("our\u00ADuser@/Root",
+            ValidPassword ? "ourUserPassword" : "wrong-password");
+        UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(ValidPassword
+            ? EKafkaErrors::NONE_ERROR : EKafkaErrors::SASL_AUTHENTICATION_FAILED));
+        std::string line;
+        UNIT_ASSERT(NKikimr::Tests::WaitAndFindAuditLine(*auditLines, "component=kafka-login", line));
+        UNIT_ASSERT_STRING_CONTAINS(line, ValidPassword ? "subject=ouruser," : "subject={none},");
+    }
+
     Y_UNIT_TEST_TWIN(TicketParserErrorAllowsAnonymousAuthentication, Retryable) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
@@ -375,7 +394,11 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
 
     // Test successful final SCRAM message with correct credentials
     Y_UNIT_TEST(FinalMsgCorrectCredentials) {
-        TInsecureTestServer testServer("2");
+        auto auditLines = std::make_shared<std::vector<std::string>>();
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .AuditLogBackendLines = auditLines,
+        });
         TKafkaTestClient client(testServer.Port);
 
         TString userName = "ouruser";
@@ -404,6 +427,9 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT(!response2->ErrorMessage.has_value() || response2->ErrorMessage->empty());
         UNIT_ASSERT(response2->AuthBytes.has_value());
+        std::string auditLine;
+        UNIT_ASSERT(NKikimr::Tests::WaitAndFindAuditLine(*auditLines, "component=kafka-login", auditLine));
+        UNIT_ASSERT_STRING_CONTAINS(auditLine, "subject=ouruser,");
 
         const auto& authBytes2 = response2->AuthBytes.value();
         std::string serverFinalMessage(reinterpret_cast<const char*>(authBytes2.data()), authBytes2.size());
@@ -449,7 +475,12 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
 
     // Test final SCRAM message with incorrect client proof
     Y_UNIT_TEST_TWIN(FinalMsgIncorrectProof, HideAuthenticationFailureReasons) {
-        TInsecureTestServer testServer({ .KafkaApiMode = "2", .HideAuthenticationFailureReasons = HideAuthenticationFailureReasons});
+        auto auditLines = std::make_shared<std::vector<std::string>>();
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .HideAuthenticationFailureReasons = HideAuthenticationFailureReasons,
+            .AuditLogBackendLines = auditLines,
+        });
         TKafkaTestClient client(testServer.Port);
 
         TString userName = "ouruser";
@@ -468,6 +499,10 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
 
         UNIT_ASSERT_VALUES_UNEQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
+
+        std::string auditLine;
+        UNIT_ASSERT(NKikimr::Tests::WaitAndFindAuditLine(*auditLines, "component=kafka-login", auditLine));
+        UNIT_ASSERT_STRING_CONTAINS(auditLine, "subject={none},");
 
         UNIT_ASSERT(response2->ErrorMessage.has_value());
         if (HideAuthenticationFailureReasons) {

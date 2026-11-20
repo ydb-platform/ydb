@@ -24,10 +24,10 @@ constexpr char AuditLogKafkaLoginComponent[] = "kafka-login";
 
 void AuditLogLogin(const NRawSocket::TNetworkConfig::TSocketAddressType& address, const TString& database,
     const TString& username, const Ydb::StatusIds_StatusCode status, const TString& reason,
-    const TString& errorDetails, const TString& sanitizedToken, bool isAdmin = false)
+    const TString& errorDetails, const TString& sanitizedToken, bool isAdmin = false, const TString& userSID = {})
 {
     NAudit::LogLoginOperationResult(AuditLogKafkaLoginComponent, address->ToString(), database, username,
-        status, reason, errorDetails, sanitizedToken, isAdmin);
+        status, reason, errorDetails, sanitizedToken, isAdmin, userSID);
 }
 
 const TDuration TKafkaSaslAuthActor::Timeout = TDuration::MilliSeconds(60000);
@@ -109,7 +109,7 @@ void TKafkaSaslAuthActor::HandleFirstLoginResponse(NSasl::TEvSasl::TEvSaslScramF
 }
 
 void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std::string& reason, const std::string& token,
-    const std::string& sanitizedToken, bool isAdmin, const NActors::TActorContext& ctx)
+    const std::string& sanitizedToken, bool isAdmin, const TString& userSID, const NActors::TActorContext& ctx)
 {
     Ydb::StatusIds_StatusCode status;
     TString errorMessage;
@@ -119,7 +119,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
         Ticket = "Login " + token;
 
         AuditLogLogin(Address, AuthDatabasePath, ClientAuthData.UserName, Ydb::StatusIds::SUCCESS, /* reason */ "",
-            /* errorDetails */ "", TString(sanitizedToken), isAdmin);
+            /* errorDetails */ "", TString(sanitizedToken), isAdmin, userSID);
         SendTicketParserRequest();
         return;
     }
@@ -182,12 +182,12 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
 
 void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& loginResult = *ev->Get();
-    HandleLoginResult(loginResult.Issue, "", loginResult.Token, loginResult.SanitizedToken, loginResult.IsAdmin, ctx);
+    HandleLoginResult(loginResult.Issue, "", loginResult.Token, loginResult.SanitizedToken, loginResult.IsAdmin, loginResult.UserSID, ctx);
 }
 
 void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslPlainLdapLoginResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& loginResult = *ev->Get();
-    HandleLoginResult(loginResult.Issue, loginResult.Reason, loginResult.Token, loginResult.SanitizedToken, loginResult.IsAdmin, ctx);
+    HandleLoginResult(loginResult.Issue, loginResult.Reason, loginResult.Token, loginResult.SanitizedToken, loginResult.IsAdmin, loginResult.UserSID, ctx);
 }
 
 void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslScramFinalServerResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -196,7 +196,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslScramFinalServerResp
     ClientAuthData.UserName = std::move(loginResult.AuthcId);
     ScramAuthActor = TActorId();
 
-    HandleLoginResult(loginResult.Issue, "", loginResult.Token, loginResult.SanitizedToken, loginResult.IsAdmin, ctx);
+    HandleLoginResult(loginResult.Issue, "", loginResult.Token, loginResult.SanitizedToken, loginResult.IsAdmin, loginResult.UserSID, ctx);
 }
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {

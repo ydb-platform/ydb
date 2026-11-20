@@ -103,7 +103,10 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
 
     securityConfig.SetHideAuthenticationFailureReasons(settings.HideAuthenticationFailureReasons);
 
-    KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr, nullptr, 0));
+    KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr,
+        [&settings](TServerSettings& serverSettings) {
+            serverSettings.SetAuditLogBackendLines(settings.AuditLogBackendLines);
+        }, 0));
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_DESCRIBER, NActors::NLog::PRI_TRACE);

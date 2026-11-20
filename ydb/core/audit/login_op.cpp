@@ -6,7 +6,7 @@ namespace NKikimr::NAudit {
 
 void LogLoginOperationResult(const TString& сomponentName, const TString& peerName, const TString& database,
     const TString& username, const Ydb::StatusIds_StatusCode status, const TString& reason,
-    const TString& errorDetails, const TString& sanitizedToken, bool isAdmin)
+    const TString& errorDetails, const TString& sanitizedToken, bool isAdmin, const TString& userSID)
 {
     static const TString LoginOperationName = "LOGIN";
     static const TString AdminAccountType = "admin";
@@ -32,6 +32,7 @@ void LogLoginOperationResult(const TString& сomponentName, const TString& peerN
     // NOTE: audit field set here must be in sync with ydb/core/security/login_page.cpp, AuditLogWebUILogout()
     AUDIT_LOG(
         AUDIT_PART("component", сomponentName)
+        AUDIT_PART("subject", (userSID ? userSID : EmptyValue))
         AUDIT_PART("remote_address", (!peerAddress.empty() ? peerAddress : EmptyValue))
         AUDIT_PART("database", (!database.empty() ? database : EmptyValue))
         AUDIT_PART("operation", LoginOperationName)

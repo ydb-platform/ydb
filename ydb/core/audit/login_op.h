@@ -8,6 +8,6 @@ namespace NKikimr::NAudit {
 
 void LogLoginOperationResult(const TString& сomponentName, const TString& peerName, const TString& database,
     const TString& username, const Ydb::StatusIds_StatusCode status, const TString& reason,
-    const TString& errorDetails, const TString& sanitizedToken, bool isAdmin = false);
+    const TString& errorDetails, const TString& sanitizedToken, bool isAdmin = false, const TString& userSID = {});
 
 } // namespace NKikimr::NAudit

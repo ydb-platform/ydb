@@ -9,7 +9,7 @@ namespace NGRpcService {
 
 void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::LoginRequest& request,
                    const Ydb::Auth::LoginResponse& response, const TString& errorDetails,
-                   const TString& sanitizedToken, bool isAdmin)
+                   const TString& sanitizedToken, bool isAdmin, const TString& userSID)
 {
     static const TString GrpcLoginComponentName = "grpc-login";
 
@@ -20,7 +20,7 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
     }
 
     NAudit::LogLoginOperationResult(GrpcLoginComponentName, ctx->GetPeerName(), database, request.user(), status, reason,
-        errorDetails, sanitizedToken, isAdmin);
+        errorDetails, sanitizedToken, isAdmin, userSID);
 }
 
 }

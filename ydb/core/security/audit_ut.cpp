@@ -199,6 +199,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "subject=user1");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/Root");
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
@@ -266,6 +267,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "subject={none}");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/Root");
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
@@ -338,6 +340,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "subject=user1@ldap");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/Root");
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
@@ -412,6 +415,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "subject={none}");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/Root");
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
@@ -485,6 +489,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "subject={none}");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/Root");
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
@@ -559,6 +564,7 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
+        UNIT_ASSERT_STRING_CONTAINS(last, "subject={none}");
         UNIT_ASSERT_STRING_CONTAINS(last, "remote_address=localhost");
         UNIT_ASSERT_STRING_CONTAINS(last, "database=/Root");
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");

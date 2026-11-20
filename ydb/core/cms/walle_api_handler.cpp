@@ -98,7 +98,7 @@ private:
         if (request->Record.GetDrainData()) {
             CreateTaskRequest = request.Release();
             SendToCms(new TEvCms::TEvGetInterfaceVersionRequest, ctx);
-            Become(&TThis::StateCheckCmsSupport, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
+            Become(&TThis::StateCheckVersion, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
             return;
         }
 
@@ -106,14 +106,14 @@ private:
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
-    STFUNC(StateCheckCmsSupport) {
+    STFUNC(StateCheckVersion) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvGetInterfaceVersionResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, CmsSupportTimeout);
         default:
-            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckCmsSupport ignored event",
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckVersion ignored event",
                 {"type", ev->GetTypeRewrite()},
                 {"ev", ev->ToString()});
         }

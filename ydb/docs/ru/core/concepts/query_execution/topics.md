@@ -177,6 +177,14 @@ WHERE
         AND __ydb_write_time > CurrentUtcTimestamp() - Interval("PT2H");
 ```
 
+{% if feature_flags.enable_user_attributes_in_topic_query == false %}
+{% note warning "Экспериментальная функциональность" %}
+
+Функциональность находится в разработке и по умолчанию выключена флагом [`enable_user_attributes_in_topic_query`](../../reference/configuration/feature_flags.md). Её поведение может измениться без сохранения обратной совместимости, а сама функциональность может так и не стать общедоступной. Включение флага может привести к ошибкам, нестабильной работе кластера или невозможности сменить версию YDB. Не включайте флаг в production-кластерах. [Подробнее](../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
 Пример использования пользовательских атрибутов:
 
 ```yql

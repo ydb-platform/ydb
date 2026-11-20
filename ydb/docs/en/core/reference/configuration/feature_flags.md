@@ -92,5 +92,6 @@ feature_flags:
 | `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#nfs) |
 | `switch_to_config_v2` | Switching from configuration V1 to [configuration V2](../../devops/configuration-management/migration/migration-to-v2.md) |
 | `enable_streaming_queries` | Enabling [streaming queries](../../concepts/streaming-query/streaming-query.md) |
+| `enable_user_attributes_in_topic_query` | [User-defined message attributes](../../concepts/query_execution/topics.md#system-metadata) in topic queries via `__ydb_user_attributes` |
 | `enable_stable_node_names` | Enabling [stable names for dynamic nodes](node_broker_config.md) |
 | `enable_alter_database_create_hive_first` | Creating a dedicated Hive for a database's system tablets when the database is created |

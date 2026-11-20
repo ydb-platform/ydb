@@ -16,7 +16,8 @@ inline constexpr char LegacySecretRecoveryMarker[] = "legacy";
 // Older controllers reject this tag as an unknown secret revision and retain Error.
 inline constexpr char MissingIndexStreamRecoveryMarker[] = "missing-index-stream";
 
-bool CanRefreshSecret(TStringBuf failed, TStringBuf resolved);
+// Minimum time after the authentication failure before probing this revision.
+std::optional<TDuration> GetSecretRefreshDelay(TStringBuf failed, TStringBuf resolved);
 
 struct TSecretProbeTopic {
     struct TIndex {

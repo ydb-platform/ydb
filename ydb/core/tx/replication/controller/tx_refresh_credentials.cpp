@@ -17,7 +17,7 @@ public:
         const auto& result = *Event->Get();
         auto replication = Self->Find(result.ReplicationId);
         if (!replication || !replication->IsExpectedSecretRefresh(Event->Sender)
-            || !CanRefreshSecret(replication->GetAuthenticationErrorRevision(), result.Revision)
+            || !GetSecretRefreshDelay(replication->GetAuthenticationErrorRevision(), result.Revision)
             || Self->ReplicationsWithSourceOffsetMismatch.contains(result.ReplicationId))
         {
             return true;

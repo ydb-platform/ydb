@@ -172,6 +172,16 @@ void AppendPQTabletConfigDelta(
     }
 }
 
+bool IsKeyRangeHeartbeatsStream(const TPathId& streamPathId, const TOperationContext& context) {
+    const auto it = context.SS->CdcStreams.find(streamPathId);
+    if (it == context.SS->CdcStreams.end()) {
+        return false;
+    }
+
+    const auto& stream = it->second->AlterData ? it->second->AlterData : it->second;
+    return stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+}
+
 }  // anonymous namespace
 
 // Serializes the cdc bootstrap as a TEvProposeTransaction prefix
@@ -441,6 +451,9 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
+        const bool keyRangeHeartbeats = IsKeyRangeHeartbeatsStream(topicPath.Parent().Base()->PathId, context);
+
+        TString fromBound;
         for (const auto* p : table->GetPartitions()) {
             const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
             Y_ABORT_UNLESS(shardInfo != nullptr);
@@ -448,10 +461,16 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
             mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
 
-            //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
-            // Routing is datashard-side over the topic partitioning, split continuity is
-            // the change-exchange re-registration, and the table split/merge re-registration
-            // produces rangeless ids anyway.
+            if (keyRangeHeartbeats) {
+                auto& keyRange = *mg.MutableKeyRange();
+                if (fromBound) {
+                    keyRange.SetFromBound(fromBound);
+                }
+                if (p->EndOfRange) {
+                    keyRange.SetToBound(p->EndOfRange);
+                }
+                fromBound = p->EndOfRange;
+            }
         }
     }
 

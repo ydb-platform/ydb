@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     ydb/core/protos
     ydb/core/scheme
+    ydb/services/lib/sharding
 )
 
 END()

@@ -17,6 +17,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 
+#include <set>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 class IKernelFetchLogic;
@@ -289,6 +291,8 @@ public:
         AFL_VERIFY(!PagesToResult);
         PagesToResult = std::deque<TPortionDataAccessor::TReadPage>(pages.begin(), pages.end());
     }
+
+    void BuildResultPages(const TPortionDataAccessor& accessor, const ui64 memoryLimit, const std::set<ui32>& entityIds);
 
     void SetResultChunk(std::shared_ptr<arrow::Table>&& table, const ui32 indexStart, const ui32 recordsCount) {
         auto page = ExtractPageForResult();

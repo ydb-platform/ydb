@@ -30,4 +30,13 @@ void TFetchedData::AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher)
     AFL_VERIFY(Fetchers.emplace(fetcher->GetEntityId(), fetcher).second)("entity_id", fetcher->GetEntityId());
 }
 
+void TFetchedResult::BuildResultPages(const TPortionDataAccessor& accessor, const ui64 memoryLimit, const std::set<ui32>& entityIds) {
+    if (DictionaryOnlyFetchColumns.empty()) {
+        SetPages(accessor.BuildReadPages(memoryLimit, entityIds));
+    } else {
+        // The result is not paginated because dict values are already deserialized in memory
+        SetPages({ TPortionDataAccessor::TReadPage(0, Batch->GetRecordsCount(), 0) });
+    }
+}
+
 }   // namespace NKikimr::NOlap::NReader::NCommon

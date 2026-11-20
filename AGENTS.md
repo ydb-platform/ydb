@@ -27,3 +27,7 @@
 ## C++
 
 - Use C++20 or earlier
+
+## Formal models
+
+For Promela models, use [modeling and verification](.agents/skills/ydb-spin-promela-verifier/SKILL.md) and [code style](.agents/skills/ydb-promela-code-style/SKILL.md).

@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/protos/config.pb.h>
 
 #include <optional>
 
@@ -15,7 +16,8 @@ void AuditLogConn(const IRequestProxyCtx* reqCtx, const TString& database, const
 using TAuditLogParts = TVector<std::pair<TString, TString>>;
 
 // grpc "operations" log
-void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts);
+void AuditLog(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass logClass,
+    std::optional<ui32> status, const TAuditLogParts& parts);
 void AuditLogConnectDbAccessDenied(
     const IRequestProxyCtx* reqCtx,
     const TString& database,

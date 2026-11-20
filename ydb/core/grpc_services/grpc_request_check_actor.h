@@ -655,13 +655,13 @@ private:
             const TString sanitizedToken = TBase::GetSanitizedToken();
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
             if (auditEnabledReceived) {
-                AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
+                AuditLog(auditMode.LogClass, std::nullopt, requestBaseCtx->GetAuditLogParts());
             }
 
             if (auditEnabledCompleted) {
-                requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
+                requestBaseCtx->SetAuditLogHook([requestBaseCtx, logClass = auditMode.LogClass](ui32 status, const TAuditLogParts& parts) {
                     AuditContextEnd(requestBaseCtx);
-                    AuditLog(status, parts);
+                    AuditLog(logClass, status, parts);
                 });
             }
         }

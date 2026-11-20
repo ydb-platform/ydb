@@ -463,6 +463,7 @@ struct TShardedTableOptions {
         ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
         i32 CompressionLevel = 0;
         ui32 TopicPartitions = 0;
+        THashMap<TString, TString> UserAttributes;
     };
 
     struct TFamily {

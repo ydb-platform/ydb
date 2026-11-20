@@ -5,12 +5,14 @@
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tx/replication/common/changefeed.h>
 #include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -566,6 +568,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
     }
 
+    if (::NKikimr::NBackup::IsKeyRangeReplicationBackup(changefeed)) {
+        return propose;
+    }
+
     auto tableDesc = GetTableDescription(ss, dstPath->PathId);
     Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
     const auto& keyId = tableDesc.GetKeyColumnIds()[0];
@@ -650,8 +656,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     auto* tabletConfig = pqGroup.MutablePQTabletConfig();
     const auto& pqConfig = AppData()->PQConfig;
+    const bool keyRangeBackup = ::NKikimr::NBackup::IsKeyRangeReplicationBackup(importChangefeedTopic.GetChangefeed());
 
     for (const auto& consumer : topic.consumers()) {
+        if (keyRangeBackup && TStringBuf(consumer.name()) == NReplication::ReplicationConsumerName) {
+            continue;
+        }
         auto& addedConsumer = *tabletConfig->AddConsumers();
         auto consumerName = NPersQueue::ConvertNewConsumerName(consumer.name(), pqConfig);
         addedConsumer.SetName(consumerName);

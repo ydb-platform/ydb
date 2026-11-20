@@ -26,6 +26,7 @@ public:
         const TPathId& tablePathId,
         const TPathId& streamPathId,
         const NKikimrSchemeOp::TCdcStreamDescription& streamDesc,
+        const TUserTable& tableInfo,
         const TString& snapshotName,
         ui64 step,
         ui64 txId);

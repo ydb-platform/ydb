@@ -72,7 +72,7 @@ def test_table_and_parameters(tmp_path):
     node = bytes([8, 2]) + message(4, bytes([1]))
     kql = bytes([8, 1]) + message(2, node)
     malformed = tmp_path / "forward.pb"
-    malformed.write_bytes(envelope.SerializeToString() + message(5, message(7, kql)))
+    malformed.write_bytes(envelope.SerializeToString() + message(5, message(6, kql)))
     failure = subprocess.run([*cmd, "--bench", "0", "1", *inputs[:3], malformed], text=True, capture_output=True)
     assert failure.returncode == 1
     assert "forward KQL child reference" in failure.stderr
@@ -147,17 +147,16 @@ def test_strict_dispatch(tmp_path):
         assert "BENCH_ROUTE=" + stage in proc.stdout.splitlines()
 
     rejected(envelope, "Missing request query")
-    old_sql = field(1, sql.read_bytes())
+    unknown_stage = field(8, sql.read_bytes())
     for payload, message in [
         (b"", "Missing or unknown parsed query stage"),
-        (old_sql, "Missing or unknown parsed query stage"),
+        (unknown_stage, "Missing or unknown parsed query stage"),
         (field(11, b""), "Missing or unknown parsed query stage"),
-        (field(3, b""), "Parsed query stage is unsupported on main"),
-        (field(8, b""), "Missing or unknown parsed query stage"),
-        (field(2, b""), "Invalid ANTLR AST envelope"),
-        (field(6, b"\x08\x02"), "Unsupported or empty YQL AST"),
-        (field(6, b"\x08\x01" + field(2, b"")), "Missing YQL node kind"),
-        (field(7, b""), "Unsupported KQL graph version"),
+        (field(2, b""), "Parsed query stage is unsupported on main"),
+        (field(1, b""), "Invalid ANTLR AST envelope"),
+        (field(5, b"\x08\x02"), "Unsupported or empty YQL AST"),
+        (field(5, b"\x08\x01" + field(2, b"")), "Missing YQL node kind"),
+        (field(6, b""), "Unsupported KQL graph version"),
     ]:
         rejected(envelope + field(5, payload), message)
 
@@ -166,12 +165,12 @@ def test_strict_dispatch(tmp_path):
     rejected(grammar.replace(b"select_stmt", b"broken_stmt"), "Invalid SQL statement description")
 
     # A second occurrence of the same message field merges its unknown field into the selected stage.
-    proc = check(inputs[2].read_bytes() + field(5, old_sql))
+    proc = check(inputs[2].read_bytes() + field(5, unknown_stage))
     assert proc.returncode == 0, proc.stderr
     assert "BENCH_ROUTE=yql_ast" in proc.stdout.splitlines()
 
     control.exec_mode = ydb_query_pb2.EXEC_MODE_EXPLAIN
-    rejected(control.SerializeToString() + field(5, old_sql), "Expected execute mode")
+    rejected(control.SerializeToString() + field(5, unknown_stage), "Expected execute mode")
     rejected(b"\xff" + envelope, "Invalid protobuf request")
 
 

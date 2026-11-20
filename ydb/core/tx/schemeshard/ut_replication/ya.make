@@ -14,6 +14,10 @@ ENDIF()
 PEERDIR(
     ydb/core/protos
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/ydb_convert
+    ydb/public/lib/ydb_cli/dump/util
+    ydb/public/sdk/cpp/src/client/draft
+    yql/essentials/public/udf
     yql/essentials/sql/pg_dummy
 )
 

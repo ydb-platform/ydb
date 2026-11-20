@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <type_traits>
@@ -71,6 +72,48 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
 ) {
     Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions, enableChecksums, iv);
     return new TSchemeUploaderFallback<TSettings>(schemeShard, exportId, itemIdx);
+}
+
+class TExportCompletionUploaderFallback: public TActorBootstrapped<TExportCompletionUploaderFallback> {
+public:
+    TExportCompletionUploaderFallback(TActorId schemeShard, ui64 exportId, ui32 itemIdx)
+        : SchemeShard(schemeShard)
+        , ExportId(exportId)
+        , ItemIdx(itemIdx)
+    {}
+
+    void Bootstrap() {
+        Become(&TExportCompletionUploaderFallback::StateWait);
+    }
+
+private:
+    void Fail() {
+        Send(SchemeShard, new TEvPrivate::TEvExportCompletionUploadResult(
+            ExportId, ItemIdx, false, GetExportDisabledMessage<Ydb::Export::ExportToS3Settings>()));
+        PassAway();
+    }
+
+    STATEFN(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, Fail);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    const TActorId SchemeShard;
+    const ui64 ExportId;
+    const ui32 ItemIdx;
+};
+
+IActor* CreateExportCompletionUploader(
+    TActorId schemeShard,
+    ui64 exportId,
+    ui32 itemIdx,
+    const Ydb::Export::ExportToS3Settings& settings,
+    const TString& destinationPrefix)
+{
+    Y_UNUSED(settings, destinationPrefix);
+    return new TExportCompletionUploaderFallback(schemeShard, exportId, itemIdx);
 }
 
 template <typename TSettings>

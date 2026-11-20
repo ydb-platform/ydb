@@ -42,6 +42,7 @@ public:
     virtual ui64 GetTxId() const = 0;
     virtual EKind GetKind() const = 0;
     virtual const TString& GetBody() const = 0;
+    virtual size_t GetBodySize() const { return GetBody().size(); }
     virtual ESource GetSource() const = 0;
     virtual const TString& GetSourceId() const = 0;
     virtual TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const = 0;
@@ -80,7 +81,7 @@ public:
 
 protected:
     ui64 Order = Max<ui64>();
-    TString Body;
+    mutable TString Body;
     ESource Source = ESource::Unspecified;
     TString SourceId;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;

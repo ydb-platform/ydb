@@ -3,6 +3,8 @@
 #include <cctype>
 #include "http_proxy.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
+
 namespace NHttp {
 
 class THttpProxy : public NActors::TActorBootstrapped<THttpProxy>, public THttpConfig {
@@ -20,7 +22,8 @@ public:
     IActor* AddOutgoingConnection(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), event);
         TActorId connectionId = Register(connectionSocket);
-        ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
+        YDB_LOG_DEBUG("Connection created",
+            {"connectionId", connectionId});
         Connections.emplace(connectionId);
         return connectionSocket;
     }
@@ -74,12 +77,12 @@ protected:
 
     void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
         Y_UNUSED(event);
-        ALOG_ERROR(HttpLog, "Event TEvHttpIncomingResponse shouldn't be in proxy, it should go to the http connection owner directly");
+        YDB_LOG_ERROR("Event TEvHttpIncomingResponse shouldn't be in proxy, it should go to the http connection owner directly");
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
         Y_UNUSED(event);
-        ALOG_ERROR(HttpLog, "Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
+        YDB_LOG_ERROR("Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
     }
 
     template<typename TEventType>
@@ -94,12 +97,15 @@ protected:
             auto itAvailableConnection = AvailableConnections.find(destination);
             if (itAvailableConnection != AvailableConnections.end()) {
                 TActorId availableConnection = itAvailableConnection->second;
-                ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
+                YDB_LOG_DEBUG("Reusing connection for destination",
+                    {"availableConnection", availableConnection},
+                    {"destination", destination});
                 AvailableConnections.erase(itAvailableConnection);
                 Send(Forward(availableConnection, std::move(event)));
                 return;
             } else {
-                ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
+                YDB_LOG_DEBUG("Creating a new connection for destination",
+                    {"destination", destination});
             }
         }
         AddOutgoingConnection(event);
@@ -120,16 +126,20 @@ protected:
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr& event) {
         if (AvailableConnections.size() < MAX_REUSABLE_CONNECTIONS) {
-            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
+            YDB_LOG_DEBUG("Connection available for destination",
+                {"connectionID", event->Get()->ConnectionID},
+                {"destination", event->Get()->Destination});
             AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
         } else {
-            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " not added to available connections, limit reached");
+            YDB_LOG_DEBUG("Connection not added to available connections, limit reached",
+                {"connectionID", event->Get()->ConnectionID});
             Send(event->Get()->ConnectionID, new NActors::TEvents::TEvPoisonPill());
         }
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr& event) {
-        ALOG_DEBUG(HttpLog, "Connection closed " << event->Get()->ConnectionID);
+        YDB_LOG_DEBUG("Connection closed",
+            {"connectionID", event->Get()->ConnectionID});
         Connections.erase(event->Get()->ConnectionID);
         auto range = AvailableConnections.equal_range(event->Get()->Destination);
         for (auto it = range.first; it != range.second; ++it) {
@@ -141,7 +151,9 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr& event) {
-        ALOG_TRACE(HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
+        YDB_LOG_TRACE("Register handler",
+            {"path", event->Get()->Path},
+            {"handler", event->Get()->Handler});
         Handlers.RegisterHandler(event->Get()->Path, event->Get()->Handler);
     }
 
@@ -187,7 +199,9 @@ protected:
                     }
                     if (address) {
                         memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
-                        ALOG_DEBUG(HttpLog, "Host " << host << " resolved to " << address->ToString());
+                        YDB_LOG_DEBUG("Host resolved",
+                            {"host", host},
+                            {"address", address->ToString()});
                         if (it == Hosts.end()) {
                             it = Hosts.emplace(host, THostEntry()).first;
                         }

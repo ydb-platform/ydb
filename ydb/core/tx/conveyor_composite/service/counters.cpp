@@ -4,10 +4,10 @@ namespace NKikimr::NConveyorComposite {
 
 TWorkersPoolCounters::TWorkersPoolCounters(const TString& poolName, const NColumnShard::TCommonCountersOwner& owner)
     : TBase(owner, "pool_name", poolName)
-    , PackSizeHistogram(TBase::GetHistogram("ExecutionPack/Count", NMonitoring::LinearHistogram(25, 1, 1)))
-    , PackExecuteHistogram(TBase::GetHistogram("PackExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
-    , SendBackHistogram(TBase::GetHistogram("SendBack/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
-    , SendFwdHistogram(TBase::GetHistogram("SendForward/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , PackSizeHistogram(TBase::GetLazyHistogram("ExecutionPack/Count", NMonitoring::LinearHistogram(25, 1, 1)))
+    , PackExecuteHistogram(TBase::GetLazyHistogram("PackExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , SendBackHistogram(TBase::GetLazyHistogram("SendBack/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , SendFwdHistogram(TBase::GetLazyHistogram("SendForward/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
     , SendBackDuration(TBase::GetDeriviative("SendBack/Duration/Us"))
     , SendFwdDuration(TBase::GetDeriviative("SendForward/Duration/Us"))
     , AvailableWorkersCount(TBase::GetValue("AvailableWorkersCount"))
@@ -24,9 +24,9 @@ TWorkersPoolCounters::TWorkersPoolCounters(const TString& poolName, const NColum
 TWPCategorySignals::TWPCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat)
     : TBase(base, "wp_category", ::ToString(cat))
     , Category(cat)
-    , WaitingHistogram(TBase::GetHistogram("Waiting/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , WaitingHistogram(TBase::GetLazyHistogram("Waiting/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
     , NoTasks(TBase::GetDeriviative("NoTasks"))
-    , TaskExecuteHistogram(TBase::GetHistogram("TaskExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , TaskExecuteHistogram(TBase::GetLazyHistogram("TaskExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
     , ValueWeight(TBase::GetValue("Weight"))
     , ExecuteDuration(TBase::GetDeriviative("Execute/Duration/Us")) {
 }

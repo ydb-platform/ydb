@@ -17,7 +17,7 @@ class TFetchingResultContext {
 private:
     NArrow::NAccessor::TAccessorsCollection& Accessors;
     NIndexes::TIndexesCollection& Indexes;
-    std::shared_ptr<IDataSource> Source;
+    IDataSource& Source;
     std::optional<std::shared_ptr<NArrow::TColumnFilter>> AppliedFilter;
 
 public:
@@ -29,12 +29,12 @@ public:
         return Indexes;
     }
 
-    const std::shared_ptr<IDataSource>& GetSource() const {
+    IDataSource& GetSource() const {
         return Source;
     }
 
     ui32 GetRecordsCount() const {
-        return Source->GetPortionAccessor().GetPortionInfo().GetRecordsCount();
+        return Source.GetPortionAccessor().GetPortionInfo().GetRecordsCount();
     }
 
     const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
@@ -45,8 +45,8 @@ public:
         }
     }
 
-    TFetchingResultContext(NArrow::NAccessor::TAccessorsCollection& accessors, NIndexes::TIndexesCollection& indexes,
-        const std::shared_ptr<IDataSource>& source, const std::optional<std::shared_ptr<NArrow::TColumnFilter>>& appliedFilter = std::nullopt)
+    TFetchingResultContext(NArrow::NAccessor::TAccessorsCollection& accessors, NIndexes::TIndexesCollection& indexes, IDataSource& source,
+        const std::optional<std::shared_ptr<NArrow::TColumnFilter>>& appliedFilter = std::nullopt)
         : Accessors(accessors)
         , Indexes(indexes)
         , Source(source)
@@ -91,46 +91,53 @@ public:
 class TColumnsFetcherTask: public NBlobOperations::NRead::ITask, public NColumnShard::TMonitoringObjectsCounter<TColumnsFetcherTask> {
 private:
     using TBase = NBlobOperations::NRead::ITask;
-    std::shared_ptr<IDataSource> Source;
+    std::unique_ptr<TDataSourceLease> SourceLease;
     THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> DataFetchers;
     TFetchingScriptCursor Cursor;
     NBlobOperations::NRead::TCompositeReadBlobs ProvidedBlobs;
     NColumnShard::TCounterGuard Guard;
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 
-    virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
-        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
-            {"errorOnBlobReading", range},
-            {"scanActorId", Source->GetContext()->GetCommonContext()->GetScanActorId()},
-            {"status", status.GetErrorMessage()},
-            {"statusCode", status.GetStatus()},
-            {"storageId", storageId});
-        NActors::TActorContext::AsActorContext().Send(Source->GetContext()->GetCommonContext()->GetScanActorId(),
-            std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                TConclusionStatus::Fail(
-                    TStringBuilder{} << "Error reading blob range for columns: " << range.ToString() << ", error: " << status.GetErrorMessage()
-                                     << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())), std::move(Guard)));
-        return false;
-    }
+    virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override;
 
 public:
+    class TStartJob: public IAsyncJob {
+    private:
+        TReadActionsCollection ReadActions;
+        const THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> Fetchers;
+        const TFetchingScriptCursor Cursor;
+        const TString TaskCustomer;
+
+    public:
+        TStartJob(TReadActionsCollection&& readActions, const THashMap<ui32, std::shared_ptr<IKernelFetchLogic>>& fetchers,
+            const TFetchingScriptCursor& cursor, const TString& taskCustomer)
+            : ReadActions(std::move(readActions))
+            , Fetchers(fetchers)
+            , Cursor(cursor)
+            , TaskCustomer(taskCustomer)
+        {
+        }
+
+        virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) override;
+    };
+
     TColumnsFetcherTask(TReadActionsCollection&& actions, const THashMap<ui32, std::shared_ptr<IKernelFetchLogic>>& fetchers,
-        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& cursor, const TString& taskCustomer,
+        std::unique_ptr<TDataSourceLease> sourceLease, const TFetchingScriptCursor& cursor, const TString& taskCustomer,
         const TString& externalTaskId = "")
         : TBase(actions, taskCustomer, externalTaskId)
-        , Source(source)
+        , SourceLease(std::move(sourceLease))
         , DataFetchers(fetchers)
         , Cursor(cursor)
-        , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetchBlobsGuard())
+        , Guard(SourceLease->GetSource().GetContext()->GetCommonContext()->GetCounters().GetFetchBlobsGuard())
     {
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("scf"));
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, SourceLease->GetSource().AddEvent("scf"));
     }
 };
 
 class TBlobsFetcherTask: public NBlobOperations::NRead::ITask, public NColumnShard::TMonitoringObjectsCounter<TBlobsFetcherTask> {
 private:
     using TBase = NBlobOperations::NRead::ITask;
-    std::shared_ptr<IDataSource> Source;
+    std::unique_ptr<TDataSourceLease> SourceLease;
     TFetchingScriptCursor Step;
     const std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard Guard;
@@ -139,17 +146,26 @@ private:
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override;
 
 public:
-    template <class TSource>
-    TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, const std::shared_ptr<TSource>& sourcePtr,
-        const TFetchingScriptCursor& step, const std::shared_ptr<NCommon::TSpecialReadContext>& context, const TString& taskCustomer,
-        const TString& externalTaskId)
-        : TBlobsFetcherTask(readActions, std::static_pointer_cast<IDataSource>(sourcePtr), step, context, taskCustomer, externalTaskId)
-    {
-    }
+    class TStartJob: public IAsyncJob {
+    private:
+        const std::vector<std::shared_ptr<IBlobsReadingAction>> ReadActions;
+        const TFetchingScriptCursor Step;
+        const TString TaskCustomer;
 
-    TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions,
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step,
-        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const TString& taskCustomer, const TString& externalTaskId);
+    public:
+        TStartJob(
+            const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, const TFetchingScriptCursor& step, const TString& taskCustomer)
+            : ReadActions(readActions)
+            , Step(step)
+            , TaskCustomer(taskCustomer)
+        {
+        }
+
+        virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) override;
+    };
+
+    TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, std::unique_ptr<TDataSourceLease> sourceLease,
+        const TFetchingScriptCursor& step, const TString& taskCustomer);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

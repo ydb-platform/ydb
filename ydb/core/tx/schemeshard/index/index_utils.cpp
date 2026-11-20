@@ -7,6 +7,12 @@
 namespace NKikimr {
 namespace NTableIndex {
 
+bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType indexType) {
+    return indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+        || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+        || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+}
+
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc) {
     TIndexObjectCounts res;
     res.IndexTableCount = 1;

@@ -4,6 +4,55 @@
 
 namespace NKikimr::NReplication::NController {
 
+namespace {
+
+bool RetryPausedBootstrap(
+        TReplication& replication,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx)
+{
+    if (replication.GetConfig().GetInitialScan()
+        || replication.GetDesiredState() != TReplication::EState::Paused
+        || replication.GetState() != TReplication::EState::Error)
+    {
+        return false;
+    }
+
+    // Restrict config-only recovery to source preparation. An ordinary PAUSE
+    // can retain attached destinations and unrelated errors that must survive.
+    for (const auto* target : replication.GetTargets()) {
+        const bool creating = target->GetDstState() == TReplication::EDstState::Creating
+            && !target->GetDstPathId();
+        const bool waitingImport = target->GetDstState() == TReplication::EDstState::WaitingImport;
+        if ((!creating && !waitingImport) || !target->GetWorkers().empty())
+        {
+            return false;
+        }
+    }
+
+    // A public config ALTER is an explicit retry even if the credential
+    // reference is unchanged (its secret or source ACL may be fixed).
+    // Persist the reset before Progress can start a replacement creator.
+    replication.SetState(TReplication::EState::Paused);
+    for (auto* target : replication.GetTargets()) {
+        if (target->GetStreamState() != TReplication::EStreamState::Error) {
+            continue;
+        }
+
+        target->Shutdown(ctx);
+        target->SetStreamState(TReplication::EStreamState::Creating);
+        target->SetIssue({});
+        db.Table<TControllerSchema::SrcStreams>().Key(replication.GetId(), target->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::SrcStreams::State>(target->GetStreamState()));
+        db.Table<TControllerSchema::Targets>().Key(replication.GetId(), target->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::Targets::Issue>(target->GetIssue()));
+    }
+
+    return true;
+}
+
+} // anonymous namespace
+
 class TController::TTxAlterReplication: public TTxBase {
     TEvController::TEvAlterReplication::TPtr Ev;
     THolder<TEvController::TEvAlterReplicationResult> Result;
@@ -57,7 +106,7 @@ public:
         }
 
         auto desiredState = Replication->GetState();
-        if (record.HasSwitchState()) {
+        if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;
@@ -74,6 +123,10 @@ public:
                 default:
                     Y_ABORT("Invalid state");
             }
+        }
+
+        if (Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
+            alter = false;
         }
 
         if (alter && Replication->GetState() == TReplication::EState::Error) {
@@ -99,7 +152,12 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        if (!alter && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId()) && RetryPausedBootstrap(*Replication, db, ctx)) {
+            issue.clear();
+            desiredState = Replication->GetDesiredState();
+        }
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),
             NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
             NIceDb::TUpdate<Schema::Replications::Issue>(issue)
@@ -118,16 +176,39 @@ public:
                 continue;
             }
 
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
+                    && desiredState == TReplication::EState::Paused) {
+                continue;
+            }
+
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
+                    && desiredState == TReplication::EState::Ready) {
+                // Import replaces the placeholder, so resolve its new path id on attachment.
+                target->SetDstPathId({});
+                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(InvalidOwnerId),
+                    NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(InvalidLocalPathId));
+            }
+
             target->Shutdown(ctx);
             target->SetDstState(TReplication::EDstState::Alter);
             if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
                 target->SetStreamState(TReplication::EStreamState::Creating);
+                db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
             }
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
             );
 
             alter = true;
+        }
+
+        if (Replication->CheckAlterDone()) {
+            Replication->SetState(desiredState);
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::State>(desiredState)
+            );
         }
 
         if (alter) {

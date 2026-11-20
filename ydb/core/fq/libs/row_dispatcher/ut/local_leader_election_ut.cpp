@@ -6,6 +6,8 @@
 
 #include <ydb/core/testlib/test_client.h>
 
+#include <util/string/builder.h>
+
 #include <thread>
 #include <chrono>
 
@@ -25,6 +27,10 @@ public:
         NKikimrProto::TAuthConfig authConfig;
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->NodeCount = 1;
+        auto* rule = ServerSettings->AppConfig->MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc(TStringBuilder() << "/" << ServerSettings->DomainName
+            << "/.metadata/streaming/coordination_node");
+        rule->SetDst("/Root/missing-coordination-node");
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
         Server->GetRuntime()->SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_DEBUG);
@@ -62,7 +68,8 @@ public:
     }
 
     NActors::TActorId ExpectCoordinatorChanged() {
-        auto eventHolder = Server->GetRuntime()->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher);
+        auto eventHolder = Server->GetRuntime()->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(
+            RowDispatcher, TDuration::Seconds(30));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         return eventHolder.Get()->Get()->CoordinatorActorId;
     }
@@ -86,7 +93,7 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(LocalLeaderElectionTests) {
-    Y_UNIT_TEST_F(Test1, TFixture) {
+    Y_UNIT_TEST_F(PhysicalCoordinationPathBypassesAliasing, TFixture) {
         Init();
 
         auto coordinatorId1 = ExpectCoordinatorChanged();

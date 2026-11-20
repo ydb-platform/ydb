@@ -160,6 +160,7 @@ public:
     TAsyncStatus BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::BootstrapClusterRequest>(settings);
         request.set_self_assembly_uuid(selfAssemblyUUID);
+        request.set_allow_unknown_fields(settings.AllowUnknownFields_);
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::BootstrapClusterRequest,
             Ydb::Config::BootstrapClusterResponse>(std::move(request),

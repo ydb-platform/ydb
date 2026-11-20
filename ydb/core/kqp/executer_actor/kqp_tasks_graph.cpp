@@ -1541,6 +1541,7 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
 void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input, bool serializeAsyncIoSettings, bool& enableMetering) const {
     const auto& snapshot = GetMeta().Snapshot;
     const auto& lockTxId = GetMeta().LockTxId;
+    const auto& lockNodeId = GetMeta().LockNodeId;
 
     switch (input.Type()) {
         case NYql::NDq::TTaskInputType::Source:
@@ -1575,6 +1576,21 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 if (snapshot.IsValid()) {
                     input.Meta.FullTextSourceSettings->MutableSnapshot()->SetStep(snapshot.Step);
                     input.Meta.FullTextSourceSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+                }
+
+                if (lockTxId) {
+                    input.Meta.FullTextSourceSettings->SetLockTxId(*lockTxId);
+                    input.Meta.FullTextSourceSettings->SetLockNodeId(lockNodeId);
+                }
+
+                if (GetMeta().LockMode) {
+                    input.Meta.FullTextSourceSettings->SetLockMode(*GetMeta().LockMode);
+                }
+
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.FullTextSourceSettings->GetTable().GetPath());
+                if (effectiveSpanId) {
+                    input.Meta.FullTextSourceSettings->SetQuerySpanId(effectiveSpanId);
                 }
 
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.FullTextSourceSettings);
@@ -2533,6 +2549,9 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     NKikimrKqp::TKqpFullTextSourceSettings* settings = input.Meta.FullTextSourceSettings;
 
     settings->SetIndex(fullTextSource.GetIndex());
+    if (fullTextSource.HasMainTableCovered()) {
+        settings->SetMainTableCovered(fullTextSource.GetMainTableCovered());
+    }
     settings->SetDatabase(GetMeta().Database);
 
     const auto& poolId = GetMeta().UserRequestContext->PoolId;
@@ -2576,6 +2595,16 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
 
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
+    }
+
+    for (const auto& query : fullTextSource.GetQuerySettings().GetPatternQueries()) {
+        const auto value = ExtractPhyValue(
+            stageInfo, query.GetPattern(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        auto* resolved = settings->MutableQuerySettings()->AddPatternQueries();
+        resolved->SetPattern(TString(value.AsStringRef()));
+        resolved->SetEscape(query.GetEscape());
+        resolved->SetMode(query.GetMode());
     }
 
     for (const auto& token : fullTextSource.GetQuerySettings().GetTokens()) {

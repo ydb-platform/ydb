@@ -151,6 +151,9 @@ public:
 
 protected:
     TMetrics ResourceValues; // current values of various metrics
+    ui64 ProtoMetricsRevision = 0;
+    ui64 PersistedProtoMetricsRevision = 0;
+    void MarkProtoMetricsDirty();
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
 
@@ -204,10 +207,8 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
-    bool IsReadyToBoot() const {
-        return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
-    }
-
+    bool IsReadyToWork() const;
+    bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;
     bool IsStartingOnNode(TNodeId nodeId) const;
@@ -216,7 +217,7 @@ public:
     bool IsAlive() const;
     bool CanBeAlive() const; // IsAlive() + <Unknown>
 
-    bool IsAliveOnLocal(const TActorId& local) const;
+    bool IsPresentOnLocal(const TActorId& local) const;
     bool IsStopped() const;
     bool InitiateBoot(TNodeId node = 0);
     bool BecomeStarting(TNodeId nodeId);
@@ -286,6 +287,20 @@ public:
         return ResourceValues;
     }
 
+    bool IsProtoMetricsDirty() const {
+        return ProtoMetricsRevision != PersistedProtoMetricsRevision;
+    }
+
+    ui64 GetProtoMetricsRevision() const {
+        return ProtoMetricsRevision;
+    }
+
+    void ConfirmProtoMetricsPersistence(ui64 revision) {
+        if (ProtoMetricsRevision == revision) {
+            PersistedProtoMetricsRevision = revision;
+        }
+    }
+
     void InitTabletMetrics() {
         UpdateResourceUsage({});
     }
@@ -300,6 +315,7 @@ public:
 
     // ONLY for use in unit tests
     TMetrics& GetMutableResourceValues() {
+        MarkProtoMetricsDirty();
         return ResourceValues;
     }
 
@@ -313,6 +329,9 @@ public:
     }
 
     void NotifyOnRestart(const TString& status, TSideEffects& sideEffects);
+
+private:
+    void ChangeNode(TNodeId nodeId);
 };
 
 

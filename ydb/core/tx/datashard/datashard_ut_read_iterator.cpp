@@ -4,12 +4,16 @@
 #include "datashard_failpoints.h"
 #include "read_iterator.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
@@ -20,6 +24,8 @@
 #include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+
+#include <util/generic/scope.h>
 
 #include <algorithm>
 #include <map>
@@ -1029,6 +1035,65 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
     Y_UNIT_TEST(ShouldReadRangeArrow) {
         TestReadRangeMovies(NKikimrDataEvents::FORMAT_ARROW);
+    }
+
+    Y_UNIT_TEST(ShouldHelpQueuedReadOnOverload) {
+        TTestHelper helper;
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto& table = helper.Tables.at("table-1");
+        const auto shardActor = ResolveTablet(runtime, table.TabletId);
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto snapshot = CreateVolatileSnapshot(helper.Server, {"/Root/table-1"}, TDuration::Hours(1));
+        auto makeRead = [&](ui64 readId) {
+            auto request = helper.GetBaseReadRequest("table-1", readId, NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+            AddKeyQuery(*request, {1, 1, 1});
+            return request;
+        };
+
+        // Warm the read so helping can finish it without waiting for pages.
+        auto warmResult = helper.SendRead("table-1", makeRead(1).release());
+        CheckResult(table.UserTable, *warmResult, {{1, 1, 1, 100}});
+        UNIT_ASSERT(warmResult->Record.GetFinished());
+
+        // CheckInflightLimit rejects when the count is greater than the limit,
+        // so a limit of one admits two iterators before rejecting the next read.
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->DataShardControls.MaxTxInFly);
+        TBlockEvents<IEventHandle> blockedActivations(runtime, [&](const IEventHandle::TPtr& ev) {
+            return ev->GetTypeName().Contains("TEvActivateLowExecution");
+        });
+        for (ui64 readId : {2, 3}) {
+            runtime.Send(new IEventHandle(shardActor, sender, makeRead(readId).release()), 0, true);
+        }
+        runtime.WaitFor("blocked low-priority activation", [&] { return !blockedActivations.empty(); }, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount"), 2);
+
+        runtime.Send(new IEventHandle(shardActor, sender, makeRead(4).release()), 0, true);
+        std::map<ui64, TEvDataShard::TEvReadResult::TPtr> results;
+        for (size_t i = 0; i < 2; ++i) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(sender, TDuration::Seconds(5));
+            UNIT_ASSERT_C(ev, "Expected the helped read and overload results while activations are blocked");
+            const ui64 readId = ev->Get()->Record.GetReadId();
+            UNIT_ASSERT(results.emplace(readId, std::move(ev)).second);
+        }
+
+        const auto& helped = *results.at(2)->Get();
+        CheckResult(table.UserTable, helped, {{1, 1, 1, 100}});
+        UNIT_ASSERT(helped.Record.GetFinished());
+        const auto& rejected = results.at(4)->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetStatus().GetCode(), Ydb::StatusIds::OVERLOADED);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(rejected.GetStatus().GetIssues(0).message().Contains("MaxTxInFly"));
+        // Helping runs exactly one transaction and still rejects the new read,
+        // even though completing the queued read frees an admission slot.
+        UNIT_ASSERT_VALUES_EQUAL(helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount"), 1);
+
+        blockedActivations.Stop().Unblock();
+        auto remaining = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(sender, TDuration::Seconds(5));
+        UNIT_ASSERT(remaining);
+        UNIT_ASSERT_VALUES_EQUAL(remaining->Get()->Record.GetReadId(), 3);
+        CheckResult(table.UserTable, *remaining->Get(), {{1, 1, 1, 100}});
+        UNIT_ASSERT(remaining->Get()->Record.GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount"), 0);
     }
 
     Y_UNIT_TEST(ShouldReadKeyOnlyValueColumn) {
@@ -4203,6 +4268,86 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
+    Y_UNIT_TEST(AdmittedReadDoesNotWaitForQuotaAfterPageFault) {
+        using namespace NKqp::NScheduler;
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(true);
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        const auto schedulerId = NKqp::MakeKqpSchedulerServiceId(runtime.GetFirstNodeId());
+        runtime.Send(schedulerId, sender, new TEvAddDatabase("/Root"));
+        runtime.Send(schedulerId, sender, new TEvAddPool("/Root", "read_pool"));
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().ExecutorCacheSize(1));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));
+        SimulateSleep(runtime, TDuration::Seconds(1));
+        const auto shard = shards.at(0);
+        CompactTable(runtime, shard, tableId, false);
+        RebootTablet(runtime, shard, sender);
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        auto query = runtime.GetAppData().KqpComputeScheduler->GetReadQuery("/Root", "read_pool");
+        UNIT_ASSERT(query);
+        bool replied = false;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvReadResult>(
+            [&](TEvDataShard::TEvReadResult::TPtr&) { replied = true; });
+        TBlockEvents<NSharedCache::TEvRequest> pages(runtime);
+        bool retried = false;
+        auto retryObserver = runtime.AddObserver<TEvDataShard::TEvReadContinue>(
+            [&](TEvDataShard::TEvReadContinue::TPtr& ev) {
+                retried = true;
+                ev.Reset();
+            });
+        auto readSender = runtime.AllocateEdgeActor();
+        auto pipe = runtime.ConnectToPipe(shard, readSender, 0, NTabletPipe::TClientConfig());
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        request->Record.SetReadId(1);
+        request->Record.SetDatabaseId("/Root");
+        request->Record.SetPoolId("read_pool");
+        request->Record.SetMaxRows(1);
+        request->Record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        request->Record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+        request->Record.MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
+        request->Record.AddColumns(1);
+        request->Record.AddColumns(2);
+        request->Ranges.emplace_back(TOwnedCellVec(), true, TOwnedCellVec(), true);
+        runtime.SendToPipe(pipe, readSender, request.release());
+
+        runtime.WaitFor("first read page fault", [&] { return !pages.empty() || replied || retried; });
+        UNIT_ASSERT(!replied);
+        UNIT_ASSERT(!retried);
+        UNIT_ASSERT_C(!pages.empty(), "The admitted operation must actually wait for a page");
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), 0u);
+
+        // Exhaust fair-share after admission. Completing this first operation
+        // must depend only on the page, with no new quota wait in the pipeline.
+        constexpr ui64 blockedUsage = 1'000'000;
+        query->CpuUsage += blockedUsage;
+        query->GetParent()->CpuUsage += blockedUsage;
+        Y_DEFER {
+            query->CpuUsage -= blockedUsage;
+            query->GetParent()->CpuUsage -= blockedUsage;
+        };
+        pages.Stop().Unblock();
+        runtime.WaitFor("resumed read or unexpected quota wait", [&] { return replied || retried; });
+        UNIT_ASSERT_C(!retried, "An admitted pipeline operation must not wait for quota after a restart");
+        UNIT_ASSERT(replied);
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetRowsCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), blockedUsage);
+    }
+
     Y_UNIT_TEST(CancelPageFaultedReadThenDropTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

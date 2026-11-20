@@ -1641,6 +1641,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        reserved "EnableSplitMergeFairScheduling"; reserved 20;  // for future EnableSplitMergeFairScheduling
+        optional uint64 MergeBySizeEnabled = 21 [(ControlOptions) = {
+            Description: "Enables merge by size",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TTCMallocControls {
@@ -2206,6 +2212,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0
+        }];
+        optional uint64 RequestsInFlightLimit = 6 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous KeyValue data requests per tablet",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 10000
         }];
     }
 
@@ -2828,6 +2840,13 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = false];
+
+    message TBackupSettings {
+        optional uint32 ExportOperationTimeoutSeconds = 1 [default = 172800]; // 2 days
+        optional uint32 ImportOperationTimeoutSeconds = 2 [default = 172800]; // 2 days
+    }
+
+    optional TBackupSettings BackupSettings = 79;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
@@ -3275,6 +3294,7 @@ message TSystemTabletBackupConfig {
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
     optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
     optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
+    optional uint64 MaxGlobalBackupsLimit = 10 [default = 50];
 }
 
 message TClusterDiagnosticsConfig {
@@ -3303,6 +3323,21 @@ message TUdfStoreConfig {
     optional string KvStorageMedia = 2 [default = "ssd"];
     optional bool EnableUnsafeNativeUdf = 3 [default = false];
     optional string UnsafeNativeUdfDir = 4;
+}
+
+// Local path-prefix aliases. Rules are ordered and take effect on node restart.
+message TPathRewriteConfig {
+    message TRule {
+        // Nonempty absolute prefixes; trailing Src slashes are ignored.
+        // First path-component match wins. Rewritten paths collapse repeated '/'
+        // and drop trailing '/' except for the root path.
+        optional string Src = 1;
+        optional string Dst = 2;
+    }
+
+    // First matching prefix wins; results are not rematched.
+    // Relative and unmatched inputs remain unchanged.
+    repeated TRule Rules = 1;
 }
 
 message TAppConfig {
@@ -3428,6 +3463,7 @@ message TAppConfig {
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
+    optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
 }
 
 message TYdbVersion {

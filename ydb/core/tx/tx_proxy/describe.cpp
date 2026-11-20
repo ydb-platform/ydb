@@ -497,8 +497,11 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
             auto* record = ev->Get()->MutableRecord();
             auto& descr = *record->MutablePathDescription();
 
-            if (auto schema = NSysView::GetSystemViewResolver()
-                .GetSystemViewSchema(descr.GetSysViewDescription().GetType()))
+            const auto sysViewType = descr.GetSysViewDescription().GetType();
+            TMaybe<NSysView::ISystemViewResolver::TSchema> schema;
+            if (NKikimrSysView::ESysViewType_IsValid(sysViewType)
+                && (schema = NSysView::GetSystemViewResolver()
+                                .GetSystemViewSchema(static_cast<NKikimrSysView::ESysViewType>(sysViewType))))
             {
                 FillSystemViewDescr(descr, std::move(*schema));
             } else {

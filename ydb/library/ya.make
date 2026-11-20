@@ -28,6 +28,7 @@ RECURSE(
     mkql_proto
     naming_conventions
     ncloud
+    net
     pdisk_io
     persqueue
     planner
@@ -45,6 +46,7 @@ RECURSE(
     testlib
     time_series_vec
     union_copy_set
+    vector_distance
     wilson_ids
     workload
     workload

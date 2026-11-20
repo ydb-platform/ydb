@@ -84,7 +84,7 @@ TString TWithKeysAggregationOption::DebugString() const {
     return sb;
 }
 
-TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor::DoExecute(
+TConclusion<TExecutionResult> TWithKeysAggregationProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     CH::GroupByOptions funcOpts;
     funcOpts.assigns.reserve(AggregationKeys.size() + Aggregations.size());
@@ -150,7 +150,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }
     }
-    return IResourceProcessor::EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 TConclusion<std::shared_ptr<TWithKeysAggregationProcessor>> TWithKeysAggregationProcessor::TBuilder::Finish() {

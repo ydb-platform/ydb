@@ -1,3 +1,5 @@
+* Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
+
 * Driver now supports async credentials initialisation: the first request is delayed until they are ready.
 
 * Added a flag to support deferred session creation(when client timeout exceeded, the session is created in the backgroud)

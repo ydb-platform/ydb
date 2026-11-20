@@ -455,10 +455,20 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
             {}
 
             ui64 operator()(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) const {
-                return counters->GetSubgroup("subsystem", "deepScrubbing")
-                        ->GetSubgroup("blobSize", IsHuge ? "huge" : "small")
-                        ->GetSubgroup("erasure", TErasureType::ErasureSpeciesName(Erasure))
-                        ->GetCounter(CounterName, false)->Val();
+                auto group = counters->FindSubgroup("subsystem", "deepScrubbing");
+                if (!group) {
+                    return 0;
+                }
+                group = group->FindSubgroup("blobSize", IsHuge ? "huge" : "small");
+                if (!group) {
+                    return 0;
+                }
+                group = group->FindSubgroup("erasure", TErasureType::ErasureSpeciesName(Erasure));
+                if (!group) {
+                    return 0;
+                }
+                auto counter = group->FindCounter(CounterName);
+                return counter ? counter->Val() : 0;
             }
 
             TString CounterName;

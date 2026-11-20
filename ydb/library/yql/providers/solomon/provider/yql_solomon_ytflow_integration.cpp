@@ -1,5 +1,6 @@
 #include "yql_solomon_ytflow_integration.h"
 
+#include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 
 #include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
@@ -160,6 +161,11 @@ public:
         auto dataSink = writeToShard.DataSink();
         const auto* clusterSettings = State_->Configuration->ClusterConfigs.FindPtr(dataSink.Cluster());
         YQL_ENSURE(clusterSettings, "Unknown cluster name: " << dataSink.Cluster().StringValue());
+        // TSolomonSinkMessage carries neither a cluster type nor an auth mode, so this
+        // path cannot select the native endpoint and Bearer authentication a Monium
+        // project needs. Refuse instead of writing somewhere else.
+        YQL_ENSURE(!NSo::IsMoniumProject(*clusterSettings),
+            "Writing into a Monium project is not supported in ytflow mode");
         TString endpoint = (clusterSettings->GetUseSsl() ? "https://" : "http://") + clusterSettings->GetCluster();
         sinkSettings.SetEndpoint(std::move(endpoint));
         auto shardPath = StringSplitter(writeToShard.Shard().StringValue())

@@ -44,5 +44,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    program/ut
     ut
 )

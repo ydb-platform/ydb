@@ -12,7 +12,7 @@ TConclusionStatus IScannerConstructor::ParseProgram(const TProgramParsingContext
     std::set<TString> namesChecker;
     if (serializedProgram.empty()) {
         if (!read.ColumnIds.size()) {
-            auto schema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
+            auto schema = read.GetTableMetadataAccessor()->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
             read.ColumnIds = std::vector<ui32>(schema->GetColumnIds().begin(), schema->GetColumnIds().end());
         }
         TProgramContainer container;
@@ -61,15 +61,24 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMe
 }
 
 TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConstructor::BuildCursorFromProto(
-    const NKikimrKqp::TEvKqpScanCursor& proto) const {
+    const NKikimrKqp::TEvKqpScanCursor& proto, const ESourcesSorting sourcesSorting) const {
+    const TString implName = CursorImplementationName(proto.GetImplementationCase());
     auto result = DoBuildCursor(proto.GetImplementationCase());
     if (!result) {
-        return result;
+        return TConclusionStatus::Fail(TStringBuilder() << "scan cursor " << implName << " cannot be read by this reader");
+    }
+    const auto protoSorting = SourcesSortingToProto(sourcesSorting);
+    const auto tag = LegacyCursorTagFromProto(proto.GetImplementationCase());
+    if (tag && *tag != LegacyCursorTag(protoSorting)) {
+        return TConclusionStatus::Fail(TStringBuilder()
+                                       << "scan cursor " << implName << " was taken with the sources ordered another way than this scan orders "
+                                       << "them (" << sourcesSorting << "), so its source index names another source");
     }
     auto status = result->DeserializeFromProto(proto);
     if (status.IsFail()) {
         return status;
     }
+    result->SetSourcesSorting(protoSorting);
     return result;
 }
 

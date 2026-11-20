@@ -33,13 +33,15 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter,
                 TReplQuoter::TPtr replPDiskWriteQuoter,
                 TReplQuoter::TPtr replNodeRequestQuoter,
-                TReplQuoter::TPtr replNodeResponseQuoter)
+                TReplQuoter::TPtr replNodeResponseQuoter,
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskAsyncCounters)
         : TBSProxyContext(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))
         , VDiskCounters(vdiskCounters)
+        , VDiskAsyncCounters(vdiskAsyncCounters ? std::move(vdiskAsyncCounters) : vdiskCounters)
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
-        , Histograms(VDiskCounters, type)
+        , Histograms(VDiskCounters, VDiskAsyncCounters, type)
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
@@ -52,7 +54,6 @@ namespace NKikimr {
         , CompIndexFresh(VDiskMemCounters->GetCounter("MemTotal:CompIndexFresh"))
         , CompData(VDiskMemCounters->GetCounter("MemTotal:CompData"))
         , CompIndex(VDiskMemCounters->GetCounter("MemTotal:CompIndex"))
-        , IteratorsCache(VDiskMemCounters->GetCounter("MemTotal:IteratorsCache"))
         , Replication(VDiskMemCounters->GetCounter("MemTotal:Replication"))
         , SyncLogCache(VDiskMemCounters->GetCounter("MemTotal:SyncLogCache"))
         , ActorSystem(as)
@@ -64,7 +65,6 @@ namespace NKikimr {
         , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , ResponseStatusMonGroup(std::make_shared<NMonGroup::TResponseStatusGroup>(VDiskCounters))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
-        , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())
     {
         Y_ABORT_UNLESS(!VDiskLogPrefix.empty());

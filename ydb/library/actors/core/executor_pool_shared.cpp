@@ -35,6 +35,7 @@ namespace NActors {
         : PoolInfos(poolInfos)
     {
         PoolThreadRanges.resize(poolInfos.size());
+        AdjacentOwnerByPool.resize(poolInfos.size(), -1);
         ui64 totalThreads = 0;
         for (const auto& poolInfo : poolInfos) {
             PoolThreadRanges[poolInfo.PoolId].Begin = totalThreads;
@@ -42,6 +43,19 @@ namespace NActors {
             totalThreads += poolInfo.SharedThreadCount;
             if (poolInfo.InPriorityOrder) {
                 PriorityOrder.push_back(poolInfo.PoolId);
+            }
+            Y_ABORT_UNLESS(poolInfo.AdjacentPools.empty() || poolInfo.SharedThreadCount > 0,
+                "pool %d has adjacent pools but owns no shared threads", poolInfo.PoolId);
+            for (i16 adjacentPoolId : poolInfo.AdjacentPools) {
+                Y_ABORT_UNLESS(adjacentPoolId >= 0 && static_cast<size_t>(adjacentPoolId) < poolInfos.size(),
+                    "invalid adjacent pool %d for owner pool %d", adjacentPoolId, poolInfo.PoolId);
+                Y_ABORT_UNLESS(poolInfo.PoolId != adjacentPoolId,
+                    "pool %d cannot be adjacent to itself", poolInfo.PoolId);
+                i16& adjacentOwner = AdjacentOwnerByPool[adjacentPoolId];
+                Y_ABORT_UNLESS(adjacentOwner == -1,
+                    "adjacent pool %d has multiple owner pools: %d and %d",
+                    adjacentPoolId, adjacentOwner, poolInfo.PoolId);
+                adjacentOwner = poolInfo.PoolId;
             }
         }
         Sort(PoolInfos.begin(), PoolInfos.end(), [](const TPoolShortInfo& a, const TPoolShortInfo& b) {
@@ -102,6 +116,7 @@ namespace NActors {
         , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , PoolName("Shared")
         , SoftProcessingDurationTs(cfg.SoftProcessingDurationTs)
+        , United(cfg.United)
         , Threads(new NThreading::TPadded<TSharedExecutorThreadCtx>[PoolThreads])
         , ForeignThreadsAllowedByPool(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
         , ForeignThreadSlots(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
@@ -493,6 +508,19 @@ namespace NActors {
             }
         }
         return true;
+    }
+
+    bool TSharedExecutorPool::WakeUpAdjacentOwner(i16 poolId) {
+        Y_ABORT_UNLESS(poolId >= 0 && static_cast<size_t>(poolId) < PoolManager.AdjacentOwnerByPool.size());
+        const i16 adjacentOwnerPoolId = PoolManager.AdjacentOwnerByPool[poolId];
+        if (adjacentOwnerPoolId == -1) {
+            return false;
+        }
+        if (WakeUpLocalThreads(adjacentOwnerPoolId)) {
+            EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "wakeup from adjacent pool owner; poolId == ", poolId, " adjacentOwnerPoolId == ", adjacentOwnerPoolId);
+            return true;
+        }
+        return false;
     }
 
     bool TSharedExecutorPool::WakeUpGlobalThreads(i16 ownerPoolId) {

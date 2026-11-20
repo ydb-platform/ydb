@@ -82,6 +82,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDecommitStatus, stream, value) {
     stream << NKikimrBlobStorage::EDecommitStatus_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TMaintenanceStatus::E, stream, value) {
+    stream << NKikimrBlobStorage::TMaintenanceStatus::E_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TGroupStatus::E, stream, value) {
     stream << NKikimrBlobStorage::TGroupStatus::E_Name(value);
 }
@@ -220,6 +224,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode,
 
 Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel, stream, value) {
     stream << NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EImportState, stream, value) {
+    stream << NKikimrSchemeOp::TTableReplicationConfig::EImportState_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrSubDomains::EServerlessComputeResourcesMode, stream, value) {

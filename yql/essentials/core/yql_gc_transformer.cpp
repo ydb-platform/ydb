@@ -25,6 +25,7 @@ public:
 
         for (auto it = zombies; ctx.ExprNodes.cend() != it; ++it) {
             const auto dead = it->get();
+            YQL_ENSURE(!dead->UseCount());
             if (const auto hash = dead->GetHashAbove()) {
                 const auto range = ctx.UniqueNodes.equal_range(hash);
                 for (auto jt = range.first; range.second != jt;) {

@@ -261,6 +261,130 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         });
     }
 
+    // Compact fulltext indexes on a custom PK own three shared row-id objects on the main table: a
+    // generated column, its sequence and one Ready unique index. ConsistentCopyTables must preserve that
+    // infrastructure together with the physical compact index type and UseRowIdAsDocId metadata; otherwise
+    // subsequent DML either cannot allocate doc ids or creates duplicate row-id infrastructure.
+    void TestConsistentCopyTableWithCompactFulltextRowIdAutoProvision(bool relevance) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableCompactFulltextIndex(true);
+        ff.SetEnableFulltextIndexRowId(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        const auto expectedType = relevance
+            ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+            : NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact;
+        const TString type = relevance
+            ? "EIndexTypeGlobalFulltextCompactRelevance"
+            : "EIndexTypeGlobalFulltextCompact";
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "pk"   Type: "Utf8" NotNull: true }
+                Columns { Name: "text" Type: "String" }
+                KeyColumnNames: ["pk"]
+            }
+            IndexDescription {
+                Name: "fulltext_idx"
+                KeyColumnNames: ["text"]
+                Type: %s
+                FulltextIndexDescription {
+                    Settings {
+                        columns: {
+                            column: "text"
+                            analyzers: {
+                                tokenizer: STANDARD
+                                use_filter_lowercase: true
+                            }
+                        }
+                    }
+                }
+            }
+        )", type.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/texts"
+                DstPath: "/MyRoot/texts_copy"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Exactly the compact fulltext index and the shared unique row-id index were copied.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_copy"), {
+            NLs::PathExist, NLs::IsTable, NLs::IndexesCount(2),
+        });
+
+        // The generated Uint64 NOT NULL column still uses the copied table-local sequence.
+        {
+            const auto tableDesc = DescribePath(runtime, "/MyRoot/texts_copy");
+            ui32 rowIdColumns = 0;
+            for (const auto& column : tableDesc.GetPathDescription().GetTable().GetColumns()) {
+                if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                    ++rowIdColumns;
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "Uint64");
+                    UNIT_ASSERT(column.GetNotNull());
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(),
+                        NTableIndex::NFulltext::RowIdSequenceName);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(rowIdColumns, 1u,
+                "consistent copy must contain exactly one auto-provisioned __ydb_row_id column");
+        }
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_copy/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathExist,
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_copy/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({TString(NTableIndex::NFulltext::RowIdColumn)}),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/fulltext_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(expectedType),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"text"}),
+        });
+        {
+            const auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/texts_copy/fulltext_idx");
+            const auto& index = indexDesc.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(index.HasFulltextIndexDescription(),
+                "copied compact fulltext index must preserve FulltextIndexDescription");
+            UNIT_ASSERT_C(index.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "copied compact fulltext index must preserve UseRowIdAsDocId=true");
+        }
+
+        const TVector<TString> indexKeys = {"text"};
+        for (const auto& implTable : NTableIndex::GetImplTables(expectedType, indexKeys)) {
+            TestDescribeResult(DescribePrivatePath(runtime,
+                    TString::Join("/MyRoot/texts_copy/fulltext_idx/", implTable)), {
+                NLs::PathExist, NLs::IsTable,
+            });
+        }
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithCompactFulltextPlainRowIdAutoProvision) {
+        TestConsistentCopyTableWithCompactFulltextRowIdAutoProvision(/*relevance=*/false);
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithCompactFulltextRelevanceRowIdAutoProvision) {
+        TestConsistentCopyTableWithCompactFulltextRowIdAutoProvision(/*relevance=*/true);
+    }
+
     Y_UNIT_TEST(ConsistentCopyTableWithGlobalJsonRowIdManualInfraIndex) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -896,4 +1020,63 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         });
     }
 
+
+    Y_UNIT_TEST(CannotCopyBackupTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Create a regular source table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create a backup table from it
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BackupTable"
+            CopyFromTable: "/MyRoot/Table"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BackupTable", true), {
+            NLs::IsBackupTable(true),
+        });
+
+        // Cannot copy a backup table (single CopyTable)
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyOfBackup"
+            CopyFromTable: "/MyRoot/BackupTable"
+        )", {NKikimrScheme::StatusSchemeError});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CopyOfBackup"), {NLs::PathNotExist});
+
+        // Cannot copy a backup table (ConsistentCopyTables)
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/BackupTable"
+                DstPath: "/MyRoot/ConsistentCopyOfBackup"
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ConsistentCopyOfBackup"), {NLs::PathNotExist});
+
+        // Cannot copy a backup table even as part of a larger consistent operation
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/CopyOfTable"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/BackupTable"
+                DstPath: "/MyRoot/CopyOfBackupTable"
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        // The whole operation must be rejected before any part is proposed:
+        // no destination paths may exist
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CopyOfTable"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CopyOfBackupTable"), {NLs::PathNotExist});
+    }
 }

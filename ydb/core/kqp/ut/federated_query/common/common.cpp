@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+#include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -123,9 +124,11 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         httpGateway = MakeHttpGateway(queryServiceConfig.GetHttpGateway(), settings.CountersRoot);
     }
 
+    constexpr ui64 maxMessageSize = 136314880;   // logbroker default grpc max message size
     NYdb::TDriverConfig cfg;
     cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
     cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+    cfg.SetMaxMessageSize(maxMessageSize);
     auto driver = std::make_shared<NYdb::TDriver>(cfg);
 
     const auto& s3Config = queryServiceConfig.GetS3();
@@ -142,7 +145,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         solomonConfig,
         nullptr,
         NYql::NDq::CreateReadActorFactoryConfig(s3Config),
-        nullptr,
+        NYql::NDq::CreatePqDqTaskTransformFactory(),
         NYql::TPqGatewayConfig{},
         options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver),
         nullptr,
@@ -172,6 +175,10 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         .SetLogSettings(std::move(logSettings))
         .SetNeedsStatsCollectors(options.NeedsStatsCollectors)
         .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
+
+    if (appConfig->GetGRpcConfig().HasMaxMessageSize()) {
+        settings.SetGrpcServerOptions(NYdbGrpc::TServerOptions().SetMaxMessageSize(appConfig->GetGRpcConfig().GetMaxMessageSize()));
+    }
 
     settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
     federatedQuerySetupFactory->SetScriptExecutionSettings({

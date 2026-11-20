@@ -47,6 +47,10 @@ protected:
         return DoInitializeImpl(context);
     }
 
+    bool IsAlterPersistent() const {
+        return !GetShardIds().empty();
+    }
+
     std::shared_ptr<TColumnTableInfo> GetTargetTableInfoVerified() const {
         auto result = GetTargetTableInfo();
         AFL_VERIFY(!!result);

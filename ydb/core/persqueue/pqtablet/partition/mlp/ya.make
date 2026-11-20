@@ -14,6 +14,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/iterator
+    ydb/core/base
     ydb/core/persqueue/common
     ydb/core/persqueue/common/proxy
     ydb/core/persqueue/events
@@ -22,6 +23,7 @@ PEERDIR(
     ydb/core/persqueue/public/write_meta
     ydb/core/util
     ydb/core/ymq/proto
+    ydb/library/persqueue/topic_parser
 )
 
 GENERATE_ENUM_SERIALIZATION(mlp_consumer_order.h)

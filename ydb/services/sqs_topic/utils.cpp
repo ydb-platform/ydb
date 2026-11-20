@@ -18,8 +18,13 @@ namespace NKikimr::NSqsTopic {
 
     namespace {
 
-        TString ConvertOldConsumerName(const TString& consumer) {
-            return NPersQueue::ConvertOldConsumerName(consumer, AppData()->PQConfig);
+        // QueueUrl stores ConvertOldConsumerName(config name). Converting that path again
+        // sees no '@' and prefixes "shared/". Restore the config name and convert once,
+        // same as topic.committed_lag_messages.
+        TString MetricsConsumerName(const TString& consumer) {
+            const auto& pqConfig = AppData()->PQConfig;
+            const TString canonical = NPersQueue::ConvertNewConsumerName(consumer, pqConfig);
+            return NPersQueue::ConvertOldConsumerName(canonical, pqConfig);
         }
 
     } // namespace
@@ -83,7 +88,9 @@ namespace NKikimr::NSqsTopic {
         const TString& consumerName,
         const TString& method,
         TVector<std::pair<TString, TString>>&& labels,
-        const TString& databaseId
+        const TString& databaseId,
+        const TString& cloudId,
+        const TString& folderId
     ) {
         TString fullDatabasePath = databasePath + "/";
         TString adjustedTopicPath;
@@ -96,10 +103,14 @@ namespace NKikimr::NSqsTopic {
         TVector<std::pair<TString, TString>> common{
             {"database", databasePath},
             {"database_id", databaseId},
-            {"method", method},
-            {"topic", adjustedTopicPath},
-            {"consumer", ConvertOldConsumerName(consumerName)},
         };
+        if (!cloudId.empty() || !folderId.empty()) {
+            common.emplace_back("cloud_id", cloudId);
+            common.emplace_back("folder_id", folderId);
+        }
+        common.emplace_back("method", method);
+        common.emplace_back("topic", adjustedTopicPath);
+        common.emplace_back("consumer", MetricsConsumerName(consumerName));
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }

@@ -51,6 +51,8 @@ class TKafkaTestClient {
     public:
         TKafkaTestClient(ui16 port, const TString clientName = "TestClient");
 
+        void SetSocketTimeout(ui32 seconds);
+
         template <std::derived_from<TApiMessage> T>
         void WriteToSocket(TRequestHeaderData& header, T& request) {
             Write(So, &header, &request);

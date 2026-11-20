@@ -15,6 +15,7 @@ SRCS(
     ut_db_iface.cpp
     ut_db_scheme.cpp
     flat_executor_ut.cpp
+    flat_executor_alter_ut.cpp
     flat_executor_database_ut.cpp
     flat_executor_gclogic_ut.cpp
     flat_executor_leases_ut.cpp
@@ -32,6 +33,7 @@ SRCS(
     ut_self.cpp
     ut_iterator.cpp
     ut_memtable.cpp
+    ut_memtable_memory.cpp
     ut_sausage.cpp
     ut_stat.cpp
     ut_comp_gen.cpp

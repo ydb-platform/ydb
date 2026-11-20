@@ -80,6 +80,8 @@ message VectorIndexSettings {
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;
         VECTOR_TYPE_FLOAT = 1;
+        VECTOR_TYPE_FLOAT8_E4M3 = 7; // E4M3FN, no scale factor.
+        VECTOR_TYPE_FLOAT8_E5M2 = 8; // E5M2, no scale factor.
         VECTOR_TYPE_UINT8 = 2;
         VECTOR_TYPE_INT8 = 3;
         VECTOR_TYPE_BIT = 4;

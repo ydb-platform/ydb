@@ -198,6 +198,13 @@ private:
         std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
         NYql::TIssues issues = {});
 
+    struct TBaseStatisticsTotals {
+        ui64 RowCount = 0;
+        ui64 BytesSize = 0;
+    };
+
+    static TBaseStatisticsTotals CalculateBaseStatisticsTotals(const NKikimrStat::TSchemeShardStats& stats);
+    void RebuildBaseStatisticsCounters();
     void ReportBaseStatisticsCounters();
 
     std::optional<bool> IsKnownTable(const TPathId& pathId) const;
@@ -288,8 +295,10 @@ private:
     struct TSerializedBaseStats {
         std::shared_ptr<TString> Committed; // Value that is safely persisted in local DB. Can be nullptr.
         std::shared_ptr<TString> Latest; // Value from the latest update.
+        TBaseStatisticsTotals CommittedTotals;
     };
     std::unordered_map<TSSId, TSerializedBaseStats> BaseStatistics;
+    TBaseStatisticsTotals BaseStatisticsTotals;
 
     std::unordered_map<TSSId, size_t> SchemeShards; // all connected schemeshards
     std::unordered_map<TActorId, TSSId> SchemeShardPipes; // schemeshard pipe servers

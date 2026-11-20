@@ -292,45 +292,12 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             {"nodeId", selfNode});
     }
 
-    TString MakeBootstrapperNodeUrl(ui32 nodeId) const {
-        if (nodeId == SelfId().NodeId()) {
-            return "/actors/bootstrapper";
-        }
-        return "/node/" + ToString(nodeId) + "/actors/bootstrapper";
+    static TString MakeBootstrapperNodeUrl(ui32 nodeId, TStringBuf nodeRoot) {
+        return TStringBuilder() << nodeRoot << "node/" << nodeId << "/actors/bootstrapper";
     }
 
-    TString NormalizeRedirectPath(TStringBuf requestedPath) const {
-        const TString fallback = MakeBootstrapperNodeUrl(SelfId().NodeId());
-
-        if (requestedPath == "/actors/bootstrapper") {
-            return TString(requestedPath);
-        }
-
-        static constexpr TStringBuf prefix = "/node/";
-        static constexpr TStringBuf suffix = "/actors/bootstrapper";
-
-        if (!requestedPath.StartsWith(prefix) || !requestedPath.EndsWith(suffix)) {
-            return fallback;
-        }
-
-        const size_t nodePartBegin = prefix.size();
-        const size_t nodePartSize = requestedPath.size() - prefix.size() - suffix.size();
-        if (nodePartSize == 0) {
-            return fallback;
-        }
-
-        TStringBuf nodePart(requestedPath.data() + nodePartBegin, nodePartSize);
-        for (char ch : nodePart) {
-            if (ch < '0' || ch > '9') {
-                return fallback;
-            }
-        }
-
-        return TString(requestedPath);
-    }
-
-    void RenderRedirectPage(TStringStream& str, TStringBuf redirectPath) const {
-        const TString target = NormalizeRedirectPath(redirectPath);
+    void RenderRedirectPage(TStringStream& str, TStringBuf root) const {
+        const TString target = TStringBuilder() << root << "actors/bootstrapper";
 
         HTML(str) {
             HEAD() {
@@ -377,7 +344,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
         auto* appData = AppData();
         const auto& postParams = ev->Get()->Request.GetPostParams();
-        const TStringBuf redirectPath = ev->Get()->Request.GetPath();
+        const TString root = NActors::GetRelativeRoot(ev->Get()->Request.GetPath());
 
         if (!appData || !postParams.Has("action")) {
             return false;
@@ -388,13 +355,13 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         if (action == "disable" || action == "enable") {
             SetLocalBootstrappersDisabled(appData, action == "disable");
             ProcessTabletsFromConfig(LastBootstrapConfig);
-            RenderRedirectPage(str, redirectPath);
+            RenderRedirectPage(str, root);
             return true;
         }
 
         if (action == "disable_tablet" || action == "enable_tablet") {
             if (!postParams.Has("tablet_id")) {
-                RenderRedirectPage(str, redirectPath);
+                RenderRedirectPage(str, root);
                 return true;
             }
 
@@ -402,12 +369,12 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             if (!TryFromString(postParams.Get("tablet_id"), tabletId)) {
                 YDB_LOG_WARN("TConfiguredTabletBootstrapper::HandleHttpRequest: invalid tablet id in HTTP request",
                     {"tabletIdParam", postParams.Get("tablet_id")});
-                RenderRedirectPage(str, redirectPath);
+                RenderRedirectPage(str, root);
                 return true;
             }
 
             SetTabletBootstrapperDisabled(appData, tabletId, action == "disable_tablet");
-            RenderRedirectPage(str, redirectPath);
+            RenderRedirectPage(str, root);
             return true;
         }
 
@@ -444,7 +411,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         }
     }
 
-    void RenderControlPanel(TStringStream& str, bool isDisabled) const {
+    void RenderControlPanel(TStringStream& str, bool isDisabled, TStringBuf root) const {
         auto& __stream = str;
 
         DIV_CLASS("panel panel-default") {
@@ -459,13 +426,13 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                     str << "<button type='submit' name='action' value='disable' class='btn btn-danger'>Disable Local Bootstrappers</button>";
                 }
                 str << "</form>";
-                str << "<br/><small>Note: You can also control via ICB at <a href='/actors/icb'>/actors/icb</a> "
+                str << "<br/><small>Note: You can also control via ICB at <a href='" << root << "actors/icb'>/actors/icb</a> "
                     << "using parameter <code>BootstrapperControls.DisableLocalBootstrappers</code></small>";
             }
         }
     }
 
-    void RenderTabletNodes(TStringStream& str, const NKikimrConfig::TBootstrap::TTablet& tablet) const {
+    void RenderTabletNodes(TStringStream& str, const NKikimrConfig::TBootstrap::TTablet& tablet, TStringBuf nodeRoot) const {
         static constexpr size_t maxVisibleNodes = 10;
 
         const size_t nodeCount = static_cast<size_t>(tablet.NodeSize());
@@ -477,7 +444,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             }
 
             const ui32 nodeId = tablet.GetNode(i);
-            str << "<a href='" << MakeBootstrapperNodeUrl(nodeId) << "'>" << nodeId << "</a>";
+            str << "<a href='" << MakeBootstrapperNodeUrl(nodeId, nodeRoot) << "'>" << nodeId << "</a>";
         }
 
         if (nodeCount > visibleCount) {
@@ -503,7 +470,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         }
     }
 
-    void RenderTabletRow(TStringStream& str, const NKikimrConfig::TBootstrap::TTablet& tablet, bool isDisabled) const {
+    void RenderTabletRow(TStringStream& str, const NKikimrConfig::TBootstrap::TTablet& tablet, bool isDisabled, TStringBuf nodeRoot) const {
         const ui64 tabletId = tablet.GetInfo().GetTabletID();
         auto it = TabletStates.find(tabletId);
         const bool hasBootstrapper = it != TabletStates.end() && it->second.BootstrapperInstance.has_value();
@@ -525,7 +492,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                 }
             }
             TABLED() {
-                RenderTabletNodes(str, tablet);
+                RenderTabletNodes(str, tablet, nodeRoot);
             }
             TABLED() {
                 RenderTabletAction(str, tabletId, isDisabled, isTabletDisabled, hasBootstrapper);
@@ -533,7 +500,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         }
     }
 
-    void RenderTabletsPanel(TStringStream& str, bool isDisabled) const {
+    void RenderTabletsPanel(TStringStream& str, bool isDisabled, TStringBuf nodeRoot) const {
         auto& __stream = str;
 
         DIV_CLASS("panel panel-default") {
@@ -553,7 +520,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                     }
                     TABLEBODY() {
                         for (const auto& tablet : LastBootstrapConfig.GetTablet()) {
-                            RenderTabletRow(str, tablet, isDisabled);
+                            RenderTabletRow(str, tablet, isDisabled, nodeRoot);
                         }
                     }
                 }
@@ -561,8 +528,13 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         }
     }
 
-    void RenderHttpPage(TStringStream& str) const {
+    void RenderHttpPage(TStringStream& str, const NMonitoring::IMonHttpRequest& request) const {
         const bool isDisabled = DisableLocalBootstrappers;
+        const TString root = NActors::GetRelativeRoot(request.GetPath());
+        TString nodeRoot = root;
+        if (!request.GetHeader("X-Forwarded-From-Node").empty()) {
+            nodeRoot += "../../";
+        }
 
         HTML(str) {
             TAG(TH2) {
@@ -571,8 +543,8 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
             RenderInfoBanner(str);
             RenderStatusPanel(str, isDisabled);
-            RenderControlPanel(str, isDisabled);
-            RenderTabletsPanel(str, isDisabled);
+            RenderControlPanel(str, isDisabled, root);
+            RenderTabletsPanel(str, isDisabled, nodeRoot);
         }
     }
 
@@ -642,7 +614,7 @@ public:
             return;
         }
 
-        RenderHttpPage(str);
+        RenderHttpPage(str, ev->Get()->Request);
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 

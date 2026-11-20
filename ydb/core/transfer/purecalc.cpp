@@ -6,19 +6,14 @@ namespace {
 
 class TProgramHolder : public IProgramHolder {
 public:
-    using TPtr = TIntrusivePtr<TProgramHolder>;
-
-public:
     TProgramHolder(
         const TScheme::TPtr& tableScheme,
         const TString& sql
     )
-        : TopicColumns()
-        , TableScheme(tableScheme)
+        : TableScheme(tableScheme)
         , Sql(sql)
     {}
 
-public:
     void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) override {
         // Program should be stateless because input values
         // allocated on another allocator and should be released
@@ -35,7 +30,6 @@ public:
     }
 
 private:
-    const TVector<TSchemeColumn> TopicColumns;
     const TScheme::TPtr TableScheme;
     const TString Sql;
 

@@ -14,11 +14,13 @@ PEERDIR(
     ydb/core/kqp/common/simple
     ydb/core/kqp/counters
     ydb/core/kqp/federated_query
+    ydb/core/path_aliasing
     ydb/core/kqp/host
     ydb/core/ydb_convert
     ydb/core/kqp/compile_service/helpers
     ydb/library/actors/interconnect
     ydb/library/query_actor
+    ydb/library/ydb_issue
     ydb/library/security
     library/cpp/protobuf/json
 )

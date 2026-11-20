@@ -406,6 +406,7 @@ private:
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
+    THashMap<TString, TString> AliasedTopicPaths;
     THashMap<TString, i64> ReadFromTimestamp;
     THashMap<TString, i64> MaxLagByTopic;
 

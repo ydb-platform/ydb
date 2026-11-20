@@ -25,7 +25,7 @@ struct TEvWriteCompleeted: public TEventLocal<TEvWriteCompleeted, EEv::EvWriteCo
     {
     }
 
-    const Ydb::StatusIds::StatusCode Status; 
+    const Ydb::StatusIds::StatusCode Status;
     const NYql::TIssues Issues;
 };
 

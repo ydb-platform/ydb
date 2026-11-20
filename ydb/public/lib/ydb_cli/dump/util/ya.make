@@ -16,6 +16,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/types/status
+    yql/essentials/public/udf
     yql/essentials/parser/proto_ast/gen/v1_antlr4
     yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
     yql/essentials/sql/settings
@@ -29,3 +30,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

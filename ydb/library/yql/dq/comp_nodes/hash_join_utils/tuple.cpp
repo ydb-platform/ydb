@@ -340,6 +340,8 @@ TTupleLayoutFallback::TTupleLayoutFallback(
     for (auto &col : Columns) {
         if (col.SizeType == EColumnSizeType::Variable) {
             VariableColumns.push_back(col);
+        } else if (col.DataSize == 0) {
+            // singular types (void/null...) no payload bytes to pack/unpack
         } else if (IsPowerOf2(col.DataSize) &&
                    col.DataSize < (1u << FixedPOTColumns_.size())) {
             FixedPOTColumns_[CountTrailingZeroBits(col.DataSize)].push_back(
@@ -366,13 +368,23 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
     std::vector<const TColumnDesc *> fallback_cols;
     std::queue<const TColumnDesc *> next_cols;
 
+    auto packableFixedPrefix = [](const std::vector<TColumnDesc> &columns) {
+        std::vector<TColumnDesc> result;
+        for (const auto &col : columns) {
+            if (col.SizeType != EColumnSizeType::Fixed) {
+                break;
+            }
+            if (col.DataSize != 0) {
+                result.push_back(col);
+            }
+        }
+        return result;
+    };
+    const auto packableKeyColumns = packableFixedPrefix(KeyColumns);
+    const auto packablePayloadColumns = packableFixedPrefix(PayloadColumns);
+
     size_t fixed_cols_left =
-        KeyColumnsFixedNum +
-        std::accumulate(PayloadColumns.begin(), PayloadColumns.end(), 0ul,
-                        [](size_t prev, const auto &col) {
-                            return prev +
-                                   (col.SizeType == EColumnSizeType::Fixed);
-                        });
+        packableKeyColumns.size() + packablePayloadColumns.size();
 
     const auto small_tuple_packing = [&](const std::vector<TColumnDesc>
                                              &columns) {
@@ -392,13 +404,19 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
                     ? col.DataSize
                     : col.DataSize + col.Offset - next_cols.front()->Offset;
 
-            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size;
+            // PackTupleOr/UnpackTupleOr are instantiated for at most
+            // kSIMDMaxCols columns, so a wider group cannot be dispatched.
+            // Stop growing the group there and let the rest of the columns go
+            // through the fallback path.
+            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size &&
+                                    next_cols.size() < kSIMDMaxCols;
             if (col_pushed) {
                 next_cols.push(&col);
                 tuple_size = tuple_size_with_col;
             }
 
             if (!SIMDSmallTuple_.Cols && next_cols.size() > 1 &&
+                next_cols.size() <= kSIMDMaxCols &&
                 tuple_size <= max_simd_tuple_size &&
                 (!col_pushed || !fixed_cols_left)) {
                 SIMDSmallTupleDesc simd_desc;
@@ -520,16 +538,16 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
     };
 
     if (max_simd_tuple_size) {
-        small_tuple_packing(KeyColumns);
-        small_tuple_packing(PayloadColumns);
+        small_tuple_packing(packableKeyColumns);
+        small_tuple_packing(packablePayloadColumns);
 
         while (!next_cols.empty()) {
             fallback_cols.push_back(next_cols.front());
             next_cols.pop();
         }
     } else {
-        transpose_packing(KeyColumns, 0);
-        transpose_packing(PayloadColumns, 1);
+        transpose_packing(packableKeyColumns, 0);
+        transpose_packing(packablePayloadColumns, 1);
     }
 
     for (const auto col_desc_p : fallback_cols) {

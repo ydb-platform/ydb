@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/formats/arrow/csv/converter
     ydb/library/workload/abstract
     ydb/library/workload/benchmark_base
+    ydb/library/vector_distance
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/types/status
 )
@@ -25,3 +26,7 @@ PEERDIR(
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(vector_enums.h)
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

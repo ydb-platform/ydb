@@ -1,9 +1,12 @@
 #include "datashard_impl.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
 #include "execution_unit_ctors.h"
 
 #include <ydb/library/aclib/user_context.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -118,11 +121,17 @@ public:
                   const TActorContext &ctx) override;
 
 private:
+    struct TCleanupContext {
+        ui64 TxId = 0;
+        TReplicationSourceOffsetsDb::TCleanupCursor Cursor;
+    };
+
+    TCleanupContext Cleanup;
 };
 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
                                  TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline)
+    : TExecutionUnit(EExecutionUnitKind::AlterTable, true, dataShard, pipeline)
 {
 }
 
@@ -151,9 +160,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     const auto version = alterTableTx.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to ALTER TABLE at " << DataShard.TabletID()
-               << " version " << version);
+    YDB_LOG_INFO_CTX(ctx, "TAlterTableUnit::Execute: trying to alter table",
+        {"tabletId", DataShard.TabletID()},
+        {"version", version});
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {
@@ -163,6 +172,45 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     auto oldInfo = DataShard.FindUserTable(tableId);
+    using TReplicationConfig = NKikimrSchemeOp::TTableReplicationConfig;
+    if (alterTableTx.HasReplicationConfig()
+        && (alterTableTx.GetReplicationConfig().GetMode() == TReplicationConfig::REPLICATION_MODE_NONE
+            || !oldInfo->IsReplicated())
+        && !oldInfo->IsIncrementalRestore()) {
+        if (oldInfo->IsReplicated()) {
+            // Persist NONE before deleting offsets, so delayed replication writes
+            // cannot recreate them. Keep the schema version until ALTER completes.
+            TUserTable::TPtr stopped = new TUserTable(*oldInfo);
+            stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
+            NKikimrSchemeOp::TTableDescription schema;
+            stopped->GetSchema(schema);
+            stopped->ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+            stopped->SetSchema(schema);
+            NIceDb::TNiceDb db(txc.DB);
+            DataShard.PersistUserTable(db, tableId.LocalPathId, *stopped);
+            TDataShardLocksDb locksDb(DataShard, txc);
+            DataShard.AddUserTable(tableId, stopped, &locksDb);
+            DataShard.ReplicatedTables.erase(tableId);
+            return EExecutionStatus::Reschedule;
+        }
+
+        // Clean offsets left by older versions before enabling replication.
+        if (Cleanup.TxId != op->GetTxId()) {
+            Cleanup = {.TxId = op->GetTxId()};
+        }
+
+        DataShard.ReplicatedTables.erase(tableId);
+        TReplicationSourceOffsetsDb rdb(txc);
+        switch (rdb.RemoveTableBatch(tableId, Cleanup.Cursor)) {
+        case TReplicationSourceOffsetsDb::ECleanupStatus::NotReady:
+            return EExecutionStatus::Restart;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::More:
+            return EExecutionStatus::Reschedule;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::Done:
+            Cleanup = {};
+            break;
+        }
+    }
     auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.AddUserTable(tableId, newInfo, &locksDb);

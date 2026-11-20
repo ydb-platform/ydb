@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	select Knn::CosineDistance(Knn::ToBinaryStringFloat8E4M3([1.0f]), Knn::ToBinaryStringFloat8E5M2([1.0f]));
+	^
+        <tmp_path>/program.sql:<main>:2:13: Error: At function: Apply, At function: Udf, At Knn.CosineDistance
+        	select Knn::CosineDistance(Knn::ToBinaryStringFloat8E4M3([1.0f]), Knn::ToBinaryStringFloat8E5M2([1.0f]));
+	            ^
+            <tmp_path>/program.sql:<main>:2:13: Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Arguments should have same tags, but 'Float8E4M3Vector' is not equal to 'Float8E5M2Vector'
+            	select Knn::CosineDistance(Knn::ToBinaryStringFloat8E4M3([1.0f]), Knn::ToBinaryStringFloat8E5M2([1.0f]));
+	            ^

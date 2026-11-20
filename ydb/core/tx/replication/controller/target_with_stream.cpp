@@ -14,6 +14,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -46,19 +49,104 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             return; // TODO: hard error
         }
 
-        for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
-            if (!partition.GetParentPartitionIds().empty()) {
+        Partitions = result.GetTopicDescription().GetPartitions();
+        for (const auto& partition : Partitions) {
+            if (partition.GetParentPartitionIds().empty()) {
+                RunWorker(partition.GetPartitionId());
+            }
+        }
+
+        // the partition graph is only returned by DescribeTopic, the offsets by DescribeConsumer
+        DescribeConsumer();
+    }
+
+    void DescribeConsumer() {
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeConsumerRequest(SrcStreamPath, SrcStreamConsumerName,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)));
+    }
+
+    // A child partition gets its worker on the parent's DataEnd, which is not persisted,
+    // so after a restart it might run nowhere. Start the children whose parents are fully
+    // consumed (the consumer offset is committed only after the data is applied, so the read
+    // order is kept), unless the child and all its own children are fully consumed too.
+    void Handle(TEvYdbProxy::TEvDescribeConsumerResponse::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        const auto& result = ev->Get()->Result;
+        if (result.GetStatus() == NYdb::EStatus::UNSUPPORTED || result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+            // e.g. the local proxy (transfers, local replications): children are started on DataEnd only
+            YDB_LOG_WARN("Describing consumer is not supported, child partitions are started on parent's DataEnd only",
+                {"streamPath", SrcStreamPath},
+                {"consumer", SrcStreamConsumerName},
+                {"ev", ev->Get()->ToString()});
+            return PassAway();
+        }
+
+        if (!result.IsSuccess()) {
+            // never give up: otherwise children are silently left unread
+            if (IsRetryableError(result)) {
+                YDB_LOG_WARN("Error of describing consumer",
+                    {"streamPath", SrcStreamPath},
+                    {"consumer", SrcStreamConsumerName},
+                    {"ev", ev->Get()->ToString()},
+                    {"outcome", "retry"});
+            } else {
+                YDB_LOG_ERROR("Error of describing consumer",
+                    {"streamPath", SrcStreamPath},
+                    {"consumer", SrcStreamConsumerName},
+                    {"ev", ev->Get()->ToString()},
+                    {"outcome", "retry"});
+            }
+            return (void)Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(DescribeConsumerTag));
+        }
+
+        THashSet<ui64> consumed;
+        for (const auto& partition : result.GetConsumerDescription().GetPartitions()) {
+            const auto& stats = partition.GetPartitionStats();
+            const auto& consumerStats = partition.GetPartitionConsumerStats();
+            if (stats && consumerStats && consumerStats->GetCommittedOffset() >= stats->GetEndOffset()) {
+                consumed.insert(partition.GetPartitionId());
+            }
+        }
+
+        THashSet<ui64> consumedInactive;
+        for (const auto& partition : Partitions) {
+            if (!partition.GetActive() && consumed.contains(partition.GetPartitionId())) {
+                consumedInactive.insert(partition.GetPartitionId());
+            }
+        }
+
+        auto isConsumed = [&](ui64 id) { return consumedInactive.contains(id); };
+        for (const auto& partition : Partitions) {
+            const auto& parents = partition.GetParentPartitionIds();
+            if (parents.empty() || !AllOf(parents, isConsumed)) {
+                continue;
+            }
+            if (isConsumed(partition.GetPartitionId()) && AllOf(partition.GetChildPartitionIds(), isConsumed)) {
                 continue;
             }
 
-            auto ev = MakeRunWorkerEv(
-                ReplicationId, TargetId, Config, partition.GetPartitionId(),
-                ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
-                BatchingSettings, Database, MetricsLevel, Location);
-            Send(Parent, std::move(ev));
+            RunWorker(partition.GetPartitionId());
         }
 
         PassAway();
+    }
+
+    void RunWorker(ui64 partitionId) {
+        auto ev = MakeRunWorkerEv(
+            ReplicationId, TargetId, Config, partitionId,
+            ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
+            BatchingSettings, Database, MetricsLevel, Location);
+        Send(Parent, std::move(ev));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == DescribeConsumerTag) {
+            DescribeConsumer();
+        } else {
+            Bootstrap();
+        }
     }
 
     void Retry() {
@@ -115,7 +203,8 @@ public:
             {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, Bootstrap);
+            hFunc(TEvYdbProxy::TEvDescribeConsumerResponse, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -136,6 +225,8 @@ private:
     const TString Database;
     TMetricsConfig::EMetricsLevel MetricsLevel;
     NKikimrReplication::TReplicationLocationConfig Location;
+    std::vector<NYdb::NTopic::TPartitionInfo> Partitions;
+    static constexpr ui64 DescribeConsumerTag = 1;
 
 }; // TWorkerRegistar
 
@@ -215,8 +306,62 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
     return true;
 }
 
+bool TTargetWithStream::CanDetachWithoutStream() const {
+    if (GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+        return false;
+    }
+
+    if (GetStreamState() == EStreamState::Removing) {
+        return false;
+    }
+
+    switch (GetDstState()) {
+    case EDstState::Attaching:
+    case EDstState::Paused:
+    case EDstState::Alter:
+    case EDstState::Done:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
+
+    if (replication->GetState() == TReplication::EState::Removing
+        && GetStreamState() == EStreamState::Removed)
+    {
+        Reset(StreamCreator);
+        Reset(StreamRemover);
+        if (GetDstState() != EDstState::Removing && GetDstState() != EDstState::Attaching) {
+            if (HasWorkers()) {
+                RemoveWorkers(ctx);
+            } else {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
+                    replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+            }
+            return;
+        }
+    }
+
+    if (CanDetachWithoutStream()) {
+        Reset(StreamCreator);
+        // Keep the stream metadata so a later DROP can clean up a stream whose
+        // creation was already submitted when DONE was requested.
+        TTargetBase::Progress(ctx);
+        return;
+    }
+
+    // Source setup can return before destination progress, including while the
+    // replication is initially PAUSED. Refresh retained source actors first.
+    if (replication->GetYdbProxy()) {
+        for (const auto& actor : {StreamCreator, StreamRemover}) {
+            if (actor) {
+                ctx.Send(actor, new TEvPrivate::TEvUpdateYdbProxy(replication->GetYdbProxy()));
+            }
+        }
+    }
 
     switch (GetStreamState()) {
     case EStreamState::Creating:
@@ -251,6 +396,10 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
     }
 
     TTargetBase::Shutdown(ctx);
+}
+
+bool TTargetWithStream::IsExpectedStreamCreator(const TActorId& actorId) const {
+    return StreamCreator && StreamCreator == actorId;
 }
 
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {

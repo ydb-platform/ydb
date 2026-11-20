@@ -56,7 +56,7 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
         ++idx;
     }
 
-    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+    sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
     AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2)("count", sds->GetResources().GetColumnsCount());
     return sds->GetResources().GetRecordsCountActualVerified();
 }
@@ -79,7 +79,7 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EO
     builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(5)));
     builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 })));
     auto chain = builder.Finish().DetachResult();
-    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+    sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
     return sds->GetResources().GetRecordsCountActualVerified();
 }
@@ -114,7 +114,7 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, 
         ++idx;
     }
 
-    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+    sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 1);
     auto arr = sds->GetResources().GetAccessorVerified(2)->GetChunkedArray();
     AFL_VERIFY(arr->type()->id() == arrow::boolean()->id());
@@ -302,7 +302,7 @@ void GroupByXY(bool nullable, ui32 numKeys, ETest test = ETest::DEFAULT, EAggreg
         ++idx;
     }
 
-    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+    sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
 
     switch (aggFunc) {
         case EAggregate::Sum:
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             sds->AddBlob(idx, "", i);
             ++idx;
         }
-        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+        sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
 
         AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2);
         AFL_VERIFY(sds->GetResources().GetRecordsCountActualVerified() == 2);
@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             sds->AddBlob(idx, "", i);
             ++idx;
         }
-        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+        sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
 
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 4);
@@ -643,7 +643,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             sds->AddBlob(idx, "", i);
             ++idx;
         }
-        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+        sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 1);
         UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(3)->type->id(), arrow::Type::INT16);
@@ -674,7 +674,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             ++idx;
         }
 
-        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+        sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 1);
         UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(3)->type->id(), arrow::Type::INT64);

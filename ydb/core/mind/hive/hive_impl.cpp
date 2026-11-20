@@ -10,6 +10,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
+#include <util/generic/strbuf.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
@@ -388,6 +389,8 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         }
         if (tablet->IsBooting()) {
             delayedTablets.push_back(record);
+        } else if (!(tablet->IsLeader() && tablet->AsLeader().IsBootingSuppressed())) {
+            tablet->InitiateStop(sideEffects);
         }
     }
     if (waitingTablets.size() == processedItems || BootQueue.WaitQueue.empty()) {
@@ -818,6 +821,7 @@ void THive::BuildLocalConfig() {
 }
 
 void THive::BuildCurrentConfig() {
+    const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     TabletLimit.clear();
@@ -885,6 +889,23 @@ void THive::BuildCurrentConfig() {
         ObjectDistributions.Disable();
     }
     BootQueue.UpdateTabletBootQueuePriorities(CurrentConfig);
+
+    const bool lockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
+    if (previousLockedTabletsSendMetrics != lockedTabletsSendMetrics) {
+        for (auto& [_, node] : Nodes) {
+            for (TLeaderTabletInfo* tablet : node.LockedTablets) {
+                if (tablet->IsDeleting()) {
+                    continue;
+                }
+                // Change accounting without stopping external execution or changing the lock.
+                if (lockedTabletsSendMetrics) {
+                    tablet->BecomeUnknown(&node);
+                } else {
+                    tablet->BecomeStopped();
+                }
+            }
+        }
+    }
 }
 
 void THive::Cleanup() {
@@ -989,7 +1010,7 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId},
             {"updateTabletMetricsInProgress", UpdateTabletMetricsInProgress});
-        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);
+        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck, 0, ev->Cookie);
     }
 }
 
@@ -3052,6 +3073,16 @@ void THive::UpdateTotalResourceValues(
     TabletCounters->Simple()[NHive::COUNTER_METRICS_NETWORK].Set(std::get<NMetrics::EResource::Network>(TotalRawResourceValues));
 }
 
+void THive::ResetTotalResourceValues() {
+    TotalRawResourceValues = {};
+    TotalNormalizedResourceValues = {};
+
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_COUNTER].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_CPU].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_MEMORY].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_NETWORK].Set(0);
+}
+
 void THive::RemoveSubActor(ISubActor* subActor) {
     auto it = std::find(SubActors.begin(), SubActors.end(), subActor);
     if (it != SubActors.end()) {
@@ -3110,7 +3141,7 @@ void THive::AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NK
 }
 
 template <ui64 TMetrics::* field>
-static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, const TString& name) {
+static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, TStringBuf name) {
     i64 oldValue = aggregate.*field;
     i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
@@ -3118,7 +3149,7 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
         YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId},
-            {"metricName", name},
+            {"metricName", TString(name)},
             {"oldValue", oldValue},
             {"delta", delta},
             {"newValue", newValue});

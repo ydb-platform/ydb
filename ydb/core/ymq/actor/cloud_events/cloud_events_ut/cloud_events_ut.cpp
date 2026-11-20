@@ -1,4 +1,5 @@
 #include <util/string/builder.h>
+#include <util/generic/scope.h>
 #include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -37,6 +38,7 @@ private:
         TCloudEventsProcessorTests* Parent;
         TActorId ProcessorId;
         TString FullTablePath;
+        TDuration RetryTimeout;
 
         TTestRunner(
             const TString& name,
@@ -47,18 +49,22 @@ private:
             , SchemePath(parent->Root + "/" + name)
             , Processor()
             , Parent(parent)
+            , RetryTimeout(retryTimeout)
         {
-            auto* runtime = parent->Server->GetRuntime();
+            FullTablePath = SchemePath + "/" + TString(NCloudEvents::TProcessor::EventTableName);
+            InitTable();
+        }
+
+        void StartProcessor() {
+            auto* runtime = Parent->Server->GetRuntime();
             Processor = new NCloudEvents::TProcessor(
                 SchemePath,
                 TString(),
-                retryTimeout,
+                RetryTimeout,
                 nullptr
             );
             ProcessorId = runtime->Register(Processor);
             runtime->EnableScheduleForActor(ProcessorId, true);
-            FullTablePath = SchemePath + "/" + TString(NCloudEvents::TProcessor::EventTableName);
-            InitTable();
         }
 
         ~TTestRunner() {
@@ -189,11 +195,20 @@ private:
 
     UNIT_TEST_SUITE(TCloudEventsProcessorTests)
     UNIT_TEST(TestCreateCloudEventProcessor)
+    UNIT_TEST(TestClientModificationsDisabled)
     UNIT_TEST_SUITE_END();
 
     void TestCreateCloudEventProcessor() {
+        CheckCreateCloudEventProcessor(true);
+    }
+
+    void TestClientModificationsDisabled() {
+        CheckCreateCloudEventProcessor(false);
+    }
+
+    void CheckCreateCloudEventProcessor(bool enableClientModifications) {
         TDuration retryTimeout = TDuration::Seconds(2);
-        TTestRunner runner("CreateCloudEventProcessor", this, retryTimeout);
+        TTestRunner runner(enableClientModifications ? "CreateCloudEventProcessor" : "ClientModificationsDisabled", this, retryTimeout);
         TString queueName = "queue1";
         TString cloudId = "cloud1";
         TString folderId = "folder1";
@@ -202,10 +217,8 @@ private:
         TString token = "maskedToken123";
         TString authType = "authtype";
         TString peerName = "localhost:8000";
-        TString requestId = "req1";
+        TString requestId = runner.TestName;
         TString labels = "{\"k1\" : \"v1\"}";
-
-        Sleep(TDuration::Seconds(1));
 
         runner.AddEvent(
             queueName,
@@ -249,7 +262,36 @@ private:
             labels
         );
 
-        Sleep(retryTimeout * 3);
+        auto& flags = Server->GetRuntime()->GetAppData().FeatureFlags;
+        const bool previousFlag = flags.GetEnableClientModifications();
+        flags.SetEnableClientModifications(enableClientModifications);
+        Y_DEFER { flags.SetEnableClientModifications(previousFlag); };
+
+        if (!enableClientModifications) {
+            const auto status = runner.RunDataQuery(TStringBuilder() << "DELETE FROM `" << runner.FullTablePath << "`;").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::PRECONDITION_FAILED, status.GetIssues().ToString());
+        }
+
+        runner.StartProcessor();
+        auto session = TableClient->CreateSession().GetValueSync().GetSession();
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (true) {
+            auto result = session.ExecuteDataQuery(
+                TStringBuilder() << "SELECT COUNT(*) AS Count FROM `" << runner.FullTablePath << "`;",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+                NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(5))).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+
+            if (parser.ColumnParser("Count").GetUint64() == 0) {
+                break;
+            }
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Cloud events were not deleted");
+
+            Sleep(TDuration::MilliSeconds(10));
+        }
 
         enum EWaitState {
             Create,
@@ -265,8 +307,12 @@ private:
         int deleteCount = 0;
 
         const TString expectedRemoteAddress = TStringBuilder() << "remote_address=" << peerName;
+        const TString expectedRequestId = TStringBuilder() << "request_id=" << requestId;
 
         for (const auto& line : *AuditLinesPtr) {
+            if (!line.contains(expectedRequestId)) {
+                continue;
+            }
             std::cerr << line << std::endl;
             bool isCreate = line.contains("CreateMessageQueue");
             bool isUpdate = line.contains("UpdateMessageQueue");

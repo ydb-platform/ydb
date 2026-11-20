@@ -1,6 +1,7 @@
 #pragma once
 #include "json_handlers.h"
 #include "json_local_rpc.h"
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 
@@ -36,6 +37,16 @@ public:
     TSchemeDirectoryRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
+
+    void PrepareResponse(NJson::TJsonValue& body) override {
+        if constexpr (std::is_same_v<LocalRpcType, TSchemeDirectoryGetRpc>) {
+            const auto& path = this->Params.Get("path");
+            const TString original = this->RestorePath(path);
+            if (original != path && body["self"]["name"].IsString()) {
+                body["self"]["name"] = TString(ExtractBase(original));
+            }
+        }
+    }
 
     bool ValidateRequest(TRequestProtoType& request) override {
         if (TBase::ValidateRequest(request)) {

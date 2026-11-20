@@ -83,6 +83,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/cache
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/core/actorlib_impl
@@ -96,6 +97,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat

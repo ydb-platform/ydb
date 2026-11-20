@@ -1,5 +1,7 @@
 #pragma once
 
+#include "index_utils.h"
+
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr {
@@ -234,11 +236,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // progress
         enum EState : ui32 {
             Sample = 0,
-            Reshuffle,
+            ReshuffleLegacy, // deprecated, should not be used in new code
             MultiLocal,
             Recompute,
             Filter,
             FilterBorders,
+            RebuildDrop,    // dropping old impl tables for rebuild
+            RebuildCreate,  // creating new impl tables for rebuild
+            Reshuffle,
+            UploadClusters, // new version of Sample+Upload which runs after Reshuffle
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -805,7 +811,7 @@ public:
         return CancelRequested;
     }
 
-    TString InvalidBuildKind() {
+    TString InvalidBuildKind() const {
         return TStringBuilder() << "Invalid index build kind " << static_cast<int>(BuildKind)
             << " for index type " << static_cast<int>(IndexType);
     }
@@ -841,10 +847,7 @@ public:
     }
 
     bool IsBuildFulltextCompact() const {
-        return BuildKind == EBuildKind::BuildFulltext && (
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+        return BuildKind == EBuildKind::BuildFulltext && NTableIndex::IsCompactFulltextIndex(IndexType);
     }
 
     // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the

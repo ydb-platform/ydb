@@ -749,6 +749,30 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(issuesCount, total, "Wrong issues count for " << type << " with expecting status " << expectingStatus);
     }
 
+    // checks that issues of the given types are linked to each other by reason, from the first type down to the last one
+    void CheckHcResultHasReasonChain(const Ydb::Monitoring::SelfCheckResult& result, const std::vector<TString>& types) {
+        std::unordered_map<TString, const Ydb::Monitoring::IssueLog*> issueById;
+        for (const auto& issueLog : result.Getissue_log()) {
+            issueById[issueLog.id()] = &issueLog;
+        }
+        const Ydb::Monitoring::IssueLog* issue = nullptr;
+        for (const auto& issueLog : result.Getissue_log()) {
+            if (issueLog.type() == types.front()) {
+                UNIT_ASSERT_C(!issue, "Found more than one issue of type " << types.front());
+                issue = &issueLog;
+            }
+        }
+        UNIT_ASSERT_C(issue, "Issue of type " << types.front() << " not found");
+        for (auto it = std::next(types.begin()); it != types.end(); ++it) {
+            UNIT_ASSERT_C(issue->reason_size() > 0, "Issue " << issue->type() << " has no reasons");
+            const auto& reasonId = issue->reason(0);
+            const auto reasonIt = issueById.find(reasonId);
+            UNIT_ASSERT_C(reasonIt != issueById.end(), "Reason " << reasonId << " of " << issue->type() << " issue not found");
+            issue = reasonIt->second;
+            UNIT_ASSERT_VALUES_EQUAL(issue->type(), *it);
+        }
+    }
+
     void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -867,11 +891,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(YellowGroupIssueWhenPartialGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(BlueGroupIssueWhenPartialGroupStatusAndReplicationDisks) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::REPLICATING});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(NonStaticGroupKeepsBlueIssueAndGetsPhantomOnlyHintFromSysView) {
@@ -901,17 +927,20 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(OrangeGroupIssueWhenDegradedGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, TVDisks{2, NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(RedGroupIssueWhenDisintegratedGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, TVDisks{3, NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(StaticGroupIssue) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR}, /*forStatic*/ true);
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pool("static"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(GreenStatusWhenCreatingGroup) {
@@ -977,6 +1006,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("2"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(BridgeGroupDegradedInOnePile) {
@@ -985,6 +1015,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test").Pile("2"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(BridgeGroupDeadInOnePile) {
@@ -993,6 +1024,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("2"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
     }
 
     Y_UNIT_TEST(BridgeGroupDeadInBothPiles) {
@@ -1000,6 +1032,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("2"));;
     }
 
@@ -1013,6 +1046,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = RequestHcWithBridgeVdisks(disks, 2);
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -2263,6 +2297,80 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), "static");
     }
 
+    Y_UNIT_TEST(NoBscResponseThenPipeFailure) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        const ui64 bscId = MakeBSControllerID();
+        std::unordered_set<TActorId> bscClients; // We can't exactly pinpoint HC actor, so we'll settle for this
+        bool bscTimeoutFired = false;
+        bool wasResult = false;
+
+        // BSC never answers
+        auto sysViewObserver = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            auto type = ev->GetTypeRewrite();
+            if (EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
+                ev.Reset();
+            }
+        });
+        // hold the pipe connection result to inject failure after bsc timeout
+        auto pipeObserver = runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](auto&& ev) {
+            if (ev->Get()->TabletId == bscId) {
+                bscClients.insert(ev->Recipient);
+                ev.Reset();
+            }
+        });
+        // first wakeup of the request actor is the bsc timeout (50% of the timeout)
+        auto wakeupObserver = runtime.AddObserver<TEvents::TEvWakeup>([&](auto&& ev) {
+            if (bscClients.contains(ev->Recipient)) {
+                bscTimeoutFired = true;
+            }
+        });
+        auto resultObserver = runtime.AddObserver<NHealthCheck::TEvSelfCheckResult>([&](auto&&) {
+            wasResult = true;
+        });
+        // keep at least one request in flight
+        TBlockEvents<TEvHive::TEvResponseHiveInfo> blockHiveInfo(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.mutable_operation_params()->mutable_operation_timeout()->set_seconds(20);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const TInstant start = runtime.GetCurrentTime();
+
+        TDispatchOptions opts;
+        opts.CustomFinalCondition = [&]() { return bscTimeoutFired && !blockHiveInfo.empty(); };
+        runtime.DispatchEvents(opts);
+        UNIT_ASSERT(!wasResult);
+
+        // pipe to bsc fails after bsc requests were already timed out
+        for (const auto& actor : bscClients) {
+            runtime.Send(new IEventHandle(actor, actor,
+                new TEvTabletPipe::TEvClientConnected(bscId, NKikimrProto::ERROR, TActorId(), TActorId(), false, false, 0)));
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // bsc requests must not be accounted twice, so we still wait for hive
+        UNIT_ASSERT(!wasResult);
+
+        blockHiveInfo.Stop().Unblock();
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Ctest << result.ShortDebugString() << Endl;
+        UNIT_ASSERT(wasResult);
+        // reply comes after hive response, not by the final timeout
+        UNIT_ASSERT_LT(runtime.GetCurrentTime() - start, TDuration::Seconds(20));
+    }
+
     Y_UNIT_TEST(BridgeNoBscResponse) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -3103,6 +3211,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
             CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
             CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
+            for (const TString& type : {"STATE_STORAGE", "SCHEME_BOARD", "BOARD"}) {
+                CheckHcResultHasReasonChain(result, {type, type + "_RING", type + "_NODE"});
+            }
         }
 
         auto statusToResult = [](std::optional<Ydb::Monitoring::StatusFlag::Status> status) {

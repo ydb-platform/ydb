@@ -5,10 +5,46 @@
 #include "leader_tablet_info.h"
 #include "follower_tablet_info.h"
 
+#include <algorithm>
+#include <google/protobuf/unknown_field_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
+
+namespace {
+
+bool SameThroughputRecord(const NKikimrTabletBase::TThroughputRecord& lhs,
+                          const NKikimrTabletBase::TThroughputRecord& rhs) {
+    if (lhs.GetThroughput() != rhs.GetThroughput()
+            || lhs.GetGroupID() != rhs.GetGroupID()
+            || lhs.GetChannel() != rhs.GetChannel()
+            || lhs.HasThroughput() != rhs.HasThroughput()
+            || lhs.HasGroupID() != rhs.HasGroupID()
+            || lhs.HasChannel() != rhs.HasChannel()) {
+        return false;
+    }
+    static const auto* reflection = lhs.GetReflection();
+    if (reflection->GetUnknownFields(lhs).field_count() == 0
+            && reflection->GetUnknownFields(rhs).field_count() == 0) {
+        return true;
+    }
+    return lhs.SerializeAsString() == rhs.SerializeAsString();
+}
+
+template <class TRecords>
+bool SameThroughputRecords(const TVector<NKikimrTabletBase::TThroughputRecord>& stored,
+                           const TRecords& incoming) {
+    return stored.size() == size_t(incoming.size())
+        && std::equal(stored.begin(), stored.end(), incoming.begin(), SameThroughputRecord);
+}
+
+} // anonymous namespace
+
+void TTabletInfo::MarkProtoMetricsDirty() {
+    ProtoMetricsRevision = Hive.AllocateProtoMetricsRevision();
+}
 
 TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     : VolatileState(EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN)
@@ -150,17 +186,28 @@ void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     VolatileStateChangeTime = TActivationContext::Now();
 }
 
+bool TTabletInfo::IsReadyToWork() const {
+    if (IsLeader()) {
+        return AsLeader().IsReadyToWork();
+    }
+    return true;
+}
+
+bool TTabletInfo::IsReadyToBoot() const {
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
+}
+
 bool TTabletInfo::IsReadyToStart(TInstant now) const {
     if (IsFollower()) {
         if (!GetLeader().IsRunning()) {
             return false;
         }
     }
-    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING && now >= PostponedStart;
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING && now >= PostponedStart;
 }
 
 bool TTabletInfo::IsStarting() const {
-    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING;
+    return IsReadyToWork() && NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING;
 }
 
 bool TTabletInfo::IsStartingOnNode(TNodeId nodeId) const {
@@ -168,27 +215,29 @@ bool TTabletInfo::IsStartingOnNode(TNodeId nodeId) const {
 }
 
 bool TTabletInfo::IsRunning() const {
-    return Node != nullptr && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING;
+    return IsReadyToWork() && Node != nullptr && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING;
 }
 
 bool TTabletInfo::IsBooting() const {
-    return VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING;
+    return IsReadyToWork() && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING;
 }
 
 bool TTabletInfo::IsAlive() const {
-    return Node != nullptr &&
+    return IsReadyToWork() &&
+            Node != nullptr &&
             (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
 }
 
 bool TTabletInfo::CanBeAlive() const {
-    return Node != nullptr &&
+    return IsReadyToWork() &&
+            Node != nullptr &&
             (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN); // KIKIMR-12558
 }
 
-bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const {
+bool TTabletInfo::IsPresentOnLocal(const TActorId& local) const {
     return Node != nullptr
             && Node->Local == local
             && (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
@@ -261,10 +310,22 @@ bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, bool forMove) {
     }
 }
 
+void TTabletInfo::ChangeNode(TNodeId nodeId) {
+    if (Node != nullptr) {
+        if (Node->Id == nodeId) {
+            return;
+        }
+        // Detach the old node while NodeId still describes its placement.
+        ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
+    }
+    Node = Hive.FindNode(nodeId);
+    Y_ABORT_UNLESS(Node != nullptr);
+}
+
 bool TTabletInfo::BecomeStarting(TNodeId nodeId) {
-    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STARTING) {
-        Node = Hive.FindNode(nodeId);
-        Y_ABORT_UNLESS(Node != nullptr);
+    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STARTING
+            || (Node != nullptr && Node->Id != nodeId)) {
+        ChangeNode(nodeId);
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STARTING);
         return true;
     }
@@ -272,18 +333,14 @@ bool TTabletInfo::BecomeStarting(TNodeId nodeId) {
 }
 
 bool TTabletInfo::BecomeRunning(TNodeId nodeId) {
-    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_RUNNING || NodeId != nodeId || (Node != nullptr && Node->Id != nodeId)) {
-        NodeId = nodeId;
+    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_RUNNING
+            || NodeId != nodeId
+            || (Node != nullptr && Node->Id != nodeId))
+    {
         PreferredNodeId = 0;
-        Y_ABORT_UNLESS(NodeId != 0);
-        if (Node == nullptr) {
-            Node = Hive.FindNode(NodeId);
-            Y_ABORT_UNLESS(Node != nullptr);
-        } else if (Node->Id != NodeId) {
-            ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
-            Node = Hive.FindNode(NodeId);
-            Y_ABORT_UNLESS(Node != nullptr);
-        }
+        Y_ABORT_UNLESS(nodeId != 0);
+        ChangeNode(nodeId);
+        NodeId = nodeId;
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
         return true;
     }
@@ -298,9 +355,7 @@ bool TTabletInfo::BecomeStopped() {
         }
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
         BootState.clear();
-        if (Node != nullptr && Node->Freeze) {
-            PreferredNodeId = Node->Id;
-        }
+        // Freeze affinity is maintained by OnTabletChangeVolatileState.
         NodeId = 0;
         Node = nullptr;
         return true;
@@ -363,8 +418,24 @@ bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
-    auto before = ResourceValues;
+    // Resource accounting only needs scalars, so keep group vectors empty.
+    const TMetrics before = {
+        .CPU = ResourceValues.CPU,
+        .Memory = ResourceValues.Memory,
+        .Network = ResourceValues.Network,
+        .Counter = ResourceValues.Counter,
+        .Storage = ResourceValues.Storage,
+        .GroupReadThroughput = {},
+        .GroupWriteThroughput = {},
+        .ReadThroughput = ResourceValues.ReadThroughput,
+        .WriteThroughput = ResourceValues.WriteThroughput,
+        .GroupReadIops = {},
+        .GroupWriteIops = {},
+        .ReadIops = ResourceValues.ReadIops,
+        .WriteIops = ResourceValues.WriteIops,
+    };
     auto maximum = GetResourceMaximumValues();
+    bool groupsChanged = false;
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)) {
         if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
@@ -424,16 +495,29 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     }
     if (metrics.GroupReadThroughputSize() > 0) {
         const auto& records = metrics.GetGroupReadThroughput();
-        ResourceValues.GroupReadThroughput.assign(records.begin(), records.end());
+        if (IsProtoMetricsDirty() || !SameThroughputRecords(ResourceValues.GroupReadThroughput, records)) {
+            ResourceValues.GroupReadThroughput.assign(records.begin(), records.end());
+            groupsChanged = true;
+        }
     }
     if (metrics.GroupWriteThroughputSize() > 0) {
         const auto& records = metrics.GetGroupWriteThroughput();
-        ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
+        if (IsProtoMetricsDirty() || !SameThroughputRecords(ResourceValues.GroupWriteThroughput, records)) {
+            ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
+            groupsChanged = true;
+        }
     }
     i64 counterBefore = ResourceValues.Counter;
     ActualizeCounter();
     i64 counterAfter = ResourceValues.Counter;
     const auto& after = ResourceValues;
+    if (groupsChanged || before.CPU != after.CPU || before.Memory != after.Memory
+            || before.Network != after.Network || before.Storage != after.Storage
+            || before.ReadThroughput != after.ReadThroughput
+            || before.WriteThroughput != after.WriteThroughput
+            || before.ReadIops != after.ReadIops || before.WriteIops != after.WriteIops) {
+        MarkProtoMetricsDirty();
+    }
     if (Node != nullptr) {
         if (IsResourceDrainingState(VolatileState)) {
             Node->UpdateResourceValues(this, before, after);
@@ -514,6 +598,7 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
 }
 
 void TTabletInfo::ActualizeCounter() {
+    // Counter is recomputed on load and does not require its own checkpoint.
     ResourceValues.Counter = GetCounterValue();
 }
 

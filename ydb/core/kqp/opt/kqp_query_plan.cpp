@@ -1,6 +1,8 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/fulltext_query.h>
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -257,10 +259,22 @@ public:
 
             planNode.TypeName = typeName;
 
+            auto visitResultStage = [&](const TDqStageBase& resultStage) {
+                // Write with RETURNING produces the result straight from the sink stage.
+                // Keep the ResultSet node clean and attach the sink stage below it so the plan
+                // looks like a regular write with the ResultSet on top.
+                if (resultStage.Outputs()) {
+                    auto& sinkPlanNode = AddPlanNode(planNode);
+                    Visit(resultStage, sinkPlanNode);
+                } else {
+                    Visit(resultStage, planNode);
+                }
+            };
+
             if (res.Maybe<TDqCnResult>()) {
-                Visit(res.Cast<TDqCnResult>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnResult>().Output().Stage());
             } else if (res.Maybe<TDqCnValue>()) {
-                Visit(res.Cast<TDqCnValue>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnValue>().Output().Stage());
             } else {
                 Y_ENSURE(false, res.Ref().Content());
             }
@@ -269,6 +283,11 @@ public:
         for (const auto& stage: Tx.Stages()) {
             TDqStageBase stageBase = stage.Cast<TDqStageBase>();
             if (stageBase.Outputs()) { // Sink
+                if (VisitedStages.contains(stage.Raw())) {
+                    // Already rendered as a result output stage (e.g. write with RETURNING).
+                    continue;
+                }
+
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -771,11 +790,20 @@ private:
         TOperator op;
 
         TVector<TString> readColumns;
+        TTableRead readInfo;
         for(const auto& column: columns) {
             readColumns.push_back(TString(column.Value()));
             if (readColumns.back() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                 op.Properties["RelevanceQuery"] = "True";
+            } else {
+                readInfo.Columns.push_back(readColumns.back());
             }
+        }
+
+        if (sourceSettings.MainTableCovered().Value() != "true") {
+            readInfo.Type = EPlanTableReadType::Lookup;
+            readInfo.LookupBy = tableData.Metadata->KeyColumnNames;
+            SerializerCtx.Tables[TString(tablePath)].Reads.push_back(std::move(readInfo));
         }
 
         op.Properties["Table"] = TString(tablePath);
@@ -784,21 +812,30 @@ private:
         op.Properties["Name"] = "ReadFullTextIndex";
 
         std::vector<TString> subparts;
-        for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
-            TString expr = GetExprStr(query, true);
-            if (expr == "expr")
-                continue;
-            subparts.emplace_back(std::move(expr));
-        }
-
-        if (!subparts.empty()) {
-            op.Properties["Query"] = JoinSeq(" ", subparts);
-        }
-
         TVector<TString> searchTerms;
         for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
-            if (query.Maybe<TCoDataCtor>()) {
-                auto literal = TString(query.Cast<TCoDataCtor>().Literal());
+            auto pattern = query;
+            std::optional<char> escape;
+            TString mode;
+            if (const auto patternQuery = NOpt::TryParseFulltextPatternQuery(query.Ptr())) {
+                pattern = TExprBase(patternQuery->Pattern);
+                escape = patternQuery->Escape;
+                mode = patternQuery->Mode;
+            }
+
+            TString expr = GetExprStr(pattern, true);
+            if (expr != "expr") {
+                if (escape) {
+                    expr += TStringBuilder() << " ESCAPE \"" << *escape << '"';
+                }
+                if (!mode.empty()) {
+                    expr = TStringBuilder() << mode << '(' << expr << ')';
+                }
+                subparts.emplace_back(std::move(expr));
+            }
+
+            if (pattern.Maybe<TCoDataCtor>()) {
+                auto literal = TString(pattern.Cast<TCoDataCtor>().Literal());
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
                     || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
@@ -809,13 +846,20 @@ private:
                 for(const auto& column: readColumns) {
                     for(const auto& analyzer: desc.settings().columns()) {
                         if (analyzer.column() == column) {
-                            for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                            const auto terms = mode.empty()
+                                ? NFulltext::BuildSearchTerms(literal, analyzer.analyzers())
+                                : NFulltext::BuildStringMatchTerms(literal, mode, escape, analyzer.analyzers());
+                            for(const auto& term: terms) {
                                 searchTerms.push_back(term);
                             }
                         }
                     }
                 }
             }
+        }
+
+        if (!subparts.empty()) {
+            op.Properties["Query"] = JoinSeq(" ", subparts);
         }
 
         if (!searchTerms.empty())
@@ -1033,7 +1077,7 @@ private:
     }
 
     template<typename TSinkLike>
-    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode, TString planNodeSuffix = "Sink") {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sinkLike.DataSink().template Cast<TCoDataSink>();
@@ -1209,7 +1253,11 @@ private:
             op.Properties["Name"] = "Write to external data source";
         }
 
-        AddOperator(planNode, "Sink", op);
+        auto inputContext = CurrentArgContext.AddArg(sinkLike.Ptr().Get());
+        LambdaInputs[inputContext] = &stagePlanNode;
+        op.Inputs.push_back(inputContext);
+
+        AddOperator(planNode, planNodeSuffix, op);
     }
 
     void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
@@ -1235,7 +1283,7 @@ private:
             dqIntegration = providerIt->second->GetDqIntegration();
         }
 
-        VisitTableSink(transform, stage, planNode, stagePlanNode);
+        VisitTableSink(transform, stage, planNode, stagePlanNode, TString(transform.Type().Value()));
 
         if (dqIntegration) {
             dqIntegration->FillSinkPlanProperties(transform, planNode.Operators.back().Properties);

@@ -4,6 +4,8 @@
 #include <util/generic/guid.h>
 #include <util/string/escape.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -29,7 +31,11 @@ namespace NPQ {
         ReservedSize = 0;
         Requests.clear();
         //WaitToChageOwner not touched - they will wait for this owner to be dropped - this new owner must have force flag
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "new Cookie " << s << " generated for partition " << partition << " topic '" << topicName << "' owner " << EscapeC(owner));
+        YDB_LOG_INFO_CTX(ctx, "New Cookie generated for partition topic owner",
+            {"s", s},
+            {"partition", partition},
+            {"topicName", topicName},
+            {"escapeCOwner", EscapeC(owner)});
     }
 
     TStringBuf TOwnerInfo::GetOwnerFromOwnerCookie(const TString& cookie) {

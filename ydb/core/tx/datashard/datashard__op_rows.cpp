@@ -2,6 +2,8 @@
 #include "datashard_direct_transaction.h"
 #include "datashard_txs.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -23,8 +25,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Execute"
-            << ": at tablet# " << Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase Execute",
+            {"txType", GetTxType()},
+            {"tabletId", Self->TabletID()});
 
         if (Self->IsFollower()) {
             return true; // TODO: report error
@@ -77,8 +80,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Complete"
-            << ": at tablet# " << Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase Complete",
+            {"txType", GetTxType()},
+            {"tabletId", Self->TabletID()});
 
         if (Op) {
             if (!CompleteList.empty()) {
@@ -195,6 +199,19 @@ static bool TryDelayS3UploadRows(TDataShard*, TEvDataShard::TEvEraseRowsRequest:
     return false;
 }
 
+template <typename TEvRequest>
+static bool AllowExecuteAtReplicated(TDataShard*, TEvRequest&) {
+    return false;
+}
+
+static bool AllowExecuteAtReplicated(TDataShard* self, TEvDataShard::TEvUploadRowsRequest::TPtr& ev) {
+    return self->IsImportingReplica() && ev->Get()->Record.GetWriteToTableShadow();
+}
+
+static bool AllowExecuteAtReplicated(TDataShard* self, TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
+    return self->IsImportingReplica();
+}
+
 template <typename TEvResponse>
 using TSetStatusFunc = void(*)(TEvResponse&);
 
@@ -224,7 +241,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
-    if (self->IsReplicated()) {
+    if (self->IsReplicated() && !AllowExecuteAtReplicated(self, ev)) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);

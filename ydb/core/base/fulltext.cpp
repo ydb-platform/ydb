@@ -441,6 +441,26 @@ namespace {
         return length;
     }
 
+    bool HasUncertainHebrewPrefix(TStringBuf text) {
+        const auto* ptr = reinterpret_cast<const unsigned char*>(text.data());
+        const auto* end = ptr + text.size();
+        while (ptr < end) {
+            wchar32 symbol;
+            size_t bytes = 0;
+            if (SafeReadUTF8Char(symbol, bytes, ptr, end) != RECODE_OK) {
+                return false;
+            }
+            if (IsHebrew(symbol)) {
+                return true;
+            }
+            if (IsALetter(symbol) || IsDecdigit(symbol) || (IsWhitespace(symbol) && !IsKatakanaOrSymbol(symbol))) {
+                return false;
+            }
+            ptr += bytes;
+        }
+        return false;
+    }
+
     bool ValidateSettings(const Ydb::Table::FulltextIndexSettings::Analyzers& settings, TString& error) {
         if (!settings.has_tokenizer() || settings.tokenizer() == Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED) {
             error = "tokenizer should be set";
@@ -699,6 +719,175 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
     return searchTerms;
 }
 
+TVector<TString> BuildStringMatchTerms(TStringBuf text, TStringBuf mode, std::optional<char> escape,
+    const Ydb::Table::FulltextIndexSettings::Analyzers& settings)
+{
+    if (mode == "ILIKE" && !settings.use_filter_lowercase()) {
+        return {};
+    }
+    const bool like = mode == "LIKE" || mode == "ILIKE";
+    const bool startsWithAny = mode == "ENDS_WITH" || mode == "CONTAINS";
+    const bool endsWithAny = mode == "STARTS_WITH" || mode == "CONTAINS";
+    Y_ENSURE(like || mode == "EXACT" || startsWithAny || endsWithAny, "Unknown string match mode: " << mode);
+    // Preserve legacy Re2::PatternFromLike's ignored escapes and avoid unsafe
+    // terms from its escaped-backslash and NUL quoting bugs.
+    if (like && escape) {
+        if (*escape == '\0' || *escape == '%' || *escape == '_' || *escape == '\\') {
+            escape.reset();
+        } else if (text.find(TString(1, *escape) + '\\') != TStringBuf::npos ||
+            ((*escape == 'x' || *escape == '0') && text.find('\0') != TStringBuf::npos))
+        {
+            return {};
+        }
+    }
+    const bool ngram = settings.use_filter_ngram() || settings.use_filter_edge_ngram();
+    const bool edge = settings.use_filter_edge_ngram();
+    const bool wholeTokens = !ngram || settings.use_filter_stopwords() || settings.use_filter_length();
+    auto analyzers = GetAnalyzersForQuery(settings);
+    if (wholeTokens) {
+        analyzers.set_use_filter_length(settings.use_filter_length());
+    }
+    TVector<TString> searchTerms;
+    TString literal;
+    bool followsWildcard = startsWithAny;
+
+    auto appendAnalyzed = [&](TStringBuf text) {
+        for (const auto& token : Analyze(text, analyzers)) {
+            if (!ngram) {
+                searchTerms.push_back(token);
+                continue;
+            }
+            const i64 length = GetLengthUTF8(token);
+            if (length >= analyzers.filter_ngram_min_length()) {
+                const size_t upper = std::min(static_cast<i64>(analyzers.filter_ngram_max_length()), length);
+                BuildNgrams(token, upper, upper, edge, searchTerms);
+            }
+        }
+    };
+
+    auto appendLiteral = [&](bool precedesWildcard) {
+        // Hebrew quote lookahead depends on the unknown preceding token state.
+        const bool quotedPrefix = analyzers.tokenizer() == Ydb::Table::FulltextIndexSettings::STANDARD
+            && literal.find_first_of("\"'") != TString::npos && HasUncertainHebrewPrefix(literal);
+        const bool trimStart = followsWildcard && (edge || wholeTokens || quotedPrefix);
+        const bool trimEnd = precedesWildcard && wholeTokens;
+        if (trimStart || trimEnd) {
+            // Prefix grams and whole-token indexes require known token boundaries.
+            const auto* ptr = reinterpret_cast<const unsigned char*>(literal.data());
+            const auto* end = ptr + literal.size();
+            size_t start = trimStart ? literal.size() : 0;
+            size_t finish = trimEnd ? 0 : literal.size();
+            wchar32 previous = 0x200D; // An unknown prefix may end in a ZWJ.
+            TVector<TString> separatorTokens;
+            while (ptr < end) {
+                wchar32 symbol;
+                size_t bytes = 0;
+                if (SafeReadUTF8Char(symbol, bytes, ptr, end) != RECODE_OK) {
+                    literal.clear();
+                    return;
+                }
+                bool delimiter = analyzers.tokenizer() == Ydb::Table::FulltextIndexSettings::ALPHANUMERIC
+                    ? IsNonStandard(symbol)
+                    : analyzers.tokenizer() != Ydb::Table::FulltextIndexSettings::KEYWORD && IsWhitespace(symbol) &&
+                        (analyzers.tokenizer() != Ydb::Table::FulltextIndexSettings::STANDARD || !IsKatakanaOrSymbol(symbol));
+                if (!delimiter && analyzers.tokenizer() == Ydb::Table::FulltextIndexSettings::STANDARD &&
+                    previous != 0x200D && IsNonStandard(symbol) &&
+                    !IsExtendNumLet(symbol) && !IsExtendOrFormat(symbol) &&
+                    !IsMidLetterChar(symbol) && !IsMidNumberChar(symbol) && symbol != '\"' && symbol != '\'')
+                {
+                    // Reuse the tokenizer to distinguish punctuation from script-specific tokens.
+                    separatorTokens.clear();
+                    TokenizeStandard(TStringBuf(reinterpret_cast<const char*>(ptr), bytes), separatorTokens, {});
+                    delimiter = separatorTokens.empty();
+                }
+                if (delimiter) {
+                    const size_t offset = ptr - reinterpret_cast<const unsigned char*>(literal.data());
+                    if (trimStart && start == literal.size()) {
+                        start = offset + bytes;
+                    }
+                    if (trimEnd) {
+                        finish = offset;
+                    }
+                }
+                ptr += bytes;
+                previous = symbol;
+            }
+            literal = start <= finish ? literal.substr(start, finish - start) : TString();
+        }
+        if (ngram && !edge && followsWildcard && !trimStart &&
+            analyzers.tokenizer() == Ydb::Table::FulltextIndexSettings::STANDARD)
+        {
+            // An unknown prefix ending in ZWJ can absorb one leading symbol or
+            // script character. Further literal ZWJs can continue that context.
+            const auto* begin = reinterpret_cast<const unsigned char*>(literal.data());
+            const auto* ptr = begin;
+            const auto* end = begin + literal.size();
+            bool mayBeJoined = true;
+            while (ptr < end) {
+                wchar32 symbol;
+                size_t bytes = 0;
+                if (SafeReadUTF8Char(symbol, bytes, ptr, end) != RECODE_OK) {
+                    literal.clear();
+                    return;
+                }
+                if (IsExtendNumLet(symbol) || IsExtendOrFormat(symbol)) {
+                    mayBeJoined = symbol == 0x200D;
+                    ptr += bytes;
+                    continue;
+                }
+                if (IsALetter(symbol) || IsDecdigit(symbol) || IsWhitespace(symbol) || !mayBeJoined) {
+                    break;
+                }
+                ptr += bytes;
+                mayBeJoined = false;
+            }
+            const size_t trim = ptr - begin;
+            if (trim) {
+                // Preserve original token boundaries: trimming then tokenizing
+                // "カ_タabc" would incorrectly join "_タabc" into one token.
+                const auto tokens = Tokenize(literal, analyzers.tokenizer(), {});
+                size_t offset = 0;
+                for (const auto& token : tokens) {
+                    const size_t start = literal.find(token, offset);
+                    Y_ASSERT(start != TString::npos);
+                    offset = start + token.size();
+                    if (offset > trim) {
+                        appendAnalyzed(TStringBuf(token).SubStr(trim > start ? trim - start : 0));
+                    }
+                }
+                literal.clear();
+                return;
+            }
+        }
+        if (literal.empty() && (followsWildcard || precedesWildcard)) {
+            return;
+        }
+        appendAnalyzed(literal);
+        literal.clear();
+    };
+
+    if (!like) {
+        literal = TString(text);
+        appendLiteral(endsWithAny);
+    } else {
+        for (size_t i = 0; i < text.size(); ++i) {
+            const char c = text[i];
+            if (escape && c == *escape) {
+                if (i + 1 < text.size()) {
+                    literal.push_back(text[++i]);
+                }
+            } else if (c == '%' || c == '_') {
+                appendLiteral(true);
+                followsWildcard = true;
+            } else {
+                literal.push_back(c);
+            }
+        }
+        appendLiteral(false);
+    }
+    return searchTerms;
+}
+
 namespace {
     // True if the query uses the `+term` required-term syntax: a `+` that begins
     // the query or follows ASCII whitespace (i.e. starts a term). A `+` inside a
@@ -887,15 +1076,21 @@ void AddVarintWithFlag(TVector<ui8>& buf, ui64 num, bool flag) {
 ui64 ReadVarint(TConstArrayRef<ui8> buf, size_t& pos) {
     ui64 r = 0;
     ui32 o = 0;
+    bool terminated = false;
     while (pos < buf.size()) {
         ui64 c = buf[pos++];
-        r |= ((c & 0x7F) << o);
+        const ui64 payload = c & 0x7F;
+        Y_ENSURE(payload <= (Max<ui64>() >> o), "Fulltext delta contains an overflowing varint");
+        r |= (payload << o);
         if (!(c & 0x80)) {
+            Y_ENSURE(o == 0 || payload != 0, "Fulltext delta contains a non-canonical varint");
+            terminated = true;
             break;
         }
         o += 7;
         Y_ENSURE(o < 64);
     }
+    Y_ENSURE(terminated, "Fulltext delta contains a truncated varint");
     return r;
 }
 
@@ -908,7 +1103,9 @@ ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
     flag = !!(c & 0x40);
     ui64 r = c & 0x3F;
     if (c & 0x80) {
-        r |= ReadVarint(buf, pos) << 6;
+        const ui64 tail = ReadVarint(buf, pos);
+        Y_ENSURE(tail <= (Max<ui64>() >> 6), "Fulltext delta contains an overflowing flagged varint");
+        r |= tail << 6;
     }
     return r;
 }
@@ -928,16 +1125,26 @@ bool TDeltaReader::Read(ui64& docId, ui32& freq) {
     }
     ui64 prevPos = Pos;
     bool hasFreq = false;
-    if (WithFreq) {
-        docId = LastId + ReadVarintWithFlag(Buf, Pos, hasFreq);
-    } else {
-        docId = LastId + ReadVarint(Buf, Pos);
-    }
+    const ui64 delta = WithFreq
+        ? ReadVarintWithFlag(Buf, Pos, hasFreq)
+        : ReadVarint(Buf, Pos);
     if (!prevPos && Sign) {
-        // Decode first item as zigzag
-        docId = (docId >> 1) ^ -(docId & 1);
+        // Decode first item as zigzag. Every ui64 representation maps to one valid i64 value.
+        docId = (delta >> 1) ^ -(delta & 1);
+    } else if (Sign) {
+        // Signed postings are ordered as i64, while their positive delta intentionally uses modular
+        // ui64 arithmetic when crossing -1 -> 0.
+        docId = LastId + delta;
+        Y_ENSURE(static_cast<i64>(docId) > static_cast<i64>(LastId),
+            "Fulltext delta contains an overflowing signed document id");
+    } else {
+        Y_ENSURE(delta <= Max<ui64>() - LastId, "Fulltext delta contains an overflowing document id");
+        docId = LastId + delta;
     }
-    freq = hasFreq ? ReadVarint(Buf, Pos) : 1;
+    const ui64 decodedFreq = hasFreq ? ReadVarint(Buf, Pos) : 1;
+    Y_ENSURE(decodedFreq <= Max<ui32>(), "Fulltext delta contains an overflowing frequency");
+    Y_ENSURE(!hasFreq || decodedFreq > 1, "Fulltext delta contains a non-canonical frequency");
+    freq = static_cast<ui32>(decodedFreq);
     if (Sign ? ((i64)docId > (i64)MaxId) : (docId > MaxId)) {
         Pos = prevPos;
         return false;
@@ -1080,7 +1287,8 @@ void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr) {
     ui64 docId = 0;
     ui32 freq = 1;
     if (rdr.Reader->Read(docId, freq)) {
-        Items.push_back(TItem{docId, (rdr.Added ? (i32)freq : -(i32)freq), rdrId});
+        const i64 signedFreq = static_cast<i64>(freq);
+        Items.push_back(TItem{docId, rdr.Added ? signedFreq : -signedFreq, rdrId});
         std::push_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
     }
 }
@@ -1108,7 +1316,8 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
                 // Finished, item has positive frequency (not canceled by updates)
                 // Leave NextItem as is
                 docId = cur.DocId;
-                freq = cur.Freq;
+                Y_ENSURE(cur.Freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
+                freq = static_cast<ui32>(cur.Freq);
                 return true;
             } else {
                 // Scan the next item
@@ -1120,7 +1329,8 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
     if (cur.Freq > 0) {
         // Finished, item has positive frequency (not canceled by updates)
         docId = cur.DocId;
-        freq = cur.Freq;
+        Y_ENSURE(cur.Freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
+        freq = static_cast<ui32>(cur.Freq);
         return true;
     }
     return false;

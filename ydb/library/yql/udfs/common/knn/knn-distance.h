@@ -5,6 +5,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/vector_distance/float8_distance.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
@@ -120,6 +121,10 @@ private:
 
 public:
     static TDistanceResult ManhattanDistance(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -130,6 +135,14 @@ public:
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::L1Distance(v1, v2, len);
+                });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    return NVectorDistance::L1Distance(v1, v2, len);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    return NVectorDistance::L1Distance(v1, v2, len);
                 });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
@@ -153,6 +166,10 @@ public:
     }
 
     static TDistanceResult EuclideanDistance(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -163,6 +180,14 @@ public:
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
+                });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    return NVectorDistance::L2Distance(v1, v2, len);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    return NVectorDistance::L2Distance(v1, v2, len);
                 });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
@@ -186,6 +211,10 @@ public:
     }
 
     static TDistanceResult DotProduct(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -196,6 +225,14 @@ public:
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::DotProduct(v1, v2, len);
+                });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    return NVectorDistance::DotProduct(v1, v2, len);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    return NVectorDistance::DotProduct(v1, v2, len);
                 });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
@@ -219,6 +256,10 @@ public:
     }
 
     static TDistanceResult CosineSimilarity(const TStringBuf& str1, const TStringBuf& str2) {
+        if (Y_UNLIKELY(str1.Size() < HeaderLen || str2.Size() < HeaderLen)) {
+            return {};
+        }
+
         const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
         const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
         if (Y_UNLIKELY(format1 != format2)) {
@@ -235,6 +276,16 @@ public:
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [&](const float* v1, const float* v2, size_t len) {
                     const auto res = ::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::Float8E4M3Vector:
+                return VectorFunc<TFloat8E4M3>(str1, str2, [&](const TFloat8E4M3* v1, const TFloat8E4M3* v2, size_t len) {
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::Float8E5M2Vector:
+                return VectorFunc<TFloat8E5M2>(str1, str2, [&](const TFloat8E5M2* v1, const TFloat8E5M2* v2, size_t len) {
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
                     return compute(res.LL, res.LR, res.RR);
                 });
             case EFormat::Int8Vector:

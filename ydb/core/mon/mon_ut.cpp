@@ -143,6 +143,44 @@ private:
     THttpMonTestEnvOptions Options;
 };
 
+Y_UNIT_TEST_SUITE(TMonUrlTest) {
+    Y_UNIT_TEST(RelativeRoot) {
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot(""), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("foo"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/foo"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("foo/"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/foo/"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("actors/sqsgc"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc/"), "../../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/blobstorageproxies/blobstorageproxy000000001"), "../../");
+    }
+
+    Y_UNIT_TEST(RelativeRootWithQueryAndFragment) {
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("?"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("#"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("?next=/foo/bar"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("#section/foo/bar"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/?next=/foo/bar#section/baz"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc?next=/foo/bar"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc#section/foo/bar"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc?next=/foo/bar#section/baz"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc#section/foo?next=/bar/baz"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc/?next=/foo/bar#section/baz"), "../../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/actors/sqsgc?#"), "../");
+    }
+
+    Y_UNIT_TEST(RelativeRootWithEncodedDelimitersAndEmptySegments) {
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/foo%2Fbar%3Fbaz%23qux"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/foo%2Fbar%3Fbaz%23qux/page"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/foo%3Fbar/page?next=/x/y#section/z"), "../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/foo//bar"), "../../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("/foo//"), "../../");
+        UNIT_ASSERT_VALUES_EQUAL(GetRelativeRoot("//foo"), "../");
+    }
+}
+
 Y_UNIT_TEST_SUITE(ActorPage) {
     Y_UNIT_TEST(HttpOk) {
         THttpMonTestEnv env({

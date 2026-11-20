@@ -83,6 +83,8 @@ Lookup: O(1). One lookup by the full key, and on a miss one lookup by the regula
 
 ## Several mark columns and regular keys
 
+DuckDB does not support this case. A correlated `IN` with several columns fails with `Correlated IN/ANY/ALL with multiple columns not yet supported`. The other cases in this note are supported.
+
 ```sql
 SELECT (a, b) IN (SELECT c, d FROM t2 WHERE t2.k = t1.k) FROM t1;
 ```
@@ -127,37 +129,24 @@ Right side. `k = 1`: `(10, null)` and `(20, 30)`. `k = 2`: `(5, 5)`.
 - Every mark column on the left is null: O(1).
 - Otherwise look up `k` in `NullRows`. If the left row has a null, look it up in `OtherRows` too. Each lookup returns only the rows with this `k`, and those rows are compared until one of them makes the answer `null`. A `false` answer has compared all of them: O(N). N is the number of rows with this `k` in the tables that were looked up.
 
-## Several mark columns, no group
+## Several mark columns, no regular keys
 
 ```sql
 SELECT (a, b) IN (SELECT c, d FROM t2) FROM t1;
 ```
 
-There is no second index. The main table is searched by `(c, d)` and still answers `true`.
+For one left row, a match can sit in different buckets on the right. `(10, 30)` and `(10, null)` are different full keys, so they are different buckets.
 
-Rows that can produce `null` are copied aside. That is every right row with a null mark, or every right row when the left side can contain null. Left rows that cannot be answered at once are set aside too. Both copies can be spilled. They are spread round-robin across the spill buckets.
+`true` and `null` should still be fast. The main hash table stays, keyed by the full key `(c, d)`. Together with three flags for the whole right side, `BuildNotEmpty_`, `BuildHasNull_`, and `BuildAllNull_`, it answers `true` and `null`.
 
-Some misses are answered at once.
+A sure `false` has to check the other buckets too: a match there would make the answer `null` instead. The right rows are copied into their own spill buckets, filled round-robin, not by the key. The buckets spill. A row with a null mark is always copied. If the left side can contain null, every right row is copied.
 
-| left `(a, b)` | right side | answer |
-|---|---|---|
-| `(10, 20)` | `(10, 20)`, `(10, null)`, `(30, 40)` | `true` |
-| `(null, null)` | any non-empty right side | `null` |
-| any row | empty | `false` |
-| any row | one right row is null in every mark column | `null` |
-| `(4, 5)` | `(1, 2)`, `(3, 4)` | `false`, nobody has a null |
+If the hash table and the flags answered neither `true` nor `false`, the copied rows are compared like a cross join. Each remaining left row is checked against the copied right rows. The first right row that makes the answer `null` stops the check. If none does, the answer is `false`.
 
-The other misses are compared later, in blocks that fit in memory. The comparison is the same as in the previous section.
+#### Complexity
 
-D is the number of postponed left rows. S is the number of saved right rows. Both can be as large as the whole side.
-
-Lookup: O(1) when the answer is known at once: a hit, an empty right side, a null in every mark column, or no nulls on either side. A postponed row is compared with every saved right row, so that lookup is O(S).
-
-Whole join: the hash table and the immediate answers are O(L + R). The later comparison is O(D × S), so the worst case is O(L × R). Extra memory is a copy of the saved and postponed rows, and the copies spill. One comparison step holds only a block that fits in memory, but it still visits every saved row.
-
-- `(10, 30)` against `(10, null)`: `10` equals `10`, and the second column is null. The answer is `null`.
-- `(30, 50)` matches nothing. The answer is `false`.
-- `(null, 20)` against `(10, 20)`: the first column is null, and `20` equals `20`. The answer is `null`.
+- The hash table or the flags answer: O(1).
+- Otherwise the cross-join comparison: O(S), where S is the number of copied right rows.
 
 ## Buckets and spilling
 

@@ -1,5 +1,7 @@
 PY3TEST()
 
+ENV(YDB_USE_IN_MEMORY_PDISKS=true)
+
 TEST_SRCS(
     test_topic_replication.py
 )

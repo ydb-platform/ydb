@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 import time
 
 import grpc
@@ -49,6 +49,10 @@ def wait_for(description, observe, expected):
             actual = observe()
         except (ydb.SchemeError, ydb.NotFound, ydb.Unavailable, ydb.Overloaded, ydb.Timeout) as error:
             actual = error
+        except grpc.RpcError as error:
+            if error.code() not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
+                raise
+            actual = error
         if actual == expected:
             return
         time.sleep(0.25)
@@ -86,7 +90,12 @@ def messages(prefix):
 
 def write(client, payloads):
     with client.writer(TOPIC, partition_id=0) as writer:
-        writer.write_with_ack(payloads, timeout=TIMEOUT)
+        try:
+            writer.write_with_ack(payloads, timeout=TIMEOUT)
+        except Exception:
+            with suppress(Exception):
+                writer.close(flush=False, timeout=TIMEOUT)
+            raise
 
 
 def read(client, payloads, first_offset):

@@ -30,11 +30,32 @@ constexpr auto WaitTimeout = TDuration::Seconds(10);
 
 using EConnectionType = NTransport::THostConnection::EConnectionType;
 using TStorageTransportMock = NTransport::TStorageTransportMock;
+using TListResult = TStorageTransportMock::TEvListPersistentBufferResult;
 using TICStorageTransportTestAdapter =
     NTransport::NTestLib::TICStorageTransportTestAdapter;
 using TDDiskId = NBsController::TDDiskId;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// Records listing targets and supplies a separate response for each PBuffer.
+class TPBufferListingTransportMock final: public TStorageTransportMock
+{
+public:
+    TMap<TDDiskId, TFuture<TListResult>> Listings;
+    TVector<TDDiskId> ListedPBuffers;
+
+    TFuture<TListResult> ListPBufferEntries(
+        const NTransport::THostConnection& connection) override
+    {
+        ListedPBuffers.push_back(connection.DDiskId);
+        if (const auto it = Listings.find(connection.DDiskId);
+            it != Listings.end())
+        {
+            return it->second;
+        }
+        return TStorageTransportMock::ListPBufferEntries(connection);
+    }
+};
 
 TVector<TDDiskId> MakeDDiskIds(ui32 baseNodeId, ui32 count)
 {
@@ -121,6 +142,128 @@ void ExpectChecksums(
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldRestorePBufferFromAddedHostOnStartup, TDBGFixture)
+    {
+        constexpr ui32 hostCount = DirectBlockGroupHostCount + 1;
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TPBufferListingTransportMock>();
+        const auto ddisks = MakeDDiskIds(100, hostCount);
+        const auto pbuffers = MakeDDiskIds(200, hostCount);
+        const TPBufferKey key{.Generation = 1, .Lsn = 17};
+        auto addedHost = NewPromise<TListResult>();
+        transport->Listings[pbuffers.back()] = addedHost.GetFuture();
+        auto dbg = MakeDirectBlockGroup(executor, transport, ddisks, pbuffers);
+        WaitReady(executor, RunAndGetInitialReady(dbg));
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            Service.get(),
+            DiskDescription,
+            TVChunkConfig::MakeDefault(0, hostCount, DefaultPrimaryCount),
+            false,
+            TDirtyMapStateProto{},
+            dbg,
+            1000,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        DrainExecutor(executor);
+        RunOnExecutor(
+            executor,
+            [transport, vchunk, pbuffers]
+            {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    pbuffers.size(),
+                    transport->ListedPBuffers.size());
+                UNIT_ASSERT(transport->ListedPBuffers == pbuffers);
+                UNIT_ASSERT(!TBaseFixture::IsDirtyMapReady(*vchunk));
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        addedHost.SetValue(TStorageTransportMock::MakeListing({key}));
+        WaitDirtyMapReady(executor, vchunk);
+        RunOnExecutor(
+            executor,
+            [vchunk]
+            {
+                UNIT_ASSERT_VALUES_EQUAL(1, vchunk->GetPBuffersUsage(5).Count);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    DefaultBlockSize,
+                    vchunk->GetPBuffersUsage(5).Size);
+                for (THostIndex host = 0; host < 5; ++host) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        0,
+                        vchunk->GetPBuffersUsage(host).Count);
+                }
+                return true;
+            })
+            .GetValue(WaitTimeout);
+        vchunk->Stop().GetValue(WaitTimeout);
+    }
+
+    Y_UNIT_TEST_F(ShouldSkipRemovedSlotWhenRestoringPBuffers, TDBGFixture)
+    {
+        constexpr ui32 hostCount = DirectBlockGroupHostCount + 1;
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TPBufferListingTransportMock>();
+        const auto ddisks = MakeDDiskIds(100, hostCount);
+        const auto pbuffers = MakeDDiskIds(200, hostCount);
+        const TPBufferKey key{.Generation = 1, .Lsn = 17};
+        transport->Listings[pbuffers.back()] =
+            MakeFuture(TStorageTransportMock::MakeListing({key}));
+        auto dbg = MakeDirectBlockGroup(executor, transport, ddisks, pbuffers);
+        Service = std::make_shared<TPartitionDirectServiceMock>(
+            true /* dropScheduledCallbacks */);
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            Service.get(),
+            DiskDescription,
+            TVChunkConfig::MakeDefault(0, hostCount, DefaultPrimaryCount),
+            false,
+            TDirtyMapStateProto{},
+            dbg,
+            1000,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        RunOnExecutor(
+            executor,
+            [dbg]
+            {
+                dbg->OnRemoveHostSucceeded(4, 1);
+                TDBGFixture::ListPBuffersDebugOnly(dbg);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+        WaitDirtyMapReady(executor, vchunk);
+        RunOnExecutor(
+            executor,
+            [transport, vchunk, pbuffers]
+            {
+                const TVector<TDDiskId> expected{
+                    pbuffers[0],
+                    pbuffers[1],
+                    pbuffers[2],
+                    pbuffers[3],
+                    pbuffers[5]};
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expected.size(),
+                    transport->ListedPBuffers.size());
+                UNIT_ASSERT(transport->ListedPBuffers == expected);
+                UNIT_ASSERT_VALUES_EQUAL(0, vchunk->GetPBuffersUsage(4).Count);
+                UNIT_ASSERT_VALUES_EQUAL(1, vchunk->GetPBuffersUsage(5).Count);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    DefaultBlockSize,
+                    vchunk->GetPBuffersUsage(5).Size);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+        vchunk->Stop().GetValue(WaitTimeout);
+    }
+
     Y_UNIT_TEST_F(ShouldSelectDDiskOnMostLoadedHostForDemote, TDBGFixture)
     {
         auto executor = MakeExecutor();

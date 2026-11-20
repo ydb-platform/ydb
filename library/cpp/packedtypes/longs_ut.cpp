@@ -65,4 +65,23 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
         TestCornerCasesImpl<i32>(31);
         TestCornerCasesImpl<i64>(63);
     }
+
+    Y_UNIT_TEST(TestVarintSize) {
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0x00), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0x7F), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0x80), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xBF), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xC0), 3);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xDF), 3);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xE0), 4);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xEF), 4);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xF0), 5);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xF7), 5);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xF8), 6);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xFB), 6);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xFC), 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xFD), 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xFE), 8);
+        UNIT_ASSERT_VALUES_EQUAL(GetVarintSize(0xFF), 9);
+    }
 }

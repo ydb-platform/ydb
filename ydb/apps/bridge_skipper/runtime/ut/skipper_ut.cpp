@@ -1086,6 +1086,30 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         UNIT_ASSERT(h.Clients->Updates.empty());
     }
 
+    Y_UNIT_TEST(UnreachableHotStandbySeedDoesNotBlockClusterView) {
+        THarness h(EMode::Manual);
+        h.Failed.clear();
+        h.Piles["b"] = static_cast<EPileState>(8);
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            h.FailedMethods.insert({B, method});
+        }
+        h.Run(35);
+        const auto snapshot = h.Store->Read();
+        UNIT_ASSERT(snapshot->Selection.View);
+        UNIT_ASSERT(snapshot->Selection.View->Piles.at("b") == static_cast<EPileState>(8));
+        UNIT_ASSERT(snapshot->Decision.Kind == EDecisionKind::Stable);
+        UNIT_ASSERT(!snapshot->Piles.contains("b"));
+        for (const auto& endpoint : snapshot->Endpoints) {
+            UNIT_ASSERT_VALUES_UNEQUAL(endpoint.Pile, "b");
+        }
+        const size_t healthCalls = h.Clients->Health.size();
+        h.Run(10);
+        for (size_t i = healthCalls; i < h.Clients->Health.size(); ++i) {
+            UNIT_ASSERT_VALUES_UNEQUAL(h.Clients->Health[i].Request.Pile, "b");
+        }
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(RemovedPileEndpointsAreRetiredWithoutRestart) {
         THarness fixture(EMode::Auto);
         fixture.Failed.clear();

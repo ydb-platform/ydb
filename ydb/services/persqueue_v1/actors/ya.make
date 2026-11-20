@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/library/actors/core

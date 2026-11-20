@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/scheme
     ydb/core/tablet_flat
+    ydb/core/tx/columnshard/backup/async_jobs
     ydb/core/tx/columnshard/backup/import/protos
     ydb/core/tx/columnshard/bg_tasks
     ydb/core/tx/columnshard/blobs_action/protos

@@ -165,7 +165,7 @@ public:
                         CDCPaths[streamImplPath] = {
                             .CdcStreamName = entry.Self->Info.GetName(),
                             .AccountDatabase = RequestDatabaseName,
-                            .IsAsyncReplication = entry.Attributes.contains("__async_replication")
+                            .IsAsyncReplication = entry.Attributes.contains("__async_replication"),
                         };
                         break;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {

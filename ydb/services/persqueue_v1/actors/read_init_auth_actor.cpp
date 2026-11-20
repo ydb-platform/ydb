@@ -9,36 +9,41 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <fmt/format.h>
+
+#include <string_view>
+
 
 namespace NKikimr::NGRpcProxy::V1 {
 
 namespace {
 
 TProcessingResult DescribeFailure(const TString& path, NPQ::NDescriber::EStatus status) {
+    const std::string_view topic = path;
     switch (status) {
         case NPQ::NDescriber::EStatus::NotFound:
             return {
                 Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC,
-                Sprintf("no path '%s', Marker# PQ15", path.c_str()),
+                TString(fmt::format("no path '{}', Marker# PQ15", topic)),
                 true
             };
         case NPQ::NDescriber::EStatus::NotTopic:
             return {
                 Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC,
-                Sprintf("item '%s' is not a topic, Marker# PQ13", path.c_str()),
+                TString(fmt::format("item '{}' is not a topic, Marker# PQ13", topic)),
                 true
             };
         case NPQ::NDescriber::EStatus::Unauthorized:
         case NPQ::NDescriber::EStatus::UnauthorizedWithDescribeAccess:
             return {
                 Ydb::PersQueue::ErrorCode::ERROR,
-                Sprintf("topic '%s' describe error, Status# AccessDenied, Marker# PQ1", path.c_str()),
+                TString(fmt::format("topic '{}' describe error, Status# AccessDenied, Marker# PQ1", topic)),
                 true
             };
         default:
             return {
                 Ydb::PersQueue::ErrorCode::ERROR,
-                Sprintf("topic '%s' describe error, Status# Unknown, Marker# PQ1", path.c_str()),
+                TString(fmt::format("topic '{}' describe error, Status# Unknown, Marker# PQ1", topic)),
                 true
             };
     }
@@ -177,6 +182,9 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         topicsIter->second.CdcStreamPath = CanonizePath(topicsIter->first);
         topicsIter->second.IsAsyncReplication = topicInfo.IsAsyncReplication;
     }
+    const auto* consumer = NPQ::GetConsumer(pqDescr.GetPQTabletConfig(), ClientId);
+    topicsIter->second.IsReplicationConsumer = consumer
+        && consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
@@ -184,8 +192,8 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     }
 
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {
-        TString errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503",
-                                      topicsIter->second.DiscoveryConverter->GetPrintableString().c_str());
+        const TString printable = topicsIter->second.DiscoveryConverter->GetPrintableString();
+        TString errorReason(fmt::format("Internal server error with topic '{}', Marker# PQ503", std::string_view(printable)));
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return false;
     }
@@ -367,7 +375,8 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
             holder.MeteringMode,
             holder.Partitions,
             holder.GetPartitionGraph(),
-            holder.IsAsyncReplication
+            holder.IsAsyncReplication,
+            holder.IsReplicationConsumer
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

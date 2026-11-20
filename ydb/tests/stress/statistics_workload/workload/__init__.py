@@ -9,6 +9,7 @@ import random
 import string
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.common.protobuf_ss import SchemeDescribeRequest
+from ydb.core.protos.statistics_pb2 import TTableSummaryStatistics
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -174,15 +175,33 @@ class Workload(object):
             f"[{table_path}] ANALYZE operation must be present in background operations list after ANALYZE command"
         logger.info(f"[{table_path}] ✓ ANALYZE operation successfully found in background operations list")
 
-    def wait_for_planner_row_count_estimate(self, table_name, expected_count, trace_id, timeout=120, poll_interval=5):
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            planner_rc = self.get_planner_row_count_estimate(table_name)
-            if planner_rc == expected_count:
-                return planner_rc
-            logger.info(f"[{trace_id}] planner row count estimate is not ready yet: {planner_rc}, expected={expected_count}")
+    def analyzed_row_count(self, table_statistics, owner_id, path_id):
+        # EStatType::TABLE_SUMMARY = 4. ANALYZE saves the full scan's exact
+        # count in data; sampled_data and the planner's SIMPLE stats may differ.
+        query = (f"SELECT data FROM `{table_statistics}` "
+                 f"WHERE owner_id = {owner_id}ul AND local_path_id = {path_id}ul "
+                 "AND stat_type = 4u AND column_tags = ''")
+        for part in self.driver.table_client.scan_query(query):
+            for row in part.result_set.rows:
+                if row[0] is not None:
+                    summary = TTableSummaryStatistics()
+                    summary.ParseFromString(row[0])
+                    if summary.HasField("RowCount"):
+                        return summary.RowCount
+        return None
+
+    def wait_for_analyzed_row_count(self, table_statistics, owner_id, path_id,
+                                    expected_count, trace_id, timeout=120, poll_interval=5):
+        deadline = time.monotonic() + timeout
+        actual = None
+        while time.monotonic() < deadline:
+            actual = self.analyzed_row_count(table_statistics, owner_id, path_id)
+            if actual == expected_count:
+                return actual
+            logger.info(f"[{trace_id}] ANALYZE row count is not ready yet: {actual}, expected={expected_count}")
             time.sleep(poll_interval)
-        raise Exception(f"[{trace_id}] planner row count estimate for '{table_name}' did not become {expected_count} within {timeout} seconds")
+        raise Exception(f"[{trace_id}] ANALYZE row count for '{owner_id}:{path_id}' "
+                        f"did not become {expected_count} within {timeout} seconds; last count: {actual}")
 
     def get_planner_row_count_estimate(self, table_name):
         with InstrumentedQuerySessionPool(self.driver) as session_pool:
@@ -221,6 +240,7 @@ class Workload(object):
                 SchemeDescribeRequest(table_path).protobuf,
                 method='SchemeDescribe'
             )
+            owner_id = scheme.PathDescription.Self.SchemeshardId
             path_id = scheme.PathDescription.Self.PathId
             logger.info(f"[{trace_id}] table '{table_name}' path id: {path_id}")
 
@@ -244,7 +264,12 @@ class Workload(object):
                 raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no multi-column stats")
 
             expected_count = self.batch_count * self.batch_size
-            self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)
+            self.wait_for_analyzed_row_count(table_statistics, owner_id, path_id, expected_count, trace_id)
+            # The planner reads asynchronously propagated SIMPLE statistics,
+            # which count physical column-store rows during compaction. They
+            # are estimates, not ANALYZE's exact logical row count.
+            planner_count = self.get_planner_row_count_estimate(table_name)
+            logger.info(f"[{trace_id}] ANALYZE row count: {expected_count}; planner estimate: {planner_count}")
         except Exception as e:
             logger.error(f"[{trace_id}] {type(e)}, {e}")
             raise

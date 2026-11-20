@@ -31,6 +31,17 @@ TConnectivityReply Sees(const TString& vantage, const std::set<TString>& withQuo
 } // namespace
 
 Y_UNIT_TEST_SUITE(AdminView) {
+    Y_UNIT_TEST(HotStandbyIsAKnownPublicState) {
+        const auto standby = static_cast<EPileState>(8);
+        auto view = View();
+        view.Piles["standby"] = standby;
+        UNIT_ASSERT_C(ValidateClusterView(view).empty(), ValidateClusterView(view));
+        UNIT_ASSERT_VALUES_EQUAL(ToString(standby), "HOT_STANDBY");
+        UNIT_ASSERT(!IsSynchronized(standby));
+        view.Piles["standby"] = static_cast<EPileState>(9);
+        UNIT_ASSERT_VALUES_EQUAL(ValidateClusterView(view), "UNSUPPORTED_PUBLIC_STATE");
+    }
+
     Y_UNIT_TEST(NewestSingleNodeGenerationWins) {
         auto newer = View(8);
         newer.Endpoint = "b:2135";

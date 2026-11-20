@@ -4,6 +4,57 @@
 
 using namespace NSQLTranslationV1;
 
+Y_UNIT_TEST_SUITE(TranslationIssuePositions) {
+
+Y_UNIT_TEST(DuplicateIndexSettingPointsToName) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table ADD INDEX idx GLOBAL ON (col)\n"
+                        "WITH (distance = cosine,\n"
+                        "  distance =\n"
+                        "    42);",
+                        "<main>:4:3: Error: Duplicated distance\n");
+}
+
+Y_UNIT_TEST(CompactSettingPointsToValue) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table COMPACT WITH (\n"
+                        "  cascade =\n"
+                        "    23);",
+                        "<main>:4:5: Error: CASCADE value should be a boolean\n");
+}
+
+Y_UNIT_TEST(UnknownCompactSettingPointsToName) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table COMPACT WITH (\n"
+                        "  unknown_option =\n"
+                        "    23);",
+                        "<main>:3:3: Error: UNKNOWN_OPTION: unknown setting for compact\n");
+}
+
+Y_UNIT_TEST(ForbiddenCoverPointsToCover) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table ADD INDEX idx LOCAL USING min_max\n"
+                        "ON (col)\n"
+                        "  COVER (payload);",
+                        "<main>:4:3: Error: COVER is not supported for local MIN_MAX index\n");
+}
+
+Y_UNIT_TEST(MissingClusterPointsToTable) {
+    ExpectFailWithError("SELECT *\n"
+                        "FROM\n"
+                        "  Input;",
+                        "<main>:3:3: Error: No cluster name given and no default cluster is selected\n");
+}
+
+Y_UNIT_TEST(AsTableClusterPointsToReference) {
+    ExpectFailWithError("SELECT * FROM\n"
+                        "  plato.\n"
+                        "    AS_TABLE([]);",
+                        "<main>:2:3: Error: Cluster shouldn't be specified for AS_TABLE source\n");
+}
+
+} // Y_UNIT_TEST_SUITE(TranslationIssuePositions)
+
 Y_UNIT_TEST_SUITE(ExternalFunction) {
 Y_UNIT_TEST(ValidUseFunctions) {
     UNIT_ASSERT(SqlToYql(

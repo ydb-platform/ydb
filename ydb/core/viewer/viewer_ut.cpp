@@ -3504,6 +3504,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         auto* sample = record.AddDDiskStateInfo();
                         sample->SetPDiskId(pdisk);
                         sample->SetDDiskSlotId(slot);
+                        if (slot == 1012) {
+                            sample->SetHasWhiteboardData(false);
+                            sample->SetDDiskStatus(NKikimrWhiteboard::TDDiskStateInfo::Initializing);
+                            continue;
+                        }
                         sample->SetDDiskOccupancy(0.25);
                         sample->SetPersistentBufferOccupancy(0.5);
                         sample->SetAllocatedSize(1024);
@@ -3554,6 +3559,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 sample ? TString("whiteboard-buffer-id") : MakeBlobStoragePersistentBufferId(runtime.GetNodeId(0), 1, 1010).ToString());
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("DDiskOccupancy"), sample);
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("AllocatedSize"), sample);
+            const auto& healthOnly = ddisks[2];
+            UNIT_ASSERT(healthOnly.Has("HasWhiteboardData"));
+            UNIT_ASSERT(!healthOnly["HasWhiteboardData"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(healthOnly.Has("DDiskStatus"), sample);
+            UNIT_ASSERT(!healthOnly.Has("DDiskOccupancy"));
+            UNIT_ASSERT(!healthOnly.Has("AllocatedSize"));
         };
         for (const TString& mode : {TString(), TString("false"), TString("true")}) {
             includeDDisks = mode == "true";

@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/resource_pools
     ydb/core/scheme
+    ydb/core/tx/scheme_cache
     ydb/library/actors/core
     ydb/public/sdk/cpp/src/client/types
 )

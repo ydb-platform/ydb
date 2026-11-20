@@ -19,7 +19,6 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverCol
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn-EnableCompileTimeDefaults
-ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+EnableIndexStreamWrite
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut THiveTest.TestLocalMetricsIopsOnlyKeepsTabletHeartbeat
 ydb/core/mind/hive/ut unittest.[*/*] chunk
@@ -29,7 +28,6 @@ ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_SessionClosedDueToUserError
 ydb/public/tools/local_ydb/ut test_local_ydb.py.test_deploy_stop_start_update_and_cleanup_preserve_data
 ydb/tests/fq/generic/analytics py3test.sole chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]

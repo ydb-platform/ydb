@@ -37,6 +37,7 @@ YQL_LAST_ABI_VERSION()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 SRCS(
+    ut_columnshard_index_portions_by_last_key.cpp
     ut_columnshard_loaded_key_ranges.cpp
     ut_columnshard_read_write.cpp
     ut_not_proposed_transactions.cpp

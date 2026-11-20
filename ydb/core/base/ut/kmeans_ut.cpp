@@ -51,6 +51,27 @@ namespace {
 
 Y_UNIT_TEST_SUITE(NKMeans) {
 
+    Y_UNIT_TEST(AssignmentOnlyDoesNotAllocateAccumulators) {
+        TString error;
+        const auto settings = MakeCosineSettings(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 3);
+        auto assign = CreateClusters(settings, 0, error, EClustersMode::AssignOnly);
+        auto recompute = CreateClusters(settings, 0, error);
+        UNIT_ASSERT_C(assign && recompute, error);
+        const auto first = SerializeVector<float>({1, 0, 0});
+        const auto second = SerializeVector<float>({0, 1, 0});
+        UNIT_ASSERT(assign->SetClusters(TVector<TString>{first, second}));
+        UNIT_ASSERT(recompute->SetClusters(TVector<TString>{first, second}));
+        UNIT_ASSERT(assign->GetNextClusterSizes().empty());
+        UNIT_ASSERT_VALUES_EQUAL(recompute->GetNextClusterSizes().size(), 2);
+        UNIT_ASSERT(assign->FindCluster(first) == recompute->FindCluster(first));
+        UNIT_ASSERT(assign->FindCluster(second) == recompute->FindCluster(second));
+        UNIT_ASSERT_EXCEPTION(assign->AggregateToCluster(0, {first.data(), first.size()}), yexception);
+        UNIT_ASSERT_EXCEPTION(assign->RecomputeClusters(), yexception);
+        recompute->AggregateToCluster(0, {first.data(), first.size()});
+        UNIT_ASSERT_VALUES_EQUAL(recompute->GetNextClusterSizes()[0], 1);
+        recompute->RecomputeClusters();
+    }
+
     Y_UNIT_TEST(EmptyIndexCentroidsKeepLegacyCompatibility) {
         for (const auto vectorType : {
                 Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,

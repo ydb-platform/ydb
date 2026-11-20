@@ -74,6 +74,10 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
             (*settings->mutable_attributes())["_allow_unauthenticated_read"] = "true";
         }
 
+        if (config.HasMetricsDisabled()) {
+            (*settings->mutable_attributes())["_metrics_disabled"] = config.GetMetricsDisabled() ? "true" : "false";
+        }
+
         if (pqDescr.GetPartitionPerTablet() != 2) {
             (*settings->mutable_attributes())["_partitions_per_tablet"] =
                 TStringBuilder() << pqDescr.GetPartitionPerTablet();

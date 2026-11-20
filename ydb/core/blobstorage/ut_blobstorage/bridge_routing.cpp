@@ -131,10 +131,10 @@ namespace {
             }
         }
 
-        void ReleaseResultsAsRace() {
+        void ReleaseResults(auto&& onResult) {
             HoldResults = false;
             for (auto& ev : std::exchange(HeldResults, {})) {
-                MakeRace(*ev->Get<TEvBlobStorage::TEvGetResult>());
+                onResult(*ev->Get<TEvBlobStorage::TEvGetResult>());
                 Env.Runtime->Send(ev.release(), 1);
             }
         }
@@ -225,13 +225,10 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         test.MakeRoutingAvailable();
         WaitUntil(test.Env, [&] { return !test.HeldResults.empty(); }, "dispatched read", TDuration::MilliSeconds(10), 100);
         // A lagging pile routes the original request back through the service id, to a different bridge proxy.
-        test.HoldResults = false;
-        for (auto& ev : std::exchange(test.HeldResults, {})) {
-            auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
-            msg->Status = NKikimrProto::RACE;
-            msg->RacingGeneration = 0;
-            test.Env.Runtime->Send(ev.release(), 1);
-        }
+        test.ReleaseResults([](auto& result) {
+            result.Status = NKikimrProto::RACE;
+            result.RacingGeneration = 0;
+        });
         test.CheckSuccess(1);
         const auto pool = GetBridgeRequestCounters(test.Env, 1);
         UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingRestarts", true)->Val(), 1);
@@ -272,11 +269,9 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_C(deleted.GetSuccess(), deleted.GetErrorDescription());
         WaitUntil(test.Env, [&] { return !test.Env.Runtime->GetActor(registeredProxy); }, "group proxy stopped",
             TDuration::MilliSeconds(100), 600);
-        test.HoldResults = false;
-        for (auto& ev : std::exchange(test.HeldResults, {})) {
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvGetResult>()->Status, NKikimrProto::RACE);
-            test.Env.Runtime->Send(ev.release(), 1);
-        }
+        test.ReleaseResults([](const auto& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, NKikimrProto::RACE);
+        });
         WaitUntil(test.Env, [&] { return test.Results.contains(cookie); }, "ejected group reply",
             TDuration::MilliSeconds(10), 100);
         const auto& result = *test.Results.at(cookie);
@@ -370,7 +365,7 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         test.MakeRoutingAvailable();
         WaitUntil(test.Env, [&] { return !test.HeldResults.empty(); }, "dispatched read", TDuration::MilliSeconds(10), 100);
         test.Env.Sim(TDuration::Seconds(3)); // the piles take longer than the whole routing budget
-        test.ReleaseResultsAsRace();
+        test.ReleaseResults([&](auto& result) { test.MakeRace(result); });
         test.Env.Sim(TDuration::MilliSeconds(300));
         UNIT_ASSERT_C(!test.Results.contains(1), "time spent in piles was charged to the routing wait");
         test.Env.Sim(TDuration::MilliSeconds(400));

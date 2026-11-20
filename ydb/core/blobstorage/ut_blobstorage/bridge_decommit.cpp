@@ -201,8 +201,8 @@ namespace {
         };
     }
 
-    // create two bridge proxy groups with their piles and write some data to the first one, which is returned
-    ui32 PrepareBridgedCluster(TEnvironmentSetup& env, TDataChecker& checker) {
+    // Create two bridge groups and write the checker's data to the first one.
+    std::pair<ui32, ui32> PrepareBridgedGroups(TEnvironmentSetup& env, TDataChecker& checker) {
         env.CreatePool(2);
         env.Sim(TDuration::Seconds(30));
 
@@ -214,7 +214,11 @@ namespace {
             checker.Write(groupId);
         }
         checker.CheckAll();
-        return groupId;
+        return {groupId, groups.back()};
+    }
+
+    ui32 PrepareBridgedCluster(TEnvironmentSetup& env, TDataChecker& checker) {
+        return PrepareBridgedGroups(env, checker).first;
     }
 
     struct TPoolSnapshot {
@@ -537,9 +541,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
     Y_UNIT_TEST(RestartedBlockCountsOnceAcrossDecommission) {
         TEnvironmentSetup env(MakeBridgedSettings());
         TDataChecker checker(env);
-        const ui32 groupId = PrepareBridgedCluster(env, checker);
-        const auto groups = env.GetGroups();
-        const ui32 backingGroup = groups.front() == groupId ? groups.back() : groups.front();
+        const auto [groupId, backingGroup] = PrepareBridgedGroups(env, checker);
         const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         constexpr ui64 tabletId = 100601;
         auto sendBlock = [&](ui32 group, ui32 generation) {
@@ -612,9 +614,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         flags.SetEnableVPatch(false); // the naive PATCH reads the source through its public group service
         TEnvironmentSetup env(MakeBridgedSettings(flags));
         TDataChecker checker(env);
-        const ui32 sourceGroup = PrepareBridgedCluster(env, checker);
-        const auto groups = env.GetGroups();
-        const ui32 targetGroup = groups.front() == sourceGroup ? groups.back() : groups.front();
+        const auto [sourceGroup, targetGroup] = PrepareBridgedGroups(env, checker);
         const auto [_, originalId, data] = checker.GetWritten().front();
 
         TFilterChain chain(env);
@@ -670,9 +670,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         flags.SetEnableVPatch(false);
         TEnvironmentSetup env(MakeBridgedSettings(flags));
         TDataChecker checker(env);
-        const ui32 sourceGroup = PrepareBridgedCluster(env, checker);
-        const auto groups = env.GetGroups();
-        const ui32 targetGroup = groups.front() == sourceGroup ? groups.back() : groups.front();
+        const auto [sourceGroup, targetGroup] = PrepareBridgedGroups(env, checker);
         const auto& originalId = std::get<1>(checker.GetWritten()[1]);
         const auto& controlId = std::get<1>(checker.GetWritten()[2]);
         SetupSchemeCacheStub(env);

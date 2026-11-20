@@ -722,7 +722,7 @@ public:
 
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
             .EnableTablePgTypes = true,
-            .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
+            .DisablePgCompatibility = !isBackup && AppData()->FeatureFlags.GetDisablePgCompatibility(),
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
             .EnableDetailedMetrics = true,

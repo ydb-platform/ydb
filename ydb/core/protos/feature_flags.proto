@@ -496,6 +496,7 @@ message TFeatureFlags {
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
+    optional bool EnableTopicReplication = 396 [default = false];
     // Disables client access to built-in PostgreSQL compatibility in YDB.
-    optional bool DisablePgCompatibility = 396 [default = true];
+    optional bool DisablePgCompatibility = 397 [default = true];
 }

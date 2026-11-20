@@ -23,6 +23,7 @@ message THiveCapabilities {
 
 message THiveSettings {
     optional int32 CountersExportMode = 1; // THiveConfig.ECountersExportMode
+    optional bool TrackResourceBrokerUsage = 2 [default = true]; // THiveConfig.TrackResourceBrokerUsage
 }
 
 message TEvRegisterNode {

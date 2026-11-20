@@ -17,13 +17,8 @@
 #include <utility>
 #include <vector>
 
-#if defined(HAVE_GSL)
-#  error #include <gsl/gsl>
-#else
-#  include <cassert>
-#endif
-
 #include "nlohmann/json.hpp"
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/exporters/otlp/otlp_http.h"
 #include "opentelemetry/exporters/otlp/otlp_http_client.h"
@@ -422,23 +417,6 @@ private:
   bool console_debug_ = false;
 };
 
-static inline char HexEncode(unsigned char byte)
-{
-#if defined(HAVE_GSL)
-  Expects(byte <= 16);
-#else
-  assert(byte <= 16);
-#endif
-  if (byte >= 10)
-  {
-    return static_cast<char>(byte - 10 + 'a');
-  }
-  else
-  {
-    return static_cast<char>(byte + '0');
-  }
-}
-
 static std::string HexEncode(const std::string &bytes)
 {
   std::string ret;
@@ -446,8 +424,8 @@ static std::string HexEncode(const std::string &bytes)
   for (std::string::size_type i = 0; i < bytes.size(); ++i)
   {
     unsigned char byte = static_cast<unsigned char>(bytes[i]);
-    ret.push_back(HexEncode(byte >> 4));
-    ret.push_back(HexEncode(byte & 0x0f));
+    ret.push_back(opentelemetry::common::detail::LowerHexDigit(byte >> 4));
+    ret.push_back(opentelemetry::common::detail::LowerHexDigit(byte));
   }
   return ret;
 }

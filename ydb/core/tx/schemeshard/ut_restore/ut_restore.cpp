@@ -2321,6 +2321,7 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2334,6 +2335,7 @@ value {
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(false);
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
@@ -8980,7 +8982,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             if (tables) {
                 UNIT_ASSERT(replica);
-                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex || asyncIndex ? 1 : 2);
+                // The base table is marked together with the impl tables of its indexes
+                // (async index impl tables are maintained by the destination).
+                UNIT_ASSERT_VALUES_EQUAL(tables, asyncIndex ? 1 : 2);
                 ++finalAlterRequests;
             }
         });
@@ -9001,7 +9005,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathExist,
             NLs::IndexesCount(1),
         });
-        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? (importedIndex ? 2 : 1) : 0);
+        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? 1 : 0);
         if (replica) {
             CheckImportedReplica(runtime, "/MyRoot/Table");
             if (!asyncIndex) {

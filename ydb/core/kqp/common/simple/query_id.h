@@ -20,7 +20,7 @@ struct TKqpQueryId {
 
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
     TGUCSettings GUCSettings;
-    bool DisablePgCompatibility = false;
+    bool DisablePgCompatibility = true;
 
 public:
     TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,

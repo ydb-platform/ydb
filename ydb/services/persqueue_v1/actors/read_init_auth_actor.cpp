@@ -114,6 +114,9 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
     topicsIter->second.SetPartitionGraph(entry.PQGroupInfo->PartitionGraph);
+    const auto* consumer = NPQ::GetConsumer(pqDescr.GetPQTabletConfig(), ClientId);
+    topicsIter->second.IsReplicationConsumer = consumer
+        && consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
@@ -295,7 +298,8 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
             holder.MeteringMode,
             holder.Partitions,
             holder.GetPartitionGraph(),
-            holder.IsAsyncReplication
+            holder.IsAsyncReplication,
+            holder.IsReplicationConsumer
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

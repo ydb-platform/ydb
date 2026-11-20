@@ -2430,7 +2430,7 @@ Y_UNIT_TEST(TableChangefeedAfterInitialScan) {
 }
 
 Y_UNIT_TEST(TableSequences) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnablePgCompatibility = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);

@@ -549,7 +549,7 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
         TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
-        if (AppData()->FeatureFlags.GetDisablePgCompatibility()
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility() && !parentPath.IsBackupTable()
                 && NPg::TypeDescFromPgTypeName(NMiniKQL::AdaptLegacyYqlType(srcSequence->Description.GetDataType()))) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for the source sequence");
             return result;

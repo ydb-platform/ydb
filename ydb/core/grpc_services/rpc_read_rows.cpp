@@ -103,6 +103,7 @@ public:
         Y_ABORT_UNLESS(resolveNamesResult);
 
         const auto& entry = resolveNamesResult->ResultSet.front();
+        const auto requestedResultColumnNames = GetRequestedResultColumns(*GetProto());
         const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
 
         THashSet<TString> keyColumnNamesInSchema;

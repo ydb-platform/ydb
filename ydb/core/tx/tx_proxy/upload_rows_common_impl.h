@@ -386,8 +386,7 @@ private:
         return TConclusionStatus::Success();
     }
 
-    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable, bool disablePgCompatibility) {
-        Y_UNUSED(ctx);
+    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable, Ydb::StatusIds::StatusCode& errorStatus) {
         Y_ABORT_UNLESS(ResolveNamesResult);
         AFL_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
 
@@ -403,6 +402,8 @@ private:
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
+        const bool disablePgCompatibility = DerivedActivityType == NKikimrServices::TActivity::GRPC_REQ
+            && AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
         const bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
         const bool isPublicBulkUpsert = !AllowWriteToPrivateTable && !AllowWriteToIndexImplTable;
 
@@ -492,6 +493,11 @@ private:
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
             if (disablePgCompatibility && (typeInProto.has_pg_type() || ci.PType.GetTypeId() == NScheme::NTypeIds::Pg)) {
+                TString errorMessage;
+                if (!CheckAccess(errorMessage)) {
+                    errorStatus = Ydb::StatusIds::UNAUTHORIZED;
+                    return TConclusionStatus::Fail(errorMessage);
+                }
                 return TConclusionStatus::Fail("PostgreSQL compatibility is disabled");
             }
 
@@ -789,16 +795,12 @@ private:
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
         }
 
-        const bool disablePgCompatibility = DerivedActivityType == NKikimrServices::TActivity::GRPC_REQ
-            && AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         {
-            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable, disablePgCompatibility);
+            auto errorStatus = Ydb::StatusIds::SCHEME_ERROR;
+            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable, errorStatus);
             if (conclusion.IsFail()) {
-                if (disablePgCompatibility && !CheckAccess(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, errorMessage, ctx);
-                }
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, conclusion.GetErrorMessage(), ctx);
+                return ReplyWithError(errorStatus, conclusion.GetErrorMessage(), ctx);
             }
         }
 

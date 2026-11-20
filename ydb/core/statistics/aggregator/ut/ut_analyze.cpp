@@ -1481,7 +1481,6 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
             settings.SetEnableTablePgTypes(true).SetDisablePgCompatibility(false);
             settings.AppConfig->MutableFeatureFlags()->SetEnableTablePgTypes(true);
-            settings.AppConfig->MutableFeatureFlags()->SetDisablePgCompatibility(false);
             settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
         });
         auto& runtime = *env.GetServer().GetRuntime();

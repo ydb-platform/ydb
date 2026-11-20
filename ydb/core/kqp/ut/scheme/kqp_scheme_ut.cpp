@@ -10358,7 +10358,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "_serial_column_Key");
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 9223372036854775807);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 2147483647);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 50);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 1);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 11);
@@ -16756,7 +16756,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(AddPgColumnWithStore) {
         TKikimrSettings runnerSettings;
-        runnerSettings.SetWithSampleTables(false).SetDisablePgCompatibility(false);
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -17788,7 +17789,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     void CheckPgColumnRejected(const TString& typeName) {
         TKikimrSettings runnerSettings;
-        runnerSettings.SetWithSampleTables(false).SetDisablePgCompatibility(false);
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -17826,7 +17828,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
     Y_UNIT_TEST(PgMultipleTypesColumn) {
         TKikimrSettings runnerSettings;
-        runnerSettings.SetWithSampleTables(false).SetDisablePgCompatibility(false);
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

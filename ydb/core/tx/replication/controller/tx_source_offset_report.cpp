@@ -11,7 +11,8 @@ bool TController::TracksSourceOffsets(const TWorkerId& id) const {
     const auto* target = FindTarget(id);
     return replication && target
         && replication->GetConfig().GetConsistencySettings().HasGlobal()
-        && target->GetKind() != TReplication::ETargetKind::Transfer;
+        && (target->GetKind() == TReplication::ETargetKind::Table
+            || target->GetKind() == TReplication::ETargetKind::IndexTable);
 }
 
 void TController::SetReplicationError(TReplication& replication, const TReplication::ITarget& target) const {

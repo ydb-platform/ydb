@@ -582,7 +582,6 @@ private:
                 request.UsePessimisticLocks = request.Query->Settings.UsePessimisticLocks;
                 // Keep the original prepared entry available when its policy is restored.
                 request.Uid.Clear();
-                request.KeepInCache = true;
                 compileResult = findInCache();
             }
         }
@@ -677,11 +676,11 @@ private:
             : AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
         TKqpCompileResult::TConstPtr compileResult = QueryCache->FindByUid(request.Uid, false);
         const bool modeChanged = compileResult && compileResult->Query->DisablePgCompatibility != disablePgCompatibility;
-        if (modeChanged || HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+        if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
             compileResult = nullptr;
         }
 
-        if (compileResult || request.Query) {
+        if (!modeChanged && (compileResult || request.Query)) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
@@ -704,7 +703,7 @@ private:
                         {"cache", compileResult->Query->SerializeToString()});
                 }
             }
-            TKqpCompileRequest compileRequest(ev->Sender, modeChanged ? CreateGuidAsString() : request.Uid, compileResult ? *compileResult->Query : std::move(query),
+            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : std::move(query),
                 compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,

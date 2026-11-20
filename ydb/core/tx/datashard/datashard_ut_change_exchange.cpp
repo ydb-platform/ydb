@@ -1034,9 +1034,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
-                .SetDisablePgCompatibility(false)
                 .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true);
+            if (AnyOf(tableDesc.Columns_, [](const auto& column) { return column.Type.StartsWith("pg"); })) {
+                settings.SetDisablePgCompatibility(false);
+            }
 
             Server = new TServer(settings);
             if (useRealThreads || enableGrpc) {

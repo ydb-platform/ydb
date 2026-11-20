@@ -4,6 +4,7 @@ SRCS(
     dq_cbo_ut.cpp
     dq_opt_build_ut.cpp
     dq_opt_equal_nulls_ut.cpp
+    dq_hash_join_type_ut.cpp
     dq_opt_hypergraph_ut.cpp
     dq_opt_interesting_orderings_ut.cpp
 )

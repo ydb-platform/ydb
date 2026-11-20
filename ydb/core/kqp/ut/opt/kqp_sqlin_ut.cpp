@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         const auto execSettings = TExecDataQuerySettings()
             .KeepInQueryCache(true)
             .CollectQueryStats(ECollectQueryStatsMode::Basic);
-        const TString pgQuery = Q1_("SELECT FromPg(Pg::abs(CAST(-42 AS PgInt4))) ?? 0 AS value;");
+        const TString pgQuery = Q1_("SELECT FromPg(Pg::abs(ToPg(-42))) ?? 0 AS value;");
         const TString nativeQuery = Q1_("SELECT 43 AS value;");
         auto execute = [&](const TString& query) {
             return session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();

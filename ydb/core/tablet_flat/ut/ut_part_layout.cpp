@@ -435,11 +435,34 @@ namespace {
     struct TLoadStats {
         ui32 Fetches = 0;
         TSet<ui32> FetchedSlots;
+        ui32 CreatedParts = 0;
+        ui32 SavedReplies = 0;
+    };
+
+    class TTrackedLoaderEnv : public NTable::TLoader::TLoaderEnv {
+    public:
+        TTrackedLoaderEnv(TVector<TIntrusivePtr<NTable::TLoader::TPageCollection>> collections, TLoadStats& stats)
+            : TLoaderEnv(std::move(collections))
+            , Stats(stats)
+        {}
+
+        NTable::TPartStore* CreatePart(NTable::TPart::TParams params, NTable::TPart::TStat stat) override {
+            ++Stats.CreatedParts;
+            return TLoaderEnv::CreatePart(std::move(params), stat);
+        }
+
+        void Save(NActors::IEventBase& event) override {
+            ++Stats.SavedReplies;
+            TLoaderEnv::Save(event);
+        }
+
+    private:
+        TLoadStats& Stats;
     };
 
     // Serves fetches from the written pages, optionally reusing page collections with cached pages
     TPartView LoadBundlePart(const TBundlePart& bundlePart, bool withSlices, bool preloadData, TLoadStats& stats,
-            ui32 dropSlots = 0, const TPartView& cachedPart = { }) {
+        ui32 dropSlots = 0, const TPartView& cachedPart = {}, bool injectedEnvironment = false) {
         const auto& result = bundlePart.Result;
 
         TVector<THashMap<NPage::TPageOffset, TSharedData>> pages(result.PageCollections.size());
@@ -451,7 +474,7 @@ namespace {
                     pages[slot][page.Location.Offset] = page.Data;
                 }
             }
-            collections.push_back(cachedPart ? cachedPart.As<NTable::TPartStore>()->PageCollections[slot]
+            collections.push_back(cachedPart ? cachedPart.As<NTable::TPrivatePartStore>()->PageCollections[slot]
                 : MakeIntrusive<NTable::TLoader::TPageCollection>(written.PageCollection));
         }
         collections.resize(collections.size() - dropSlots);
@@ -462,7 +485,13 @@ namespace {
             .Epoch = TEpoch::Max(),
         };
 
-        NTable::TLoader loader(std::move(components), std::move(collections));
+        THolder<NTable::TLoader::IEnv> environment;
+        if (injectedEnvironment) {
+            environment = MakeHolder<TTrackedLoaderEnv>(std::move(collections), stats);
+        } else {
+            environment = MakeHolder<NTable::TLoader::TLoaderEnv>(std::move(collections));
+        }
+        NTable::TLoader loader(std::move(environment), std::move(components));
 
         while (auto fetch = loader.Run({ .PreloadIndex = true, .PreloadData = preloadData })) {
             stats.Fetches++;
@@ -482,7 +511,9 @@ namespace {
                 UNIT_ASSERT_C(data, "Fetch of an unknown page " << location << " of page collection " << slot);
                 loaded.emplace_back(location.Offset, location.Size, NSharedCache::TSharedPageRef::MakePrivate(*data));
             }
-            loader.Save(std::move(loaded));
+            NSharedCache::TEvResult reply(std::move(fetch.PageCollection), NKikimrProto::OK, 0);
+            reply.Pages = std::move(loaded);
+            loader.Save(reply);
         }
 
         return loader.Result();
@@ -499,7 +530,7 @@ namespace {
         // Outer values are in the last page collection, frames and globs of large values are in the descriptor
         UNIT_ASSERT_VALUES_EQUAL_C(part->GetPageCollectionCount(), part->Slots.SlotsCount() + 1, message);
         UNIT_ASSERT_VALUES_EQUAL_C(part->OuterSlot(), part->Slots.SlotsCount(), message);
-        UNIT_ASSERT_C(part->Small && part->Large && part->Blobs && part->Pseudo, message);
+        UNIT_ASSERT_C(part->Small && part->Large && part->Blobs && part->GetPseudoPageCollection(), message);
 
         // Slices are built from the first and the last keys of data pages
         UNIT_ASSERT_C(partView.Slices && partView.Slices->size() == 1, message);
@@ -516,6 +547,16 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
+    Y_UNIT_TEST(InjectedEnvironmentCreatesPartAndSavesReplies) {
+        const auto& layout = SeparateLayouts.front();
+        const auto bundlePart = WriteBundlePart(layout, EIndex::V2);
+        TLoadStats stats;
+        const auto part = LoadBundlePart(bundlePart, true, false, stats, 0, {}, true);
+        CheckLoadedPart(bundlePart, part, layout, "injected loader environment");
+        UNIT_ASSERT_VALUES_EQUAL(stats.CreatedParts, 1);
+        UNIT_ASSERT(stats.Fetches > 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.SavedReplies, stats.Fetches);
+    }
 
     Y_UNIT_TEST(Load) {
         for (EIndex index : { EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow }) {
@@ -584,7 +625,7 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
                 const auto bundlePart = WriteBundlePart(layout, index);
                 TLoadStats initialStats;
                 const auto cachedPart = LoadBundlePart(bundlePart, true, false, initialStats);
-                const auto* part = cachedPart.As<NTable::TPartStore>();
+                const auto* part = cachedPart.As<NTable::TPrivatePartStore>();
                 const ui32 indexSlot = part->IndexSlot({ });
                 const ui32 dataSlot = part->DataSlot({ });
                 UNIT_ASSERT_VALUES_UNEQUAL(indexSlot, dataSlot);

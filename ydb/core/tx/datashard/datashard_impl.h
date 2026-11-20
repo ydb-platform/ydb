@@ -315,6 +315,7 @@ class TDataShard
     friend class TReplicationSourceOffsetsServer;
     friend class TMultiTxIdManager;
 
+    template <class TPageCache>
     friend class TTableStatsCoroBuilder;
     friend class THnswIndexBuildActor;
     friend class THnswIndexBuildUnit;

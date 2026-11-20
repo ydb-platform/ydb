@@ -9,8 +9,6 @@ namespace NKikimr {
 namespace NTable {
 
     struct TSizeEnv : public IPages {
-        using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
-
         TSizeEnv(IPages* env)
             : Env(env)
         {
@@ -25,7 +23,7 @@ namespace NTable {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            auto *info = partStore->Locate(lob, ref);
+            auto *info = partStore->GetPageCollection(lob, ref);
             AddPageSize(info, info->GetLocation(ref));
 
             return { true, nullptr };
@@ -36,7 +34,7 @@ namespace NTable {
             Y_ENSURE(!NPage::IsIndexPage(location.Type), "Index page " << location << " is requested as a data page");
 
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
-            auto *collection = partStore->PageCollections.at(part->DataSlot(groupId)).Get();
+            auto *collection = partStore->GetPageCollection(part->DataSlot(groupId));
 
             // data pages are counted from metadata
             AddPageSize(collection, location);
@@ -56,7 +54,7 @@ namespace NTable {
         }
 
     private:
-        void AddPageSize(const TPageCollection *collection, const TPageLocation& location)
+        void AddPageSize(const NPageCollection::IPageCollection *collection, const TPageLocation& location)
         {
             if (Touched[collection].insert(location.Offset).second) {
                 Pages++;
@@ -66,7 +64,7 @@ namespace NTable {
 
     private:
         IPages* Env;
-        THashMap<const TPageCollection*, THashSet<TPageOffset>> Touched;
+        THashMap<const NPageCollection::IPageCollection*, THashSet<TPageOffset>> Touched;
         ui64 Pages = 0;
         ui64 Bytes = 0;
     };

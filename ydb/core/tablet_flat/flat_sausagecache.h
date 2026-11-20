@@ -162,9 +162,12 @@ private:
     TStats Stats;
 };
 
-struct TExecutorCaches {
+struct TPrivatePageCacheRestartState final : public IPageCacheRestartState {
     THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
-    THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
+};
+
+struct TPrivateLoadedCollections final : public IPageCacheLoadedCollections {
+    TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
 };
 
 // The holder stays stable when boot recreates the private cache
@@ -175,7 +178,14 @@ public:
     {}
 
     bool PrepareRegistration() override;
-    void CaptureForRestart(TExecutorCaches& caches) const override;
+    void CaptureForRestart(THolder<IPageCacheRestartState>& restartState) const override;
+    void CaptureForRestart(
+        const NTable::TPartStore& partStore, THolder<IPageCacheLoadedCollections>& loaded) const override;
+    void MergeForRestart(
+        THolder<IPageCacheRestartState>& restartState, const IPageCacheLoadedCollections* loaded) const override;
+    THolder<NTable::IPartLoaderEnv> MakeLoaderEnvironment(
+        TConstArrayRef<NPageCollection::TLargeGlobId> collections = {},
+        const IPageCacheRestartState* restartState = nullptr) const override;
     void PrepareCollectionModes(
         const NTable::TPartStore& partStore, TVector<ECacheMode>& modes, const TVector<bool>& stickyGroups) override;
     TVector<bool> UpdateCollectionModes(
@@ -189,6 +199,14 @@ public:
     std::unique_ptr<TSeat> MakeSeat(ui64 uniqueId, TAutoPtr<ITransaction> transaction) override;
     void WithTransactionPages(NTable::TDatabase& database, TSeat& seat,
         TFunctionRef<void(ITransactionPages&, TTransactionEnv&)> execute) override;
+    EPageCacheEvent EventKind(ui32 eventType) const noexcept override;
+    TPageCacheResult ReadResult(NActors::IEventBase& event) const override;
+    THolder<NActors::IEventBase> MakePageRequest(NBlockIO::EPriority priority,
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
+        TVector<NTable::NPage::TPageLocation> locations, ui64 cookie = 0) const override;
+    THolder<NActors::IEventBase> MakeCollectionUpdate(TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
+        ECacheMode mode, TVector<NPageCollection::TBtreeSeed> btreeSeeds = {}) const override;
+    THolder<NActors::IEventBase> MakeUnregisterRequest() const override;
     THolder<NActors::IEventBase> MakeTransactionRequest(const TLogoBlobID& collectionId,
         TVector<NTable::NPage::TPageLocation> locations, TIntrusivePtr<NPageCollection::TPagesWaitPad> waitPad,
         NWilson::TTraceId traceId) override;

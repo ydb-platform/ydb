@@ -2,7 +2,7 @@
 
 #include "flat_boot_util.h"
 #include "flat_bio_events.h"
-#include "shared_cache_events.h"
+#include "flat_transaction_pages.h"
 #include "util_fmt_logger.h"
 #include "util_fmt_desc.h"
 #include "util_basics.h"
@@ -72,9 +72,9 @@ namespace NBoot {
 
         virtual void Start() = 0;
 
-        virtual bool HandleBio(NSharedCache::TEvResult&)
+        virtual bool HandleBio(const TPageCacheResult&, NActors::IEventBase&)
         {
-            Y_TABLET_ERROR("Boot IStep got an unhandled NSharedCache::TEvResult event");
+            Y_TABLET_ERROR("Boot IStep got an unhandled page-cache result event");
         }
 
         virtual void HandleStep(TIntrusivePtr<IStep>)

@@ -1,7 +1,12 @@
 #pragma once
 
 #include "flat_part_iface.h"
+#include "flat_bio_eggs.h"
+#include "flat_sausage_gut.h"
 
+#include <ydb/core/protos/base.pb.h>
+
+#include <util/generic/array_ref.h>
 #include <util/generic/function_ref.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -15,12 +20,12 @@ class TTraceId;
 
 namespace NKikimr::NPageCollection {
 struct TPagesWaitPad;
-struct TBtreeSeed;
 }
 
 namespace NKikimr::NTable {
 class TDatabase;
 class TPartStore;
+struct IPartLoaderEnv;
 }
 
 namespace NKikimr::NTabletFlatExecutor {
@@ -28,7 +33,21 @@ namespace NKikimr::NTabletFlatExecutor {
 class ITransaction;
 struct TSeat;
 struct TTransactionEnv;
-struct TExecutorCaches;
+
+class IPageCacheRestartState {
+public:
+    virtual ~IPageCacheRestartState() = default;
+};
+
+class IPageCacheLoadedCollections {
+public:
+    virtual ~IPageCacheLoadedCollections() = default;
+};
+
+struct TExecutorCaches {
+    THolder<IPageCacheRestartState> PageCollections;
+    THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
+};
 
 struct TPageReadStats {
     size_t NewlyPinnedPages = 0;
@@ -57,6 +76,42 @@ struct TPageCacheStats {
 
 using TPageCacheEventSender = TFunctionRef<void(THolder<NActors::IEventBase>)>;
 
+enum class ERequestTypeCookie : ui64 {
+    Undefined = 0,
+    Transaction = 1,
+    StickyPages,
+    PendingInit,
+    BootLogic,
+    TryKeepInMemPages,
+};
+
+enum class EPageCacheEvent {
+    Unhandled,
+    Result,
+    Updated,
+    StickyPages,
+};
+
+enum class EPageCacheResultKind {
+    Pages,
+    WorkingSetTooLarge,
+    ResourcesReady,
+    ResourcePressure,
+};
+
+// Borrows from the live source event and must not escape its dispatch
+struct TPageCacheResult {
+    void Describe(IOutputStream& out) const;
+
+    NKikimrProto::EReplyStatus Status;
+    const NPageCollection::IPageCollection* PageCollection;
+    TIntrusivePtr<NPageCollection::TPagesWaitPad>& WaitPad;
+    ui64 Cookie;
+    size_t PageCount;
+    // Control results precede normal descriptor and storage-status handling
+    EPageCacheResultKind Kind = EPageCacheResultKind::Pages;
+};
+
 enum class EPageResultStatus {
     Ignored,
     Error,
@@ -70,7 +125,15 @@ public:
 
     // Returns whether previously registered Sticky walks need replay
     virtual bool PrepareRegistration() = 0;
-    virtual void CaptureForRestart(TExecutorCaches& caches) const = 0;
+    virtual void CaptureForRestart(THolder<IPageCacheRestartState>& restartState) const = 0;
+    virtual void CaptureForRestart(
+        const NTable::TPartStore& partStore, THolder<IPageCacheLoadedCollections>& loaded) const = 0;
+    virtual void MergeForRestart(
+        THolder<IPageCacheRestartState>& restartState, const IPageCacheLoadedCollections* loaded) const = 0;
+    // The environment owns its prebuilt collections independently of the restart state
+    virtual THolder<NTable::IPartLoaderEnv> MakeLoaderEnvironment(
+        TConstArrayRef<NPageCollection::TLargeGlobId> collections = {},
+        const IPageCacheRestartState* restartState = nullptr) const = 0;
     // Resolve this executor's requested modes in place using backend-specific Sticky rules
     virtual void PrepareCollectionModes(const NTable::TPartStore& partStore, TVector<NTable::NPage::ECacheMode>& modes,
         const TVector<bool>& stickyGroups) = 0;
@@ -90,6 +153,16 @@ public:
     // Calls execute once synchronously; frame references must not escape
     virtual void WithTransactionPages(
         NTable::TDatabase& database, TSeat& seat, TFunctionRef<void(ITransactionPages&, TTransactionEnv&)> execute) = 0;
+
+    virtual EPageCacheEvent EventKind(ui32 eventType) const noexcept = 0;
+    virtual TPageCacheResult ReadResult(NActors::IEventBase& event) const = 0;
+    virtual THolder<NActors::IEventBase> MakePageRequest(NBlockIO::EPriority priority,
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
+        TVector<NTable::NPage::TPageLocation> locations, ui64 cookie = 0) const = 0;
+    virtual THolder<NActors::IEventBase> MakeCollectionUpdate(
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection, NTable::NPage::ECacheMode mode,
+        TVector<NPageCollection::TBtreeSeed> btreeSeeds = {}) const = 0;
+    virtual THolder<NActors::IEventBase> MakeUnregisterRequest() const = 0;
 
     // Prepares the fresh wait pad before the executor sends any page requests
     virtual TPageRequests PreparePageRequests(

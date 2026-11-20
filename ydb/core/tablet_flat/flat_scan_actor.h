@@ -223,7 +223,7 @@ namespace NOps {
 
                 Y_ENSURE(Loader);
                 Y_ENSURE(msg->Cookie == 0);
-                Loader->Save(std::move(msg->Pages));
+                Loader->Save(*msg);
 
                 if (ReadsLeft == 0) {
                     RunLoader();

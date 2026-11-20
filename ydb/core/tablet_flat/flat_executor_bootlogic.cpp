@@ -30,8 +30,10 @@ NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeG
     Logic->LoadEntry(this);
 }
 
-TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly)
+TExecutorBootLogic::TExecutorBootLogic(IOps *ops, IExecutorPageCache& pageCache, const TActorId &self,
+    ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly)
     : Ops(ops)
+    , PageCache(pageCache)
     , SelfId(self)
     , BootAttempt(bootAttempt)
     , Info(info)
@@ -199,11 +201,11 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
 
     Ops->Send(
         NSharedCache::MakeSharedPageCacheId(),
-        new NSharedCache::TEvRequest(
+        PageCache.MakePageRequest(
             NBlockIO::EPriority::Fast,
             std::move(fetch.PageCollection),
             std::move(fetch.Pages),
-            BootAttempt),
+            BootAttempt).Release(),
         0, (ui64)ERequestTypeCookie::BootLogic);
 
     return NBoot::TSpawned(true);
@@ -291,14 +293,16 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
         if (!LoadBlobQueue.ProcessResult(msg))
             return OpResultBroken;
 
-    } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
+    } else if (PageCache.EventKind(ev.GetTypeRewrite()) == EPageCacheEvent::Result) {
         if (ERequestTypeCookie(ev.Cookie) != ERequestTypeCookie::BootLogic)
             return OpResultUnhandled;
 
-        if (msg->Cookie != BootAttempt)
+        auto& event = *ev.GetBase();
+        const auto msg = PageCache.ReadResult(event);
+        if (msg.Cookie != BootAttempt)
             return OpResultUnhandled;
 
-        auto it = Loads.find(msg->PageCollection.Get());
+        auto it = Loads.find(msg.PageCollection);
         if (it == Loads.end()) // could receive outdated results
             return OpResultUnhandled;
 
@@ -306,11 +310,11 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
         auto step = std::move(it->second);
         Loads.erase(it);
 
-        if (msg->Status == NKikimrProto::NODATA) {
+        if (msg.Status == NKikimrProto::NODATA) {
             GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true)->Inc();
         }
 
-        if (!step->HandleBio(*msg))
+        if (!step->HandleBio(msg, event))
             return OpResultBroken;
 
         step.Drop();
@@ -375,8 +379,7 @@ void TExecutorBootLogic::FollowersSyncComplete() {
 
 TExecutorCaches TExecutorBootLogic::DetachCaches() {
     if (Result_) {
-        for (auto &x : Result().PageCollections)
-            State().PageCollections[x->Id] = x;
+        PageCache.MergeForRestart(State().PageCollections, Result().PageCollections.Get());
     }
     return TExecutorCaches{
         .PageCollections = std::move(State().PageCollections),

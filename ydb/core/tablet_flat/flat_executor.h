@@ -123,8 +123,8 @@ struct TPendingPartSwitch {
         NTable::TLoader Loader;
         const NPageCollection::IPageCollection* Fetching = nullptr;
 
-        explicit TLoaderStage(NTable::TPartComponents&& pc)
-            : Loader(std::move(pc))  // constructs PageCollections in StageParseMeta from components
+        TLoaderStage(THolder<NTable::IPartLoaderEnv> environment, NTable::TPartComponents&& pc)
+            : Loader(std::move(environment), std::move(pc))
         { }
     };
 
@@ -448,9 +448,10 @@ class TExecutor
     TWaitingSnaps WaitingSnapshots;
 
     ui64 BootAttempt = 0;
-    THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
     TPrivatePageCacheBackend PageCache{ PrivatePageCache };
+    // Boot steps borrow PageCache and may run while boot logic is destroyed
+    THolder<TExecutorBootLogic> BootLogic;
 
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
@@ -617,9 +618,8 @@ class TExecutor
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
     void Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSharedCache::TEvResult::TPtr &ev);
-    void Handle(NSharedCache::TEvUpdated::TPtr &ev);
-    void Handle(NSharedCache::TEvStickyCollectionPages::TPtr &ev);
+    void HandlePageCacheEvent(NActors::IEventHandle& ev);
+    void HandlePageCacheResult(NActors::IEventHandle& ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult::TPtr &ev);

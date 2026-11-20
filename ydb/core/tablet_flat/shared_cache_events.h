@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "flat_bio_events.h"
+#include "flat_transaction_pages.h"
 #include "shared_handle.h"
 #include "shared_page.h"
 #include <ydb/core/protos/shared_cache.pb.h>
@@ -40,14 +41,7 @@ namespace NKikimr::NSharedCache {
         /* +1024 range is reserved for scan events */
     };
 
-    enum class ERequestTypeCookie : ui64 {
-        Undefined = 0,
-        Transaction = 1,
-        StickyPages,
-        PendingInit,
-        BootLogic,
-        TryKeepInMemPages,
-    };
+    using ERequestTypeCookie = NTabletFlatExecutor::ERequestTypeCookie;
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 

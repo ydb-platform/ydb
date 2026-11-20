@@ -1,8 +1,11 @@
 #include <ydb/core/tablet_flat/flat_executor_tx_env.h>
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/stream/str.h>
 
 namespace NKikimr::NTabletFlatExecutor {
 namespace {
@@ -61,7 +64,7 @@ namespace {
                 .TxIdStats = Source->TxIdStats,
                 .Layout = Source->Slots.GetLayout(),
             };
-            Part = MakeHolder<NTable::TPartStore>(Source->Label, std::move(params), Source->Stat);
+            Part = MakeHolder<NTable::TPrivatePartStore>(Source->Label, std::move(params), Source->Stat);
             for (ui32 room : xrange(Source->PageColls.size())) {
                 const auto& label = Source->Label;
                 auto descriptor = MakeIntrusive<TReadPageCollection>(
@@ -94,9 +97,9 @@ namespace {
         }
 
         TPrivatePageCache Cache;
-        TSeat Seat;
+        TPrivateSeat Seat;
         TIntrusiveConstPtr<NTable::NTest::TPartStore> Source;
-        THolder<NTable::TPartStore> Part;
+        THolder<NTable::TPrivatePartStore> Part;
         TVector<NTable::TPageLocation> Locations;
         TPageCollectionReadEnv Env;
     };
@@ -110,6 +113,7 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         IExecutorPageCache& pageCache = backend;
         auto seat = pageCache.MakeSeat(1, TAutoPtr<ITransaction>(new TReadTransaction));
         UNIT_ASSERT(seat && !cache);
+        UNIT_ASSERT(dynamic_cast<TPrivateSeat*>(seat.get()));
         pageCache.ReleasePins(*seat);
         UNIT_ASSERT(!cache);
         TPageCacheStats stats;
@@ -139,6 +143,54 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         UNIT_ASSERT(!seat);
     }
 
+    Y_UNIT_TEST(SizeCountingDeduplicatesSharedDescriptors) {
+        TReadFixture f;
+        const ui32 slot = f.Part->DataSlot({});
+        const auto& location = f.Locations.front();
+        const NTable::TPartStore& common = *f.Part;
+        const auto* descriptor = common.GetPageCollection(slot);
+        UNIT_ASSERT(descriptor == common.GetPageCollectionRef(slot).Get());
+        NTable::TSizeEnv env(&f.Env);
+        UNIT_ASSERT(!env.TryGetPage(f.Part.Get(), location, {}));
+        UNIT_ASSERT(!env.TryGetPage(f.Part.Get(), location, {}));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetSize(), location.Size);
+
+        auto clone = common.CloneWithEpoch(common.Epoch);
+        UNIT_ASSERT(!env.TryGetPage(clone.Get(), location, {}));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetSize(), location.Size);
+        TReadFixture separatePart;
+        auto separate = MakeIntrusive<TPrivatePageCache::TPageCollection>(common.GetPageCollectionRef(slot));
+        separatePart.Part->PageCollections[slot] = separate;
+        UNIT_ASSERT(separate->PageCollection.Get() == descriptor);
+        UNIT_ASSERT(!env.TryGetPage(separatePart.Part.Get(), location, {}));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetSize(), location.Size);
+    }
+
+    Y_UNIT_TEST(PartCloneKeepsLegacyOwnersBehindCommonDescriptor) {
+        TReadFixture f;
+        auto regular = f.Load(f.Locations[0]);
+        auto sticky = f.Load(f.Locations[1], true);
+        const NTable::TPartStore& common = *f.Part;
+        const NTable::TEpoch epoch(i64(42));
+        auto clone = common.CloneWithEpoch(epoch);
+        const auto* privateClone = CheckedCast<const NTable::TPrivatePartStore*>(clone.Get());
+        const NTable::TPartStore& clonedDescriptor = *privateClone;
+        UNIT_ASSERT(clone->Epoch == epoch);
+        UNIT_ASSERT(clonedDescriptor.BundleId() == common.BundleId());
+        UNIT_ASSERT_VALUES_EQUAL(clonedDescriptor.BackingSize(), common.BackingSize());
+        UNIT_ASSERT_VALUES_EQUAL(clonedDescriptor.GetPageCollectionCount(), common.GetPageCollectionCount());
+        for (ui32 slot : xrange(common.GetPageCollectionCount())) {
+            UNIT_ASSERT(privateClone->PageCollections[slot].Get() == f.Part->PageCollections[slot].Get());
+            UNIT_ASSERT(clonedDescriptor.GetPageCollectionRef(slot).Get() == common.GetPageCollectionRef(slot).Get());
+        }
+        UNIT_ASSERT(privateClone->Pseudo.Get() == f.Part->Pseudo.Get());
+        UNIT_ASSERT(clonedDescriptor.GetPseudoPageCollection() == common.GetPseudoPageCollection());
+        const auto* collection = privateClone->PageCollections[privateClone->DataSlot({})].Get();
+        UNIT_ASSERT(collection->FindPage(f.Locations[0].Offset)->SharedBody.GetHandle() == regular.GetHandle());
+        UNIT_ASSERT(collection->IsStickyPage(f.Locations[1].Offset));
+        UNIT_ASSERT(collection->FindPage(f.Locations[1].Offset)->SharedBody.GetHandle() == sticky.GetHandle());
+    }
+
     Y_UNIT_TEST(BackendCapturesBootOwnersWithoutChangingActiveCache) {
         TReadFixture f;
         THolder<TPrivatePageCache> cache;
@@ -148,8 +200,8 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         const TLogoBlobID statusId(2, 3, 4, 1, 0, 0);
         captured.TxStatusCaches[statusId] = TSharedData::Copy("tx", 2);
         const auto* txData = captured.TxStatusCaches.at(statusId).data();
-        pageCache.CaptureForRestart(captured);
-        UNIT_ASSERT(captured.PageCollections.empty());
+        pageCache.CaptureForRestart(captured.PageCollections);
+        UNIT_ASSERT(!captured.PageCollections);
         UNIT_ASSERT_VALUES_EQUAL(captured.TxStatusCaches.size(), 1);
         UNIT_ASSERT(captured.TxStatusCaches.at(statusId).data() == txData);
 
@@ -159,14 +211,16 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         f.Cache.UpdateCacheMode(ECacheMode::TryKeepInMemory, collection.Get());
         cache = MakeHolder<TPrivatePageCache>();
         cache->AddPageCollection(collection);
-        pageCache.CaptureForRestart(captured);
-        UNIT_ASSERT_VALUES_EQUAL(captured.PageCollections.size(), 1);
-        const auto& snapshot = captured.PageCollections.at(collection->Id);
-        UNIT_ASSERT(snapshot.Get() != collection.Get());
-        UNIT_ASSERT(snapshot->PageCollection.Get() == collection->PageCollection.Get());
-        UNIT_ASSERT(snapshot->GetCacheMode() == ECacheMode::TryKeepInMemory);
-        UNIT_ASSERT(snapshot->FindPage(f.Locations[0].Offset)->SharedBody.GetHandle() == regular.GetHandle());
-        UNIT_ASSERT(snapshot->IsStickyPage(f.Locations[1].Offset));
+        pageCache.CaptureForRestart(captured.PageCollections);
+        const auto& saved =
+            CheckedCast<TPrivatePageCacheRestartState*>(captured.PageCollections.Get())->PageCollections;
+        UNIT_ASSERT_VALUES_EQUAL(saved.size(), 1);
+        const auto& capturedCollection = saved.at(collection->Id);
+        UNIT_ASSERT(capturedCollection.Get() != collection.Get());
+        UNIT_ASSERT(capturedCollection->PageCollection.Get() == collection->PageCollection.Get());
+        UNIT_ASSERT(capturedCollection->GetCacheMode() == ECacheMode::TryKeepInMemory);
+        UNIT_ASSERT(capturedCollection->FindPage(f.Locations[0].Offset)->SharedBody.GetHandle() == regular.GetHandle());
+        UNIT_ASSERT(capturedCollection->IsStickyPage(f.Locations[1].Offset));
         UNIT_ASSERT(cache->FindPageCollection(collection->Id) == collection.Get());
         UNIT_ASSERT_VALUES_EQUAL(cache->GetStats().PageCollections, 1);
         UNIT_ASSERT(captured.TxStatusCaches.at(statusId).data() == txData);
@@ -175,10 +229,83 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         f.Cache.DropPageCollection(collection.Get());
         regular.Drop();
         sticky.Drop();
-        auto restored = snapshot->FindPage(f.Locations[0].Offset)->SharedBody;
+        auto restored = capturedCollection->FindPage(f.Locations[0].Offset)->SharedBody;
         UNIT_ASSERT(restored.Use());
         UNIT_ASSERT_VALUES_EQUAL(TPinnedPageRef(restored).GetData().size(), f.Locations[0].Size);
-        UNIT_ASSERT(snapshot->IsStickyPage(f.Locations[1].Offset));
+        UNIT_ASSERT(capturedCollection->IsStickyPage(f.Locations[1].Offset));
+    }
+
+    Y_UNIT_TEST(LoaderEnvironmentKeepsRestartOwnersAcrossMetadataIO) {
+        TReadFixture f;
+        THolder<TPrivatePageCache> cache;
+        TPrivatePageCacheBackend backend(cache);
+        IExecutorPageCache& pageCache = backend;
+        TExecutorCaches captured;
+        auto empty = pageCache.MakeLoaderEnvironment();
+        UNIT_ASSERT_VALUES_EQUAL(empty->GetCollectionCount(), 0);
+        UNIT_ASSERT(!cache);
+
+        auto regular = f.Load(f.Locations[0]);
+        const ui32 slot = f.Part->DataSlot({});
+        const auto& collection = f.Part->PageCollections[slot];
+        cache = MakeHolder<TPrivatePageCache>();
+        cache->AddPageCollection(collection);
+        pageCache.CaptureForRestart(captured.PageCollections);
+        TVector<NPageCollection::TLargeGlobId> ids(2);
+        ids[0].Lead = collection->Id;
+        ids[1].Lead = TLogoBlobID(collection->Id.TabletID() + 1, 0, 0, 0, 0, 0);
+        auto environment = pageCache.MakeLoaderEnvironment(ids, captured.PageCollections.Get());
+        UNIT_ASSERT_VALUES_EQUAL(environment->GetCollectionCount(), 2);
+        UNIT_ASSERT(environment->HasCollection(0));
+        UNIT_ASSERT(!environment->HasCollection(1));
+        UNIT_ASSERT(environment->GetCollection(0).Get() == collection->PageCollection.Get());
+
+        captured.PageCollections.Reset();
+        cache.Reset();
+        f.Cache.DropPageCollection(collection.Get());
+        regular.Drop();
+        environment->Initialize(NTable::TPartSlots(1));
+        const auto* page = environment->TryGetSlotPage(0, f.Locations[0]);
+        UNIT_ASSERT(page);
+        UNIT_ASSERT_VALUES_EQUAL(page->size(), f.Locations[0].Size);
+    }
+
+    Y_UNIT_TEST(BackendMergesBootOwnersWithoutConsumingThem) {
+        TReadFixture f;
+        THolder<TPrivatePageCache> cache;
+        TPrivatePageCacheBackend backend(cache);
+        IExecutorPageCache& pageCache = backend;
+        TExecutorCaches captured;
+        pageCache.MergeForRestart(captured.PageCollections, nullptr);
+        UNIT_ASSERT(!captured.PageCollections);
+        THolder<IPageCacheLoadedCollections> loaded;
+        const auto& label = f.Part->Label;
+        auto pseudo = MakeIntrusive<TReadPageCollection>(
+            f.Source->Store, ui32{ 0 }, TLogoBlobID(label.TabletID(), label.Generation(), label.Step(), label.Channel(),
+                                            label.BlobSize(), label.Cookie() + 2048));
+        f.Part->Pseudo = MakeIntrusive<TPrivatePageCache::TPageCollection>(std::move(pseudo));
+        pageCache.CaptureForRestart(*f.Part, loaded);
+        const auto& retained = CheckedCast<TPrivateLoadedCollections*>(loaded.Get())->PageCollections;
+        UNIT_ASSERT_VALUES_EQUAL(retained.size(), f.Part->PageCollections.size() + 1);
+        for (size_t slot : xrange(f.Part->PageCollections.size())) {
+            UNIT_ASSERT(retained[slot].Get() == f.Part->PageCollections[slot].Get());
+        }
+        UNIT_ASSERT(retained.back().Get() == f.Part->Pseudo.Get());
+        const auto firstId = retained.front()->Id;
+        auto replacement = MakeIntrusive<TPrivatePageCache::TPageCollection>(retained.front()->PageCollection);
+        auto& appended = CheckedCast<TPrivateLoadedCollections*>(loaded.Get())->PageCollections;
+        appended.push_back(replacement);
+        const auto count = retained.size();
+        pageCache.MergeForRestart(captured.PageCollections, loaded.Get());
+        const auto& saved =
+            CheckedCast<TPrivatePageCacheRestartState*>(captured.PageCollections.Get())->PageCollections;
+        UNIT_ASSERT(saved.at(firstId).Get() == replacement.Get());
+        UNIT_ASSERT(saved.at(f.Part->Pseudo->Id).Get() == f.Part->Pseudo.Get());
+        UNIT_ASSERT_VALUES_EQUAL(retained.size(), count);
+        cache.Reset();
+        const auto* restartState = captured.PageCollections.Get();
+        pageCache.CaptureForRestart(captured.PageCollections);
+        UNIT_ASSERT(captured.PageCollections.Get() == restartState);
     }
 
     Y_UNIT_TEST(BackendModesPreserveLegacyAccountingAndOuterMode) {
@@ -290,6 +417,93 @@ Y_UNIT_TEST_SUITE(TLegacyPageReadEnv) {
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
         const auto& emptyAttach = *CheckedCast<NSharedCache::TEvAttach*>(events.front().Get());
         UNIT_ASSERT(emptyAttach.BtreeSeeds.empty() && !emptyAttach.ReplayStickyWalk);
+    }
+
+    Y_UNIT_TEST(BackendClassifiesEventsAndBorrowsResultMetadata) {
+        TReadFixture f;
+        THolder<TPrivatePageCache> cache;
+        TPrivatePageCacheBackend backend(cache);
+        IExecutorPageCache& pageCache = backend;
+        UNIT_ASSERT(pageCache.EventKind(NSharedCache::EvResult) == EPageCacheEvent::Result);
+        UNIT_ASSERT(pageCache.EventKind(NSharedCache::EvUpdated) == EPageCacheEvent::Updated);
+        UNIT_ASSERT(pageCache.EventKind(NSharedCache::EvStickyCollectionPages) == EPageCacheEvent::StickyPages);
+        UNIT_ASSERT(pageCache.EventKind(TEvents::TSystem::Poison) == EPageCacheEvent::Unhandled);
+        const ui32 slot = f.Part->DataSlot({});
+        const auto& descriptor = f.Part->GetPageCollectionRef(slot);
+        constexpr ui64 cookie = 135;
+        for (auto status : { NKikimrProto::OK, NKikimrProto::NODATA, NKikimrProto::RACE }) {
+            auto result = MakeHolder<NSharedCache::TEvResult>(descriptor, status, cookie);
+            result->WaitPad = MakeIntrusive<NPageCollection::TPagesWaitPad>();
+            const auto* waitPad = result->WaitPad.Get();
+            const auto& location = f.Locations.front();
+            result->Pages.emplace_back(location.Offset, location.Size,
+                TSharedPageRef::MakePrivate(*f.Source->Store->GetPage(slot, location.Offset)));
+            NActors::IEventHandle envelope(
+                TActorId(), TActorId(), result.Release(), 0, ui64(ERequestTypeCookie::Transaction));
+            auto& typed = *CheckedCast<NSharedCache::TEvResult*>(envelope.GetBase());
+            const auto view = pageCache.ReadResult(typed);
+            UNIT_ASSERT(view.Status == status);
+            UNIT_ASSERT(view.PageCollection == descriptor.Get());
+            UNIT_ASSERT(&view.WaitPad == &typed.WaitPad);
+            UNIT_ASSERT(view.WaitPad.Get() == waitPad);
+            UNIT_ASSERT_VALUES_EQUAL(view.Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(view.PageCount, 1);
+            UNIT_ASSERT(view.Kind == EPageCacheResultKind::Pages);
+            UNIT_ASSERT_VALUES_EQUAL(envelope.Cookie, ui64(ERequestTypeCookie::Transaction));
+            TStringStream originalText;
+            TStringStream commonText;
+            typed.Describe(originalText);
+            view.Describe(commonText);
+            UNIT_ASSERT_VALUES_EQUAL(commonText.Str(), originalText.Str());
+            auto moved = std::move(view.WaitPad);
+            UNIT_ASSERT(moved.Get() == waitPad);
+            UNIT_ASSERT(!typed.WaitPad);
+        }
+        UNIT_ASSERT(!cache);
+    }
+
+    Y_UNIT_TEST(BackendBuildsLoaderAndCollectionRequests) {
+        TReadFixture f;
+        THolder<TPrivatePageCache> cache;
+        TPrivatePageCacheBackend backend(cache);
+        IExecutorPageCache& pageCache = backend;
+        const auto& descriptor = f.Part->GetPageCollectionRef(f.Part->DataSlot({}));
+        for (auto priority : { NBlockIO::EPriority::Fast, NBlockIO::EPriority::Bkgr }) {
+            auto locations = f.Locations;
+            const auto* storage = locations.data();
+            auto event = pageCache.MakePageRequest(priority, descriptor, std::move(locations), 73);
+            UNIT_ASSERT_VALUES_EQUAL(event->Type(), NSharedCache::EvRequest);
+            const auto& request = *CheckedCast<NSharedCache::TEvRequest*>(event.Get());
+            UNIT_ASSERT(request.Priority == priority);
+            UNIT_ASSERT(request.PageCollection.Get() == descriptor.Get());
+            UNIT_ASSERT(request.Pages.data() == storage);
+            UNIT_ASSERT(request.Pages == f.Locations);
+            UNIT_ASSERT_VALUES_EQUAL(request.Cookie, 73);
+            UNIT_ASSERT(!request.WaitPad);
+        }
+        TVector<NPageCollection::TBtreeSeed> seeds{ {
+            .IndexCollectionId = descriptor->Label(),
+            .DataCollectionId = descriptor->Label(),
+            .Root = f.Locations.front(),
+            .LevelCount = 2,
+            .Sticky = true,
+        } };
+        const auto expectedSeeds = seeds;
+        const auto* seedStorage = seeds.data();
+        auto update = pageCache.MakeCollectionUpdate(descriptor, ECacheMode::TryKeepInMemory, std::move(seeds));
+        UNIT_ASSERT_VALUES_EQUAL(update->Type(), NSharedCache::EvAttach);
+        const auto& attach = *CheckedCast<NSharedCache::TEvAttach*>(update.Get());
+        UNIT_ASSERT(attach.PageCollection.Get() == descriptor.Get());
+        UNIT_ASSERT(attach.CacheMode == ECacheMode::TryKeepInMemory);
+        UNIT_ASSERT(attach.BtreeSeeds == expectedSeeds);
+        UNIT_ASSERT(attach.BtreeSeeds.data() == seedStorage);
+        UNIT_ASSERT(!attach.ReplayStickyWalk);
+        auto unregister = pageCache.MakeUnregisterRequest();
+        UNIT_ASSERT_VALUES_EQUAL(unregister->Type(), NSharedCache::EvUnregister);
+        UNIT_ASSERT(!cache);
+        static_assert(ui64(ERequestTypeCookie::Transaction) == 1);
+        static_assert(ui64(ERequestTypeCookie::BootLogic) == 4);
+        static_assert(ui64(NSharedCache::ERequestTypeCookie::TryKeepInMemPages) == 5);
     }
 
     Y_UNIT_TEST(BackendBuildsRequestsFromCurrentCache) {

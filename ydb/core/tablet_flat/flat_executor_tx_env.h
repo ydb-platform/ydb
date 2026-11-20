@@ -5,12 +5,12 @@
 #include "flat_table_misc.h"
 #include "flat_part_store.h"
 #include "flat_sausagecache.h"
-#include <util/generic/hash_set.h>
 #include "tablet_flat_executor.h"
 #include "flat_executor_snapshot.h"
 #include "flat_direct_part_writer.h"
 #include "flat_store_hotdog.h"
 #include "flat_store_solid.h"
+#include <util/generic/hash_set.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <optional>
@@ -18,9 +18,15 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+    struct TPrivateSeat final : public TSeat {
+        using TSeat::TSeat;
+
+        THashMap<TLogoBlobID, THashMap<TPageOffset, TPrivatePageCache::TPinnedPage>> Pinned;
+    };
+
     struct TPrivatePageCacheAccess {
         using TBackend = TPrivatePageCache;
-        using TSeat = NTabletFlatExecutor::TSeat;
+        using TSeat = TPrivateSeat;
         using TPageCollection = TPrivatePageCache::TPageCollection;
 
         TPrivatePageCacheAccess(TPrivatePageCache& cache, TSeat& seat)
@@ -29,11 +35,11 @@ namespace NTabletFlatExecutor {
         {}
 
         static TPageCollection* Locate(const NTable::TPartStore* partStore, NTable::ELargeObj lob, ui64 ref) {
-            return partStore->Locate(lob, ref);
+            return CheckedCast<const NTable::TPrivatePartStore*>(partStore)->Locate(lob, ref);
         }
 
         static TPageCollection* GetPageCollection(const NTable::TPartStore* partStore, ui32 slot) {
-            return partStore->PageCollections.at(slot).Get();
+            return CheckedCast<const NTable::TPrivatePartStore*>(partStore)->PageCollections.at(slot).Get();
         }
 
         static const TLogoBlobID& GetCollectionId(const TPageCollection* pageCollection) noexcept {
@@ -365,7 +371,7 @@ namespace NTabletFlatExecutor {
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public TTransactionEnv {
-        TPageCollectionTxEnv(NTable::TDatabase& db, TPrivatePageCache& cache, TSeat& seat)
+        TPageCollectionTxEnv(NTable::TDatabase& db, TPrivatePageCache& cache, TPrivateSeat& seat)
             : TPageCollectionReadEnv(cache, seat)
             , TTransactionEnv(db)
         {}

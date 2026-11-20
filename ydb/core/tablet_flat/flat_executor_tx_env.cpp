@@ -1,8 +1,16 @@
 #include "flat_executor_tx_env.h"
 #include "flat_database.h"
+#include "flat_part_loader.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
+    namespace {
+
+        const NTable::TPrivatePartStore& PrivatePart(const NTable::TPartStore& partStore) {
+            return *CheckedCast<const NTable::TPrivatePartStore*>(&partStore);
+        }
+
+    } // namespace
 
     bool TPrivatePageCacheBackend::PrepareRegistration() {
         const bool replayStickyWalks = bool(Cache_);
@@ -10,16 +18,62 @@ namespace NTabletFlatExecutor {
         return replayStickyWalks;
     }
 
-    void TPrivatePageCacheBackend::CaptureForRestart(TExecutorCaches& caches) const {
+    void TPrivatePageCacheBackend::CaptureForRestart(THolder<IPageCacheRestartState>& restartState) const {
         if (Cache_) {
-            caches.PageCollections = Cache_->DetachPrivatePageCache();
+            auto captured = MakeHolder<TPrivatePageCacheRestartState>();
+            captured->PageCollections = Cache_->DetachPrivatePageCache();
+            restartState = std::move(captured);
         }
+    }
+
+    void TPrivatePageCacheBackend::CaptureForRestart(
+        const NTable::TPartStore& partStore, THolder<IPageCacheLoadedCollections>& loaded) const {
+        const auto& part = PrivatePart(partStore);
+        if (!loaded) {
+            loaded = MakeHolder<TPrivateLoadedCollections>();
+        }
+        auto& retained = CheckedCast<TPrivateLoadedCollections*>(loaded.Get())->PageCollections;
+        for (auto& pageCollection : part.PageCollections) {
+            retained.push_back(pageCollection);
+        }
+        if (const auto& pageCollection = part.Pseudo) {
+            retained.push_back(pageCollection);
+        }
+    }
+
+    void TPrivatePageCacheBackend::MergeForRestart(
+        THolder<IPageCacheRestartState>& restartState, const IPageCacheLoadedCollections* loaded) const {
+        if (!loaded) {
+            return;
+        }
+        if (!restartState) {
+            restartState = MakeHolder<TPrivatePageCacheRestartState>();
+        }
+        auto& saved = CheckedCast<TPrivatePageCacheRestartState*>(restartState.Get())->PageCollections;
+        for (const auto& collection : CheckedCast<const TPrivateLoadedCollections*>(loaded)->PageCollections) {
+            saved[collection->Id] = collection;
+        }
+    }
+
+    THolder<NTable::IPartLoaderEnv> TPrivatePageCacheBackend::MakeLoaderEnvironment(
+        TConstArrayRef<NPageCollection::TLargeGlobId> collections, const IPageCacheRestartState* restartState) const {
+        TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> prebuilt(collections.size());
+        if (restartState) {
+            const auto& saved = CheckedCast<const TPrivatePageCacheRestartState*>(restartState)->PageCollections;
+            for (size_t slot : xrange(collections.size())) {
+                if (const auto* collection = saved.FindPtr(collections[slot].Lead)) {
+                    prebuilt[slot] = *collection;
+                }
+            }
+        }
+        return MakeHolder<NTable::TLoader::TLoaderEnv>(std::move(prebuilt));
     }
 
     void TPrivatePageCacheBackend::PrepareCollectionModes(
         const NTable::TPartStore& partStore, TVector<ECacheMode>& modes, const TVector<bool>& stickyGroups) {
+        const auto& collections = PrivatePart(partStore).PageCollections;
         for (ui32 slot : xrange(partStore.Slots.SlotsCount())) {
-            partStore.PageCollections[slot]->SetCacheMode(modes[slot]);
+            collections[slot]->SetCacheMode(modes[slot]);
         }
         ReadCollectionModes(partStore, modes, stickyGroups);
     }
@@ -27,8 +81,9 @@ namespace NTabletFlatExecutor {
     TVector<bool> TPrivatePageCacheBackend::UpdateCollectionModes(
         const NTable::TPartStore& partStore, TVector<ECacheMode>& modes, const TVector<bool>& stickyGroups) {
         TVector<bool> changed(partStore.GetPageCollectionCount(), false);
+        const auto& collections = PrivatePart(partStore).PageCollections;
         for (ui32 slot : xrange(partStore.Slots.SlotsCount())) {
-            changed[slot] = Cache_->UpdateCacheMode(modes[slot], partStore.PageCollections[slot].Get());
+            changed[slot] = Cache_->UpdateCacheMode(modes[slot], collections[slot].Get());
         }
         ReadCollectionModes(partStore, modes, stickyGroups);
         return changed;
@@ -36,20 +91,23 @@ namespace NTabletFlatExecutor {
 
     void TPrivatePageCacheBackend::ReadCollectionModes(
         const NTable::TPartStore& partStore, TVector<ECacheMode>& modes, const TVector<bool>&) const {
+        const auto& collections = PrivatePart(partStore).PageCollections;
         for (size_t slot = 0; slot < modes.size(); ++slot) {
-            modes[slot] = partStore.PageCollections[slot]->GetCacheMode();
+            modes[slot] = collections[slot]->GetCacheMode();
         }
     }
 
     void TPrivatePageCacheBackend::RegisterCollection(const NTable::TPartStore& partStore, ui32 slot,
         ECacheMode cacheMode, TVector<NPageCollection::TBtreeSeed> btreeSeeds, bool replayStickyWalk,
         TPageCacheEventSender send) {
-        RegisterCollection(partStore.PageCollections[slot], cacheMode, std::move(btreeSeeds), replayStickyWalk, send);
+        RegisterCollection(
+            PrivatePart(partStore).PageCollections[slot], cacheMode, std::move(btreeSeeds), replayStickyWalk, send);
     }
 
     void TPrivatePageCacheBackend::RegisterPseudoCollection(
         const NTable::TPartStore& partStore, TPageCacheEventSender send) {
-        RegisterCollection(partStore.Pseudo, partStore.Pseudo->GetCacheMode(), {}, false, send);
+        const auto& pseudo = PrivatePart(partStore).Pseudo;
+        RegisterCollection(pseudo, pseudo->GetCacheMode(), {}, false, send);
     }
 
     void TPrivatePageCacheBackend::RegisterCollection(
@@ -70,14 +128,60 @@ namespace NTabletFlatExecutor {
     }
 
     std::unique_ptr<TSeat> TPrivatePageCacheBackend::MakeSeat(ui64 uniqueId, TAutoPtr<ITransaction> transaction) {
-        return std::make_unique<TSeat>(uniqueId, std::move(transaction));
+        return std::make_unique<TPrivateSeat>(uniqueId, std::move(transaction));
     }
 
     void TPrivatePageCacheBackend::WithTransactionPages(
         NTable::TDatabase& database, TSeat& seat, TFunctionRef<void(ITransactionPages&, TTransactionEnv&)> execute) {
-        TPageCollectionTxEnv frame(database, *Cache_, seat);
+        TPageCollectionTxEnv frame(database, *Cache_, *CheckedCast<TPrivateSeat*>(&seat));
         execute(frame, frame);
         // The callback may destroy the seat; do not access it afterward
+    }
+
+    void TPageCacheResult::Describe(IOutputStream& out) const {
+        out << "TEvResult{" << PageCount << " pages"
+            << " " << PageCollection->Label() << " " << (Status == NKikimrProto::OK ? "ok" : "fail") << " "
+            << NKikimrProto::EReplyStatus_Name(Status) << "}";
+    }
+
+    EPageCacheEvent TPrivatePageCacheBackend::EventKind(ui32 eventType) const noexcept {
+        switch (eventType) {
+            case NSharedCache::EvResult:
+                return EPageCacheEvent::Result;
+            case NSharedCache::EvUpdated:
+                return EPageCacheEvent::Updated;
+            case NSharedCache::EvStickyCollectionPages:
+                return EPageCacheEvent::StickyPages;
+            default:
+                return EPageCacheEvent::Unhandled;
+        }
+    }
+
+    TPageCacheResult TPrivatePageCacheBackend::ReadResult(NActors::IEventBase& event) const {
+        auto& result = *CheckedCast<NSharedCache::TEvResult*>(&event);
+        return {
+            .Status = result.Status,
+            .PageCollection = result.PageCollection.Get(),
+            .WaitPad = result.WaitPad,
+            .Cookie = result.Cookie,
+            .PageCount = result.Pages.size(),
+        };
+    }
+
+    THolder<NActors::IEventBase> TPrivatePageCacheBackend::MakePageRequest(NBlockIO::EPriority priority,
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection,
+        TVector<NTable::NPage::TPageLocation> locations, ui64 cookie) const {
+        return MakeHolder<NSharedCache::TEvRequest>(priority, std::move(collection), std::move(locations), cookie);
+    }
+
+    THolder<NActors::IEventBase> TPrivatePageCacheBackend::MakeCollectionUpdate(
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> collection, ECacheMode mode,
+        TVector<NPageCollection::TBtreeSeed> btreeSeeds) const {
+        return MakeHolder<NSharedCache::TEvAttach>(std::move(collection), mode, std::move(btreeSeeds));
+    }
+
+    THolder<NActors::IEventBase> TPrivatePageCacheBackend::MakeUnregisterRequest() const {
+        return MakeHolder<NSharedCache::TEvUnregister>();
     }
 
     THolder<NActors::IEventBase> TPrivatePageCacheBackend::MakeTransactionRequest(const TLogoBlobID& collectionId,
@@ -132,10 +236,11 @@ namespace NTabletFlatExecutor {
     }
 
     bool TPrivatePageCacheBackend::AdoptLoadedPages(TSeat& seat, NActors::IEventBase* event) {
+        auto& pinned = CheckedCast<TPrivateSeat*>(&seat)->Pinned;
         if (event) {
             auto& result = *CheckedCast<NSharedCache::TEvResult*>(event);
             if (auto* collection = Cache_->FindPageCollection(result.PageCollection->Label())) {
-                auto& pinnedCollection = seat.Pinned[collection->Id];
+                auto& pinnedCollection = pinned[collection->Id];
                 for (auto& loaded : result.Pages) {
                     auto inserted = pinnedCollection.insert(
                         std::make_pair(loaded.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
@@ -146,7 +251,7 @@ namespace NTabletFlatExecutor {
                 }
             }
         }
-        for (const auto& [id, pages] : seat.Pinned) {
+        for (const auto& [id, pages] : pinned) {
             if (!pages.empty()) {
                 return true;
             }
@@ -155,7 +260,7 @@ namespace NTabletFlatExecutor {
     }
 
     void TPrivatePageCacheBackend::ReleasePins(TSeat& seat) {
-        seat.Pinned.clear();
+        CheckedCast<TPrivateSeat*>(&seat)->Pinned.clear();
     }
 
     bool TPrivatePageCacheBackend::ReadStats(TPageCacheStats& stats) const noexcept {

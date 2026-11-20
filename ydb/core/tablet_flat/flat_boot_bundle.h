@@ -36,15 +36,11 @@ namespace NBoot {
     private: /* IStep, boot logic DSL actor interface   */
         void Start() override
         {
-            Prebuilt.resize(LargeGlobIds.size());
+            LoaderEnv = Logic->PageCache.MakeLoaderEnvironment(LargeGlobIds, Back->PageCollections.Get());
             Components.resize(LargeGlobIds.size());
 
             for (auto slot: xrange(LargeGlobIds.size())) {
-                if (auto *cached = Back->PageCollections.FindPtr(LargeGlobIds[slot].Lead)) {
-                    // Use existing cached collection as prebuilt
-                    Prebuilt[slot] = *cached;
-                } else {
-                    Prebuilt[slot] = nullptr;
+                if (!LoaderEnv->HasCollection(slot)) {
                     LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot);
                 }
             }
@@ -52,14 +48,14 @@ namespace NBoot {
             TryLoad();
         }
 
-        bool HandleBio(NSharedCache::TEvResult &msg) override
+        bool HandleBio(const TPageCacheResult& msg, NActors::IEventBase& event) override
         {
             Y_ENSURE(Loader, "PageCollections loader got un unexpected pages fetch");
 
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(std::move(msg.Pages));
+                Loader->Save(event);
 
                 TryFinalize();
 
@@ -80,10 +76,10 @@ namespace NBoot {
                 Y_TABLET_ERROR("Got an unexpected load blobs result");
             } else if (load->Cookie >= LargeGlobIds.size()) {
                 Y_TABLET_ERROR("Got blobs load step with an invalid cookie");
-            } else if (Prebuilt[load->Cookie]) {
+            } else if (LoaderEnv->HasCollection(load->Cookie)) {
                 Y_TABLET_ERROR("Page collection is already loaded at room " << load->Cookie);
             } else {
-                // StageParseMeta constructs both NPageCollection::TPageCollection and TPrivatePageCache::TPageCollection
+                // StageParseMeta constructs missing collections from these components
                 Components[load->Cookie].LargeGlobId = load->LargeGlobId;
                 Components[load->Cookie].RawMeta = load->PlainData();
             }
@@ -104,7 +100,7 @@ namespace NBoot {
                 };
 
                 // Pass pre-built collections — StageParseMeta fills null slots from components
-                Loader = new NTable::TLoader(std::move(parts), std::move(Prebuilt));
+                Loader = new NTable::TLoader(std::move(LoaderEnv), std::move(parts));
 
                 TryFinalize();
             }
@@ -120,44 +116,33 @@ namespace NBoot {
 
             if (!LeftReads) {
                 NTable::TPartView partView = Loader->Result();
+                const auto* partStore = partView.As<NTable::TPartStore>();
 
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
                         << NFmt::Do(*Back) << " table " << Table
                         << " part loaded, page collections [";
 
-                    for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections)
-                        logl << " " << cache->Id;
+                    for (ui32 slot : xrange(partStore->GetPageCollectionCount()))
+                        logl << " " << partStore->GetPageCollectionRef(slot)->Label();
 
                     logl << " ]";
                 }
 
-                PropagateSideEffects(partView);
+                Logic->PageCache.CaptureForRestart(*partStore, Logic->Result().PageCollections);
                 Back->DatabaseImpl->Merge(Table, std::move(partView));
 
                 Env->Finish(this); /* return self to owner */
             }
         }
 
-        void PropagateSideEffects(const NTable::TPartView &partView)
-        {
-            for (auto &pageCollection : partView.As<NTable::TPartStore>()->PageCollections)
-                Logic->Result().PageCollections.push_back(pageCollection);
-
-            if (auto &pageCollection = partView.As<NTable::TPartStore>()->Pseudo)
-                Logic->Result().PageCollections.push_back(pageCollection);
-        }
-
     private:
-        using TPageCollection = TPrivatePageCache::TPageCollection;
-
         const ui32 Table = Max<ui32>();
 
         TAutoPtr<NTable::TLoader> Loader;
         TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
         TVector<NTable::TPageCollectionComponents> Components;
-        // Pre-built TPrivatePageCache::TPageCollection for slots found in Back->PageCollections cache
-        TVector<TIntrusivePtr<TPageCollection>> Prebuilt;
+        THolder<NTable::IPartLoaderEnv> LoaderEnv;
         TString Legacy;
         TString Opaque;
         TVector<TString> Deltas;

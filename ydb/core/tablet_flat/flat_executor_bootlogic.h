@@ -38,7 +38,7 @@ namespace NBoot {
         TAutoPtr<TExecutorBorrowLogic> Loans;
         THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
 
-        TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
+        THolder<IPageCacheLoadedCollections> PageCollections;
         bool ShouldSnapshotScheme = false;
     };
 }
@@ -74,6 +74,7 @@ private:
     bool Restored = false;
 
     IOps * const Ops = nullptr;
+    IExecutorPageCache& PageCache;
     const TActorId SelfId;
     TAutoPtr<NBoot::TBack> State_;
     TAutoPtr<NBoot::TResult> Result_;
@@ -110,7 +111,8 @@ private:
     inline NBoot::TBack& State() const noexcept { return *State_; }
 
 public:
-    TExecutorBootLogic(IOps*, const TActorId&, ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly);
+    TExecutorBootLogic(IOps*, IExecutorPageCache& pageCache, const TActorId&, ui64 bootAttempt,
+        TTabletStorageInfo *info, ui64 maxBytesInFly);
     ~TExecutorBootLogic();
 
     void Describe(IOutputStream&) const;

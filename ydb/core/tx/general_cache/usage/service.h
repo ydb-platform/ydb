@@ -23,19 +23,19 @@ private:
 
 public:
     static void KillSource(const TSourceId sourceId) {
-        AFL_VERIFY(NActors::TlsActivationContext);
+        YDB_LOG_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvKillSource(sourceId));
     }
 
     static void AskObjects(const EConsumer consumer, THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback) {
-        AFL_VERIFY(NActors::TlsActivationContext);
+        YDB_LOG_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvAskData(consumer, std::move(addresses), std::move(callback)));
     }
 
     static void ModifyObjects(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove) {
-        AFL_VERIFY(NActors::TlsActivationContext);
+        YDB_LOG_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(
             GetCurrentNodeServiceId(), new NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo(sourceId, std::move(add), std::move(remove)));
@@ -46,7 +46,7 @@ public:
     }
 
     static NActors::TActorId GetCurrentNodeServiceId() {
-        AFL_VERIFY(NActors::TlsActivationContext);
+        YDB_LOG_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         return MakeServiceId(selfId.NodeId());

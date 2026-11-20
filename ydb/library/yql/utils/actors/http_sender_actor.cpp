@@ -30,12 +30,15 @@ namespace {
         )
 
         void SendRequestToProxy() {
-            Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate(), Timeout));
+            auto request = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate(), Timeout);
+            request->AllowConnectionReuse = AllowConnectionReuse;
+            Send(HttpProxyId, request);
         }
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& ev) {
             Request = ev->Get()->Request;
             Timeout = ev->Get()->Timeout;
+            AllowConnectionReuse = ev->Get()->AllowConnectionReuse;
             Cookie = ev->Cookie;
             SendRequestToProxy();
         }
@@ -73,6 +76,7 @@ namespace {
 
         NHttp::THttpOutgoingRequestPtr Request;
         TDuration Timeout;
+        bool AllowConnectionReuse = false;
         ui64 Cookie = 0;
     };
 } // namespace

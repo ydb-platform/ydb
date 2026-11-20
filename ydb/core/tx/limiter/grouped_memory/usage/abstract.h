@@ -87,7 +87,7 @@ public:
     }
 
     void Release() {
-        AFL_VERIFY(!Released);
+        YDB_LOG_VERIFY(!Released);
         Released = true;
     }
 

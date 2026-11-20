@@ -39,7 +39,7 @@ struct TEvExternal {
             , ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId)
             , ExternalGroupId(externalGroupId) {
-            AFL_VERIFY(Allocations.size());
+            YDB_LOG_VERIFY(Allocations.size());
         }
     };
 

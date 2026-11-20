@@ -79,8 +79,8 @@ public:
         : TBase(std::move(context))
         , Task(std::move(task))
         , TaskSignals(std::move(taskSignals)) {
-        AFL_VERIFY(Task);
-        AFL_VERIFY(TaskSignals);
+        YDB_LOG_VERIFY(Task);
+        YDB_LOG_VERIFY(TaskSignals);
     }
 };
 
@@ -98,7 +98,7 @@ public:
         const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
         : TBase(prediction, category, scope, processId)
         , Task(std::move(task)) {
-        AFL_VERIFY(Task);
+        YDB_LOG_VERIFY(Task);
     }
 
     bool operator<(const TWorkerTaskPrepare& wTask) const {

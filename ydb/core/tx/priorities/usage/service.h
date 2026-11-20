@@ -36,7 +36,7 @@ public:
         }
     }
     static void Ask(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
-        AFL_VERIFY(request);
+        YDB_LOG_VERIFY(request);
         if (TSelf::IsEnabled()) {
             NActors::TActorContext::AsActorContext().Send(MakeServiceId(), new TEvExecution::TEvAsk(clientId, count, request, priority));
         } else {
@@ -44,7 +44,7 @@ public:
         }
     }
     static void AskMax(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
-        AFL_VERIFY(request);
+        YDB_LOG_VERIFY(request);
         if (TSelf::IsEnabled()) {
             NActors::TActorContext::AsActorContext().Send(MakeServiceId(), new TEvExecution::TEvAskMax(clientId, count, request, priority));
         } else {

@@ -69,7 +69,7 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
         }
         WorkerPools.emplace_back(std::move(wp));
         for (auto&& link : WorkerPools.back().GetLinks()) {
-            AFL_VERIFY((ui64)link.GetCategory() < Categories.size());
+            YDB_LOG_VERIFY((ui64)link.GetCategory() < Categories.size());
             auto& cat = Categories[(ui64)link.GetCategory()];
             if (!cat.AddWorkerPool(WorkerPools.back().GetWorkersPoolId())) {
                 return TConclusionStatus::Fail("double link for category: " + ::ToString(link.GetCategory()));
@@ -85,12 +85,12 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
             hasManagedPool |= mode != TProtoWorkerPool::NonSchedulable;
         }
         if (!hasServicePool) {
-            AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
-            AFL_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
+            YDB_LOG_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
+            YDB_LOG_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
         }
         if (!hasManagedPool) {
-            AFL_VERIFY(schedulablePool.AddLink(i.GetCategory()));
-            AFL_VERIFY(i.AddWorkerPool(schedulablePool.GetWorkersPoolId()));
+            YDB_LOG_VERIFY(schedulablePool.AddLink(i.GetCategory()));
+            YDB_LOG_VERIFY(i.AddWorkerPool(schedulablePool.GetWorkersPoolId()));
         }
     }
     return TConclusionStatus::Success();
@@ -103,14 +103,15 @@ double TWorkersPool::GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThr
     if (workerIdx + 1 <= wholePart) {
         return 1;
     } else {
-        AFL_VERIFY(workerIdx == wholePart);
-        AFL_VERIFY(fractionalPart)("count", workersCountDouble);
+        YDB_LOG_VERIFY(workerIdx == wholePart);
+        YDB_LOG_VERIFY(fractionalPart,
+            {"count", workersCountDouble});
         return fractionalPart;
     }
 }
 
 const TCategory& TConfig::GetCategoryConfig(const ESpecialTaskCategory cat) const {
-    AFL_VERIFY((ui64)cat < Categories.size());
+    YDB_LOG_VERIFY((ui64)cat < Categories.size());
     return Categories[(ui64)cat];
 }
 
@@ -391,7 +392,7 @@ ui64 TWorkersPool::GetWorkersCount(const ui64 totalThreadsCount) const {
 }
 
 const TString& TWorkersPool::GetName() const {
-    AFL_VERIFY(!!PoolName);
+    YDB_LOG_VERIFY(!!PoolName);
     return PoolName;
 }
 
@@ -417,14 +418,14 @@ TString TWorkerPoolCategoryUsage::DebugString() const {
 TThreadsCountInfo::TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction)
     : Count(count)
     , Fraction(fraction) {
-    AFL_VERIFY(Count || Fraction);
+    YDB_LOG_VERIFY(Count || Fraction);
 }
 
 double TThreadsCountInfo::GetCPUUsageDouble(const ui64 totalThreadsCount) const {
     if (Count) {
         return *Count;
     }
-    AFL_VERIFY(Fraction);
+    YDB_LOG_VERIFY(Fraction);
     const double result = *Fraction * totalThreadsCount;
     if (!result) {
         return 1;

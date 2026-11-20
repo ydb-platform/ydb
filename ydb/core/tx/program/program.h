@@ -80,7 +80,7 @@ public:
         if (data.empty()) {
             return;
         }
-        AFL_VERIFY(!Program);
+        YDB_LOG_VERIFY(!Program);
         std::vector<ui32> columnsVector;
         THashSet<ui32> columnsSet;
         for (auto&& i : data) {
@@ -110,7 +110,7 @@ public:
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept;
 
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetChainVerified() const {
-        AFL_VERIFY(!!Program);
+        YDB_LOG_VERIFY(!!Program);
         return Program;
     }
 

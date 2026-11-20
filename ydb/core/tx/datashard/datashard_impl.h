@@ -2360,7 +2360,7 @@ public:
     TUserTable::TPtr AlterTableSchemaVersion(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, const ui64 tableSchemaVersion,
-        bool persist = true);
+        bool persist = true, bool cdcOnly = false);
 
     TUserTable::TPtr AlterTableAddIndex(
         const TActorContext& ctx, TTransactionContext& txc,

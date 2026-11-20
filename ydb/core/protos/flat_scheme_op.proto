@@ -443,6 +443,13 @@ message TTableDescription {
 
     // Local graph of the logical index owning this physical posting table.
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
+
+    // DataShard-local metadata. A range is valid only for the exact table version it covers.
+    message TReadSchemaVersionRange {
+        optional uint64 MinVersion = 1;
+        optional uint64 TableVersion = 2;
+    }
+    optional TReadSchemaVersionRange ReadSchemaVersionRange = 57;
 }
 
 message TCompressionOptions {

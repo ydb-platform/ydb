@@ -2483,6 +2483,53 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
+    Y_UNIT_TEST_F(StreamLookupContinuesAfterChangefeedAddAndDrop, TStreamingTestFixture) {
+        auto& config = SetupAppConfig();
+        config.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        config.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(true);
+
+        const auto inputTopic = MakeExternalName("changefeedLookupInput");
+        const auto outputTopic = MakeExternalName("changefeedLookupOutput");
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
+        CreatePqSource("changefeedLookupSource");
+        ExecQuery("CREATE TABLE lookup_cdc (id Int32 NOT NULL, payload String, PRIMARY KEY (id));");
+        ExecQuery(R"(UPSERT INTO lookup_cdc (id, payload) VALUES (1, "A"), (2, "B"), (3, "C");)");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY lookupCdcQuery AS DO BEGIN
+                $input = SELECT * FROM changefeedLookupSource.`{input}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (id Int32 NOT NULL, event String NOT NULL)
+                );
+                $lookup = SELECT * FROM lookup_cdc;
+                INSERT INTO changefeedLookupSource.`{output}`
+                    SELECT Unwrap(i.event || ":" || l.payload)
+                    FROM $input AS i
+                    LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $lookup AS l ON i.id = l.id;
+            END DO;
+        )", "input"_a = inputTopic, "output"_a = outputTopic));
+
+        WriteTopicMessage(inputTopic, R"({"id":1,"event":"before"})");
+        ReadTopicMessage(outputTopic, "before:A");
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")->GetCounter("CompletedCheckpoints", true);
+        const auto initial = completed->Val();
+        WaitFor(TDuration::Seconds(15), "lookup input checkpoint saved", [&](TString& error) {
+            error = TStringBuilder() << "Completed " << completed->Val() << ", need " << initial + 2;
+            return completed->Val() >= initial + 2;
+        });
+
+        ExecQuery(R"(ALTER TABLE lookup_cdc ADD CHANGEFEED changes WITH (MODE = "KEYS_ONLY", FORMAT = "JSON");)");
+        const auto afterAdd = TInstant::Now();
+        WriteTopicMessage(inputTopic, R"({"id":2,"event":"add"})");
+        ReadTopicMessage(outputTopic, "add:B", afterAdd);
+
+        ExecQuery("ALTER TABLE lookup_cdc DROP CHANGEFEED changes;");
+        const auto afterDrop = TInstant::Now();
+        WriteTopicMessage(inputTopic, R"({"id":3,"event":"drop"})");
+        ReadTopicMessage(outputTopic, "drop:C", afterDrop);
+        CheckScriptExecutionsCount(1, 1);
+    }
+
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";

@@ -604,12 +604,17 @@ struct TUserTable : public TThrRefBase {
     void SetSchema(const NKikimrSchemeOp::TTableDescription& description) {
         Schema.clear();
         Y_PROTOBUF_SUPPRESS_NODISCARD description.SerializeToString(&Schema);
+        MinReadSchemaVersion = GetMinReadSchemaVersion(description);
     }
 
     void SetPath(const TString &path);
 
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
-    void SetTableSchemaVersion(ui64 schemaVersion);
+    void SetTableSchemaVersion(ui64 schemaVersion, bool cdcOnly = false);
+    bool IsReadSchemaVersionCompatible(ui64 version) const {
+        return TableSchemaVersion == 0 || (MinReadSchemaVersion <= version && version <= TableSchemaVersion);
+    }
+    bool RestoreReadSchemaVersionRange(const NKikimrSchemeOp::TTableDescription& source, bool firstSource);
     bool ResetTableSchemaVersion();
 
     NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
@@ -642,7 +647,10 @@ private:
 private:
     TString Schema;
     ui64 TableSchemaVersion = 0;
+    ui64 MinReadSchemaVersion = 0;
 
+    static ui64 GetMinReadSchemaVersion(const NKikimrSchemeOp::TTableDescription& schema);
+    static void SetReadSchemaVersionRange(NKikimrSchemeOp::TTableDescription& schema, ui64 minVersion);
     void CheckSpecialColumns();
     void AlterSchema();
     void ParseProto(const NKikimrSchemeOp::TTableDescription& descr);

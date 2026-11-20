@@ -2359,6 +2359,38 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(readResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
     }
 
+    Y_UNIT_TEST(ShouldReadUsingSchemaFromBeforeChangefeed) {
+        TTestHelper helper;
+        auto& table = helper.Tables.at("table-1");
+        auto currentVersion = [&] {
+            auto [tables, ownerId] = GetTables(helper.Server, table.TabletId);
+            return tables.at("table-1").GetDescription().GetTableSchemaVersion();
+        };
+        auto read = [&](ui64 id) {
+            auto request = helper.GetBaseReadRequest("table-1", id);
+            AddKeyQuery(*request, {1, 1, 1});
+            return helper.SendRead("table-1", request.release());
+        };
+
+        WaitTxNotification(helper.Server, helper.Sender, AsyncAlterAddStream(helper.Server, "/Root", "table-1", {
+            .Name = "changes",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+        }));
+        const ui64 addVersion = currentVersion();
+        UNIT_ASSERT_GT(addVersion, table.UserTable.GetDescription().GetTableSchemaVersion());
+        CheckResult(table.UserTable, *read(1), {{1, 1, 1, 100}});
+
+        WaitTxNotification(helper.Server, helper.Sender, AsyncAlterDropStream(helper.Server, "/Root", "table-1", "changes"));
+        UNIT_ASSERT_GT(currentVersion(), addVersion);
+        RebootTablet(*helper.Server->GetRuntime(), table.TabletId, helper.Sender);
+        table.ClientId = {};
+        CheckResult(table.UserTable, *read(2), {{1, 1, 1, 100}});
+
+        WaitTxNotification(helper.Server, helper.Sender, AsyncAlterAddExtraColumn(helper.Server, "/Root", "table-1"));
+        UNIT_ASSERT_VALUES_EQUAL(read(3)->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
+    }
+
     Y_UNIT_TEST(ShouldFailReadNextAfterSchemeChange) {
         TTestHelper helper;
 

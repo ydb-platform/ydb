@@ -4,6 +4,7 @@
 #include "stream_remover.h"
 #include "topic_mirror.h"
 
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
@@ -50,8 +51,15 @@ public:
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false)
         : Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
     {
+        auto& runtime = Destination.GetRuntime();
+        if (runtime.IsRealThreads()) {
+            const auto& appData = runtime.GetAppData(0);
+            appData.PersQueueMirrorReaderFactory->Initialize(
+                runtime.GetActorSystem(0), appData.PQConfig.GetMirrorConfig().GetPQLibSettings());
+        }
+
         std::atomic<bool> createResultBlocked = false;
-        auto observer = Destination.GetRuntime().AddObserver<TEvPrivate::TEvCreateDstResult>(
+        auto observer = runtime.AddObserver<TEvPrivate::TEvCreateDstResult>(
             [&](TEvPrivate::TEvCreateDstResult::TPtr& ev) {
                 if (stopBeforeCreateResult && ev->Get()->IsSuccess()) {
                     ev.Reset();

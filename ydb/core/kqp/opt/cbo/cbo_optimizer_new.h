@@ -92,6 +92,22 @@ enum EJoinKind: ui32 {
 EJoinKind ConvertToJoinKind(const TString& joinString);
 TString ConvertToJoinString(const EJoinKind kind);
 
+// MapJoin builds an in-memory dict of the whole build side (NarrowSqueezeToDict).
+// Zero estimates mean "unknown", not "small".
+constexpr double MapJoinMaxBuildSideBytes = 1e6;
+
+inline bool IsMapJoinBuildSideSmall(const TOptimizerStatistics& buildSide) {
+    return buildSide.ByteSize > 0.0 && buildSide.ByteSize < MapJoinMaxBuildSideBytes
+        && buildSide.Nrows > 0.0;
+}
+
+inline bool IsMapJoinApplicable(EJoinKind joinKind, const TOptimizerStatistics& buildSide) {
+    if (joinKind == EJoinKind::OuterJoin || joinKind == EJoinKind::Exclusion) {
+        return false;
+    }
+    return IsMapJoinBuildSideSmall(buildSide);
+}
+
 struct TCardinalityHints {
     enum ECardOperation: ui32 {
         Add,

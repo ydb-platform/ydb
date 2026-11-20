@@ -762,6 +762,8 @@ enum ETransactionKind {
     TX_KIND_SNAPSHOT = 6;
     TX_KIND_DISTRIBUTED_ERASE = 7;
     TX_KIND_COMMIT_WRITES = 8;
+    // Separate wire and persisted kind: older DataShards must not detach without activating CDC.
+    TX_KIND_CDC_HANDOFF = 9;
 
     // Values [100, inf) are used for internal datashard operation
     // kinds. See NKikimr::NDataShard::EOperationKind.

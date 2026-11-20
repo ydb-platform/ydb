@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
+#include "datashard_write.h"
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -83,6 +84,33 @@ private:
 
 ///
 Y_UNIT_TEST_SUITE(TxOrderInternals) {
+
+Y_UNIT_TEST(CdcHandoffRequiresDedicatedKind) {
+    NKikimrTxDataShard::TFlatSchemeTransaction body;
+    auto& alter = *body.MutableAlterTable();
+    alter.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+    alter.AddActivateCdcStreams()->SetLocalId(42);
+
+    auto check = [&](EOperationKind kind, bool expected) {
+        // Recovery reconstructs the operation from this persisted kind.
+        const TBasicOpInfo info(1, kind, 0, 0, TInstant::Zero(), 1);
+        const auto op = NEvWrite::TConvertor::MakeOperation(kind, info, 100);
+        UNIT_ASSERT(op->IsSchemeTx());
+        UNIT_ASSERT_EQUAL(op->GetKind(), kind);
+        auto* tx = dynamic_cast<TActiveTransaction*>(op.Get());
+        UNIT_ASSERT(tx);
+        tx->SetTxBody(body.SerializeAsString());
+        UNIT_ASSERT_EQUAL(tx->BuildSchemeTx(), expected);
+    };
+
+    check(EOperationKind::SchemeTx, false);
+    check(EOperationKind::CdcHandoff, true);
+    alter.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    check(EOperationKind::CdcHandoff, false);
+    alter.ClearActivateCdcStreams();
+    check(EOperationKind::CdcHandoff, false);
+    check(EOperationKind::SchemeTx, true);
+}
 
 Y_UNIT_TEST(OperationOrder) {
     using TTester = TDatashardTester;

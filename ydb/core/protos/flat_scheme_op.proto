@@ -443,6 +443,10 @@ message TTableDescription {
 
     // Local graph of the logical index owning this physical posting table.
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
+
+    // Internal ALTER command: activate these streams atomically with replica detach.
+    // Persisted only in pending AlterData, never in the resulting table schema.
+    repeated NKikimrProto.TPathID ActivateCdcStreams = 57;
 }
 
 message TCompressionOptions {

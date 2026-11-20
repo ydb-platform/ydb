@@ -8526,6 +8526,10 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             *patch);
     }
 
+    if (alterData->TableDescriptionFull.Defined()) {
+        *proto->MutableActivateCdcStreams() = alterData->TableDescriptionFull->GetActivateCdcStreams();
+    }
+
     if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasReplicationConfig()) {
         proto->MutableReplicationConfig()->CopyFrom(alterData->TableDescriptionFull->GetReplicationConfig());
     } else if (tableInfo->HasReplicationConfig()) {

@@ -74,12 +74,15 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
             MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), NScheduler::TOptions{});
         runtime.GetAppData().KqpComputeScheduler = scheduler;
+        const auto memory = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NMemory::MakeMemoryControllerId(), memory);
         const auto service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::Hours(1)));
+        runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memory);
         const auto sender = runtime.AllocateEdgeActor();
         auto add = [&](double weight) {
             auto ev = MakeHolder<NScheduler::TEvAddDatabase>("db");
             ev->Weight = weight;
-            runtime.Send(new IEventHandle(service, sender, ev.Release()), 0, true);
+            runtime.Send(new IEventHandle(service, sender, ev.Release()));
             return scheduler->GetStaticTree();
         };
         const auto first = add(1);
@@ -112,7 +115,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         expectSubscription();
         auto remove = [&] {
             runtime.Send(new IEventHandle(service, wm,
-                new NWorkloadManager::TEvUpdatePoolInfo("db", poolId, std::nullopt, std::nullopt)), 0, true);
+                new NWorkloadManager::TEvUpdatePoolInfo("db", poolId, std::nullopt, std::nullopt)));
         };
         remove();
         expectSubscription();

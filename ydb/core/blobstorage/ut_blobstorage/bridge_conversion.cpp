@@ -734,7 +734,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         TEnvironmentSetup env(MakeUnbridgedSettings(/*setupHive=*/ false, 9, flags));
         TDataChecker checker(env);
         ConvertCluster(env, checker, 2);
-        const auto& [sourceGroup, originalId, data] = checker.GetWritten().front();
+        const auto& [sourceGroup, originalId, _] = checker.GetWritten().front();
         const auto groups = env.GetGroups();
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
         const ui32 targetGroup = groups.front() == sourceGroup ? groups.back() : groups.front();
@@ -766,17 +766,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             return true;
         };
         const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        const TLogoBlobID patchedId(originalId.TabletID(), 2, 1, 0, data.size(), 0);
-        using TDiff = TEvBlobStorage::TEvPatch::TDiff;
-        TArrayHolder<TDiff> diffs(new TDiff[1]);
-        diffs[0].Set(TString("X"), 0);
-        env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, targetGroup, new TEvBlobStorage::TEvPatch(sourceGroup, originalId, patchedId,
-                0, std::move(diffs), 1, env.Runtime->GetClock() + TDuration::Minutes(1)));
-        });
-        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPatchResult>(edge, false);
+        CheckCrossGroupPatch(env, edge, sourceGroup, targetGroup, originalId);
         env.Runtime->FilterFunction = {};
-        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
         UNIT_ASSERT_VALUES_EQUAL(movedPatchSucceeded, MovedPatch);
         UNIT_ASSERT_VALUES_EQUAL(patches->Val(), patchesBefore + 1);
         UNIT_ASSERT_VALUES_EQUAL(traffic("GetAsync", "262144"), reads);

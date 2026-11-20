@@ -572,16 +572,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
             const auto bytesBefore = bytes->Val();
             const auto readsBeforePatch = backingReads;
 
-            const TLogoBlobID patchedId(originalId.TabletID(), 2, 1, 0, data.size(), 0);
-            using TDiff = TEvBlobStorage::TEvPatch::TDiff;
-            TArrayHolder<TDiff> diffs(new TDiff[1]);
-            diffs[0].Set(TString("X"), 0);
-            env.Runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, targetGroup, new TEvBlobStorage::TEvPatch(sourceGroup, originalId, patchedId, 0,
-                    std::move(diffs), 1, env.Runtime->GetClock() + TDuration::Minutes(1)));
-            });
-            const auto patchResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPatchResult>(edge, false);
-            UNIT_ASSERT_VALUES_EQUAL_C(patchResult->Get()->Status, NKikimrProto::OK, patchResult->Get()->ToString());
+            CheckCrossGroupPatch(env, edge, sourceGroup, targetGroup, originalId);
             UNIT_ASSERT_GT(backingReads, readsBeforePatch);
             UNIT_ASSERT_VALUES_EQUAL(completed->Val(), completedBefore);
             UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), bytesBefore);

@@ -476,6 +476,7 @@ namespace NKikimr::NBlobDepot {
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
+            bool SkipBridgeAccountingForSubrequests = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
             ui32 BlockChecksRemain = 3;
             NWilson::TSpan Span;
@@ -501,8 +502,7 @@ namespace NKikimr::NBlobDepot {
             TString GetName() const;
             TString GetQueryId() const;
             bool ShouldSkipBridgeAccountingForSubrequests() const {
-                const auto& request = dynamic_cast<const TEvBlobStorage::TEvRequestCommon&>(*Event->GetBase());
-                return request.IsDSProxySubrequest || (ExecutionRelay && ExecutionRelay->BridgeProxyPoolCounters);
+                return SkipBridgeAccountingForSubrequests;
             }
             virtual ui64 GetTabletId() const { return 0; }
             virtual void Initiate() = 0;
@@ -566,6 +566,8 @@ namespace NKikimr::NBlobDepot {
                 , Request(*Event->Get<TEvent>())
             {
                 ExecutionRelay = std::move(Request.ExecutionRelay);
+                SkipBridgeAccountingForSubrequests = Request.IsDSProxySubrequest ||
+                    (ExecutionRelay && ExecutionRelay->BridgeProxyPoolCounters);
             }
 
         protected:

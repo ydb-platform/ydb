@@ -103,6 +103,20 @@ namespace NBridgeTest {
         UNIT_ASSERT_VALUES_EQUAL(m.Responses[0].Buffer.ConvertToString(), data);
     }
 
+    inline void CheckCrossGroupPatch(TEnvironmentSetup& env, TActorId edge, ui32 sourceGroup, ui32 targetGroup,
+            const TLogoBlobID& originalId) {
+        const TLogoBlobID patchedId(originalId.TabletID(), 2, 1, 0, originalId.BlobSize(), 0);
+        using TDiff = TEvBlobStorage::TEvPatch::TDiff;
+        TArrayHolder<TDiff> diffs(new TDiff[1]);
+        diffs[0].Set(TString("X"), 0);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, targetGroup, new TEvBlobStorage::TEvPatch(sourceGroup, originalId, patchedId, 0,
+                std::move(diffs), 1, env.Runtime->GetClock() + TDuration::Minutes(1)));
+        });
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPatchResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+    }
+
     inline const NKikimrBlobStorage::TBaseConfig::TGroup& FindGroup(const NKikimrBlobStorage::TBaseConfig& baseConfig,
             ui32 groupId) {
         for (const auto& group : baseConfig.GetGroup()) {

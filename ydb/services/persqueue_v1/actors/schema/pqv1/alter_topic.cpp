@@ -51,6 +51,10 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
             }
         }
 
+        // Ordinary SDK settings do not expose the system _metrics_disabled attribute.
+        if (sourceTabletConfig.HasMetricsDisabled()) {
+            targetConfig.MutablePQTabletConfig()->SetMetricsDisabled(sourceTabletConfig.GetMetricsDisabled());
+        }
         auto result = ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, localCluster);
         if (!result) {
             return result;

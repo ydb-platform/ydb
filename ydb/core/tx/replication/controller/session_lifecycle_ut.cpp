@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
     };
 
     enum class ESecretCredentials { OAuth, Static };
-    enum class ESourceSchema { Table, IndexedTable, IndexedTableWithSchemaChanges };
+    enum class ESourceSchema { Table, IndexedTable, IndexedTableWithSchemaChanges, IndexedTableWithPendingStream };
 
     struct TSetup {
         TEnv<> Env;
@@ -130,6 +130,17 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                     runtime.Register(CreateReplicationMockService(Edges[node]), node), node);
             }
 
+            TTestActorRuntime::TEventObserverHolder pendingStream;
+            bool indexCreateRequested = false;
+            if (schema == ESourceSchema::IndexedTableWithPendingStream) {
+                pendingStream = runtime.AddObserver<TEvYdbProxy::TEvAlterTableRequest>(
+                    [&](TEvYdbProxy::TEvAlterTableRequest::TPtr& ev) {
+                        if (TStringBuf(std::get<0>(ev->Get()->GetArgs())).StartsWith("/Root/table/idx")) {
+                            indexCreateRequested = true;
+                            ev.Reset();
+                        }
+                    });
+            }
             if (schema != ESourceSchema::Table) {
                 runtime.GetAppData(0).FeatureFlags.SetEnableAsyncReplicationSchemaChanges(
                     schema == ESourceSchema::IndexedTableWithSchemaChanges);
@@ -202,6 +213,11 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             Worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
             CredentialInstanceId = run->Get()->Record.GetCommand().GetRemoteTopicReader()
                 .GetConnectionParams().GetCredentialInstanceId();
+
+            if (schema == ESourceSchema::IndexedTableWithPendingStream) {
+                runtime.WaitFor("index stream creation requested", [&] { return indexCreateRequested; },
+                    TDuration::Seconds(30));
+            }
 
             if (nodeCount > 1) {
                 Status(1, false);
@@ -988,6 +1004,29 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             runtime.SimulateSleep(TDuration::Minutes(2));
         }
         UNIT_ASSERT_VALUES_EQUAL(probes, 2);
+        UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+    }
+
+    Y_UNIT_TEST(PendingStreamFinishesAfterSecretRecovery) {
+        TSetup s(1, false, true, ESecretCredentials::Static, ESourceSchema::IndexedTableWithPendingStream);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
+        s.Reboot();
+        s.Status(0, false);
+        const auto initial = s.Describe();
+        UNIT_ASSERT(initial.GetState().HasError());
+        UNIT_ASSERT_VALUES_EQUAL(initial.TargetsSize(), 2);
+        const auto& index = initial.GetTargets(initial.GetTargets(0).GetSrcPath() == "/Root/table" ? 1 : 0);
+        UNIT_ASSERT_UNEQUAL(s.Worker.TargetId(), index.GetId());
+
+        ++s.Secret->Revision->Version;
+        bool indexWorkerStarted = false;
+        auto runs = runtime.AddObserver<TEvService::TEvRunWorker>([&](TEvService::TEvRunWorker::TPtr& ev) {
+            indexWorkerStarted |= TWorkerId::Parse(ev->Get()->Record.GetWorker()).TargetId() == index.GetId();
+        });
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        runtime.WaitFor("new index stream ready and its worker started", [&] { return indexWorkerStarted; },
+            TDuration::Minutes(2));
         UNIT_ASSERT(s.Describe().GetState().HasStandBy());
     }
 

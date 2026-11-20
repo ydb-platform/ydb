@@ -3261,16 +3261,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(TestSecureScriptExecutions) {
+    Y_UNIT_TEST_TWIN(TestSecureScriptExecutions, EnforceUserToken) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(EnforceUserToken);
 
         auto kikimr = std::make_shared<TKikimrRunner>(
             NKqp::TKikimrSettings(appConfig).SetEnableSecureScriptExecutions(true).SetInitFederatedQuerySetupFactory(true));
 
         constexpr char aToken[] = "A@" BUILTIN_ACL_DOMAIN;
         auto userA = kikimr->GetQueryClient(TClientSettings().AuthToken(aToken));
-        NOperation::TOperationClient clientA(kikimr->GetDriver(), TCommonClientSettings().AuthToken(aToken));
+        const TString userSID = EnforceUserToken ? aToken : "";
+        auto db = kikimr->GetQueryClient(TClientSettings().AuthToken(userSID));
+        NOperation::TOperationClient client(kikimr->GetDriver(), TCommonClientSettings().AuthToken(userSID));
 
         // Create sample operation
         NOperationId::TOperationId opId;
@@ -3280,11 +3283,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(!createdOp.Metadata().ExecutionId.empty());
             opId = createdOp.Id();
 
-            const auto readyOp = WaitScriptExecutionOperation(opId, kikimr->GetDriver(), aToken);
+            const auto readyOp = WaitScriptExecutionOperation(opId, kikimr->GetDriver(), userSID);
             UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Status().GetStatus(), EStatus::SUCCESS, readyOp.Status().GetIssues().ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
 
-            auto results = userA.FetchScriptResults(opId, 0).ExtractValueSync();
+            auto results = db.FetchScriptResults(opId, 0).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToOneLineString());
             TResultSetParser resultSet(results.ExtractResultSet());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
@@ -3292,13 +3295,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(resultSet.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
 
-            const auto listResult = clientA.List<TScriptExecutionOperation>(/* pageSize */ 10).ExtractValueSync();
+            const auto listResult = client.List<TScriptExecutionOperation>(/* pageSize */ 10).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), EStatus::SUCCESS, listResult.GetIssues().ToOneLineString());
             const auto& listedOps = listResult.GetList();
             UNIT_ASSERT_VALUES_EQUAL(listedOps.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(listedOps[0].Metadata().ExecStatus, EExecStatus::Completed);
 
-            const auto cancelResult = clientA.Cancel(opId).ExtractValueSync();
+            const auto cancelResult = client.Cancel(opId).ExtractValueSync();
             const auto& cancelIssues = cancelResult.GetIssues();
             UNIT_ASSERT_VALUES_EQUAL_C(cancelResult.GetStatus(), EStatus::PRECONDITION_FAILED, cancelIssues.ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(cancelIssues.ToString(), "Script execution operation is already finished");
@@ -3307,12 +3310,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         // Test operations from client B
         CheckAccessDenied(kikimr, "B@" BUILTIN_ACL_DOMAIN, opId, "User is not owner of script execution operation");
 
-        // Test operations from client without token
-        CheckAccessDenied(kikimr, "", opId, "Access to script execution operations without user token is not allowed");
+        if (EnforceUserToken) {
+            CheckAccessDenied(kikimr, "", opId, "Access to script execution operations without user token is not allowed");
+        }
 
-        // Forget operation from client A
         {
-            const auto result = clientA.Forget(opId).ExtractValueSync();
+            const auto result = client.Forget(opId).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
     }

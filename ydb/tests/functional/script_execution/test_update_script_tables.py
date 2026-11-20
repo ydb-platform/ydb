@@ -25,10 +25,7 @@ columns = ["syntax", "ast", "stats"]
 class TestUpdateScriptTablesYdb(object):
     @classmethod
     def setup_class(cls):
-        cls.config = KikimrConfigGenerator(
-            extra_feature_flags=["enable_script_execution_operations"],
-            disabled_feature_flags=["enable_secure_script_executions"],
-        )
+        cls.config = KikimrConfigGenerator(extra_feature_flags=["enable_script_execution_operations"])
         cls.cluster = KiKiMR(configurator=cls.config)
         cls.cluster.start()
         cls.driver = ydb.Driver(ydb.DriverConfig(

@@ -19,7 +19,6 @@ def start(argv):
         erasure=Erasure.NONE,
         domain_name="Root",
         extra_feature_flags=["enable_script_execution_operations", "enable_relative_paths"],
-        disabled_feature_flags=["enable_secure_script_executions"],
     )
     cluster = KiKiMR(config)
     try:

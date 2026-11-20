@@ -2525,7 +2525,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultCancellation) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableSecureScriptExecutions(false)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();

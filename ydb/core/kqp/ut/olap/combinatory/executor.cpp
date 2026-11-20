@@ -27,7 +27,11 @@ void TScriptExecutor::Execute(const TKikimrSettings& settings) {
     // the result has already reached the client, so the counters may lag behind the last command for a while
     // (up to seconds on a loaded sanitizer runner). Give that cleanup a bounded time before calling it a leak.
     const TBackgroundProcessesState state = WaitBackgroundProcesses(TDuration::Seconds(30));
-    if (state.Waited) {
+    if (!state.IsClean()) {
+        Cerr << "Background processes of the last command are still alive " << state.Waited
+             << " after the client got its result: ProcessScopeCount=" << state.ProcessScopeCount
+             << ", DataSourceCount=" << state.DataSourceCount << Endl;
+    } else if (state.Waited) {
         Cerr << "Background processes of the last command finished " << state.Waited << " after the client got its result"
              << Endl;
     }

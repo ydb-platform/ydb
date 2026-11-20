@@ -5,6 +5,8 @@
 
 #include <ydb/library/signals/object_counter.h>
 
+#include <library/cpp/time_provider/monotonic.h>
+
 namespace NKikimr::NKqp {
 
 TBackgroundProcessesState TBackgroundProcessesState::Current() {
@@ -16,19 +18,19 @@ TBackgroundProcessesState TBackgroundProcessesState::Current() {
 }
 
 TBackgroundProcessesState WaitBackgroundProcesses(const TDuration timeout) {
-    const TInstant start = TInstant::Now();
-    TInstant nextReport = start + TDuration::Seconds(1);
+    const TMonotonic start = TMonotonic::Now();
+    TMonotonic nextReport = start + TDuration::Seconds(1);
     TBackgroundProcessesState state = TBackgroundProcessesState::Current();
-    while (!state.IsClean() && TInstant::Now() - start < timeout) {
-        if (nextReport <= TInstant::Now()) {
+    while (!state.IsClean() && TMonotonic::Now() - start < timeout) {
+        if (nextReport <= TMonotonic::Now()) {
             Cerr << "WAIT_BACKGROUND_PROCESSES: Waiting for background processes to complete... "
                  << "ProcessScopeCount=" << state.ProcessScopeCount << ", DataSourceCount=" << state.DataSourceCount
-                 << ", elapsed=" << (TInstant::Now() - start).Seconds() << "s" << Endl;
+                 << ", elapsed=" << (TMonotonic::Now() - start).Seconds() << "s" << Endl;
             nextReport += TDuration::Seconds(1);
         }
         Sleep(TDuration::MilliSeconds(100));
         state = TBackgroundProcessesState::Current();
-        state.Waited = TInstant::Now() - start;
+        state.Waited = TMonotonic::Now() - start;
     }
     return state;
 }

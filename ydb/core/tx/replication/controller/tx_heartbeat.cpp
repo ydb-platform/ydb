@@ -29,7 +29,8 @@ bool TController::HasMissingIndexWorkers(const TReplication& replication) const 
     // PAUSE clears the worker set and its completion marker. A missing feed
     // cannot enumerate its partitions on RESUME.
     return AnyOf(replication.GetMissingIndexStreams(), [&](ui64 tid) {
-        return !CompleteWorkerSets.contains({replication.GetId(), tid}) || !replication.FindTarget(tid)->HasWorkers();
+        const auto key = std::make_pair(replication.GetId(), tid);
+        return !CompleteWorkerSets.contains(key) || !replication.FindTarget(tid)->HasWorkers();
     });
 }
 

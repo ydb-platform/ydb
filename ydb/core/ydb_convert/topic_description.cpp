@@ -225,7 +225,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
 
     for (const auto& consumer : config.GetConsumers()) {
         auto& publicConsumer = *out.add_consumers();
-        if (!FillConsumer(publicConsumer, config, consumer, status, error)) {
+        if (!FillConsumer(publicConsumer, consumer, status, error)) {
             return false;
         }
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {

@@ -6,14 +6,10 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
-<<<<<<< HEAD
-=======
 #include <ydb/public/sdk/cpp/src/client/topic/common/replication.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -35,15 +31,6 @@ static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 
 namespace {
 
-<<<<<<< HEAD
-=======
-TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
-    TStringBuilder out;
-    NActors::NStructuredLog::TTextWriter writer;
-    writer.Write(out, prefix);
-    return out;
-}
-
 TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& offsetsByConsumers) {
     TStringBuilder out;
     bool firstConsumer = true;
@@ -57,7 +44,6 @@ TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& off
     return out;
 }
 
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
@@ -377,27 +363,15 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         YDB_LOG_NOTICE("[STATE] next offset to read current end offset",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"offsetToRead", OffsetToRead},
-<<<<<<< HEAD
-<<<<<<< HEAD
-            {"endOffset", EndOffset});
-        YDB_LOG_NOTICE("[STATE] bytes in flight messages in write request queue",
-            {"logPrefix", NPQ_LOG_PREFIX},
-=======
-            {"endOffset", EndOffset}
-=======
             {"endOffset", EndOffset},
-            {"confirmedEndOffset", ConfirmedEndOffset}
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
-        );
-        LOG_N(
-            "[STATE] replication offsets",
+            {"confirmedEndOffset", ConfirmedEndOffset});
+        YDB_LOG_NOTICE("[STATE] replication offsets",
+            {"logPrefix", NPQ_LOG_PREFIX},
             {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
             {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
-            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp}
-        );
-        LOG_N(
-            "[STATE] bytes in flight messages in write request queue",
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
+            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp});
+        YDB_LOG_NOTICE("[STATE] bytes in flight messages in write request queue",
+            {"logPrefix", NPQ_LOG_PREFIX},
             {"bytesInFlight", BytesInFlight},
             {"writeInFlightSize", WriteInFlight.size()},
             {"toWrite", Queue.size()});
@@ -558,14 +532,6 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     EndPartitionSessionEvent = std::nullopt;
 }
 
-<<<<<<< HEAD
-void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
-        YDB_LOG_DEBUG("Ignoring stale credentials init",
-            {"logPrefix", NPQ_LOG_PREFIX}, {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
-        return;
-    }
-=======
 void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
     if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
         return;
@@ -577,7 +543,7 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
             continue;
         }
-        
+
         offsetsByConsumersToSend[consumer] = offsetToSend;
     }
 
@@ -596,7 +562,8 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         }
     }
 
-    LOG_D("Sending replication data to consumers",
+    YDB_LOG_DEBUG("Sending replication data to consumers",
+        {"logPrefix", NPQ_LOG_PREFIX},
         {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
         {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
         {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
@@ -618,8 +585,12 @@ void TMirrorer::Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx
     TryToSendReplicationData(ctx);
 }
 
-void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
+void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
+        YDB_LOG_DEBUG("Ignoring stale credentials init",
+            {"logPrefix", NPQ_LOG_PREFIX}, {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
+        return;
+    }
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
             {"logPrefix", NPQ_LOG_PREFIX});
@@ -821,13 +792,15 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
                 LastReplicationDataTimestamp = TActivationContext::Now();
-                LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
+                YDB_LOG_DEBUG("Received replication data",
+                    {"logPrefix", NPQ_LOG_PREFIX}, {"replicationData", replicationData.DebugString()});
 
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
                     OffsetsByConsumers[consumer] = offset;
                 }
             } else {
-                LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
+                YDB_LOG_ERROR("Failed to parse replication service message",
+                    {"logPrefix", NPQ_LOG_PREFIX}, {"payloadSize", msg.GetData().size()});
             }
             continue;
         }

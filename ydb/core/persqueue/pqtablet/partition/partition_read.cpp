@@ -210,6 +210,37 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     }
 }
 
+void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx) {
+    const auto now = ctx.Now();
+
+    auto forgetSubscription = [&](const TString& clientId) {
+        if (InitDone && !clientId.empty()) {
+            UsersInfoStorage->GetOrCreate(clientId, ctx).ForgetSubscription(GetEndOffset(), now);
+        }
+    };
+
+    for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
+        if (it->ClientId != user) {
+            ++it;
+            continue;
+        }
+        auto response = MakeHasDataInfoResponse(0, it->Cookie);
+        response->Record.SetSessionInvalidated(true);
+        ctx.Send(it->Sender, response.Release());
+
+        forgetSubscription(it->ClientId);
+        it = HasDataRequests.erase(it);
+    }
+
+    for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end();) {
+        if (dlIt->Request.ClientId == user) {
+            dlIt = HasDataDeadlines.erase(dlIt);
+        } else {
+            ++dlIt;
+        }
+    }
+}
+
 void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     PQ_ENSURE(record.HasSender());

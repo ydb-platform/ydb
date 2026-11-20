@@ -248,8 +248,6 @@ struct TEvPQ {
         EvTopicSqsActionMetrics,
         EvProcessBatchKeys,
         EvProcessBatchKeysResult,
-        EvResetOffsetRequest,
-        EvResetOffsetResponse,
         EvReplicationData,
         EvReplicationDataAck,
         EvPersistDone,

@@ -365,6 +365,10 @@ struct TPersQueue::TReplyToActor {
     TEventBasePtr Event;
 };
 
+bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
+    return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
+}
+
 bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const {
     if (!ReplicationEnabled(Config) || AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
         return false;
@@ -1937,7 +1941,6 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
             pipeIter->second.ClientId = cmd.GetClientId();
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
-			pipeIter->second.ClientActor = sender;
 
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Created session",
                 {"logPrefix", LogPrefix()},

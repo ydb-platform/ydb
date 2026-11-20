@@ -1506,6 +1506,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
+    event->Record.SetSessionId(Session);
     if (MaxTimeLagMs) {
         event->Record.SetMaxTimeLagMs(MaxTimeLagMs);
     }
@@ -1558,6 +1559,20 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     WaitDataInfly.erase(it);
     if (!WaitForData)
         return;
+
+    if (record.GetSessionInvalidated()) {
+        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, close read session",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"session", Session});
+        WaitForData = false;
+        WaitDataInfly.clear();
+        Counters.Errors.Inc();
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+            TStringBuilder() << "status is not ok: no such session '" << Session << "'",
+            ConvertOldCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION)));
+        return;
+    }
 
     if (Counters.WaitsForData) {
         Counters.WaitsForData.Inc();

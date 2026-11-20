@@ -133,7 +133,7 @@ void TPartition::RestoreReadSessionActor(TUserInfo& userInfo, const TString& ses
     }
     userInfo.ReadSessionActor = readSessionActor;
 
-    LOG_D("Restored read session actor",
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Restored read session actor",
         {"consumer", userInfo.User},
         {"readSessionActor", readSessionActor});
 

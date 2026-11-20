@@ -2172,9 +2172,27 @@ public:
     ui32 ForcedCompactionStoredOperationsLimit = 1000; // total operations, 0 means unlimited
     bool ForcedCompactionAutoForgetOperations = true;
 
-    // operations loaded in the Cancelling state, persisted by an older schemeshard in the middle of a cancel (a cancel
-    // finishes the operation in its own transaction now): finished by the progress transaction
-    TVector<TForcedCompactionInfo::TPtr> CancellingForcedCompactions;
+    struct TCancellingForcedCompaction {
+        struct TWaiter {
+            TActorId ActorId;
+            ui64 TxId;
+            ui64 Cookie;
+        };
+
+        TForcedCompactionInfo::TPtr Info;
+        std::optional<TWaiter> Waiter;
+
+        explicit TCancellingForcedCompaction(TForcedCompactionInfo::TPtr info)
+            : Info(std::move(info))
+            , Waiter(std::nullopt)
+        {}
+
+        TCancellingForcedCompaction(TForcedCompactionInfo::TPtr info, TActorId waiter, ui64 txId, ui64 cookie)
+            : Info(std::move(info))
+            , Waiter(TWaiter(waiter, txId, cookie))
+        {}
+    };
+    TVector<TCancellingForcedCompaction> CancellingForcedCompactions;
 
     struct TForcedCompaction {
         struct TTxCreate;
@@ -2204,8 +2222,6 @@ public:
 
     void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
     bool IsForcedCompactionCompleted(const TForcedCompactionInfo& forcedCompactionInfo) const;
-    // the operation is over, done or cancelled: releases its tables, persists the final state, notifies the subscribers
-    void FinishForcedCompaction(NIceDb::TNiceDb& db, TForcedCompactionInfo& forcedCompactionInfo, TSideEffects& sideEffects, const TActorContext& ctx);
     void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId, const TActorContext &ctx);
     void ProcessForcedCompactionQueues();
     void UpdateForcedCompactionQueueMetrics();

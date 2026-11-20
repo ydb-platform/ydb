@@ -38,16 +38,32 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
             Self->PersistForcedCompactionDoneShard(db, shardIdx);
         }
 
-        for (const auto& cancelling : Self->CancellingForcedCompactions) {
-            compactionsToPersist.emplace(cancelling);
+        for (auto cancelling : Self->CancellingForcedCompactions) {
+            compactionsToPersist.emplace(cancelling.Info);
+            if (cancelling.Waiter) {
+                auto cancelResponse = MakeHolder<TEvForcedCompaction::TEvCancelResponse>(cancelling.Waiter->TxId);
+                cancelResponse->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+                SideEffects.Send(
+                    cancelling.Waiter->ActorId,
+                    cancelResponse.Release(),
+                    cancelling.Waiter->Cookie
+                );
+            }
         }
 
         for (auto& forcedCompactionInfo : compactionsToPersist) {
             if (Self->IsForcedCompactionCompleted(*forcedCompactionInfo)) {
-                Self->FinishForcedCompaction(db, *forcedCompactionInfo, SideEffects, ctx);
-            } else {
-                Self->PersistForcedCompactionState(db, *forcedCompactionInfo);
+                for (const auto& tablePathId : forcedCompactionInfo->TablesToCompact) {
+                    Self->ForcedCompactionShardsByTable.erase(tablePathId);
+                    Self->ForcedCompactionTablesQueue.Remove(tablePathId);
+                    Self->InProgressForcedCompactionsByTable.erase(tablePathId);
+                }
+                forcedCompactionInfo->EndTime = ctx.Now();
+
+                TransitToFinalState(*forcedCompactionInfo);
             }
+            Self->PersistForcedCompactionState(db, *forcedCompactionInfo);
+            SendNotificationsIfFinished(*forcedCompactionInfo, ctx);
         }
         Self->ForcedCompactionsDoneShardsToPersist.clear();
         Self->CancellingForcedCompactions.clear();
@@ -62,6 +78,38 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
             {"cancellingSize", Self->CancellingForcedCompactions.size()},
         );
         SideEffects.ApplyOnComplete(Self, ctx);
+    }
+
+private:
+    void SendNotificationsIfFinished(TForcedCompactionInfo& info, const TActorContext& ctx) {
+        if (!info.IsFinished()) {
+            return;
+        }
+
+        YDB_LOG_TRACE_CTX(ctx, "[ForcedCompaction] TForcedCompaction::TTxProgress SendNotifications",
+            {"schemeshard", Self->SelfTabletId()},
+            {"id", info.Id},
+            {"subscriberCount", info.Subscribers.size()},
+        );
+
+        TSet<TActorId> toAnswer;
+        toAnswer.swap(info.Subscribers);
+        for (auto& actorId: toAnswer) {
+            SideEffects.Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(info.Id));
+        }
+    }
+
+    void TransitToFinalState(TForcedCompactionInfo& info) {
+        switch (info.State) {
+            case TForcedCompactionInfo::EState::InProgress:
+                info.State = TForcedCompactionInfo::EState::Done;
+                break;
+            case TForcedCompactionInfo::EState::Cancelling:
+                info.State = TForcedCompactionInfo::EState::Cancelled;
+                break;
+            default:
+                break;
+        }
     }
 
 private:

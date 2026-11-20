@@ -202,39 +202,6 @@ void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, c
     ScheduleForcedCompactionProgress(ctx);
 }
 
-void TSchemeShard::FinishForcedCompaction(
-    NIceDb::TNiceDb& db, TForcedCompactionInfo& forcedCompactionInfo, TSideEffects& sideEffects, const TActorContext& ctx)
-{
-    for (const auto& tablePathId : forcedCompactionInfo.TablesToCompact) {
-        ForcedCompactionShardsByTable.erase(tablePathId);
-        ForcedCompactionTablesQueue.Remove(tablePathId);
-        InProgressForcedCompactionsByTable.erase(tablePathId);
-    }
-    forcedCompactionInfo.EndTime = ctx.Now();
-    switch (forcedCompactionInfo.State) {
-        case TForcedCompactionInfo::EState::InProgress:
-            forcedCompactionInfo.State = TForcedCompactionInfo::EState::Done;
-            break;
-        case TForcedCompactionInfo::EState::Cancelling:
-            forcedCompactionInfo.State = TForcedCompactionInfo::EState::Cancelled;
-            break;
-        default:
-            break;
-    }
-    PersistForcedCompactionState(db, forcedCompactionInfo);
-
-    YDB_LOG_TRACE_CTX(ctx, "[ForcedCompaction] FinishForcedCompaction",
-        {"schemeshard", SelfTabletId()},
-        {"id", forcedCompactionInfo.Id},
-        {"subscriberCount", forcedCompactionInfo.Subscribers.size()},
-    );
-    TSet<TActorId> toAnswer;
-    toAnswer.swap(forcedCompactionInfo.Subscribers);
-    for (auto& actorId : toAnswer) {
-        sideEffects.Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(forcedCompactionInfo.Id));
-    }
-}
-
 bool TSchemeShard::IsForcedCompactionCompleted(const TForcedCompactionInfo& info) const {
     for (const auto& tablePathId : info.TablesToCompact) {
         auto* shardsQueue = ForcedCompactionShardsByTable.FindPtr(tablePathId);

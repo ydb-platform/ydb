@@ -65,13 +65,10 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             );
         }
 
-        // The operation is over in this transaction: the shards still to compact are given up, the shards that have
-        // completed are counted, the table is free for a new operation as soon as the response is out. The shards are
-        // not told: a column shard with a CASCADE rewrite in flight runs it to completion (or forgets it with a
-        // restart), and its late reply finds no operation to complete.
         forcedCompactionInfo.State = TForcedCompactionInfo::EState::Cancelling;
 
         NIceDb::TNiceDb db(txc.DB);
+        Self->PersistForcedCompactionState(db, forcedCompactionInfo);
 
         // clean waiting shards
         for (const auto& tablePathId : forcedCompactionInfo.TablesToCompact) {
@@ -85,6 +82,9 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
                     --Self->ForcedCompactionTotalInQueues;
                 }
             }
+            Self->ForcedCompactionShardsByTable.erase(tablePathId);
+            Self->ForcedCompactionTablesQueue.Remove(tablePathId);
+            Self->InProgressForcedCompactionsByTable.erase(tablePathId);
         }
 
         // clean waiting in flight shards
@@ -97,24 +97,8 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         }
         forcedCompactionInfo.ShardsInFlight.clear();
 
-        // shards that have completed but whose completion waits for the progress transaction: counted and persisted
-        // here, so that nothing of the operation is left for it
-        TVector<TShardIdx> doneShards;
-        for (const auto& [shardIdx, info] : Self->ForcedCompactionsDoneShardsToPersist) {
-            if (info.Get() == &forcedCompactionInfo) {
-                doneShards.push_back(shardIdx);
-            }
-        }
-        for (const auto& shardIdx : doneShards) {
-            if (Self->InProgressForcedCompactionsByShard.erase(shardIdx)) {
-                ++forcedCompactionInfo.DoneShardCount;
-            }
-            Self->PersistForcedCompactionDoneShard(db, shardIdx);
-            Self->ForcedCompactionsDoneShardsToPersist.erase(shardIdx);
-        }
-
-        Self->FinishForcedCompaction(db, forcedCompactionInfo, SideEffects, ctx);
-        Reply(std::move(response));
+        Self->CancellingForcedCompactions.emplace_back(*forcedCompactionInfoPtr, Request->Sender, request.GetTxId(), Request->Cookie);
+        Self->ForcedCompactionNeedsImmediatePersist = true;
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }

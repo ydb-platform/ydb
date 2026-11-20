@@ -294,18 +294,6 @@ public:
             }
         }
 
-        if (Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().GetAlterSchema().GetOptions().GetSchemeNeedActualization()) {
-            // ALTER TABLE ... COMPACT WITH (CASCADE = true) rewrites the portions older than the schema current at the
-            // request; SCHEME_NEED_ACTUALIZATION drives the same rewrite from the schema it is set on and would widen
-            // it to the portions already rewritten. The other options are unrelated and stay allowed.
-            auto* compaction = context.SS->InProgressForcedCompactionsByTable.FindPtr(path.Base()->PathId);
-            if (compaction && (*compaction)->Cascade) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "SCHEME_NEED_ACTUALIZATION cannot be set while a cascade compaction of the table is in progress");
-                return result;
-            }
-        }
-
         TProposeErrorCollector errors(*result);
         TEntityInitializationContext iContext(&context);
         std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);

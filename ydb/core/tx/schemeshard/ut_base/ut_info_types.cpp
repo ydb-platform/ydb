@@ -572,11 +572,12 @@ ColumnFamilies {
 
             auto fillResult = runtime.RunCall(
                 [&]() {
-                    return importInfo->FillItemsFromSchemaMapping(schemeshard);
+                    return importInfo->ResolveItemsFromSchemaMapping(schemeshard);
                 }
             );
             if (expectSuccess) {
                 UNIT_ASSERT_C(fillResult.Success, fillResult.ErrorMessage);
+                importInfo->Items.swap(fillResult.Items);
             } else {
                 UNIT_ASSERT(!fillResult.Success);
                 UNIT_ASSERT_STRING_CONTAINS(fillResult.ErrorMessage, expectedError);

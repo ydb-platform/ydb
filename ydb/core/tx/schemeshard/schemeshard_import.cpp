@@ -289,14 +289,14 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& 
     }
 }
 
-void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemsSizeBefore) {
-    for (ui32 itemIdx = importInfo.Items.size(); itemIdx < itemsSizeBefore; ++itemIdx) {
+void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, const TVector<TImportInfo::TItem>& resolvedItems) {
+    for (ui32 itemIdx = resolvedItems.size(); itemIdx < importInfo.Items.size(); ++itemIdx) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }
 
     // There can be new items, so do at least the same as for creation
-    for (ui32 itemIdx : xrange(importInfo.Items.size())) {
-        const auto& item = importInfo.Items.at(itemIdx);
+    for (ui32 itemIdx : xrange(resolvedItems.size())) {
+        const auto& item = resolvedItems.at(itemIdx);
 
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
             NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),

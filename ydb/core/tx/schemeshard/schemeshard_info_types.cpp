@@ -3651,8 +3651,8 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
     return timestamp;
 }
 
-TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
-    TFillItemsFromSchemaMappingResult result;
+TImportInfo::TResolveItemsFromSchemaMappingResult TImportInfo::ResolveItemsFromSchemaMapping(TSchemeShard* ss) {
+    TResolveItemsFromSchemaMappingResult result;
 
     if (TString err; !CompileExcludeRegexps(err)) {
         result.AddError(err);
@@ -3690,7 +3690,6 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         }
     };
 
-    TVector<TImportInfo::TItem> items;
     if (Items.empty()) { // Fill the whole list from schema mapping
         for (const auto& schemaMappingItem : SchemaMapping->Items) {
             if (IsExcludedFromImport(schemaMappingItem.ObjectPath)) {
@@ -3704,7 +3703,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                 continue;
             }
 
-            auto& item = items.emplace_back(dstPath);
+            auto& item = result.Items.emplace_back(dstPath);
             init(schemaMappingItem, item);
         }
     } else { // Take existing items from items list
@@ -3772,7 +3771,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                         continue;
                     }
 
-                    auto& item = items.emplace_back(dstPath);
+                    auto& item = result.Items.emplace_back(dstPath);
                     init(schemaMappingItem, item);
                 }
             } else {
@@ -3786,20 +3785,15 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         }
     }
 
-
-    if (items.empty()) {
+    if (result.Items.empty()) {
         // Schema mapping should not be empty
         result.AddError("no items to import");
-    }
-
-    if (result.Success) {
-        Items.swap(items);
     }
 
     return result;
 }
 
-void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err) {
+void TImportInfo::TResolveItemsFromSchemaMappingResult::AddError(const TString& err) {
     Success = false;
     if (++ErrorsCount > 30) {
         return;

@@ -31,11 +31,12 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
     }
 
     Y_UNIT_TEST(LegacySchemaMappingWithoutIndexIVs) {
-        for (const TString extra : {"", ",\"iv\":\"000102030405060708090A0B\""}) {
+        for (const char* json : {
+                R"({"exportedObjects":{"Table":{"exportPrefix":"001"}}})",
+                R"({"exportedObjects":{"Table":{"exportPrefix":"001","iv":"000102030405060708090A0B"}}})"}) {
             TSchemaMapping mapping;
             TString error;
-            UNIT_ASSERT_C(mapping.Deserialize(
-                TString(R"({"exportedObjects":{"Table":{"exportPrefix":"001")") + extra + "}}}", error), error);
+            UNIT_ASSERT_C(mapping.Deserialize(json, error), error);
             UNIT_ASSERT_VALUES_EQUAL(mapping.Items.size(), 1);
             UNIT_ASSERT(mapping.Items.front().IndexIVs.empty());
         }
@@ -73,39 +74,19 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
 
     Y_UNIT_TEST(MakeIndexesMetadata) {
         google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex> indexes;
-        {
-            // Async index data is not exported and must not consume a prefix number.
+        const auto addIndex = [&](const char* name, const char* column) -> Ydb::Table::TableIndex& {
             auto& index = *indexes.Add();
-            index.set_name("async");
-            index.add_index_columns("value");
-            index.mutable_global_async_index();
-        }
-        {
-            // A schema-only export may describe HNSW, which has no supported backup layout.
-            auto& index = *indexes.Add();
-            index.set_name("hnsw");
-            index.add_index_columns("embedding");
-            index.mutable_global_hnsw_index();
-        }
-        {
-            auto& index = *indexes.Add();
-            index.set_name("global");
-            index.add_index_columns("value");
-            index.mutable_global_index();
-        }
-        {
-            // Local indexes have no impl tables and must not consume a prefix number
-            auto& index = *indexes.Add();
-            index.set_name("bloom");
-            index.add_index_columns("key");
-            index.mutable_local_bloom_filter_index();
-        }
-        {
-            auto& index = *indexes.Add();
-            index.set_name("vector");
-            index.add_index_columns("embedding");
-            index.mutable_global_vector_kmeans_tree_index();
-        }
+            index.set_name(name);
+            index.add_index_columns(column);
+            return index;
+        };
+
+        // Only materialized indexes consume export prefixes. HNSW may be present in a schema-only backup.
+        addIndex("async", "value").mutable_global_async_index();
+        addIndex("hnsw", "embedding").mutable_global_hnsw_index();
+        addIndex("global", "value").mutable_global_index();
+        addIndex("bloom", "key").mutable_local_bloom_filter_index();
+        addIndex("vector", "embedding").mutable_global_vector_kmeans_tree_index();
 
         const auto encrypted = NBackup::MakeIndexesMetadata(indexes, 3, true);
         UNIT_ASSERT_VALUES_EQUAL(encrypted.size(), 3);

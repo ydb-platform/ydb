@@ -1787,15 +1787,26 @@ private:
             }
         }
 
-        const ui32 itemsSizeBefore = importInfo->Items.size();
-        const TImportInfo::TFillItemsFromSchemaMappingResult fillResult = importInfo->FillItemsFromSchemaMapping(Self);
-        if (!fillResult.Success) {
-            return CancelAndPersist(db, importInfo, -1, fillResult.ErrorMessage, "invalid items in schema mapping");
+        auto mapping = importInfo->ResolveItemsFromSchemaMapping(Self);
+        if (!mapping.Success) {
+            return CancelAndPersist(db, importInfo, -1, mapping.ErrorMessage, "invalid items in schema mapping");
         }
 
+        PersistSchemaMappingImportFields(db, *importInfo, mapping.Items);
+        // Reserve 1 MiB for the final state update and executor bookkeeping.
+        const ui64 limitBytes = (ui64(Self->MaxCommitRedoMB) - 1) << 20;
+        const ui64 redoBytes = txc.DB.GetCommitRedoBytes();
+        if (redoBytes >= limitBytes && AnyOf(mapping.Items, [](const auto& item) { return item.ExportIndexIVs.IVsSize() != 0; })) {
+            txc.DB.RollbackChanges();
+            return CancelAndPersist(db, importInfo, -1,
+                TStringBuilder() << "Index IVs in the import schema mapping exceed the maximum SchemeShard commit size: "
+                    << redoBytes << " bytes, limit " << limitBytes << " bytes",
+                "index IV mapping is too large");
+        }
+
+        importInfo->Items = std::move(mapping.Items);
         importInfo->State = EState::Waiting;
         PersistImportState(db, *importInfo);
-        PersistSchemaMappingImportFields(db, *importInfo, itemsSizeBefore);
         Resume(txc, ctx);
     }
 

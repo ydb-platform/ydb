@@ -431,6 +431,31 @@ TEST(TSolomonRegistryTest, HistogramWithBigCounterValues)
     ASSERT_EQ(result.front(), 4e9);
 }
 
+TEST(TSolomonRegistryTest, GaugeAndRateHistogramCollection)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    TProfiler profiler(impl, "/d");
+
+    auto gaugeHistogram = profiler.GaugeHistogram("/gauge_histogram", {1.0});
+    auto rateHistogram = profiler.RateHistogram("/rate_histogram", {1.0});
+
+    gaugeHistogram.Add(0.5, 2);
+    rateHistogram.Add(0.5, 3);
+
+    auto result = CollectSensors(impl).Histograms;
+
+    auto gaugeIt = result.find("yt.d.gauge_histogram{}");
+    ASSERT_NE(gaugeIt, result.end());
+    ASSERT_EQ(gaugeIt->second->Count(), 2u);
+    EXPECT_EQ(gaugeIt->second->Value(0), 2u);
+
+    auto rateIt = result.find("yt.d.rate_histogram{}");
+    ASSERT_NE(rateIt, result.end());
+    ASSERT_EQ(rateIt->second->Count(), 2u);
+    EXPECT_EQ(rateIt->second->Value(0), 3u);
+}
+
 TEST(TSolomonRegistryTest, SparseCounters)
 {
     auto impl = New<TSolomonRegistry>();
@@ -1002,10 +1027,12 @@ TEST_P(TRenameTest, RenameTag)
     result = CollectSensors(impl);
     ASSERT_EQ(result.Counters.size(), 4u);
 
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{}"));
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store}"));
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=default}"));
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;location_id=store0;device=sdb;model=M5100;medium=default}"));
+    ASSERT_EQ(result.Counters.at("yt.d.bytes_read{}"), 1);
+    ASSERT_EQ(result.Counters.at("yt.d.bytes_read{location_type=store}"), 1);
+    ASSERT_EQ(result.Counters.at("yt.d.bytes_read{location_type=store;medium=default}"), 1);
+    ASSERT_EQ(
+        result.Counters.at("yt.d.bytes_read{location_type=store;location_id=store0;device=sdb;model=M5100;medium=default}"),
+        1);
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -29,9 +29,12 @@ struct TEndpointUpdateResult {
 
 class TEndpointPool {
 public:
+    enum class EUpdateReason { Regular, TransportFailure };
+
     TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
     ~TEndpointPool();
-    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
+    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync(EUpdateReason reason = EUpdateReason::Regular);
+    NThreading::TFuture<TEndpointUpdateResult> GetPendingTransportUpdate();
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
     void BanEndpoint(const std::string& endpoint);
@@ -57,6 +60,8 @@ private:
     std::mutex Mutex_;
     TEndpointElectorSafe Elector_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
+    std::atomic_bool TransportUpdatePending_ = false;
+    TDeadline NextTransportUpdate_;
     std::atomic_uint64_t LastUpdateTime_;
     const TBalancingPolicy::TImpl BalancingPolicy_;
 

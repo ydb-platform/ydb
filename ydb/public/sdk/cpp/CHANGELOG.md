@@ -1,3 +1,5 @@
+* The driver refreshes discovered endpoints when a data RPC or stream loses its transport, so new requests and Topic reconnects can follow a database switchover.
+
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 
 * Added `TOperation::HasMetadata()` to check whether operation metadata is available.

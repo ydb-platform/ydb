@@ -12,29 +12,30 @@ namespace NYdb::inline Dev {
 
 namespace {
 
-using TCredentialsWaitResult = TGRpcConnectionsImpl::TCredentialsWaitResult;
+using EWaitFor = TGRpcConnectionsImpl::EWaitFor;
+using TWaitResult = TGRpcConnectionsImpl::TWaitResult;
 
-TPlainStatus InitFailedStatus(const std::exception* e = nullptr) {
+TPlainStatus InitFailedStatus(EWaitFor reason, const std::exception* e = nullptr) {
     TStringBuilder message;
-    message << "Credentials provider initialization failed";
+    message << (reason == EWaitFor::Credentials ? "Credentials provider initialization failed" : "Endpoint discovery failed");
     if (e) {
         message << ". " << e->what();
     }
-    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, message);
+    return TPlainStatus(reason == EWaitFor::Credentials ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, message);
 }
 
 TPlainStatus InitCancelledStatus() {
     return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
 }
 
-TCredentialsWaitResult ReadyResult(NThreading::TFuture<void> future) {
+TWaitResult ReadyResult(NThreading::TFuture<void> future, EWaitFor reason) {
     try {
         future.GetValue();
         return {};
     } catch (const std::exception& e) {
-        return InitFailedStatus(&e);
+        return InitFailedStatus(reason, &e);
     } catch (...) {
-        return InitFailedStatus();
+        return InitFailedStatus(reason);
     }
 }
 
@@ -55,11 +56,12 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
         : authInfo.IgnoreResult();
 }
 
-void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
+void TGRpcConnectionsImpl::DeferUntilReady(
+    EWaitFor reason,
     const TRpcRequestSettings& requestSettings,
     IQueueClientContextPtr& context,
-    NThreading::TFuture<void> credentialsReady,
-    TCredentialsCallback callback)
+    NThreading::TFuture<void> ready,
+    TReadyCallback callback)
 {
     if (!TryCreateContext(context)) {
         callback(InitCancelledStatus());
@@ -67,7 +69,7 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
     }
 
     auto cancelled = NThreading::NewPromise<void>();
-    if (!credentialsReady.IsReady()) {
+    if (!ready.IsReady()) {
         context->SubscribeCancel([cancelled]() mutable {
             cancelled.TrySetValue();
         });
@@ -94,40 +96,41 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
             [&] { callback(false); });
     };
 
-    NThreading::TFuture<TCredentialsWaitResult> wait;
-    if (credentialsReady.IsReady()) {
-        auto status = ReadyResult(credentialsReady);
+    NThreading::TFuture<TWaitResult> wait;
+    if (ready.IsReady()) {
+        auto status = ReadyResult(ready, reason);
         wait = NThreading::MakeFuture(status || !cancelled.HasValue()
             ? std::move(status)
-            : TCredentialsWaitResult(InitCancelledStatus()));
+            : TWaitResult(InitCancelledStatus()));
     } else {
-        auto result = NThreading::NewPromise<TCredentialsWaitResult>();
+        auto result = NThreading::NewPromise<TWaitResult>();
         wait = result.GetFuture();
-        credentialsReady.Subscribe([result](NThreading::TFuture<void> future) mutable {
-            result.TrySetValue(ReadyResult(future));
+        ready.Subscribe([result, reason](NThreading::TFuture<void> future) mutable {
+            result.TrySetValue(ReadyResult(future, reason));
         });
         cancelled.GetFuture().Subscribe([result](NThreading::TFuture<void>) mutable {
             result.TrySetValue(InitCancelledStatus());
         });
         if (requestSettings.Deadline != TDeadline::Max()) {
             scheduleCallback(requestSettings.Deadline,
-                [result](bool scheduledSuccessfully) mutable {
+                [result, reason](bool scheduledSuccessfully) mutable {
                     result.TrySetValue(scheduledSuccessfully
                         ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
-                            "Request deadline exceeded while waiting for credentials")
+                            reason == EWaitFor::Credentials ? "Request deadline exceeded while waiting for credentials"
+                                                            : "Request deadline exceeded while waiting for discovery")
                         : InitCancelledStatus());
                 });
         }
     }
 
     wait.Subscribe([callback = std::move(callback), scheduleCallback = std::move(scheduleCallback)]
-        (NThreading::TFuture<TCredentialsWaitResult> future) mutable {
+        (NThreading::TFuture<TWaitResult> future) mutable {
         scheduleCallback(TDeadline::Now(),
             [callback = std::move(callback), status = future.GetValue()]
             (bool scheduledSuccessfully) mutable {
                 callback(scheduledSuccessfully
                     ? std::move(status)
-                    : TCredentialsWaitResult(InitCancelledStatus()));
+                    : TWaitResult(InitCancelledStatus()));
             });
     });
 }

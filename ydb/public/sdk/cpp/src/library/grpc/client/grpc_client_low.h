@@ -1345,6 +1345,14 @@ private:
             }
         }
 
+        // Publish the terminal transport status before a failed write can reconnect.
+        for (auto& finishedCallback : finishedCallbacks) {
+            TGrpcStatus statusCopy = status;
+            RunGuarded([&] {
+                finishedCallback(std::move(statusCopy));
+            });
+        }
+
         while (!writesDropped.empty()) {
             auto callback = std::move(writesDropped.front().Callback);
             // Release the queued request before reporting its completion.
@@ -1358,13 +1366,6 @@ private:
                     callback(std::move(writeStatus));
                 });
             }
-        }
-
-        for (auto& finishedCallback : finishedCallbacks) {
-            TGrpcStatus statusCopy = status;
-            RunGuarded([&] {
-                finishedCallback(std::move(statusCopy));
-            });
         }
 
         if (connectedCallback) {

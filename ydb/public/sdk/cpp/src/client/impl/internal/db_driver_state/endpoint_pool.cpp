@@ -26,10 +26,22 @@ TEndpointPool::~TEndpointPool() {
     }
 }
 
-std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::UpdateAsync() {
+std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::UpdateAsync(EUpdateReason reason) {
     NThreading::TFuture<TEndpointUpdateResult> future;
     {
         std::lock_guard guard(Mutex_);
+        if (reason == EUpdateReason::TransportFailure) {
+            // Share an in-flight discovery, including a periodic update. During a
+            // persistent outage, bound new bootstrap RPCs even if they fail fast.
+            const auto now = TDeadline::Now();
+            if (now < NextTransportUpdate_ && !DiscoveryPromise_.Initialized()) {
+                return {};
+            }
+            if (!TransportUpdatePending_) {
+                NextTransportUpdate_ = now + std::chrono::seconds(1);
+                TransportUpdatePending_ = true;
+            }
+        }
         if (DiscoveryPromise_.Initialized()) {
             return {DiscoveryPromise_.GetFuture(), false};
         } else {
@@ -119,12 +131,21 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
         {
             std::lock_guard guard(Mutex_);
             DiscoveryPromise_.Swap(promise);
+            TransportUpdatePending_ = false;
         }
         promise.SetValue({std::move(removed), result.DiscoveryStatus});
     };
 
     Provider_().Subscribe(handler);
     return {future, true};
+}
+
+NThreading::TFuture<TEndpointUpdateResult> TEndpointPool::GetPendingTransportUpdate() {
+    if (!TransportUpdatePending_) {
+        return {};
+    }
+    std::lock_guard guard(Mutex_);
+    return TransportUpdatePending_ ? DiscoveryPromise_.GetFuture() : NThreading::TFuture<TEndpointUpdateResult>{};
 }
 
 TEndpointRecord TEndpointPool::GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred) const {

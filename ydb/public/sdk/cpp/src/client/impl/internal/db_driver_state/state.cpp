@@ -118,6 +118,22 @@ void TDbDriverState::SignalDiscoveryCompleted() {
     DiscoveryCompletedPromise.TrySetValue();
 }
 
+void TDbDriverState::UpdateEndpoints(TEndpointPool::EUpdateReason reason) {
+    auto [future, started] = EndpointPool.UpdateAsync(reason);
+    if (started) {
+        future.Subscribe([self = shared_from_this()](const auto& completed) {
+            const auto& result = completed.GetValue();
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+            self->Client->DeleteChannels(result.Removed);
+#endif
+            if (self->DiscoveryMode == EDiscoveryMode::Sync) {
+                std::unique_lock guard(self->LastDiscoveryStatusRWLock);
+                self->LastDiscoveryStatus = result.DiscoveryStatus;
+            }
+        });
+    }
+}
+
 TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
     auto weak = std::weak_ptr<TDbDriverState>(driverState);
     return [weak](NYdb::NIssue::TIssues&&, EStatus status) {
@@ -141,21 +157,7 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
             }
 
             if (pessThreshold || expiration) {
-                auto asyncResult = strong->EndpointPool.UpdateAsync();
-                // true - we were first who run UpdateAsync
-                if (asyncResult.second) {
-                    auto cb = [strong](const NThreading::TFuture<TEndpointUpdateResult>& future) {
-                        const auto& updateResult = future.GetValue();
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                        strong->Client->DeleteChannels(updateResult.Removed);
-#endif
-                        if (strong->DiscoveryMode == EDiscoveryMode::Sync) {
-                            std::unique_lock guard(strong->LastDiscoveryStatusRWLock);
-                            strong->LastDiscoveryStatus = updateResult.DiscoveryStatus;
-                        }
-                    };
-                    asyncResult.first.Subscribe(std::move(cb));
-                }
+                strong->UpdateEndpoints(TEndpointPool::EUpdateReason::Regular);
             }
         }
         return true;

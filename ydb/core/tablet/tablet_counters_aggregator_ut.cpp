@@ -5,13 +5,16 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/mon/counters_memonly.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -712,6 +715,43 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             {0, 1, 0, 0, 0},
             tablet1.TabletType
         );
+    }
+
+    Y_UNIT_TEST(TypeAllExportsMemOnly) {
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        TActorId edge = runtime.AllocateEdgeActor();
+
+        for (const bool follower : {false, true}) {
+            auto aggregatorId = runtime.Register(CreateTabletCountersAggregator(follower));
+            runtime.EnableScheduleForActor(aggregatorId);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+
+            // type=all aggregates only the executor counters, and the helper's are empty.
+            TTabletWithHist tablet(1, TTabletTypes::Dummy, follower ? 1 : 0);
+            tablet.ExecutorCounters = std::make_unique<NTabletFlatExecutor::TExecutorCounters>();
+            tablet.ExecutorCounters->RememberCurrentStateAsBaseline(*tablet.ExecutorCountersBaseline);
+            tablet.SendUpdate(runtime, aggregatorId, edge);
+
+            const TString service = follower ? "followers" : "tablets";
+            TStringStream out;
+            GetServiceCounters(runtime.GetAppData(0).Counters, service)->Accept(TString(), TString(),
+                *NMonitoring::NMemOnlyShim::CreateEncoder(&out, NMonitoring::EFormat::JSON));
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(out.Str(), &json));
+            bool sawAll = false, sawOther = false;
+            for (const auto& sensor : json["sensors"].GetArray()) {
+                const bool isAll = sensor["labels"]["type"].GetString() == "all";
+                UNIT_ASSERT_VALUES_EQUAL_C(sensor["memOnly"].GetBooleanSafe(false), isAll,
+                    service << ": " << sensor["labels"]["sensor"].GetString());
+                (isAll ? sawAll : sawOther) = true;
+            }
+            UNIT_ASSERT_C(sawAll && sawOther, service);
+        }
     }
 
     Y_UNIT_TEST(SearchCounters) {

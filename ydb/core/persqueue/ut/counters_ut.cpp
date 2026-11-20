@@ -855,7 +855,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 } // Y_UNIT_TEST_SUITE(PQCountersSimple)
 
 Y_UNIT_TEST_SUITE(PQCountersLabeled) {
-    Y_UNIT_TEST_TWIN(SuppressLabeledCountersWhenWriteProhibited, firstClass) {
+    Y_UNIT_TEST_TWIN(PublishLabeledCountersInAllWriteModes, firstClass) {
         TTestContext tc;
         TFinalizer finalizer(tc);
         bool activeZone = false;
@@ -910,11 +910,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
             runtime.SimulateSleep(TDuration::Seconds(15));
             UNIT_ASSERT_C(tabletWakeups >= 2, "The tablet must run multiple reporting cycles");
             UNIT_ASSERT_C(partitionCounters > 0, "Ordinary partition counters must still be sent");
-            if (mode == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED) {
-                UNIT_ASSERT_C(sentGroups.empty(), "Labeled counters were published while writes were prohibited");
-            } else {
-                UNIT_ASSERT_C(sentGroups == expectedGroups, "All labeled counter groups must be published");
-            }
+            UNIT_ASSERT_C(sentGroups == expectedGroups, "All labeled counter groups must be published in every write mode");
         }
         runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
     }

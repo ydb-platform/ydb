@@ -227,11 +227,8 @@ private:
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
-<<<<<<< HEAD
-=======
     void DestroyMirrorer();
     void NotifyMirrorerPersistDone();
->>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);

@@ -1113,14 +1113,10 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Reading Timestamp failed for offset",
             {"readingForOffset", ReadingForOffset},
             {"userInfoOffset", userInfo->Offset},
-<<<<<<< HEAD
-            {"responseDebugString", ev->Get()->Response->DebugString()});
-=======
                     {"responseDebugString",
             ev->Get()->Response->DebugString()}
         );
         bool timestampAvailable = false;
->>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&

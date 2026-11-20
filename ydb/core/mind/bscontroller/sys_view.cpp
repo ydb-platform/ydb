@@ -209,7 +209,7 @@ public:
             }
         }
 
-        for (; begin != end; ++begin) {
+        for (; begin != index.end() && (end == index.end() || begin->first < end->first); ++begin) {
             auto* entry = response->Record.AddEntries();
             FillKey(entry->MutableKey(), begin->first);
             entry->MutableInfo()->CopyFrom(*begin->second);

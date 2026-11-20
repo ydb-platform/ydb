@@ -13,6 +13,7 @@
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -3161,6 +3162,38 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
             UNIT_ASSERT_VALUES_EQUAL(groupIds.size(), numGroups);
         }
+    }
+
+    Y_UNIT_TEST(SystemViewGroupsEmptyOpenRange) {
+        TEnvironmentSetup env(1, 1);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+
+        NKikimrBlobStorage::TConfigRequest config;
+        env.DefineBox(1, "test box", {
+            {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+        }, env.GetNodes(), config);
+        env.DefineStoragePool(1, 1, "test pool", 1, NKikimrBlobStorage::ROT, false, config, "none");
+        UNIT_ASSERT(env.Invoke(config).GetSuccess());
+        env.Runtime->SimulateSleep(TDuration::Seconds(10));
+
+        using TEvSysView = NSysView::TEvSysView;
+        const TActorId edge = env.Runtime->AllocateEdgeActor();
+        env.Runtime->SendToPipe(env.TabletId, edge, new TEvSysView::TEvGetGroupsRequest,
+            env.NodeId, GetPipeConfigWithRetries());
+        auto groups = env.Runtime->GrabEdgeEventRethrow<TEvSysView::TEvGetGroupsResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(groups->Get()->Record.EntriesSize(), 1);
+        const ui32 groupId = groups->Get()->Record.GetEntries(0).GetKey().GetGroupId();
+
+        auto request = MakeHolder<TEvSysView::TEvGetGroupsRequest>();
+        request->Record.MutableFrom()->SetGroupId(groupId);
+        request->Record.SetInclusiveFrom(false);
+        request->Record.MutableTo()->SetGroupId(groupId);
+        request->Record.SetInclusiveTo(false);
+        env.Runtime->SendToPipe(env.TabletId, edge, request.Release(), env.NodeId, GetPipeConfigWithRetries());
+        auto response = env.Runtime->GrabEdgeEventRethrow<TEvSysView::TEvGetGroupsResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.EntriesSize(), 0);
     }
 
     Y_UNIT_TEST(EmptyPhysicalGroupIsNotListableAndDoesNotCrashResourceCalculation) {

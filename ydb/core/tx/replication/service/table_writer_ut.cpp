@@ -335,6 +335,34 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             "key = 1, value = first\nkey = 2, value = later\nkey = 3, value = first");
     }
 
+    Y_UNIT_TEST(ConsistentWriteRequestsEarlierIntervalAfterCachingLaterAssignment) {
+        TEnv env;
+        CreateConsistentTable(env);
+        const auto writer = env.GetRuntime().Register(CreateLocalTableWriter(
+            "/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(1, R"({"key":[1],"update":{"value":"later"},"ts":[15,7]})"),
+        }));
+        auto later = MakeTxIdResult({{TRowVersion(20, 0), 102}});
+        TRowVersion(10, 0).ToProto(later->Record.MutableVersionTxIds(0)->MutableBegin());
+        env.Send<TEvWorker::TEvPoll>(writer, std::move(later));
+
+        env.SendAsync(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(2, R"({"key":[2],"update":{"value":"earlier"},"ts":[5,9]})"),
+        }));
+        TAutoPtr<IEventHandle> next;
+        env.GetRuntime().GrabEdgeEvents<TEvService::TEvGetTxId, TEvWorker::TEvPoll>(next);
+        UNIT_ASSERT_VALUES_EQUAL(next->GetTypeRewrite(), TEvService::TEvGetTxId::EventType);
+        const auto& request = next->Get<TEvService::TEvGetTxId>()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(request.VersionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(request.GetVersions(0)), TRowVersion(5, 9));
+        env.Send<TEvWorker::TEvPoll>(writer, MakeTxIdResult({{TRowVersion(10, 0), 101}}));
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 101);
+        auto rows = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(rows), "key = 2, value = earlier");
+    }
+
     Y_UNIT_TEST(ConsistentWrite) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

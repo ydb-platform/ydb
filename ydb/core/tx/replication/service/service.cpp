@@ -260,11 +260,15 @@ public:
     }
 
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
-        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
+        const NKikimrReplication::TRunWorkerCommand& command)
     {
+        const auto metricsLevel = command.GetMetricsLevel();
+        if (command.GetConsistencySettings().HasGlobal()) {
+            CommitIntervalMs = command.GetConsistencySettings().GetGlobal().GetCommitIntervalMilliSeconds();
+        }
         auto res = Workers.emplace(id, TWorkerInfo{
             ops->Register(actor, TMailboxType::HTSwap, poolId),
-            replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters
+            command.GetReplicationLocation(), metricsLevel, id.WorkerId(), AppData()->Counters
         });
 
         const auto& worker = res.first->second;
@@ -418,7 +422,7 @@ public:
 
         for (const auto& v : ev->Get()->Record.GetVersions()) {
             const auto version = TRowVersion::FromProto(v);
-            if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+            if (auto it = TxIds.upper_bound(version); it != TxIds.end() && IntervalBegin(it->first) <= version) {
                 result[it->first] = it->second;
             } else {
                 versionsWithoutTxId.push_back(version);
@@ -460,11 +464,7 @@ public:
             const auto version = TRowVersion::FromProto(kv.GetVersion());
             TxIds.emplace(version, kv.GetTxId());
 
-            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                if (it->first >= version) {
-                    break;
-                }
-
+            for (auto it = PendingTxId.lower_bound(IntervalBegin(version)); it != PendingTxId.end() && it->first < version;) {
                 for (const auto& actorId : it->second) {
                     results[actorId].emplace(version, kv.GetTxId());
                 }
@@ -507,9 +507,7 @@ public:
         WorkersByHeartbeat[version].insert(id);
 
         if (Workers.size() - IndexBuildWorkers.size() == WorkersWithHeartbeat.size()) {
-            while (!TxIds.empty() && WorkersByHeartbeat.begin()->first < TxIds.begin()->first) {
-                TxIds.erase(TxIds.begin());
-            }
+            TxIds.erase(TxIds.begin(), TxIds.upper_bound(WorkersByHeartbeat.begin()->first));
         }
 
         id.Serialize(*record.MutableWorker());
@@ -537,12 +535,20 @@ public:
     }
 
 private:
-    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
+    TRowVersion IntervalBegin(const TRowVersion& end) const {
+        // The controller replies with the requested interval end, including when
+        // several adjacent intervals share one write transaction.
+        Y_DEBUG_ABORT_UNLESS(CommitIntervalMs && end.Step >= CommitIntervalMs);
+        return TRowVersion(end.Step - CommitIntervalMs, 0);
+    }
+
+    void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) const {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 
         for (const auto& [version, txId] : result) {
             auto& item = *ev->Record.AddVersionTxIds();
             version.ToProto(item.MutableVersion());
+            IntervalBegin(version).ToProto(item.MutableBegin());
             item.SetTxId(txId);
         }
 
@@ -562,6 +568,7 @@ private:
     THashSet<TWorkerId> IndexBuildWorkers;
     THashMap<TWorkerId, TSet<TRowVersion>> PendingIndexTxIds;
     THashMap<TWorkerId, NKikimrReplication::TEvWorkerDataEnd> DataEnded;
+    ui64 CommitIntervalMs = 0;
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
     THashSet<TWorkerId> WorkersWithHeartbeat;
@@ -889,9 +896,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                     cmd.HasLocalTableWriter() && AppData()->ReplicationConfig.GetEnableDataLossDetection()),
                 std::move(writerFn), cmd.GetTrackSourceOffsets(),
                 cmd.HasProcessedSourceOffset() ? TMaybe<ui64>(cmd.GetProcessedSourceOffset()) : Nothing()),
-            poolId,
-            cmd.GetReplicationLocation(),
-            cmd.GetMetricsLevel()
+            poolId, cmd
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }

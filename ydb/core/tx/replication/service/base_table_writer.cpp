@@ -562,8 +562,8 @@ class TLocalTableWriter
                     continue;
                 }
 
-                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()) {
-                    record->RewriteTxId(it->second);
+                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end() && it->second.Begin <= version) {
+                    record->RewriteTxId(it->second.Id);
                     if (PendingTxId.empty()) {
                         records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
                     } else {
@@ -611,97 +611,36 @@ class TLocalTableWriter
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
-        TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
-        if (IndexBuild) {
-            for (const auto& assignment : ev->Get()->Record.GetVersionTxIds()) {
-                const auto begin = TRowVersion::FromProto(assignment.GetBegin());
-                const auto end = TRowVersion::FromProto(assignment.GetVersion());
-                for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                    auto& record = PendingRecords.at(*it);
-                    const auto version = TRowVersion(record->GetStep(), record->GetTxId());
-                    if (begin <= version && version < end) {
-                        record->RewriteTxId(assignment.GetTxId());
-                        BlockedRecords.insert(*it);
-                        it = PendingTxId.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-            }
-            if (PendingTxId.empty()) {
-                // Replies can cross in flight at C. Preserve topic order by
-                // draining the batch only after both scopes have answered.
-                for (const auto offset : BlockedRecords) {
-                    const auto& record = PendingRecords.at(offset);
-                    records.emplace_back(offset, TablePathId, record->GetBody().size());
-                }
-                BlockedRecords.clear();
-                if (!records.empty()) {
-                    EnqueueRecords(std::move(records));
-                }
+        for (const auto& assignment : ev->Get()->Record.GetVersionTxIds()) {
+            const auto begin = TRowVersion::FromProto(assignment.GetBegin());
+            const auto end = TRowVersion::FromProto(assignment.GetVersion());
+            if (!IndexBuild) {
+                TxIds.emplace(end, TWriteTxId{begin, assignment.GetTxId()});
             }
 
-            return;
-        }
-
-        for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
-            const auto version = TRowVersion::FromProto(kv.GetVersion());
-            TxIds.emplace(version, kv.GetTxId());
-
-            auto pendingIt = PendingTxId.begin();
-            auto blockedIt = BlockedRecords.begin();
-
-            auto processPending = [this, &records, &version, txId = kv.GetTxId()](auto& it) -> bool {
-                Y_ABORT_UNLESS(PendingRecords.contains(*it));
+            // Offsets from different source shards may be interleaved.
+            // Match by source version, then send the resolved offsets in topic order.
+            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
                 auto& record = PendingRecords.at(*it);
-
-                const auto recordVersion = TRowVersion(record->GetStep(), record->GetTxId());
-                if (recordVersion >= version) {
-                    return false;
-                }
-
-                record->RewriteTxId(txId);
-                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
-
-                it = PendingTxId.erase(it);
-                return true;
-            };
-
-            auto processBlocked = [this, &records](auto& it) {
-                Y_ABORT_UNLESS(PendingRecords.contains(*it));
-                auto& record = PendingRecords.at(*it);
-
-                records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
-
-                it = BlockedRecords.erase(it);
-            };
-
-            while (pendingIt != PendingTxId.end() && blockedIt != BlockedRecords.end()) {
-                if (*pendingIt < *blockedIt) {
-                    if (!processPending(pendingIt)) {
-                        break;
-                    }
+                const auto version = TRowVersion(record->GetStep(), record->GetTxId());
+                if (begin <= version && version < end) {
+                    record->RewriteTxId(assignment.GetTxId());
+                    BlockedRecords.insert(*it);
+                    it = PendingTxId.erase(it);
                 } else {
-                    processBlocked(blockedIt);
-                }
-            }
-
-            if (blockedIt == BlockedRecords.end()) {
-                for (; pendingIt != PendingTxId.end();) {
-                    if (!processPending(pendingIt)) {
-                        break;
-                    }
-                }
-            }
-
-            if (pendingIt == PendingTxId.end()) {
-                for (; blockedIt != BlockedRecords.end();) {
-                    processBlocked(blockedIt);
+                    ++it;
                 }
             }
         }
 
-        if (records) {
+        if (PendingTxId.empty() && !BlockedRecords.empty()) {
+            TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
+            records.reserve(BlockedRecords.size());
+            for (const auto offset : BlockedRecords) {
+                const auto& record = PendingRecords.at(offset);
+                records.emplace_back(offset, TablePathId, record->GetBody().size());
+            }
+            BlockedRecords.clear();
             EnqueueRecords(std::move(records));
         }
     }
@@ -907,7 +846,11 @@ private:
     bool RefreshingSchema = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
-    TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
+    struct TWriteTxId {
+        TRowVersion Begin;
+        ui64 Id;
+    };
+    TMap<TRowVersion, TWriteTxId> TxIds; // keyed by exclusive interval end
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();

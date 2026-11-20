@@ -77,7 +77,7 @@ public:
     }
 
     const std::shared_ptr<arrow::Field>& GetFieldByIndexVerified(const ui32 index) const {
-        AFL_VERIFY(index < Fields.size());
+        YDB_LOG_VERIFY(index < Fields.size());
         return Fields[index];
     }
 
@@ -151,7 +151,7 @@ public:
     }
 
     const std::shared_ptr<arrow::Field>& GetFieldByIndexVerified(const ui32 index) const {
-        AFL_VERIFY(index < Fields.size());
+        YDB_LOG_VERIFY(index < Fields.size());
         return Fields[index];
     }
 
@@ -232,7 +232,7 @@ private:
 
         void OnMoveItem(const std::shared_ptr<arrow::Field>& item, const ui64 new_index) const {
             auto* findField = Owner->IndexByName.FindPtr(item->name());
-            AFL_VERIFY(findField);
+            YDB_LOG_VERIFY(findField);
             *findField = new_index;
         }
     };

@@ -170,10 +170,13 @@ TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
     auto name = pqTabletConfig.GetTopicName();
     auto path = pqTabletConfig.GetTopicPath();
     if (name.empty()) {
-        AFL_ENSURE(!path.empty())("topic_path", path)("topic_name", name);
+        YDB_LOG_ENSURE(!path.empty(),
+            {"topicPath", path},
+            {"topicName", name});
         TStringBuf pathBuf(path), fst, snd;
         auto res = pathBuf.TryRSplit("/", fst, snd);
-        AFL_ENSURE(res)("topic_path", path);
+        YDB_LOG_ENSURE(res,
+            {"topicPath", path});
         name = snd;
     } else if (path.empty()) {
         path = name;
@@ -295,7 +298,9 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
         const TString& ydbDatabaseRootOverride,
         const TMaybe<TString>& clientsideNameOverride
 ) {
-    AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
+    YDB_LOG_ENSURE(Valid,
+        {"reason", Reason},
+        {"originalTopic", OriginalTopic});
     auto* res = new TTopicNameConverter(FstClass, PQPrefix, pqTabletConfig,
         ydbDatabaseRootOverride, clientsideNameOverride);
     return TTopicConverterPtr(res);
@@ -598,8 +603,12 @@ const TMaybe<TString>& TDiscoveryConverter::GetSecondaryPath(const TString& data
     if (!database.empty()) {
         SetDatabase(database);
     }
-    AFL_ENSURE(!PendingDatabase)("database", database)("original_topic", OriginalTopic);
-    AFL_ENSURE(SecondaryPath.Defined())("database", database)("original_topic", OriginalTopic);
+    YDB_LOG_ENSURE(!PendingDatabase,
+        {"database", database},
+        {"originalTopic", OriginalTopic});
+    YDB_LOG_ENSURE(SecondaryPath.Defined(),
+        {"database", database},
+        {"originalTopic", OriginalTopic});
     return SecondaryPath;
 }
 
@@ -622,7 +631,9 @@ void TDiscoveryConverter::SetDatabase(const TString& database) {
     if (!Database.Defined()) {
         Database = NormalizeFullPath(database);
     }
-    AFL_ENSURE(!FullModernName.empty())("database", database)("original_topic", OriginalTopic);
+    YDB_LOG_ENSURE(!FullModernName.empty(),
+        {"database", database},
+        {"originalTopic", OriginalTopic});
     if (!SecondaryPath.Defined()) {
         SecondaryPath = NKikimr::JoinPath({*Database, FullModernName});
         NormalizeAsFullPath(SecondaryPath.GetRef());
@@ -729,11 +740,21 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
         NormalizeAsFullPath(res->PrimaryPath);
     }
     if (res->IsValid()) {
-        AFL_ENSURE(res->Account_.Defined())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->LegacyProducer.empty())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->LegacyLogtype.empty())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->Dc.empty())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->FullLegacyName.empty())("scheme_name", schemeName)("database", database);
+        YDB_LOG_ENSURE(res->Account_.Defined(),
+            {"schemeName", schemeName},
+            {"database", database});
+        YDB_LOG_ENSURE(!res->LegacyProducer.empty(),
+            {"schemeName", schemeName},
+            {"database", database});
+        YDB_LOG_ENSURE(!res->LegacyLogtype.empty(),
+            {"schemeName", schemeName},
+            {"database", database});
+        YDB_LOG_ENSURE(!res->Dc.empty(),
+            {"schemeName", schemeName},
+            {"database", database});
+        YDB_LOG_ENSURE(!res->FullLegacyName.empty(),
+            {"schemeName", schemeName},
+            {"database", database});
         res->Account = *res->Account_;
         res->InternalName = res->FullLegacyName;
     }
@@ -781,7 +802,9 @@ void TTopicNameConverter::BuildInternals(const NKikimrPQ::TPQTabletConfig& confi
     db.ChopSuffix("/");
     Database = db;
     if (FstClass) {
-        AFL_ENSURE(!path.empty())("topic_path", config.GetTopicPath())("database", db);
+        YDB_LOG_ENSURE(!path.empty(),
+            {"topicPath", config.GetTopicPath()},
+            {"database", db});
         path.SkipPrefix(db);
         path.SkipPrefix("/");
         ClientsideName = path;
@@ -790,7 +813,9 @@ void TTopicNameConverter::BuildInternals(const NKikimrPQ::TPQTabletConfig& confi
         InternalName = PrimaryPath;
     } else {
         SetDatabase(*Database);
-        AFL_ENSURE(!FullLegacyName.empty())("topic_path", config.GetTopicPath())("database", db);
+        YDB_LOG_ENSURE(!FullLegacyName.empty(),
+            {"topicPath", config.GetTopicPath()},
+            {"database", db});
         ClientsideName = FullLegacyName;
         ShortClientsideName = ShortLegacyName;
         auto& producer = config.GetProducer();
@@ -801,7 +826,9 @@ void TTopicNameConverter::BuildInternals(const NKikimrPQ::TPQTabletConfig& confi
         if (LegacyProducer.empty()) {
             LegacyProducer = Account;
         }
-        AFL_ENSURE(!FullModernName.empty())("topic_path", config.GetTopicPath())("database", db);
+        YDB_LOG_ENSURE(!FullModernName.empty(),
+            {"topicPath", config.GetTopicPath()},
+            {"database", db});
         InternalName = FullLegacyName;
     }
 }
@@ -823,13 +850,19 @@ TString TTopicNameConverter::GetInternalName() const {
 }
 
 const TString& TTopicNameConverter::GetClientsideName() const {
-    AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
-    AFL_ENSURE(!ClientsideName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+    YDB_LOG_ENSURE(Valid,
+        {"reason", Reason},
+        {"originalTopic", OriginalTopic});
+    YDB_LOG_ENSURE(!ClientsideName.empty(),
+        {"originalTopic", OriginalTopic},
+        {"primaryPath", PrimaryPath});
     return ClientsideName;
 }
 
 const TString& TTopicNameConverter::GetShortClientsideName() const {
-    AFL_ENSURE(!ShortClientsideName.empty())("original_topic", OriginalTopic)("clientside_name", ClientsideName);
+    YDB_LOG_ENSURE(!ShortClientsideName.empty(),
+        {"originalTopic", OriginalTopic},
+        {"clientsideName", ClientsideName});
     return ShortClientsideName;
 }
 
@@ -885,9 +918,13 @@ TString TTopicNameConverter::GetTopicForSrcIdHash() const {
 }
 
 TString TTopicNameConverter::GetSecondaryPath() const {
-    AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
+    YDB_LOG_ENSURE(Valid,
+        {"reason", Reason},
+        {"originalTopic", OriginalTopic});
     if (!FstClass) {
-        AFL_ENSURE(SecondaryPath.Defined())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+        YDB_LOG_ENSURE(SecondaryPath.Defined(),
+            {"originalTopic", OriginalTopic},
+            {"primaryPath", PrimaryPath});
         return *SecondaryPath;
     } else {
         return TString();

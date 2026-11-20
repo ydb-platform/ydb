@@ -3196,6 +3196,40 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.EntriesSize(), 0);
     }
 
+    Y_UNIT_TEST(SystemViewGroupsReversedRange) {
+        TEnvironmentSetup env(1, 1);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+
+        NKikimrBlobStorage::TConfigRequest config;
+        env.DefineBox(1, "test box", {
+            {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+        }, env.GetNodes(), config);
+        env.DefineStoragePool(1, 1, "test pool", 2, NKikimrBlobStorage::ROT, false, config, "none");
+        UNIT_ASSERT(env.Invoke(config).GetSuccess());
+        env.Runtime->SimulateSleep(TDuration::Seconds(10));
+
+        using TEvSysView = NSysView::TEvSysView;
+        const TActorId edge = env.Runtime->AllocateEdgeActor();
+        env.Runtime->SendToPipe(env.TabletId, edge, new TEvSysView::TEvGetGroupsRequest,
+            env.NodeId, GetPipeConfigWithRetries());
+        auto groups = env.Runtime->GrabEdgeEventRethrow<TEvSysView::TEvGetGroupsResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(groups->Get()->Record.EntriesSize(), 2);
+        const ui32 fromGroupId = groups->Get()->Record.GetEntries(1).GetKey().GetGroupId();
+        const ui32 toGroupId = groups->Get()->Record.GetEntries(0).GetKey().GetGroupId();
+        UNIT_ASSERT(toGroupId < fromGroupId);
+
+        auto request = MakeHolder<TEvSysView::TEvGetGroupsRequest>();
+        request->Record.MutableFrom()->SetGroupId(fromGroupId);
+        request->Record.SetInclusiveFrom(true);
+        request->Record.MutableTo()->SetGroupId(toGroupId);
+        request->Record.SetInclusiveTo(false);
+        env.Runtime->SendToPipe(env.TabletId, edge, request.Release(), env.NodeId, GetPipeConfigWithRetries());
+        auto response = env.Runtime->GrabEdgeEventRethrow<TEvSysView::TEvGetGroupsResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.EntriesSize(), 0);
+    }
+
     Y_UNIT_TEST(EmptyPhysicalGroupIsNotListableAndDoesNotCrashResourceCalculation) {
         TBlobStorageController::TGroupInfo group(TGroupId::FromValue(0x8200000f), 2, 0,
             TBlobStorageGroupType::Erasure4Plus2Block, 0, NKikimrBlobStorage::TVDiskKind::Default,

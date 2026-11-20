@@ -1484,30 +1484,24 @@ TKqpReadOlapTableRanges BuildReadWithJsonValueProjection(
     const auto olapOperation =
         BuildOlapJsonValue(jsonValue, jsonValue.Json().Cast<TCoMember>().Struct().Ref(), ctx, pos, TPushdownOptions(false, false, false));
     // clang-format off
-    const auto projection = Build<TKqpOlapProjection>(ctx, pos)
-        .OlapOperation(olapOperation)
-        .ColumnName().Build(sourceColumn)
-        .Done();
-    const auto process = Build<TKqpOlapProjections>(ctx, pos)
-        .Input(read.Process().Body())
-        .Projections()
-            .Add(projection)
-            .Build()
-        .Done();
-    const auto processLambda = Build<TCoLambda>(ctx, pos)
-        .Args({"arg"})
-        .Body<TExprApplier>()
-            .Apply(process)
-            .With(read.Process().Args().Arg(0), "arg")
-            .Build()
-        .Done();
     return Build<TKqpReadOlapTableRanges>(ctx, pos)
         .Table(read.Table())
         .Ranges(read.Ranges())
         .Columns(read.Columns())
         .Settings(read.Settings())
         .ExplainPrompt(read.ExplainPrompt())
-        .Process(processLambda)
+        .Process()
+            .Args({"arg"})
+            .Body<TKqpOlapProjections>()
+                .Input("arg")
+                .Projections()
+                    .Add<TKqpOlapProjection>()
+                        .OlapOperation(olapOperation)
+                        .ColumnName().Build(sourceColumn)
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
         .Done();
     // clang-format on
 }

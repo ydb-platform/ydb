@@ -81,18 +81,14 @@ TIntrusivePtr<TOpRead> BuildReadWithOlapProjections(const TOpRead& read,
     // clang-format on
 
     // clang-format off
-    auto olapProjections = Build<TKqpOlapProjections>(ctx, olapProcess.Pos())
-        .Input(olapProcess.Body())
-        .Projections()
-            .Add(projections)
-        .Build()
-    .Done();
     auto newLambda = Build<TCoLambda>(ctx, olapProcess.Pos())
-        .Args({"arg"})
-        .Body<TExprApplier>()
-            .Apply(olapProjections)
-            .With(olapProcess.Args().Arg(0), "arg")
-        .Build()
+        .Args(olapProcess.Args())
+        .Body<TKqpOlapProjections>()
+            .Input(olapProcess.Body())
+            .Projections()
+                .Add(projections)
+                .Build()
+            .Build()
     .Done().Ptr();
     // clang-format on
 
@@ -210,14 +206,15 @@ std::optional<TReplicateJsonValueBranchRewrite> BuildReplicateJsonValueBranchRew
     }
     const auto replacement = std::get<2>(candidates.front());
     const auto rewrittenBody = ctx.ExprCtx.ReplaceNode(lambda.Body().Ptr(), *std::get<1>(candidates.front()), replacement);
+    // clang-format off
     auto newLambda = Build<TCoLambda>(ctx.ExprCtx, lambda.Pos())
-                         .Args({"arg"})
-                         .Body<TExprApplier>()
-                         .Apply(TExprBase(rewrittenBody))
-                         .With(lambda.Args().Arg(0), "arg")
-                         .Build()
-                         .Done()
-                         .Ptr();
+        .Args({"arg"})
+        .Body<TExprApplier>()
+            .Apply(TExprBase(rewrittenBody))
+            .With(lambda.Args().Arg(0), "arg")
+            .Build()
+    .Done().Ptr();
+    // clang-format on
     return TReplicateJsonValueBranchRewrite{ portJsonValue.Map, portJsonValue.Output, std::move(newLambda), std::get<3>(candidates.front()) };
 }
 

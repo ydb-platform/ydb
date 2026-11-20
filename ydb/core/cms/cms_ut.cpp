@@ -3346,10 +3346,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         ui32 versionResponses = 0;
         ui32 createRequests = 0;
         TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvCms::EvGetInterfaceVersionResponse) {
+            if (ev->GetTypeRewrite() == TEvCms::EvGetConfigResponse) {
                 ++versionResponses;
-                // An interface version below the required minimum must be rejected.
-                ev->Get<TEvCms::TEvGetInterfaceVersionResponse>()->Record.SetVersion(0);
+                // Older CMS versions return the config without an interface version.
+                ev->Get<TEvCms::TEvGetConfigResponse>()->Record.ClearInterfaceVersion();
             } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
                 ++createRequests;
             }
@@ -3382,8 +3382,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         ui32 versionRequests = 0;
         ui32 createRequests = 0;
         TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvCms::EvGetInterfaceVersionRequest) {
-                // Older CMS versions do not handle this event.
+            if (ev->GetTypeRewrite() == TEvCms::EvGetConfigRequest) {
+                // Simulate a missing response to the config request.
                 ++versionRequests;
                 return TTestActorRuntime::EEventAction::DROP;
             } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
@@ -3425,13 +3425,13 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         THolder<IEventHandle> firstResponse;
         THolder<IEventHandle> secondResponse;
         TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->Recipient == handler && ev->GetTypeRewrite() == TEvCms::EvGetInterfaceVersionResponse) {
+            if (ev->Recipient == handler && ev->GetTypeRewrite() == TEvCms::EvGetConfigResponse) {
                 if (!firstResponse) {
-                    UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvCms::TEvGetInterfaceVersionResponse>()->Record.GetVersion(), CMS_INTERFACE_VERSION);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvCms::TEvGetConfigResponse>()->Record.GetInterfaceVersion(), CMS_INTERFACE_VERSION);
                     firstResponse.Reset(ev.Release());
                 } else {
                     // Simulate reconnecting to a CMS version without DrainData support.
-                    ev->Get<TEvCms::TEvGetInterfaceVersionResponse>()->Record.SetVersion(0);
+                    ev->Get<TEvCms::TEvGetConfigResponse>()->Record.ClearInterfaceVersion();
                     secondResponse.Reset(ev.Release());
                 }
                 return TTestActorRuntime::EEventAction::DROP;

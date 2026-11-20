@@ -97,7 +97,7 @@ private:
 
         if (request->Record.GetDrainData()) {
             CreateTaskRequest = request.Release();
-            SendToCms(new TEvCms::TEvGetInterfaceVersionRequest, ctx);
+            SendToCms(new TEvCms::TEvGetConfigRequest, ctx);
             Become(&TThis::StateCheckVersion, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
             return;
         }
@@ -108,7 +108,7 @@ private:
 
     STFUNC(StateCheckVersion) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvCms::TEvGetInterfaceVersionResponse, Handle);
+            HFunc(TEvCms::TEvGetConfigResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
@@ -119,14 +119,18 @@ private:
         }
     }
 
-    void Handle(TEvCms::TEvGetInterfaceVersionResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvCms::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
         // Ignore replies from a previous pipe connection.
         if (ev->Cookie != CmsPipeCookie) {
             return;
         }
 
         const auto &rec = ev->Get()->Record;
-        if (rec.GetVersion() < CMS_INTERFACE_WALLE_DRAIN_DATA) {
+        TString status;
+        if (!CheckStatus(rec.GetStatus(), status, false, ctx))
+            return;
+
+        if (rec.GetInterfaceVersion() < CMS_INTERFACE_WALLE_DRAIN_DATA) {
             ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_data", ctx);
             return;
         }

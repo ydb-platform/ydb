@@ -566,19 +566,13 @@ message TResetMarkerResponse {
     optional TStatus Status = 1;
 }
 
-message TGetInterfaceVersionRequest {
-}
-
-message TGetInterfaceVersionResponse {
-    optional uint32 Version = 1;
-}
-
 message TGetConfigRequest {
 }
 
 message TGetConfigResponse {
     optional TStatus    Status = 1;
     optional TCmsConfig Config = 2;
+    optional uint32     InterfaceVersion = 3;
 }
 
 message TSetConfigRequest {

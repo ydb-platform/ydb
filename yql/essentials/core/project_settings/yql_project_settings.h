@@ -1,14 +1,15 @@
 #pragma once
 
+#include <yql/essentials/public/langver/yql_langver.h>
+
 #include <library/cpp/yson/node/node.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
 namespace NYql {
 
-// Project settings, mirrors the TProjectSettings proto message
-// (yql/tools/yqlworker/interface/proto/task.proto).
 struct TProjectSettings {
     struct TPragma {
         TString Name;           // e.g. "yt.StaticPool"
@@ -16,12 +17,9 @@ struct TProjectSettings {
     };
 
     TVector<TPragma> Pragmas;
-
-    static TProjectSettings FromJson(TStringBuf json);
-
-    static TProjectSettings FromYson(const NYT::TNode& settings);
-
-    NYT::TNode ToYson() const;
+    TString DefaultCluster;
+    TMaybe<TLangVersion> LangVer;
+    NYT::TNode Attributes = NYT::TNode::CreateMap();
 
     void AddPragma(TString name, TVector<TString> values);
 

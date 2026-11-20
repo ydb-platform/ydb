@@ -1,5 +1,7 @@
 #include "yql_facade.h"
 
+#include <yql/essentials/core/project_settings/convert/convert.h>
+
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -80,7 +82,7 @@ const TString StartTimeLabel = "StartTime";
 TProjectSettings HandleProjectSettings(TProjectSettings settings, const TQContext& qContext) {
     if (qContext.CanWrite()) {
         qContext.GetWriter()->Put({.Component = FacadeComponent, .Label = ProjectSettingsLabel},
-                                  NYT::NodeToYsonString(settings.ToYson(), NYT::NYson::EYsonFormat::Binary))
+                                  NYT::NodeToYsonString(ProjectSettingsToYson(settings), NYT::NYson::EYsonFormat::Binary))
             .GetValueSync();
     } else if (qContext.CanRead()) {
         settings = ProjectSettingsFromQContext(qContext);
@@ -206,7 +208,7 @@ TProjectSettings ProjectSettingsFromQContext(const TQContext& context) {
     YQL_ENSURE(context.CanRead());
     auto item = context.GetReader()->Get({.Component = FacadeComponent, .Label = ProjectSettingsLabel}).GetValueSync();
     if (item) {
-        return TProjectSettings::FromYson(NYT::NodeFromYsonString(item->Value));
+        return ProjectSettingsFromYson(NYT::NodeFromYsonString(item->Value));
     }
     return {};
 }
@@ -371,6 +373,7 @@ TProgramPtr TProgramFactory::Create(
     TUdfIndexPackageSet::TPtr udfIndexPackageSet = (UdfIndexPackageSet_ && hiddenMode == EHiddenMode::Disable) ? UdfIndexPackageSet_->Clone() : nullptr;
     IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr;
     auto projectSettings = HandleProjectSettings(ProjectSettings_, qContext);
+    const auto langVer = LangVer_.GetOrElse(projectSettings.LangVer.GetOrElse(UnknownLangVersion));
     if (moduleResolver) {
         moduleResolver->SetProjectSettings(std::make_shared<const TProjectSettings>(projectSettings));
     }
@@ -384,7 +387,7 @@ TProgramPtr TProgramFactory::Create(
 
     // make UserDataTable_ copy here
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-                        LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
+                        langVer, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
                         filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
@@ -469,6 +472,9 @@ TProgram::TProgram(
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
     , TranslatorsRegistry_(std::move(translatorsRegistry))
 {
+    if (!ProjectSettings_.Attributes.AsMap().empty()) {
+        SetOperationAttrsYson({});
+    }
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
     }
@@ -755,6 +761,22 @@ TString TProgram::GetSessionId() const {
     }
 }
 
+void TProgram::SetOperationAttrsYson(const TString& attrs) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    if (ProjectSettings_.Attributes.AsMap().empty()) {
+        OperationOptions_.AttrsYson = attrs;
+        return;
+    }
+    auto merged = ProjectSettings_.Attributes;
+    if (!attrs.empty()) {
+        const auto operationAttrs = NYT::NodeFromYsonString(attrs);
+        for (const auto& [key, value] : operationAttrs.AsMap()) {
+            merged[key] = value;
+        }
+    }
+    OperationOptions_.AttrsYson = NYT::NodeToYsonString(merged, NYT::NYson::EYsonFormat::Binary);
+}
+
 void TProgram::SetLanguageVersion(TLangVersion version) {
     LangVer_ = version;
 }
@@ -920,12 +942,24 @@ bool TProgram::ValidateLangVersion() {
 
     TMaybe<TIssue> issue;
     auto ret = CheckLangVersion(LangVer_, MaxLangVer_, issue);
+    TIssues issues;
     if (issue) {
+        issues.AddIssue(*issue);
+    }
+    if (StrictConfigValidation_ && ProjectSettings_.LangVer) {
+        TMaybe<TIssue> projectIssue;
+        if (!CheckLangVersion(*ProjectSettings_.LangVer, MaxLangVer_, projectIssue)) {
+            projectIssue->SetMessage(TStringBuilder() << "Invalid project LangVer: " << projectIssue->GetMessage());
+            issues.AddIssue(*projectIssue);
+            ret = false;
+        }
+    }
+    if (!issues.Empty()) {
         if (!ExprCtx_) {
             ExprCtx_.Reset(new TExprContext(NextUniqueId_));
         }
 
-        ExprCtx_->AddError(*issue);
+        ExprCtx_->IssueManager.AddIssues(issues);
     }
 
     return ret;
@@ -977,6 +1011,9 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     HandleSourceCode();
     NSQLTranslation::TTranslationSettings currentSettings = settings;
     currentSettings.ProjectSettings = ProjectSettings_;
+    if (!ProjectSettings_.DefaultCluster.empty()) {
+        currentSettings.DefaultCluster = ProjectSettings_.DefaultCluster;
+    }
     if (currentSettings.StrictConfigValidation) {
         for (const auto& flag : currentSettings.Flags) {
             if (!NSQLTranslationV1::IsKnownSimpleFlag(flag)) {

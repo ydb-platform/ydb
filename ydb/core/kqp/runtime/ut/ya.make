@@ -10,8 +10,6 @@ SRCS(
     kqp_scan_fetcher_ut.cpp
     kqp_write_actor_ut.cpp
     kqp_write_table_ut.cpp
-    scheduler/kqp_compute_scheduler_service_ut.cpp
-    scheduler/kqp_compute_scheduler_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()
@@ -19,10 +17,9 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/common
-    ydb/core/kqp/node_service
+    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/ut/common
     ydb/core/testlib/basics/pg
-    ydb/services/workload_manager/ut/common
     yql/essentials/ast
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy

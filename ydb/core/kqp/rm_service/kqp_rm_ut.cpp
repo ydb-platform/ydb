@@ -172,7 +172,7 @@ NKikimrConfig::TTableServiceConfig::TResourceManager MakeArenaConfig(ui64 execut
 
 NScheduler::TComputeSchedulerPtr MakeComputeScheduler() {
     auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
-        MakeIntrusive<TKqpCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>()),
+        MakeIntrusive<::NMonitoring::TDynamicCounters>(),
         NScheduler::TOptions{
             .DelayParams = NScheduler::TDelayParams{
                 .MaxDelay = TDuration::MicroSeconds(3'000'000),

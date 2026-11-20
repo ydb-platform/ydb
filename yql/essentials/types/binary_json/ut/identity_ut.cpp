@@ -78,7 +78,7 @@ public:
                 const auto binaryJson = std::get<TBinaryJson>(NBinaryJson::SerializeToBinaryJson(json));
                 UNIT_ASSERT_VALUES_EQUAL(json, NBinaryJson::SerializeToJson(binaryJson));
             }
-            for (const TStringBuf truncated : {TStringBuf("[1,"), TStringBuf("{\"a\":"), TStringBuf("\"abc"), TStringBuf("tru")}) {
+            for (const TStringBuf truncated : {TStringBuf("[1,"), TStringBuf("{\"a\":"), TStringBuf("\"abc"), TStringBuf("tru"), TStringBuf()}) {
                 UNIT_ASSERT(std::holds_alternative<TBinaryJson>(NBinaryJson::SerializeToBinaryJson(previous)));
                 UNIT_ASSERT(std::holds_alternative<TString>(NBinaryJson::SerializeToBinaryJson(truncated)));
             }

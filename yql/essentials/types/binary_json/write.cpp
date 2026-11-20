@@ -665,17 +665,24 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf js
     thread_local simdjson::ondemand::parser reusedParser;
     thread_local std::string reusedBuffer;
     simdjson::ondemand::parser localParser;
-    std::string localBuffer;
+    simdjson::padded_string localJson;
+    simdjson::padded_string_view paddedJson;
     const bool reuse = json.size() <= MaxReusedJsonSize;
-    auto& parser = reuse ? reusedParser : localParser;
-    auto& buffer = reuse ? reusedBuffer : localBuffer;
-    if (buffer.size() < json.size() + simdjson::SIMDJSON_PADDING) {
-        buffer.resize(json.size() + simdjson::SIMDJSON_PADDING);
+    if (reuse) {
+        if (reusedBuffer.size() < json.size() + simdjson::SIMDJSON_PADDING) {
+            reusedBuffer.resize(json.size() + simdjson::SIMDJSON_PADDING);
+        }
+        if (!json.empty()) {
+            std::memcpy(reusedBuffer.data(), json.data(), json.size());
+        }
+        // A reused buffer holds bytes of earlier documents past the end: zero the padding.
+        std::memset(reusedBuffer.data() + json.size(), 0, simdjson::SIMDJSON_PADDING);
+        paddedJson = simdjson::padded_string_view(reusedBuffer.data(), json.size(), reusedBuffer.size());
+    } else {
+        localJson = simdjson::padded_string(json);
+        paddedJson = localJson;
     }
-    std::memcpy(buffer.data(), json.data(), json.size());
-    // A reused buffer holds bytes of earlier documents past the end: zero the padding.
-    std::memset(buffer.data() + json.size(), 0, simdjson::SIMDJSON_PADDING);
-    const simdjson::padded_string_view paddedJson(buffer.data(), json.size(), buffer.size());
+    auto& parser = reuse ? reusedParser : localParser;
     try {
         auto doc = parser.iterate(paddedJson);
         if (auto status = doc.error(); status != simdjson::SUCCESS) {

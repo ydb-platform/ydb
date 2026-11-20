@@ -1,0 +1,54 @@
+name: Revalidate muted PR tests
+
+on:
+  push:
+    branches: [main, 'stable-*', 'prestable-*', 'stream-nb-*', 'dev-*', 'rc-*', 'q-stable-*']
+    paths:
+      - '.github/config/muted_ya*.txt'
+      - '.github/config/mute_config.json'
+  workflow_run:
+    workflows: [PR-check]
+    types: [completed]
+  # Also recover missed/coalesced events and partially published statuses.
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report eligible PRs without updating statuses or comments
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+  statuses: write
+  pull-requests: write
+
+# Never cancel a scan halfway through publishing its statuses.
+concurrency:
+  group: revalidate-muted-pr-tests
+  cancel-in-progress: false
+
+jobs:
+  revalidate:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.event == 'pull_request_target' && github.event.workflow_run.conclusion == 'failure')
+    runs-on: [self-hosted, tiny-worker]
+    timeout-minutes: 30
+    steps:
+      # Execute trusted scripts, never code from the PR being revalidated.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Revalidate recent failed PR checks
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+          AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [ -n "$RUN_ID" ]; then args+=(--run-id "$RUN_ID"); fi
+          if [ "$DRY_RUN" == "true" ]; then args+=(--dry-run); fi
+          python3 .github/scripts/tests/revalidate_muted_tests.py recent "${args[@]}"

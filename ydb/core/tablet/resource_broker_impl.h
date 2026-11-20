@@ -229,7 +229,8 @@ public:
     void EraseTask(TTaskPtr task, bool finished, TInstant now);
 
     TTaskPtr FrontTask();
-    void PopTask();
+    TTaskPtr FrontMemorylessTask();
+    void PopTask(TTaskPtr task);
 
     void UpdateRealResourceUsage(TInstant now);
 
@@ -251,7 +252,9 @@ private:
 public:
     TString Name;
     ui32 Weight;
+    bool StrictMemoryLimit;
     TSet<TTaskPtr, TTaskEarlier> Tasks;
+    TSet<TTaskPtr, TTaskEarlier> MemorylessTasks;
     TResourceLimit QueueLimit;
     TResourceLimitPtr TotalLimit;
     double RealResourceUsage;
@@ -322,8 +325,21 @@ public:
      * Returns TTask raw pointer if it exists.
      */
     const TTask* FindTask(ui64 taskId, const TActorId &client) const;
+
+    bool FitsMemoryLimit(const TString& type, const TResourceValues& resources) const {
+        const auto& queue = TaskConfig(type).Queue;
+        const auto bytes = resources[NKikimrResourceBroker::MEMORY];
+        return !queue->StrictMemoryLimit ||
+            bytes <= GetMemoryLimit(type);
+    }
+
+    ui64 GetMemoryLimit(const TString& type) const {
+        return Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
+            ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]);
+    }
+
     /**
-     * Create new task and queue it. Return true on success, and false if task with the same id already exists.
+     * Create and queue a task. Return false if the client already has a task with the same ID.
      */
     bool SubmitTask(const TEvResourceBroker::TTask &task, const TActorId &client, const TActorSystem &as);
     /**
@@ -368,9 +384,9 @@ public:
      * Build or reconfigure queues and limits according to new config. Config should
      * have at least one queue and one task type configuration (default queue and
      * unknown task). On re-configuration tasks may migrate between queues according
-     * to new mapping.
+     * to new mapping. Returns queued tasks rejected by the new strict memory limits.
      */
-    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as);
+    TVector<TTaskPtr> Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as);
 
     /**
      * Update current scheduler time which is used for all resource consumption
@@ -386,6 +402,7 @@ public:
 private:
     // Erase task from all structure.
     void EraseTask(TTaskPtr task, bool finished, const TActorSystem &as);
+    void EraseTaskFromIndexes(const TTask &task);
     // Update resource usage for all queues.
     void UpdateResourceUsage(const TActorSystem &as);
 

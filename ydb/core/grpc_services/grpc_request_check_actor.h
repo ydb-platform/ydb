@@ -325,7 +325,7 @@ public:
 
         if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
             // log info about input connection (remote address, basically)
-            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
+            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetAuditUserSID(), TBase::GetSanitizedToken());
         }
 
         if (ResourceDomainKey) {

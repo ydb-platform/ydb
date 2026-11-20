@@ -26,6 +26,7 @@ struct TEvSecureRequestTest {
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         bool IsUserAdmin;
         TString ErrorMessage;
+        TString AuditUserSID;
     };
 };
 
@@ -49,6 +50,7 @@ public:
         auto response = MakeHolder<TEvSecureRequestTest::TEvResponse>();
         response->AccessDenied = false;
         response->UserToken = GetParsedToken();
+        response->AuditUserSID = GetAuditUserSID();
         response->IsUserAdmin = IsUserAdmin();
         ctx.Send(ReplyTo, response.Release());
         Die(ctx);
@@ -58,6 +60,7 @@ public:
         auto response = MakeHolder<TEvSecureRequestTest::TEvResponse>();
         response->AccessDenied = true;
         response->UserToken = GetParsedToken();
+        response->AuditUserSID = GetAuditUserSID();
         response->IsUserAdmin = IsUserAdmin();
         response->ErrorMessage = error.Message;
         ctx.Send(ReplyTo, response.Release());
@@ -191,6 +194,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     auto response = runtime->GrabEdgeEvent<TEvSecureRequestTest::TEvResponse>(sender);
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(!response->Get()->UserToken);
+    UNIT_ASSERT(response->Get()->AuditUserSID.empty());
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -199,6 +203,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     response = runtime->GrabEdgeEvent<TEvSecureRequestTest::TEvResponse>(sender);
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(!response->Get()->UserToken);
+    UNIT_ASSERT(response->Get()->AuditUserSID.empty());
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -208,6 +213,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -217,6 +223,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -226,6 +233,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), ROOT_TOKEN);
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, ROOT_TOKEN);
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -235,6 +243,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), ROOT_TOKEN);
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, ROOT_TOKEN);
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -243,6 +252,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     response = runtime->GrabEdgeEvent<TEvSecureRequestTest::TEvResponse>(sender);
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(!response->Get()->UserToken);
+    UNIT_ASSERT(response->Get()->AuditUserSID.empty());
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -251,6 +261,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     response = runtime->GrabEdgeEvent<TEvSecureRequestTest::TEvResponse>(sender);
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(!response->Get()->UserToken);
+    UNIT_ASSERT(response->Get()->AuditUserSID.empty());
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -261,6 +272,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user@builtin");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user@builtin");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -271,6 +283,7 @@ Y_UNIT_TEST(SecurityConfig1) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user@builtin");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user@builtin");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 }
@@ -297,6 +310,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "defaultUser");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "defaultUser");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -306,6 +320,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "defaultUser");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "defaultUser");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -315,6 +330,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -324,6 +340,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -333,6 +350,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), ROOT_TOKEN);
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, ROOT_TOKEN);
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -342,6 +360,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), ROOT_TOKEN);
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, ROOT_TOKEN);
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -350,6 +369,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     response = runtime->GrabEdgeEvent<TEvSecureRequestTest::TEvResponse>(sender);
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(!response->Get()->UserToken);
+    UNIT_ASSERT(response->Get()->AuditUserSID.empty());
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -358,6 +378,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     response = runtime->GrabEdgeEvent<TEvSecureRequestTest::TEvResponse>(sender);
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(!response->Get()->UserToken);
+    UNIT_ASSERT(response->Get()->AuditUserSID.empty());
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -368,6 +389,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user@builtin");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user@builtin");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 
@@ -378,6 +400,7 @@ Y_UNIT_TEST(SecurityConfig2) {
     UNIT_ASSERT(!response->Get()->AccessDenied);
     UNIT_ASSERT(response->Get()->UserToken);
     UNIT_ASSERT_VALUES_EQUAL(response->Get()->UserToken->GetUserSID(), "user@builtin");
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->AuditUserSID, "user@builtin");
     UNIT_ASSERT(response->Get()->IsUserAdmin);
     UNIT_ASSERT(response->Get()->ErrorMessage.empty());
 }

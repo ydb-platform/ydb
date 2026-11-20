@@ -482,6 +482,7 @@ void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageControll
     info->SetErasureSpeciesV2(TErasureType::ErasureSpeciesName(poolInfo.ErasureSpecies));
     info->SetVDiskKindV2(NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(poolInfo.VDiskKind));
     info->SetKind(poolInfo.Kind);
+    info->SetBridgeMode(poolInfo.BridgeMode);
     info->SetNumGroups(poolInfo.NumGroups);
     if (poolInfo.EncryptionMode) {
         info->SetEncryptionMode(*poolInfo.EncryptionMode);

@@ -359,6 +359,7 @@ message TStoragePoolInfo {
     optional string BestSpaceColor = 16; // the best space color among groups of the pool
     optional string WorstSpaceColor = 17; // the worst space color among groups of the pool
     optional bool SpaceExhausted = 18; // the pool blocks writes to its database (see DatabaseSpaceBlockColor)
+    optional bool BridgeMode = 19;
     // metrics ?
 }
 

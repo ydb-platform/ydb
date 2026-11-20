@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/blobstorage/base/bridge_events.h>
+#include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <util/generic/hash.h>
@@ -11,24 +12,55 @@
 
 namespace NKikimr::NViewer {
 
-struct TBridgeGroupCounts {
+struct TBridgeGroupSyncStats {
     ui64 Required = 0;
     ui64 Synced = 0;
     ui64 Syncing = 0;
+    ui64 Pending = 0;
     ui64 Unknown = 0;
+    std::optional<ui64> BytesRemaining;
+    bool BytesRemainingComplete = true;
+    std::optional<ui64> BytesPerSecond = 0;
 
-    void Add(const NKikimrBridge::TGroupSyncCounts& counts) {
-        Required += counts.required();
-        Synced += counts.synced();
-        Syncing += counts.syncing();
-        Unknown += counts.unknown();
+    TBridgeGroupSyncStats() = default;
+
+    explicit TBridgeGroupSyncStats(const NKikimrBridge::TDatabaseSynchronization& row)
+        : Required(row.groups().required())
+        , Synced(row.groups().synced())
+        , Syncing(row.groups().syncing())
+        , Pending(row.groups().pending())
+        , Unknown(row.groups().unknown())
+        , BytesRemainingComplete(row.has_remaining_bytes() && row.remaining_bytes_complete())
+    {
+        // A completed pile contributes no estimate for copies still awaiting their first scan in another pile.
+        if (Required != Synced && row.has_remaining_bytes()) {
+            BytesRemaining = row.remaining_bytes();
+        }
+        if (row.has_copy_bytes_per_second()) {
+            BytesPerSecond = row.copy_bytes_per_second();
+        } else {
+            BytesPerSecond.reset();
+        }
     }
 
-    void Add(const TBridgeGroupCounts& counts) {
-        Required += counts.Required;
-        Synced += counts.Synced;
-        Syncing += counts.Syncing;
-        Unknown += counts.Unknown;
+    void Add(const TBridgeGroupSyncStats& stats) {
+        if (!stats.Required) {
+            return;
+        }
+        Required += stats.Required;
+        Synced += stats.Synced;
+        Syncing += stats.Syncing;
+        Pending += stats.Pending;
+        Unknown += stats.Unknown;
+        if (stats.BytesRemaining) {
+            BytesRemaining = BytesRemaining.value_or(0) + *stats.BytesRemaining;
+        }
+        BytesRemainingComplete &= stats.BytesRemainingComplete;
+        if (BytesPerSecond && stats.BytesPerSecond) {
+            *BytesPerSecond += *stats.BytesPerSecond;
+        } else {
+            BytesPerSecond.reset();
+        }
     }
 
     NKikimrBridge::ESynchronizationStatus GetStatus() const {
@@ -38,7 +70,7 @@ struct TBridgeGroupCounts {
 
 struct TBridgeDatabaseStats {
     NKikimrBridge::EStorageMode Mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
-    TBridgeGroupCounts Groups;
+    TBridgeGroupSyncStats Groups;
 
     NKikimrBridge::ESynchronizationStatus GetStatus() const {
         return Groups.GetStatus();
@@ -70,13 +102,28 @@ inline std::optional<THashSet<TString>> GetBridgeDatabaseStoragePools(
     return pools;
 }
 
+inline std::optional<THashMap<TString, const NKikimrSysView::TStoragePoolEntry*>> FindBridgeDatabasePoolEntries(
+        const THashSet<TString>& names, const NKikimrSysView::TEvGetStoragePoolsResponse& pools) {
+    THashMap<TString, const NKikimrSysView::TStoragePoolEntry*> entries;
+    for (const auto& pool : pools.GetEntries()) {
+        const auto& name = pool.GetInfo().GetName();
+        if (names.contains(name) && !entries.emplace(name, &pool).second) {
+            return std::nullopt;
+        }
+    }
+    if (entries.size() != names.size()) {
+        return std::nullopt;
+    }
+    return entries;
+}
+
 class TBridgeStorageSnapshot {
     using TPoolId = std::pair<ui64, ui64>;
 
     struct TPoolStats {
         TString Name;
         NKikimrBridge::EStorageMode Mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
-        TBridgeGroupCounts Groups;
+        TBridgeGroupSyncStats Groups;
         THashSet<TString> PileNames;
         bool HasUnplaced = false;
         bool Valid = true;
@@ -123,7 +170,7 @@ public:
                 } else {
                     target.HasUnplaced = true;
                 }
-                target.Groups.Add(row.groups());
+                target.Groups.Add(TBridgeGroupSyncStats(row));
             }
         }
     }

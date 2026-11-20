@@ -38,9 +38,13 @@ namespace NKikimr::NStorage {
 
         if (vdisk.RuntimeData) {
             vdiskRunning = true;
-            vdisk.ShutdownActorId = vdisk.RuntimeData->ActorId;
+            TActorId recipient = vdisk.GetVDiskServiceId();
+            if (!vdisk.RuntimeData->DDisk) {
+                recipient = vdisk.RuntimeData->ActorId;
+                vdisk.ShutdownActorId = recipient;
+            }
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.RuntimeData->ActorId, {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, recipient, {}, nullptr, 0));
             vdisk.RuntimeData.reset();
         }
 
@@ -62,7 +66,7 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        vdisk.ShutdownPending |= vdiskRunning;
+        vdisk.ShutdownPending = vdiskRunning || static_cast<bool>(vdisk.ShutdownActorId);
         VDiskStatusChanged = true;
     }
 
@@ -99,6 +103,14 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        // A removed slot can be recreated while its old incarnation drains.
+        for (const auto& [actorId, slot] : VDiskIdByActor) {
+            if (slot == vslotId) {
+                vdisk.ShutdownPending = true;
+                vdisk.ShutdownActorId = actorId;
+                break;
+            }
+        }
         if (vdisk.ShutdownPending) {
             vdisk.RestartAfterShutdown = true;
             return;
@@ -414,7 +426,10 @@ namespace NKikimr::NStorage {
 
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
-        VDiskIdByActor.try_emplace(actorId, vslotId);
+        // DDisk actors on this branch do not send TEvGone to NodeWarden.
+        if (!ddisk) {
+            VDiskIdByActor.try_emplace(actorId, vslotId);
+        }
 
         YDB_LOG_DEBUG("StartLocalVDiskActor done",
             {"marker", "NW24"},
@@ -452,7 +467,9 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::HandleGone(STATEFN_SIG) {
         if (const auto it = VDiskIdByActor.find(ev->Sender); it != VDiskIdByActor.end()) {
-            if (const auto jt = LocalVDisks.find(it->second); jt != LocalVDisks.end()) {
+            const TVSlotId slot = it->second;
+            VDiskIdByActor.erase(it);
+            if (const auto jt = LocalVDisks.find(slot); jt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = jt->second;
                 if (vdisk.ShutdownActorId == ev->Sender) {
                     vdisk.ShutdownActorId = {};
@@ -462,7 +479,6 @@ namespace NKikimr::NStorage {
                     }
                 }
             }
-            VDiskIdByActor.erase(it);
         }
     }
 

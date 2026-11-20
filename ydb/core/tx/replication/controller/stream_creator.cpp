@@ -15,6 +15,7 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -166,7 +167,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 .SetAvailabilityPeriod(ConsumerAvailabilityPeriod);
             break;
         case ETopicOperation::SetRetention:
-            settings.SetRetentionPeriod(StreamRetentionPeriod);
+            settings.SetRetentionPeriod(StreamRetentionPeriod)
+                .SetPartitionWriteSpeedBytesPerSecond(10_MB);
             break;
         }
 

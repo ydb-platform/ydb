@@ -312,7 +312,8 @@ namespace {
             auto& appData = *Runtime.GetNode(NodeId)->AppData;
             appData.IoContextFactory = IoFactory.get();
             appData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
-            appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
+            appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig();
+            appData.DynamicNameserviceConfig->MaxStaticNodeId = 5000;
 
             auto config = MakeIntrusive<TNodeWardenConfig>(new TObservedRealPDiskServiceFactory(
                 [this](bool temporary, TActorId actor) {

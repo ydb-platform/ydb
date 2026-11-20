@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -88,6 +89,7 @@ private:
         }
 
         auto path = NormalizePath(database, topicName);
+        NPersQueue::CountTopicPathWithDatabasePrefix(database, Settings.Strategy->GetTopicName(), path);
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");

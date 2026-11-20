@@ -87,6 +87,15 @@ class DistConfKiKiMRTest(object):
             additional_log_configs=log_configs,
             system_tablets=system_tablets)
 
+        if cls.protected_mode:
+            node_sid = 'dynamic-nodes@cert'
+            security = cls.configurator.yaml_config['security_config']
+            security['register_dynamic_node_allowed_sids'] = [node_sid]
+            # The harness bootstraps the cluster with the certificate before obtaining the root token.
+            security['bootstrap_allowed_sids'] = security['bootstrap_allowed_sids'] + [node_sid]
+            definitions = cls.configurator.yaml_config['client_certificate_authorization']['client_certificate_definitions']
+            definitions[0]['member_groups'] = [node_sid]
+
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
 
@@ -790,7 +799,10 @@ class TestDistConfBootstrapValidation:
 class TestDistConfWithAuth(DistConfKiKiMRTest):
     protected_mode = True
 
-    def test_auth_v2_initialization(self):
+    def test_auth_v2_initialization(self, tmp_path):
+        response = self.cluster.config_client.fetch_all_configs()
+        assert response.operation.status == StatusIds.UNAUTHORIZED, response.operation
+
         table_path = '/Root/mydb/mytable_with_auth'
         self.cluster.create_database(
             table_path,
@@ -800,3 +812,18 @@ class TestDistConfWithAuth(DistConfKiKiMRTest):
             timeout_seconds=60,
             token=self.cluster.root_token
         )
+
+        seed_nodes_file = tmp_path / 'seed_nodes.yaml'
+        seed_nodes_file.write_text(yaml.safe_dump([
+            f'grpcs://{node.host}:{node.grpc_ssl_port}' for node in self.cluster.nodes.values()
+        ]))
+        slots = self.cluster.register_and_start_slots(table_path, count=1, seed_nodes_file=str(seed_nodes_file))
+        try:
+            def assert_seed_config_applied():
+                with open(slots[0].stdout_file_name) as output:
+                    assert 'Successfully applied dynamic config from seed nodes' in output.read()
+
+            retry_assertions(assert_seed_config_applied, timeout_seconds=60)
+            self.cluster.wait_tenant_up(table_path, token=self.cluster.root_token)
+        finally:
+            self.cluster.unregister_and_stop_slots(slots)

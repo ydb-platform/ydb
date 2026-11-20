@@ -197,6 +197,7 @@ private:
 
     bool Started = false;
     bool WarmupWasStopped = false;
+    bool SuccessfulTransactionReported = false;
 };
 
 } // namespace NYdb::NTPCC

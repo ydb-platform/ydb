@@ -517,8 +517,8 @@ namespace NKikimr::NStorage {
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;
-            bool RestartAfterShutdown = false;
             TActorId ShutdownActorId;
+            bool RestartAfterShutdown = false;
 
             // Last VDiskId reported to Node Whiteboard.
             std::optional<TVDiskID> WhiteboardVDiskId;

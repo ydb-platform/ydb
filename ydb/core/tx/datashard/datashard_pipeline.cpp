@@ -1793,6 +1793,10 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         }
     }
 
+    if (writeTx->IsReadOnlyPrepare(Self->GetSysLocks())) {
+        writeOp->SetFlag(TTxFlags::ReadOnlyPrepare);
+    }
+
     return writeOp;
 }
 

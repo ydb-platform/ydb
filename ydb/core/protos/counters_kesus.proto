@@ -75,4 +75,5 @@ enum ETxTypes {
     TXTYPE_QUOTER_RESOURCE_ADD = 19                       [(TxTypeOpts) = {Name: "TxQouterResourceAdd"}];
     TXTYPE_QUOTER_RESOURCE_UPDATE = 20                    [(TxTypeOpts) = {Name: "TxQouterResourceUpdate"}];
     TXTYPE_QUOTER_RESOURCE_DELETE = 21                    [(TxTypeOpts) = {Name: "TxQouterResourceDelete"}];
+    TXTYPE_SEMAPHORES_DESCRIBE = 22                       [(TxTypeOpts) = {Name: "TxSemaphoresDescribe"}];
 }

@@ -35,6 +35,7 @@ SRCS(
     topic_service_ut.cpp
     topic_deferred_publish_ut.cpp
     read_session_multi_topic_ut.cpp
+    read_init_auth_actor_ut.cpp
     demo_tx.cpp
 
     partition_writer_cache_actor_ut.cpp

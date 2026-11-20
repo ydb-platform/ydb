@@ -2,6 +2,8 @@
 
 #include <ydb/public/api/grpc/ydb_export_v1.grpc.pb.h>
 
+#include <library/cpp/json/json_reader.h>
+
 #include <type_traits>
 
 const TString TEST_BUCKET = "test-bucket";
@@ -42,6 +44,13 @@ public:
         CHECK_EXP(settings.source_path() == CommonSourcePrefix, "Incorrect common source prefix: \"" << settings.source_path() << "\" instead of \"" << CommonSourcePrefix << "\"");
         CHECK_EXP(settings.destination_prefix() == CommonDstPrefix, "Incorrect common destination prefix: \"" << settings.destination_prefix() << "\" instead of \"" << CommonDstPrefix << "\"");
         CHECK_EXP(settings.include_index_data() == IncludeIndexData, "Incorrect include index data: " << settings.include_index_data() << " instead of " << IncludeIndexData);
+        if (ParquetRowGroupSize) {
+            CHECK_EXP(settings.has_parquet(), "Expected Parquet format");
+            CHECK_EXP(settings.parquet().row_group_size() == *ParquetRowGroupSize,
+                "Incorrect Parquet row group size: " << settings.parquet().row_group_size() << " instead of " << *ParquetRowGroupSize);
+        } else {
+            CHECK_EXP(settings.has_ydb_dump(), "Expected YDB dump format");
+        }
         CheckEncryptionSettings(settings);
         CheckExcludeRegexps(settings);
     }
@@ -115,6 +124,7 @@ public:
         NumberOfRetries = DEFAULT_RETRIES;
         StorageClass = Ydb::Export::ExportToS3Settings::STORAGE_CLASS_UNSPECIFIED;
         Compression.clear();
+        ParquetRowGroupSize.Clear();
         Region.clear();
         DisableVirtualAddressing = false;
         CommonSourcePrefix.clear();
@@ -188,6 +198,11 @@ public:
         return *this;
     }
 
+    TExportImpl& ExpectParquet(ui32 rowGroupSize) {
+        ParquetRowGroupSize = rowGroupSize;
+        return *this;
+    }
+
     TExportImpl& ExpectRegion(TString region) {
         Region = std::move(region);
         return *this;
@@ -234,6 +249,7 @@ public:
     ui32 NumberOfRetries = DEFAULT_RETRIES;
     Ydb::Export::ExportToS3Settings::StorageClass StorageClass = Ydb::Export::ExportToS3Settings::STORAGE_CLASS_UNSPECIFIED;
     TString Compression;
+    TMaybe<ui32> ParquetRowGroupSize;
     TString Region;
     bool DisableVirtualAddressing = false;
     TString CommonSourcePrefix;
@@ -281,6 +297,18 @@ class TExportFixture : public TCliTestFixture {
         TCliTestFixture::AddServices();
         AddService<TExportImpl>();
         AddService<TTableImpl>();
+    }
+
+public:
+    TList<TString> S3ExportArgs(const TList<TString>& options) {
+        TList<TString> args = {
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+            "--access-key", "test-key", "--secret-key", "test-access-key",
+            "--destination-prefix", "dst",
+        };
+        args.insert(args.end(), options.begin(), options.end());
+        return args;
     }
 };
 
@@ -369,6 +397,75 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 "--include-index-data", "true",
             }
         );
+    }
+
+    Y_UNIT_TEST_F(PassS3FileFormat, TExportFixture) {
+        struct TTestCase {
+            TList<TString> Options;
+            TMaybe<ui32> RowGroupSize;
+            TString Compression;
+        };
+        const TTestCase cases[] = {
+            {{"--file-format", "csv"}, {}, {}},
+            {{"--file-format", "parquet"}, 10000, {}},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "1", "--compression", "zstd-3"}, 1, "zstd-3"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "10000000"}, 10000000, {}},
+        };
+
+        for (const auto& testCase : cases) {
+            auto& service = Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonDstPrefix("dst")
+                .ExpectCompression(testCase.Compression);
+            if (testCase.RowGroupSize) {
+                service.ExpectParquet(*testCase.RowGroupSize);
+            }
+
+            auto args = S3ExportArgs(testCase.Options);
+            args.insert(args.end(), {"--format", "proto-json-base64"});
+            const auto output = RunCli(std::move(args));
+            NJson::TJsonValue operation;
+            UNIT_ASSERT(NJson::ReadJsonTree(output, &operation, true));
+            UNIT_ASSERT_VALUES_EQUAL(operation["id"].GetStringSafe(), "ydb://export/6?id=1&kind=s3");
+        }
+    }
+
+    Y_UNIT_TEST_F(RejectInvalidS3FileFormatOptions, TExportFixture) {
+        struct TTestCase {
+            TList<TString> Options;
+            THashMap<TString, TString> Env;
+            TString Error;
+        };
+        const TString keyFile = EnvFile("test-encryption-key", "parquet-export.key");
+        const TTestCase cases[] = {
+            {{"--file-format", "tsv"}, {}, "file-format"},
+            {{"--file-format"}, {}, "file-format"},
+            {{"--parquet-row-group-size", "1"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "csv", "--parquet-row-group-size", "1"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "0"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "10000001"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "parquet", "--parquet-row-group-size=-1"}, {}, "Unexpected symbol"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "abc"}, {}, "Unexpected symbol"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "4294967296"}, {}, "Integer overflow"},
+            {{"--file-format", "parquet", "--parquet-row-group-size"}, {}, "parquet-row-group-size"},
+            {{"--file-format", "parquet", "--encryption-algorithm", "AES-128-GCM"}, {}, "incompatible with YDB backup encryption"},
+            {{"--file-format", "parquet", "--encryption-key-file", keyFile}, {}, "incompatible with YDB backup encryption"},
+            {{"--file-format", "parquet"},
+                {{"YDB_ENCRYPTION_KEY", "31323334353637383930313233343536"}}, "incompatible with YDB backup encryption"},
+            {{"--file-format", "parquet"},
+                {{"YDB_ENCRYPTION_KEY_FILE", keyFile}}, "incompatible with YDB backup encryption"},
+        };
+
+        for (const auto& testCase : cases) {
+            Service<TExportImpl>().ExpectNoExportCall();
+            ExpectFail();
+            TString error;
+            RunCli(S3ExportArgs(testCase.Options), testCase.Env, {}, &error);
+            UNIT_ASSERT_STRING_CONTAINS(error, testCase.Error);
+        }
     }
 
     Y_UNIT_TEST_F(PassItems, TExportFixture) {

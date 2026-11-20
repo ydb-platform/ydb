@@ -100,10 +100,6 @@ def main():
     (output / 'status.json').write_text(json.dumps(metadata, indent=2))
     perf = os.environ['TA_PERF']
     commands = {
-        'python-native': [os.environ['TA_PYSPY'], 'record', '--pid', str(pid),
-                          '--native', '--idle', '--threads', '--rate', '5',
-                          '--duration', '180', '--format', 'speedscope',
-                          '--output', str(output / 'python-native.speedscope.json')],
         'perf': [perf, 'record', '-e', 'cpu-clock', '-F', '49', '--no-inherit',
                  '--call-graph', 'dwarf,8192', '-p', str(pid),
                  '-o', str(private / 'perf.data'), '--', 'sleep', '180'],
@@ -143,7 +139,7 @@ def main():
                 metadata[name + '_exit_code'] = result.returncode
         # SIGINT is the normal way to flush perf when the attempt finishes early.
         reports_ok = all(metadata.get(name + '_exit_code') == 0
-                         for name in ['python-native', 'perf-flat.txt', 'perf-stacks.txt'])
+                         for name in ['perf-flat.txt', 'perf-stacks.txt'])
         metadata['status'] = ('complete' if reports_ok and metadata.get('perf_exit_code') in (0, -signal.SIGINT)
                               else 'partial')
         (output / 'status.json').write_text(json.dumps(metadata, indent=2))

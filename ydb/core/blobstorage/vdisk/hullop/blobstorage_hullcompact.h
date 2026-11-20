@@ -198,7 +198,6 @@ namespace NKikimr {
             }
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
             Y_VERIFY_S(ev->Get()->ChunkIds.size() == PlannedChunks, HullCtx->VCtx->VDiskLogPrefix);
-            PDiskCtx->ChunkNonces->Record(ev->Get()->ChunkIds, ev->Get()->ChunkNonces);
             Worker.AddPreReservedChunks(ev->Get()->ChunkIds);
             StartWork(ctx, std::move(Barriers));
         }

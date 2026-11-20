@@ -1572,7 +1572,7 @@ void TPDisk::ChunkUnlock(TChunkUnlock &evChunkUnlock) {
             state.OwnerId = OwnerUnallocated;
             state.CommitState = TChunkState::FREE;
             Mon.LockedChunks->Dec();
-            Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+            ReturnChunkToFreeList(owner, chunkIdx);
             ++unlockedChunks;
         }
     }
@@ -1660,6 +1660,9 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             PCtx->PDiskLogPrefix << "chunkIdx# " << chunkIdx << " desired ownerId# " << req->Owner
             << " state# " << state.ToString());
         state.Nonce = chunkNonce;
+        if (ChunkNonces) {
+            ChunkNonces->Set(chunkIdx, chunkNonce);
+        }
         state.CurrentNonce = chunkNonce;
         YDB_LOG_P_LOG(PRI_INFO, "Chunk is allocated",
             {"marker", "BPD01"},
@@ -1854,7 +1857,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                         // chunk stops validating and reads back as gaps.
                         state.Nonce = 0;
                         state.CurrentNonce = 0;
-                        Keeper.PushFreeOwnerChunk(evChunkForget.Owner, chunkIdx);
+                        ReturnChunkToFreeList(evChunkForget.Owner, chunkIdx);
                         break;
                     case TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS:
                         Mon.UncommitedDataChunks->Dec();
@@ -1876,7 +1879,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                         Mon.UncommitedDataChunks->Dec();
                         state.OwnerId = OwnerUnallocated;
                         state.CommitState = TChunkState::FREE;
-                        Keeper.PushFreeOwnerChunk(evChunkForget.Owner, chunkIdx);
+                        ReturnChunkToFreeList(evChunkForget.Owner, chunkIdx);
                         break;
                     default:
                         Y_FAIL_S(PCtx->PDiskLogPrefix
@@ -2519,6 +2522,13 @@ void TPDisk::AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitRes
 #endif
 }
 
+void TPDisk::ReturnChunkToFreeList(TOwner owner, TChunkIdx chunkIdx) {
+    if (ChunkNonces) {
+        ChunkNonces->Set(chunkIdx, 0);
+    }
+    Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+}
+
 void TPDisk::FillFormatContext(NPDisk::TEvYardInitResult &result) {
     if (Format.IsPlainDataChunks()) {
         return; // no sector footers to build or check
@@ -2528,13 +2538,16 @@ void TPDisk::FillFormatContext(NPDisk::TEvYardInitResult &result) {
         // a new TPDisk and new YardInits, so owners never seal differently from TChunkWriter.
         FormatContextCache = std::make_shared<const TFormatContext>(Format,
             Cfg->FeatureFlags.GetEnablePDiskDataEncryption());
+        ChunkNonces = std::make_shared<TChunkNonces>(ChunkState.size());
+        for (TChunkIdx idx = 0; idx < ChunkState.size(); ++idx) {
+            const TChunkState& state = ChunkState[idx];
+            if (IsOwnerUser(state.OwnerId) && state.CommitState != TChunkState::LOCKED) {
+                ChunkNonces->Set(idx, state.Nonce);
+            }
+        }
     }
     result.FormatContext = FormatContextCache;
-    result.NonceTableSize = ChunkState.size();
-    result.OwnedChunkNonces.reserve(result.OwnedChunks.size());
-    for (TChunkIdx chunkIdx : result.OwnedChunks) {
-        result.OwnedChunkNonces.push_back(ChunkState[chunkIdx].Nonce);
-    }
+    result.ChunkNonces = ChunkNonces;
 }
 
 // A reservation that was never committed leaves no persistent trace: WriteSysLogRestorePoint
@@ -2576,7 +2589,7 @@ ui32 TPDisk::ReleaseUncommittedChunks(TOwner owner) {
             // gets a freshly allocated nonce range, so whatever was written here stops validating.
             state.Nonce = 0;
             state.CurrentNonce = 0;
-            Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+            ReturnChunkToFreeList(owner, chunkIdx);
         }
         ++released;
     }
@@ -2976,7 +2989,7 @@ void TPDisk::ForceDeleteChunk(TChunkIdx chunkIdx) {
         state.CommitState = TChunkState::FREE;
         state.Nonce = 0;
         state.CurrentNonce = 0;
-        Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+        ReturnChunkToFreeList(owner, chunkIdx);
         break;
     case TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS:
         [[fallthrough]];

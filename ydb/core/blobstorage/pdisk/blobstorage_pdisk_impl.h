@@ -8,6 +8,7 @@
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
+#include "blobstorage_pdisk_chunk_nonces.h"
 #include "blobstorage_pdisk_format_context.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_free_chunks.h"
@@ -451,6 +452,8 @@ public:
     // Format context and chunk nonces for an owner that builds and checks its sectors itself.
     // StateMutex must be held by the caller.
     void FillFormatContext(NPDisk::TEvYardInitResult &result);
+    std::shared_ptr<TChunkNonces> ChunkNonces;
+    void ReturnChunkToFreeList(TOwner owner, TChunkIdx chunkIdx);
     TFormatContextPtr FormatContextCache; // created on first use; the format does not change afterwards
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);

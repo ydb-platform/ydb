@@ -66,7 +66,7 @@ namespace NKikimr {
         {
             Y_ABORT_UNLESS(chunkIdx != 0);
             if (pdiskCtx && static_cast<i64>(pdiskCtx->EnableSectorPreparation) != 0 && pdiskCtx->FormatContext
-                    && !pdiskCtx->FormatContext->IsPlainDataChunks()
+                    && pdiskCtx->ChunkNonces && !pdiskCtx->FormatContext->IsPlainDataChunks()
                     && pdiskCtx->FormatContext->GetSectorPayloadSize() == AppendBlockSize
                     && BaseOffset % AppendBlockSize == 0 && WriteBlockSize) {
                 if (const std::optional<ui64> nonce = pdiskCtx->ChunkNonces->Get(chunkIdx)) {

@@ -18,23 +18,24 @@ Y_UNIT_TEST_SUITE(TVDiskSectorSealing) {
         explicit TFixture(bool encrypt) {
             Format.Clear(encrypt);
             Format.ChunkKey = 0xFEDCBA9876543210ull;
-            PDiskCtx = std::make_shared<TPDiskCtx>(nullptr, TActorId(), TString(), ChunkIdx + 1);
+            const std::shared_ptr<NPDisk::TChunkNonces> nonces = std::make_shared<NPDisk::TChunkNonces>(ChunkIdx + 1);
+            nonces->Set(ChunkIdx, ChunkNonce);
+            PDiskCtx = std::make_shared<TPDiskCtx>(nullptr, TActorId(), TString(), nonces);
             PDiskCtx->FormatContext = std::make_shared<const NPDisk::TFormatContext>(Format, encrypt);
-            PDiskCtx->ChunkNonces->Record({ChunkIdx}, {ChunkNonce});
             PDiskCtx->EnableSectorPreparation = TControlWrapper(1, 0, 1);
         }
     };
 
     Y_UNIT_TEST(NonceReplacementAndFallback) {
-        TChunkNonces table(4);
+        NPDisk::TChunkNonces table(4);
         UNIT_ASSERT(!table.Get(2));
-        table.Record({2, 3}, {11, 22});
-        table.Forget(2);
+        table.Set(2, 11);
+        table.Set(3, 22);
+        table.Set(2, 0);
         UNIT_ASSERT(!table.Get(2));
         UNIT_ASSERT_VALUES_EQUAL(*table.Get(3), 22);
-        table.Record({2}, {33});
+        table.Set(2, 33);
         UNIT_ASSERT_VALUES_EQUAL(*table.Get(2), 33);
-        table.Record({4}, {44});
         UNIT_ASSERT(!table.Get(4));
     }
 

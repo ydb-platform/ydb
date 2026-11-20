@@ -5,6 +5,7 @@
 #include <ydb/core/util/interval_set.h>
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_compaction_arbiter.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_nonces.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_format_context.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_quota_record.h>
@@ -86,7 +87,7 @@ struct TPDiskMockState::TImpl {
     NPDisk::EDeviceType DeviceType;
     std::shared_ptr<TMetadata> Metadata = std::make_shared<TMetadata>();
     // With FormatContext: the nonce of each chunk, set when it is allocated, as TPDisk::AllocateChunkForOwner does.
-    std::unordered_map<TChunkIdx, ui64> ChunkNonces;
+    std::shared_ptr<NPDisk::TChunkNonces> ChunkNonces;
     ui64 NextChunkNonce = 1;
     // TEvChangeExpectedSlotCount
     ui32 ExpectedSlotCount = 0;
@@ -145,6 +146,7 @@ struct TPDiskMockState::TImpl {
         , NextFreeChunk(1)
         , StatusFlags(NPDisk::TStatusFlags{})
         , DeviceType(deviceType)
+        , ChunkNonces(sectorFormat ? std::make_shared<NPDisk::TChunkNonces>(TotalChunks) : nullptr)
         , SpaceColorPolicy(spaceColorPolicy)
     {
         switch (SpaceColorPolicy) {
@@ -209,7 +211,7 @@ struct TPDiskMockState::TImpl {
         Y_ABORT_UNLESS(chunkIdx != TotalChunks);
 
         if (FormatContext) { // a nonce for every sector of the chunk
-            ChunkNonces[chunkIdx] = NextChunkNonce;
+            ChunkNonces->Set(chunkIdx, NextChunkNonce);
             NextChunkNonce += RawChunkSize / SectorSize;
         }
 
@@ -247,9 +249,9 @@ struct TPDiskMockState::TImpl {
     }
 
     ui64 GetChunkNonce(TChunkIdx chunkIdx) const {
-        const auto it = ChunkNonces.find(chunkIdx);
-        Y_VERIFY_S(it != ChunkNonces.end(), "ChunkIdx# " << chunkIdx);
-        return it->second;
+        const std::optional<ui64> nonce = ChunkNonces->Get(chunkIdx);
+        Y_VERIFY_S(nonce, "ChunkIdx# " << chunkIdx);
+        return *nonce;
     }
 
     void AdjustRefs() {
@@ -335,12 +337,29 @@ struct TPDiskMockState::TImpl {
         return std::make_tuple(ownerId, &it->second);
     }
 
+    void CopyChunkNoncesFrom(const TImpl& source) {
+        if (ChunkNonces) {
+            for (ui32 idx = 0; idx < TotalChunks; ++idx) {
+                ChunkNonces->Set(idx, source.ChunkNonces->Get(idx).value_or(0));
+            }
+        }
+    }
+
+    void ReleaseChunks(std::set<ui32>& chunks) {
+        if (ChunkNonces) {
+            for (TChunkIdx idx : chunks) {
+                ChunkNonces->Set(idx, 0);
+            }
+        }
+        FreeChunks.merge(chunks);
+    }
+
     void ResetOwnerReservedChunks(TOwner& owner) {
         for (const TChunkIdx chunkIdx : owner.ReservedChunks) {
             owner.ChunkData.erase(chunkIdx);
         }
 
-        FreeChunks.merge(owner.ReservedChunks);
+        ReleaseChunks(owner.ReservedChunks);
         AdjustFreeChunks();
     }
 
@@ -355,6 +374,9 @@ struct TPDiskMockState::TImpl {
         const ui32 num = owner.ReservedChunks.erase(chunkIdx) + owner.CommittedChunks.erase(chunkIdx);
         Y_VERIFY(num);
         owner.ChunkData.erase(chunkIdx);
+        if (ChunkNonces) {
+            ChunkNonces->Set(chunkIdx, 0);
+        }
         const bool inserted = FreeChunks.insert(chunkIdx).second;
         Y_ABORT_UNLESS(inserted);
 
@@ -548,6 +570,10 @@ ui32 TPDiskMockState::GetNumActiveSlots() const {
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
     auto res = MakeIntrusive<TPDiskMockState>(std::make_unique<TImpl>(*Impl));
     res->Impl->Metadata = std::make_shared<TMetadata>(*Impl->Metadata);
+    if (Impl->ChunkNonces) {
+        res->Impl->ChunkNonces = std::make_shared<NPDisk::TChunkNonces>(Impl->TotalChunks);
+        res->Impl->CopyChunkNoncesFrom(*Impl);
+    }
     res->Impl->AdjustRefs();
     return res;
 }
@@ -751,11 +777,7 @@ public:
             res->DiskFormat = NPDisk::MakeDiskFormatCopy(format);
             if (Impl.FormatContext) {
                 res->FormatContext = Impl.FormatContext;
-                res->NonceTableSize = Impl.TotalChunks;
-                res->OwnedChunkNonces.reserve(res->OwnedChunks.size());
-                for (const TChunkIdx chunkIdx : res->OwnedChunks) {
-                    res->OwnedChunkNonces.push_back(Impl.GetChunkNonce(chunkIdx));
-                }
+                res->ChunkNonces = Impl.ChunkNonces;
             }
 
         } else {
@@ -816,8 +838,8 @@ public:
                 break;
             } else {
                 owner.Slain = true;
-                Impl.FreeChunks.merge(owner.ReservedChunks);
-                Impl.FreeChunks.merge(owner.CommittedChunks);
+                Impl.ReleaseChunks(owner.ReservedChunks);
+                Impl.ReleaseChunks(owner.CommittedChunks);
                 Impl.AdjustFreeChunks();
                 owner.ChunkData.clear();
                 owner.Log.clear();
@@ -1497,8 +1519,8 @@ public:
                 << owner.OwnerRound << " race detected";
         } else {
             owner.Slain = true;
-            Impl.FreeChunks.merge(owner.ReservedChunks);
-            Impl.FreeChunks.merge(owner.CommittedChunks);
+            Impl.ReleaseChunks(owner.ReservedChunks);
+            Impl.ReleaseChunks(owner.CommittedChunks);
             Impl.AdjustFreeChunks();
             owner.ChunkData.clear();
             owner.Log.clear();
@@ -1900,7 +1922,7 @@ public:
         Impl.Blocks = State->Impl->Blocks;
         Impl.Owners = State->Impl->Owners;
         Impl.PDiskGuid = State->Impl->PDiskGuid;
-        Impl.ChunkNonces = State->Impl->ChunkNonces;
+        Impl.CopyChunkNoncesFrom(*State->Impl);
         Impl.NextChunkNonce = State->Impl->NextChunkNonce;
     }
 

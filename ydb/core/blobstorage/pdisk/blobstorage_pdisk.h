@@ -34,6 +34,7 @@ class IUringRouterClient;
 
 using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
 
+class TChunkNonces;
 class TFormatContext; // blobstorage_pdisk_format_context.h
 using TFormatContextPtr = std::shared_ptr<const TFormatContext>;
 
@@ -209,10 +210,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TStatusFlags StatusFlags;
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
-    // Nonce of each chunk in OwnedChunks, same order. Sector i of a chunk has nonce chunk nonce + i.
-    // Empty for plain data chunks.
-    TVector<ui64> OwnedChunkNonces;
-    ui32 NonceTableSize = 0; // number of addressable chunk indices for sector preparation
+    std::shared_ptr<const TChunkNonces> ChunkNonces; // shared by all owners of this PDisk
     // For building and checking data sectors outside the PDisk (PreformattedSectors writes, RawSectors
     // reads). Null for plain data chunks.
     TFormatContextPtr FormatContext;

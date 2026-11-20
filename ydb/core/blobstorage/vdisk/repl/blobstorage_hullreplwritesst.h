@@ -150,7 +150,6 @@ namespace NKikimr {
                 return;
             }
 
-            ReplCtx->PDiskCtx->ChunkNonces->Record(ev->ChunkIds, ev->ChunkNonces);
             for (ui32 chunkId : ev->ChunkIds) {
                 ReservedChunks.push_back(chunkId);
             }

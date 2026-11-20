@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
         ui64 newNonce = 0;
         std::vector<bool> preparedWrites;
         bool sawRawRead = false;
-        // The two real reservation handlers share the live VDisk nonce table.
+        // Observe both reservations and verify the new nonce on subsequent I/O.
         auto fixtureFilter = std::move(env.Env.Runtime->FilterFunction);
         env.Env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {

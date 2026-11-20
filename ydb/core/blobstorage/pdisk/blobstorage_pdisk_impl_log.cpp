@@ -1471,7 +1471,7 @@ void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
         Y_VERIFY_S(state.OwnerId == owner, PCtx->PDiskLogPrefix); // TODO DELETE
         state.OwnerId = OwnerUnallocated;
         state.CommitState = TChunkState::FREE;
-        Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+        ReturnChunkToFreeList(owner, chunkIdx);
         break;
     case TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE:
         // Mark chunk as quarantine, so it will be released through default quarantine way

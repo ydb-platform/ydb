@@ -66,7 +66,7 @@ namespace NKikimr {
 
     bool PrepareChunkWriteSectors(NPDisk::TEvChunkWrite& ev, const TPDiskCtx& pdiskCtx) {
         const bool enabled = static_cast<i64>(pdiskCtx.EnableSectorPreparation) != 0;
-        if (!enabled || !pdiskCtx.FormatContext || ev.PreformattedSectors || !ev.ChunkIdx || !ev.PartsPtr) {
+        if (!enabled || !pdiskCtx.ChunkNonces || !pdiskCtx.FormatContext || ev.PreformattedSectors || !ev.ChunkIdx || !ev.PartsPtr) {
             return false;
         }
         const NPDisk::TFormatContext& format = *pdiskCtx.FormatContext;

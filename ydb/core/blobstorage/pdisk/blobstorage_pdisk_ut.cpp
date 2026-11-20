@@ -805,8 +805,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const TSet<TChunkIdx> reserved = vdisk.Chunks[EChunkState::RESERVED];
         const TChunkIdx sealedChunk = *reserved.begin();
         const TChunkIdx pdiskChunk = *reserved.rbegin();
-        const ui64 sealedNonce = vdisk.ChunkNonces.at(sealedChunk);
-        const ui64 pdiskNonce = vdisk.ChunkNonces.at(pdiskChunk);
+        const ui64 sealedNonce = vdisk.ChunkNonces->Get(sealedChunk).value();
+        const ui64 pdiskNonce = vdisk.ChunkNonces->Get(pdiskChunk).value();
 
         // 300 sectors from sector 2 on, the last one half full
         const ui32 firstSector = 2;
@@ -929,7 +929,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const NPDisk::TOwnerRound ownerRound = vdisk.PDiskParams->OwnerRound;
         vdisk.ReserveChunk();
         const TChunkIdx chunkIdx = *vdisk.Chunks[EChunkState::RESERVED].begin();
-        const ui64 chunkNonce = vdisk.ChunkNonces.at(chunkIdx);
+        const ui64 chunkNonce = vdisk.ChunkNonces->Get(chunkIdx).value();
 
         const ui32 writes = 4;
         const ui32 sectors = 1000; // many Forseti pieces each
@@ -1089,7 +1089,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.ReserveChunk();
         const auto format = vdisk.FormatContext;
         const auto chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
-        const ui64 nonce = vdisk.ChunkNonces.at(chunk);
+        const ui64 nonce = vdisk.ChunkNonces->Get(chunk).value();
         const ui32 sectorSize = format->GetSectorSize();
         readBuffer = TRcBuf::UninitializedPageAligned(sectorSize);
         const TString payload = PrepareData(format->GetSectorPayloadSize());

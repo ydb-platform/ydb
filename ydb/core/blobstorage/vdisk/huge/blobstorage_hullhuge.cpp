@@ -347,7 +347,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_VERIFY_S(ev->Get()->ChunkIds.size() == 1, HugeKeeperCtx->VCtx->VDiskLogPrefix);
             ChunkId = ev->Get()->ChunkIds.front();
-            HugeKeeperCtx->PDiskCtx->ChunkNonces->Record(ev->Get()->ChunkIds, ev->Get()->ChunkNonces);
             Lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvNotifyChunksDeleted(Lsn, ev->Get()->ChunkIds));
 

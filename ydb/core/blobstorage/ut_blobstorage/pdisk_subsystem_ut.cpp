@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_format_context.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/library/pdisk_io/aio.h>
 
@@ -736,6 +737,7 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
         const NPDisk::TOwnerRound OwnerRound = 1;
         ui32 AppendBlockSize = 0;
         NPDisk::TFormatContextPtr FormatContext;
+        std::shared_ptr<const NPDisk::TChunkNonces> ChunkNonces;
 
         explicit TMockOwner(bool sectorFormat, TPDiskMockState::ESpaceColorPolicy policy = {})
             : State(MakeIntrusive<TPDiskMockState>(1u, 1u, Guid, 32ull << 30, 128u << 20, false, NPDisk::DEVICE_TYPE_NVME,
@@ -749,6 +751,7 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
             Owner = res->Get()->PDiskParams->Owner;
             AppendBlockSize = res->Get()->PDiskParams->AppendBlockSize;
             FormatContext = res->Get()->FormatContext;
+            ChunkNonces = res->Get()->ChunkNonces;
         }
 
         void Send(IEventBase *ev) {
@@ -778,10 +781,53 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
     Y_UNIT_TEST(PlainMockHasNoFormatContext) {
         TMockOwner mock(false);
         UNIT_ASSERT(!mock.FormatContext);
+        UNIT_ASSERT(!mock.ChunkNonces);
         UNIT_ASSERT_VALUES_EQUAL(mock.AppendBlockSize, 4096);
         const auto [chunkIdx, nonce] = mock.Reserve();
         UNIT_ASSERT(chunkIdx);
         UNIT_ASSERT_VALUES_EQUAL(nonce, 0); // no nonces for plain data chunks
+    }
+
+    Y_UNIT_TEST(ChunkNoncesSharedAcrossOwners) {
+        TMockOwner first(true);
+        first.Send(new NPDisk::TEvYardInit(first.OwnerRound, TVDiskID(TGroupId::FromValue(2), 1, 0, 0, 0),
+            TMockOwner::Guid, first.Edge));
+        const TAutoPtr<TEventHandle<NPDisk::TEvYardInitResult>> init = first.Wait<NPDisk::TEvYardInitResult>();
+        UNIT_ASSERT_VALUES_EQUAL(init->Get()->Status, NKikimrProto::OK);
+        const NPDisk::TOwner second = init->Get()->PDiskParams->Owner;
+        UNIT_ASSERT(second != first.Owner);
+        UNIT_ASSERT(first.ChunkNonces && first.ChunkNonces == init->Get()->ChunkNonces);
+        TPDiskCtx reader(init->Get()->PDiskParams, first.PDisk, TString(), init->Get()->ChunkNonces);
+        reader.FormatContext = init->Get()->FormatContext;
+        reader.EnableSectorPreparation = TControlWrapper(0, 0, 1);
+
+        const auto [idx, oldNonce] = first.Reserve();
+        UNIT_ASSERT(oldNonce && reader.ChunkNonces->Get(idx) == oldNonce);
+        first.Send(new NPDisk::TEvChunkForget(first.Owner, first.OwnerRound, {idx}));
+        UNIT_ASSERT_VALUES_EQUAL(first.Wait<NPDisk::TEvChunkForgetResult>()->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(!reader.ChunkNonces->Get(idx));
+        first.Send(new NPDisk::TEvChunkReserve(second, first.OwnerRound, 1));
+        const TAutoPtr<TEventHandle<NPDisk::TEvChunkReserveResult>> reserve = first.Wait<NPDisk::TEvChunkReserveResult>();
+        UNIT_ASSERT_VALUES_EQUAL(reserve->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(reserve->Get()->ChunkIds == TVector<TChunkIdx>{idx});
+        const ui64 nextNonce = reader.ChunkNonces->Get(idx).value_or(0);
+        UNIT_ASSERT(nextNonce && nextNonce != oldNonce);
+
+        const TString payload = "new owner";
+        std::unique_ptr<NPDisk::TEvChunkWrite> write = std::make_unique<NPDisk::TEvChunkWrite>(second,
+            first.OwnerRound, idx, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, true, 0);
+        UNIT_ASSERT(!PrepareChunkWriteSectors(*write, reader));
+        reader.EnableSectorPreparation = 1;
+        UNIT_ASSERT(PrepareChunkWriteSectors(*write, reader));
+        UNIT_ASSERT_VALUES_EQUAL(write->FirstSectorNonce, nextNonce);
+        first.Send(write.release());
+        UNIT_ASSERT_VALUES_EQUAL(first.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::OK);
+        first.Send(new NPDisk::TEvChunkRead(second, first.OwnerRound, idx, 0, payload.size(), 0, nullptr));
+        const TAutoPtr<TEventHandle<NPDisk::TEvChunkReadResult>> read = first.Wait<NPDisk::TEvChunkReadResult>();
+        UNIT_ASSERT_VALUES_EQUAL(read->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(read->Get()->Data.IsReadable());
+        const TRcBuf data = read->Get()->Data.ToString();
+        UNIT_ASSERT_VALUES_EQUAL(TString(data.data(), data.size()), payload);
     }
 
     Y_UNIT_TEST(PreformattedSectorsAndRawSectorsRead) {
@@ -890,7 +936,7 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
         TAutoPtr<TEventHandle<NPDisk::TEvYardInitResult>> init = mock.Wait<NPDisk::TEvYardInitResult>();
         UNIT_ASSERT_VALUES_EQUAL(init->Get()->Status, NKikimrProto::OK);
         UNIT_ASSERT(init->Get()->OwnedChunks == TVector<TChunkIdx>{chunkIdx});
-        UNIT_ASSERT(init->Get()->OwnedChunkNonces == TVector<ui64>{chunkNonce});
+        UNIT_ASSERT_VALUES_EQUAL(init->Get()->ChunkNonces->Get(chunkIdx).value_or(0), chunkNonce);
     }
 
     // A sector whose hash was salted with blob id A checks out only when read with A, as on a real PDisk: the mock

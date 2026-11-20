@@ -646,7 +646,6 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
 
         auto msg = ev->Get();
         Y_VERIFY_S(msg->ChunkIds.size() == 1, VCtx->VDiskLogPrefix);
-        PDiskCtx->ChunkNonces->Record(msg->ChunkIds, msg->ChunkNonces);
         auto chunkId = msg->ChunkIds.front();
         auto type = (EWriterType)ev->Cookie;
 

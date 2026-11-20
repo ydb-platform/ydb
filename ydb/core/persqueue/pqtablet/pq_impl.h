@@ -44,6 +44,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     bool HandleHook(STFUNC_SIG) override;
 
     bool IsTopicMutateDisabled(const TActorContext& ctx) const;
+    // Client will get UNAVAILABLE error code
+    bool IsWriteUnavailable() const;
+    // Client will get BAD_REQUEST error code
+    bool IsWriteProhibited() const;
 
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
 

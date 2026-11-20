@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    partition_stats.h
     validation.cpp
 )
 

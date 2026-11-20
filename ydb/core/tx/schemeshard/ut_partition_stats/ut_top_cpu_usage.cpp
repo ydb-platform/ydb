@@ -1,6 +1,9 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/common/partition_stats.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/string/builder.h>
+#include <util/string/printf.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -8,12 +11,12 @@ using namespace NSchemeShard;
 namespace {
 
 /**
- * Create the TPartitionStats::TTopCpuUsage container will all times set to unique values.
+ * Create the TTopCpuUsage container will all times set to unique values.
  *
  * @return The CPU usage container with all times set to unique values.
  */
-TPartitionStats::TTopCpuUsage MakeTopCpuUsageWithUniqueTimes() {
-    TPartitionStats::TTopCpuUsage top_cpu_usage;
+TTopCpuUsage MakeTopCpuUsageWithUniqueTimes() {
+    TTopCpuUsage top_cpu_usage;
 
     for (ui64 i = 0; i < top_cpu_usage.BucketUpdateTimes.size(); ++i) {
         // Set older time stamps to higher CPU usage values to make it easier
@@ -27,13 +30,13 @@ TPartitionStats::TTopCpuUsage MakeTopCpuUsageWithUniqueTimes() {
 }
 
 /**
- * Convert the TPartitionStats::TTopCpuUsage container to a pretty-printed string.
+ * Convert the TTopCpuUsage container to a pretty-printed string.
  *
  * @param[in] top_cpu_usage The container to convert to a string
  *
  * @return The corresponding pretty-printed string
  */
-TString PrintTopCpuUsage(const TPartitionStats::TTopCpuUsage& top_cpu_usage) {
+TString PrintTopCpuUsage(const TTopCpuUsage& top_cpu_usage) {
     auto builder = TStringBuilder() << "\nTopCpuUsage = [\n";
 
     for (ui64 i = 0; i < top_cpu_usage.Buckets.size(); ++i) {
@@ -50,17 +53,17 @@ TString PrintTopCpuUsage(const TPartitionStats::TTopCpuUsage& top_cpu_usage) {
 } // namespace <anonymous>
 
 /**
- * Unit tests for the TPartitionStats::TTopCpuUsage class.
+ * Unit tests for the TTopCpuUsage class.
  */
 Y_UNIT_TEST_SUITE(TSchemeShardPartitionStatsTopCpuUsageTest) {
     /**
      * Verify that TTopCpuUsage::Update() works correctly.
      */
     Y_UNIT_TEST(Update) {
-        TPartitionStats::TTopCpuUsage top_cpu_usage1 = MakeTopCpuUsageWithUniqueTimes();
+        TTopCpuUsage top_cpu_usage1 = MakeTopCpuUsageWithUniqueTimes();
 
         // Unset (== 0) and smaller values should be ignore, larger values should be kept
-        TPartitionStats::TTopCpuUsage top_cpu_usage2;
+        TTopCpuUsage top_cpu_usage2;
 
         top_cpu_usage2.BucketUpdateTimes[1] = TInstant::MicroSeconds(2001);
         top_cpu_usage2.BucketUpdateTimes[2] = TInstant::MicroSeconds(202);
@@ -88,7 +91,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardPartitionStatsTopCpuUsageTest) {
      * if the given CPU usage percentage does not satisfy any CPU usage threshold.
      */
     Y_UNIT_TEST(UpdateCpuUsage_NoBuckets) {
-        TPartitionStats::TTopCpuUsage top_cpu_usage = MakeTopCpuUsageWithUniqueTimes();
+        TTopCpuUsage top_cpu_usage = MakeTopCpuUsageWithUniqueTimes();
         top_cpu_usage.UpdateCpuUsage(10000 /* 1% */, TInstant::MicroSeconds(123456));
 
         std::array<TInstant, 5> expectedTimes = {{
@@ -111,7 +114,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardPartitionStatsTopCpuUsageTest) {
      * if the given CPU usage percentage satisfies only some of the CPU usage thresholds.
      */
     Y_UNIT_TEST(UpdateCpuUsage_SomeBuckets) {
-        TPartitionStats::TTopCpuUsage top_cpu_usage(MakeTopCpuUsageWithUniqueTimes());
+        TTopCpuUsage top_cpu_usage(MakeTopCpuUsageWithUniqueTimes());
         top_cpu_usage.UpdateCpuUsage(150000 /* 15% */, TInstant::MicroSeconds(123456));
 
         std::array<TInstant, 5> expectedTimes = {{
@@ -134,7 +137,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardPartitionStatsTopCpuUsageTest) {
      * if the given CPU usage percentage satisfies all CPU usage thresholds.
      */
     Y_UNIT_TEST(UpdateCpuUsage_AllBuckets) {
-        TPartitionStats::TTopCpuUsage top_cpu_usage = MakeTopCpuUsageWithUniqueTimes();
+        TTopCpuUsage top_cpu_usage = MakeTopCpuUsageWithUniqueTimes();
         top_cpu_usage.UpdateCpuUsage(310000 /* 31% */, TInstant::MicroSeconds(123456));
 
         std::array<TInstant, 5> expectedTimes = {{
@@ -157,7 +160,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardPartitionStatsTopCpuUsageTest) {
      * for all threshold values.
      */
     Y_UNIT_TEST(GetLatestMaxCpuUsagePercent) {
-        TPartitionStats::TTopCpuUsage top_cpu_usage = MakeTopCpuUsageWithUniqueTimes();
+        TTopCpuUsage top_cpu_usage = MakeTopCpuUsageWithUniqueTimes();
 
         for (const auto [since, expectedCpuUsage] : std::array<std::pair<ui64, ui32>, 6>{
             std::make_pair(1005, 2), // The default value - no bucket for this time stamp

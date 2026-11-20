@@ -3358,7 +3358,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         for (const TString uri : {"/api/walle/v11/tasks", "/api/walle/v11/tasks?dry_run=true"}) {
             const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri, MakeWalleDrainDataJson(nodeId));
-            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 503"), response);
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
             UNIT_ASSERT_C(response.Contains("CMS does not support drain_data"), response);
         }
         UNIT_ASSERT_VALUES_EQUAL(versionResponses, 2);
@@ -3450,7 +3450,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TAutoPtr<IEventHandle> handle;
         const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
         UNIT_ASSERT(response);
-        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 503"), response->Answer);
+        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 400"), response->Answer);
         UNIT_ASSERT_C(response->Answer.Contains("CMS does not support drain_data"), response->Answer);
         env.CheckWalleListTasks(0);
         env.CheckListPermissions(WALLE_CMS_USER, 0);

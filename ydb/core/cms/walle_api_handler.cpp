@@ -131,7 +131,7 @@ private:
 
         const auto &rec = ev->Get()->Record;
         if (rec.GetVersion() < CMS_INTERFACE_WALLE_DRAIN_DATA) {
-            ReplyWithError("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support drain_data", ctx);
+            ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_data", ctx);
             return;
         }
 

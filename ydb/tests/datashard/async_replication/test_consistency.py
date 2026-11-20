@@ -55,6 +55,35 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
         assert wait_for(completed, timeout_seconds=100), f"{operation} did not finish: {result}"
         self.run_cli(cluster, "operation", "forget", operation_id)
 
+    def export_replication_snapshot(self, destination, replication_path, table_path):
+        source_cluster, destination_cluster = self.clusters
+        table_name = table_path.rsplit("/", 1)[1]
+
+        def changefeed_ready():
+            description = self.describe(destination_cluster, replication_path)
+            assert "error" not in description, description
+            items = description.get("items", [])
+            if "paused" not in description or len(items) != 1:
+                return False
+            name = items[0].get("source_changefeed_name")
+            table = self.describe(source_cluster, table_path)
+            if not any(feed["name"] == name and feed["state"] == "STATE_ENABLED"
+                       for feed in table.get("changefeeds", [])):
+                return False
+            topic = self.describe(source_cluster, f"{table_path}/{name}")
+            return any(consumer["name"] == "replicationConsumer" for consumer in topic.get("consumers", []))
+
+        assert wait_for(changefeed_ready, timeout_seconds=100), "Source changefeed is not ready for backup"
+        assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \
+            "Destination placeholder was not created"
+        bucket = f"replication-{self.hash_short}"
+        boto3.client(
+            "s3", endpoint_url=os.environ["S3_ENDPOINT"],
+            aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
+        ).create_bucket(Bucket=bucket)
+        self.run_s3_operation(source_cluster, "export", bucket, table_path, table_name)
+        return bucket
+
     @pytest.mark.parametrize("from_backup", [False, True], ids=["initial_scan", "backup"])
     @pytest.mark.parametrize("consistency_level", ["ROW", "GLOBAL"])
     def test_consistency(self, from_backup, consistency_level):
@@ -91,29 +120,7 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
         """)
 
         if from_backup:
-            def changefeed_ready():
-                description = self.describe(destination_cluster, replication_path)
-                assert "error" not in description, description
-                items = description.get("items", [])
-                if "paused" not in description or len(items) != 1:
-                    return False
-                name = items[0].get("source_changefeed_name")
-                table = self.describe(source_cluster, table_path)
-                if not any(feed["name"] == name and feed["state"] == "STATE_ENABLED"
-                           for feed in table.get("changefeeds", [])):
-                    return False
-                topic = self.describe(source_cluster, f"{table_path}/{name}")
-                return any(consumer["name"] == "replicationConsumer" for consumer in topic.get("consumers", []))
-
-            assert wait_for(changefeed_ready, timeout_seconds=100), "Source changefeed is not ready for backup"
-            assert wait_for(lambda: DMLOperations(destination).table_exists(table_name), timeout_seconds=100), \
-                "Destination placeholder was not created"
-            bucket = f"replication-{self.hash_short}"
-            boto3.client(
-                "s3", endpoint_url=os.environ["S3_ENDPOINT"],
-                aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
-            ).create_bucket(Bucket=bucket)
-            self.run_s3_operation(source_cluster, "export", bucket, table_path, table_name)
+            bucket = self.export_replication_snapshot(destination, replication_path, table_path)
             # These changes must be recovered from CDC, since they are absent from the backup.
             write_rows(0, 25, "during_backup")
             self.run_s3_operation(destination_cluster, "import", bucket, table_name, table_path)
@@ -156,6 +163,8 @@ class TestAsyncReplicationConsistency(MulticlusterTestBase):
 class TestAuthenticationRecovery(MulticlusterTestBase):
     run_cli = TestAsyncReplicationConsistency.run_cli
     describe = TestAsyncReplicationConsistency.describe
+    run_s3_operation = TestAsyncReplicationConsistency.run_s3_operation
+    export_replication_snapshot = TestAsyncReplicationConsistency.export_replication_snapshot
 
     @classmethod
     def get_extra_grpc_services(cls):
@@ -175,8 +184,12 @@ class TestAuthenticationRecovery(MulticlusterTestBase):
         cluster.start()
         return cluster
 
-    @pytest.mark.parametrize("consistency_level", ["ROW", "GLOBAL"])
-    def test_schema_secret_change_recovers_without_pause(self, consistency_level):
+    @pytest.mark.parametrize("consistency_level, from_backup", [
+        pytest.param("ROW", False, id="ROW"),
+        pytest.param("GLOBAL", False, id="GLOBAL"),
+        pytest.param("GLOBAL", True, id="GLOBAL-backup-catchup"),
+    ])
+    def test_schema_secret_change_recovers_without_pause(self, consistency_level, from_backup):
         source_cluster, destination_cluster = self.clusters
         source = Query.create(self.get_database(), self.get_endpoint(source_cluster))
         destination = Query.create(self.get_database(), self.get_endpoint(destination_cluster))
@@ -194,9 +207,17 @@ class TestAuthenticationRecovery(MulticlusterTestBase):
             CREATE ASYNC REPLICATION `{replication}` FOR `{path}` AS `{path}` WITH (
                 CONNECTION_STRING='grpc://{self.get_endpoint(source_cluster)}/?database={self.get_database()}',
                 USER='{name}', PASSWORD_SECRET_PATH='{secret}',
+                INITIAL_SCAN={'FALSE' if from_backup else 'TRUE'},
                 CONSISTENCY_LEVEL='{consistency_level}'{interval})
         """)
         source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'initial');")
+        if from_backup:
+            source.query(f"UPSERT INTO `{path}` (key,value) VALUES (10u,'snapshot-delete');")
+            bucket = self.export_replication_snapshot(destination, replication, path)
+            # This prefix must arrive through CDC, not from the imported snapshot.
+            source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'prefix'), (11u,'prefix-delete');")
+            self.run_s3_operation(destination_cluster, "import", bucket, name, path)
+            destination.query(f"ALTER ASYNC REPLICATION `{replication}` SET (STATE='STANDBY');")
 
         def equal_rows():
             try:
@@ -219,12 +240,36 @@ class TestAuthenticationRecovery(MulticlusterTestBase):
 
         assert wait_for(equal_rows, timeout_seconds=120), "Initial rows did not arrive"
         original_identities = identities()
-        source.query(f"ALTER USER {name} PASSWORD '{new_password}';")
-        # All old destination tokens disappear, forcing a fresh Login with the stale secret.
-        for node in destination_cluster.nodes.values():
-            node.stop()
-        for node in destination_cluster.nodes.values():
-            node.start()
+        if from_backup:
+            assert "running" in self.describe(destination_cluster, replication)
+            prefix = [(1, 'prefix'), (10, 'snapshot-delete'), (11, 'prefix-delete')]
+            assert [(row.key, row.value) for row in destination.query(
+                f"SELECT * FROM `{path}` ORDER BY key;")] == prefix
+            try:
+                # Hold a catch-up boundary without changing the replication's requested state.
+                # Acknowledged SIGSTOP makes the following CDC tail deterministically pending.
+                for node in destination_cluster.nodes.values():
+                    node.freeze()
+                    pid, status = os.waitpid(node.pid, os.WUNTRACED)
+                    assert pid == node.pid and os.WIFSTOPPED(status), "Destination did not freeze"
+                source.query(f"UPSERT INTO `{path}` (key,value) VALUES (1u,'tail-update'), (20u,'tail-insert');")
+                source.query(f"DELETE FROM `{path}` WHERE key=10u;")
+                source.query(f"ALTER USER {name} PASSWORD '{new_password}';")
+                # kill() restarts the node. Do not unfreeze the old process: it could
+                # drain the tail using its still-valid token before the fresh Login.
+                for node in destination_cluster.nodes.values():
+                    node.kill()
+            finally:
+                for node in destination_cluster.nodes.values():
+                    if node.is_alive():
+                        node.unfreeze()
+        else:
+            source.query(f"ALTER USER {name} PASSWORD '{new_password}';")
+            # All old destination tokens disappear, forcing a fresh Login with the stale secret.
+            for node in destination_cluster.nodes.values():
+                node.stop()
+            for node in destination_cluster.nodes.values():
+                node.start()
         source.query(f"UPSERT INTO `{path}` (key,value) VALUES (2u,'while-failed');")
 
         def has_error():
@@ -235,7 +280,11 @@ class TestAuthenticationRecovery(MulticlusterTestBase):
 
         assert wait_for(has_error, timeout_seconds=120), "Rejected Login did not become public Error"
         error = self.describe(destination_cluster, replication)["error"]
+        assert "authentication" in str(error).lower(), error
         assert old_password not in str(error) and new_password not in str(error)
+        if from_backup:
+            assert [(row.key, row.value) for row in destination.query(
+                f"SELECT * FROM `{path}` ORDER BY key;")] == prefix, "Stale credentials delivered the pending tail"
         destination.query(f"ALTER SECRET `{secret}` WITH (value='{new_password}');")
         # Deliberately no ALTER REPLICATION / PAUSE / STANDBY here.
         assert wait_for(equal_rows, timeout_seconds=120), "Secret change did not recover backlog"

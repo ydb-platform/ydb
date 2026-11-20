@@ -733,9 +733,12 @@ namespace NKikimr {
                 ctx.Send(ev->Forward(SchedulerId));
             } else {
                 auto result = std::make_unique<TEvLocalStatusResult>();
-                // Includes the interval before the startup scheduler is created.
-                result->Record.SetReplicated(false);
-                result->Record.SetDurabilityReplicated(false);
+                // Read-only StandardMode has no scheduler; preserve Skeleton's status there.
+                // All other phases, including writable startup before scheduling, remain gated.
+                if (Phase != TPhaseVal::PhaseStandardMode || !SyncerCtx->Config->BaseInfo.ReadOnly) {
+                    result->Record.SetReplicated(false);
+                    result->Record.SetDurabilityReplicated(false);
+                }
                 NKikimrBlobStorage::TSyncerStatus *rec = result->Record.MutableSyncerStatus();
                 rec->SetPhase(Phase);
                 ctx.Send(ev->Sender, result.release());

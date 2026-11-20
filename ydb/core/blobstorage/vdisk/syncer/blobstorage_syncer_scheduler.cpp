@@ -548,6 +548,9 @@ namespace NKikimr {
             }
             GInfo = msg->NewInfo;
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
+            // Revalidate metadata coverage in the new group view. Matching slot numbers
+            // do not prove that the physical peers or realm roles stayed unchanged.
+            // Replication flags stay false until successful current-generation syncs restore coverage.
             MetadataSynced = TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(),
                 SyncerContext->VCtx->ShortSelfVDisk);
             UpdateMetadataSyncComplete();

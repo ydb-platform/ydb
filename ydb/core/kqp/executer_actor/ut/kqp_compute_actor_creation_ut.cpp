@@ -317,6 +317,7 @@ Y_UNIT_TEST_SUITE(KqpTaskPlacement) {
             }
             UNIT_ASSERT(nodes.contains(executer.NodeId()));
             UNIT_ASSERT(nodes.contains(peerId));
+            return true;
         });
     }
 }

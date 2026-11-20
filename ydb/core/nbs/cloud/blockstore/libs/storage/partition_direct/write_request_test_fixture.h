@@ -55,7 +55,8 @@ struct TWriteRequestTestFixture: public TBaseFixture
 
     TWriteRequestExecutorPtr CreateRequestExecutor(
         TRequestHeaders headers,
-        EWriteMode writeMode);
+        EWriteMode writeMode,
+        const TBlockChecksums& checksums = {});
 
     void RunScheduledHedge();
 };

@@ -73,7 +73,7 @@ class TMirrorCredentialsInitializer
             userToken,
             Database,
             ActorContext().ActorSystem(),
-            {.RetryPolicy = NSecret::MakeShortRetryPolicy()}
+            {.RetryPolicy = NSecret::ERetryPolicy::ShortRetries}
         );
         future.Subscribe([
             actorSystem = ActorContext().ActorSystem(),

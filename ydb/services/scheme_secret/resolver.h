@@ -14,12 +14,17 @@
 
 namespace NKikimr::NSecret {
 
-struct TDescribeSecretSettings {
-    IRetryPolicy<>::TPtr RetryPolicy;
+enum class ERetryPolicy {
+    ShortRetries,
+    LongRetries,
+    NoRetries
 };
 
-IRetryPolicy<>::TPtr MakeShortRetryPolicy();
-IRetryPolicy<>::TPtr MakeLongRetryPolicy();
+struct TDescribeSecretSettings {
+    // Common policy for SchemeShard and SchemeCache
+    ERetryPolicy RetryPolicy = ERetryPolicy::ShortRetries;
+
+};
 
 NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecret(
     const TVector<TString>& secretNames,

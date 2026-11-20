@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/federated_query
     ydb/core/testlib
     ydb/library/testlib/common
+    ydb/library/yql/udfs/digest
     ydb/library/yql/providers/s3/actors_factory
     yql/essentials/public/udf
     yql/essentials/udfs/common/datetime2

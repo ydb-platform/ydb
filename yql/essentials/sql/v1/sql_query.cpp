@@ -1,5 +1,6 @@
 #include "sql_query.h"
 
+#include "sql_checksum.h"
 #include "select_yql.h"
 #include "sql_expression.h"
 #include "sql_select.h"
@@ -2426,6 +2427,15 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             blocks.push_back(materializeNode);
             auto refNode = BuildYqlSubqueryRef(materializeNode, ref);
             PushNamedNode(intoPos, varName, refNode);
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore71: {
+            auto node = TChecksumTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core71().GetRule_checksum_table_stmt1());
+            if (!node) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

@@ -2665,18 +2665,25 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         auto dist = BuildTasks(queryText);
         AssertNoCrossNodeCopyChannels(dist);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 315);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 315);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 315);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 315);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 315);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 2);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 1);
+        TVector<std::pair<TStageId, ui32>>
+            tasksPerStage(dist.TasksPerStage.begin(), dist.TasksPerStage.end()),
+            expectedTasksPerStage {
+                { { 0, 0 }, 315 },
+                { { 0, 1 }, 315 },
+                { { 0, 2 }, 256 },
+                { { 0, 3 }, 315 },
+                { { 0, 4 }, 256 },
+                { { 0, 5 }, 315 },
+                { { 0, 6 }, 315 },
+                { { 0, 7 }, 256 },
+                { { 0, 8 },   2 },
+                { { 0, 9 }, 256 },
+                { { 0, 10 },  1 },
+            };
+        Sort(tasksPerStage, [](const auto& a, const auto& b) noexcept {
+            return std::pair { a.first.TxId, a.first.StageId } <  std::pair { b.first.TxId, b.first.StageId };
+        });
+        UNIT_ASSERT_VALUES_EQUAL(tasksPerStage, expectedTasksPerStage);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);

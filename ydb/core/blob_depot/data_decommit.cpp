@@ -278,6 +278,12 @@ namespace NKikimr::NBlobDepot {
             Become(&TThis::StateFunc);
         }
 
+        template<typename TEvent>
+        void SendBackingRequest(ui32 groupId, std::unique_ptr<TEvent> event, ui64 cookie) {
+            event->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
+            SendToBSProxy(SelfId(), groupId, event.release(), cookie);
+        }
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // RANGE QUERIES are for metadata only -- they scan not yet assimilated parts of the original group and do not
         // recover any data; thus they are IsIndexOnly and not MustRestoreFirst range queries
@@ -294,8 +300,7 @@ namespace NKikimr::NBlobDepot {
                 {"mustRestoreFirst", mustRestoreFirst});
             auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, Deadline, true);
             ev->Decommission = true;
-            ev->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
-            SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), mustRestoreFirst);
+            SendBackingRequest(Self->Config.GetVirtualGroupId(), std::move(ev), mustRestoreFirst);
             ++RangesInFlight;
         }
 
@@ -369,8 +374,7 @@ namespace NKikimr::NBlobDepot {
                     NKikimrBlobStorage::EGetHandleClass::FastRead, false /*mustRestoreFirst*/,
                     !mustRestoreFirst /*isIndexOnly*/);
                 ev->Decommission = true;
-                ev->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
-                SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), bytes);
+                SendBackingRequest(Self->Config.GetVirtualGroupId(), std::move(ev), bytes);
             }
         }
 
@@ -441,8 +445,7 @@ namespace NKikimr::NBlobDepot {
                     .WriteSource = TWriteSource::BlobDepotPut,
                     .DataKind = Ev->Get()->Record.GetDataKind(),
                 });
-                ev->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
-                SendToBSProxy(SelfId(), channel.GroupId, ev.release(), (ui64)keep | (ui64)doNotKeep << 1);
+                SendBackingRequest(channel.GroupId, std::move(ev), (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
                 Y_ABORT_UNLESS(inserted);
                 const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;

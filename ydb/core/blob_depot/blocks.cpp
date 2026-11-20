@@ -14,6 +14,7 @@ namespace NKikimr::NBlobDepot {
         const ui64 IssuerGuid;
         const std::optional<ui32> Version;
         const TWriteSource WriteSource;
+        const bool SkipBridgeAccountingForSubrequests;
         const TInstant Timestamp;
         std::unique_ptr<IEventHandle> Response;
         bool ProcessBlock = false;
@@ -23,7 +24,8 @@ namespace NKikimr::NBlobDepot {
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_UPDATE_BLOCK; }
 
         TTxUpdateBlock(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-                std::optional<ui32> version, TWriteSource writeSource, TInstant timestamp, std::unique_ptr<IEventHandle> response)
+                std::optional<ui32> version, TWriteSource writeSource, bool skipBridgeAccountingForSubrequests,
+                TInstant timestamp, std::unique_ptr<IEventHandle> response)
             : TTransactionBase(self)
             , TabletId(tabletId)
             , BlockedGeneration(blockedGeneration)
@@ -31,6 +33,7 @@ namespace NKikimr::NBlobDepot {
             , IssuerGuid(issuerGuid)
             , Version(version)
             , WriteSource(writeSource)
+            , SkipBridgeAccountingForSubrequests(skipBridgeAccountingForSubrequests)
             , Timestamp(timestamp)
             , Response(std::move(response))
         {}
@@ -107,7 +110,7 @@ namespace NKikimr::NBlobDepot {
                 TActivationContext::Send(Response.release());
             } else if (ProcessBlock) {
                 Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, IssuerGuid, Version,
-                    std::move(Response));
+                    SkipBridgeAccountingForSubrequests, std::move(Response));
             } else {
                 TActivationContext::Send(Response.release());
             }
@@ -204,6 +207,7 @@ namespace NKikimr::NBlobDepot {
         const ui32 NodeId;
         const ui64 IssuerGuid;
         const std::optional<ui32> Version;
+        const bool SkipBridgeAccountingForSubrequests;
         std::unique_ptr<IEventHandle> Response;
         ui32 BlocksPending = 0;
         ui32 RetryCount = 0;
@@ -218,13 +222,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         TBlockProcessorActor(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-                std::optional<ui32> version, std::unique_ptr<IEventHandle> response)
+                std::optional<ui32> version, bool skipBridgeAccountingForSubrequests, std::unique_ptr<IEventHandle> response)
             : Self(self)
             , TabletId(tabletId)
             , BlockedGeneration(blockedGeneration)
             , NodeId(nodeId)
             , IssuerGuid(issuerGuid)
             , Version(version)
+            , SkipBridgeAccountingForSubrequests(skipBridgeAccountingForSubrequests)
             , Response(std::move(response))
             , Token(Self->Token)
         {}
@@ -359,8 +364,10 @@ namespace NKikimr::NBlobDepot {
                 {"blockedGeneration", BlockedGeneration},
                 {"groupId", groupId},
                 {"issuerGuid", IssuerGuid});
-            SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
-                IssuerGuid, TWriteSource::BlobDepotBlock, Version), groupId);
+            auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, BlockedGeneration, TInstant::Max(), IssuerGuid,
+                TWriteSource::BlobDepotBlock, Version);
+            ev->IsProxySubrequest = SkipBridgeAccountingForSubrequests;
+            SendToBSProxy(SelfId(), groupId, ev.release(), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
@@ -516,9 +523,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId,
-            ui64 issuerGuid, std::optional<ui32> version, std::unique_ptr<IEventHandle> response) {
+            ui64 issuerGuid, std::optional<ui32> version, bool skipBridgeAccountingForSubrequests,
+            std::unique_ptr<IEventHandle> response) {
         Self->RegisterWithSameMailbox(new TBlockProcessorActor(Self, tabletId, blockedGeneration, nodeId, issuerGuid,
-            version, std::move(response)));
+            version, skipBridgeAccountingForSubrequests, std::move(response)));
     }
 
     void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
@@ -538,7 +546,7 @@ namespace NKikimr::NBlobDepot {
             Self->Execute(std::make_unique<TTxUpdateBlock>(Self, tabletId, record.GetBlockedGeneration(),
                 agent.Connection->NodeId, record.GetIssuerGuid(),
                 record.HasVersion() ? std::optional<ui32>(record.GetVersion()) : std::nullopt, writeSource,
-                TActivationContext::Now(), std::move(response)));
+                record.GetSkipBridgeAccountingForSubrequests(), TActivationContext::Now(), std::move(response)));
         }
 
         TActivationContext::Send(response.release()); // not sent if the request got processed and response now is nullptr

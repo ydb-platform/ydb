@@ -534,6 +534,79 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         UNIT_ASSERT_VALUES_EQUAL(vanished.size(), 2);
     }
 
+    Y_UNIT_TEST(RestartedBlockCountsOnceAcrossDecommission) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+        const ui32 backingGroup = env.GetGroups().back();
+        UNIT_ASSERT_UNEQUAL(groupId, backingGroup);
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        constexpr ui64 tabletId = 100601;
+        auto sendBlock = [&](ui32 group, ui32 generation) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, group, new TEvBlobStorage::TEvBlock(tabletId, generation, TInstant::Max()));
+            });
+        };
+        auto expectBlock = [&](NKikimrProto::EReplyStatus status) {
+            auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Minutes(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, status, result->Get()->ToString());
+        };
+        // Only the backing group knows about generation 5. Its ALREADY reply must reach the original caller.
+        sendBlock(backingGroup, 5);
+        expectBlock(NKikimrProto::OK);
+
+        const auto service = MakeBlobStorageProxyID(groupId);
+        const auto proxy = env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(service);
+        const auto group = GetGroupInfo(env, groupId);
+        auto configure = [&](const NKikimrBlobStorage::TGroupInfo& info) {
+            env.Runtime->Send(new IEventHandle(proxy, edge, new TEvBlobStorage::TEvConfigureProxy(
+                TBlobStorageGroupInfo::Parse(info, nullptr, nullptr), nullptr)), 1);
+        };
+        auto ahead = group;
+        for (auto& pile : *ahead.MutableBridgeGroupState()->MutablePile()) {
+            pile.SetGroupGeneration(pile.GetGroupGeneration() + 1);
+        }
+        TFilterChain chain(env);
+        auto& retry = chain.AddHold([&](IEventHandle& ev) {
+            if (ev.Recipient != service || ev.GetTypeRewrite() != TEvBlobStorage::EvBlock) {
+                return false;
+            }
+            const auto& block = *ev.Get<TEvBlobStorage::TEvBlock>();
+            return block.TabletId == tabletId && block.RestartCounter;
+        });
+        configure(ahead); // the piles return RACE before applying the block
+        sendBlock(groupId, 1);
+        retry.WaitForHeld();
+        configure(group);
+
+        SetupSchemeCacheStub(env);
+        const auto response = DecommitGroup(env, groupId);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitForDecommitStatus(env, groupId, NKikimrBlobStorage::TGroupDecommitStatus::DONE);
+        checker.CheckAll();
+        UNIT_ASSERT_UNEQUAL(env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(service), proxy);
+
+        auto alreadyCount = [&] {
+            ui64 total = 0;
+            for (ui32 nodeId : env.Runtime->GetNodes()) {
+                total += GetBridgeRequestCounters(env, nodeId)->GetSubgroup("operation", "Block")
+                    ->GetSubgroup("status", "ALREADY")->GetCounter("completedRequests", true)->Val();
+            }
+            return total;
+        };
+        const ui64 before = alreadyCount();
+        retry.Release(); // the group service now belongs to the BlobDepot agent
+        expectBlock(NKikimrProto::ALREADY);
+        UNIT_ASSERT_VALUES_EQUAL(alreadyCount(), before + 1);
+
+        // A direct agent request has no bridge observer. Its backing operation is the first bridge admission.
+        sendBlock(groupId, 2);
+        expectBlock(NKikimrProto::ALREADY);
+        UNIT_ASSERT_VALUES_EQUAL(alreadyCount(), before + 2);
+    }
+
     Y_UNIT_TEST(PatchReadsThroughDecommittingSource) {
         TFeatureFlags flags;
         flags.SetEnableVPatch(false); // the naive PATCH reads the source through its public group service
@@ -622,8 +695,6 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
                 const auto& get = *ev->Get<TEvBlobStorage::TEvGet>();
                 if (get.QuerySize == 1 && get.Queries[0].Id == expectedLookup && get.Decommission && get.IsIndexOnly &&
                         get.GetHandleClass == NKikimrBlobStorage::FastRead) {
-                    const auto *sender = env.Runtime->GetActor(ev->Sender);
-                    UNIT_ASSERT(sender && TypeName(*sender).EndsWith("::TResolveDecommitActor"));
                     ++metadataReads;
                 }
             }

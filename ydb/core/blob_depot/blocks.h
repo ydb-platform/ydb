@@ -53,7 +53,7 @@ namespace NKikimr::NBlobDepot {
         void AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid, ui32 version);
         void AddBlockOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlock& block, NTabletFlatExecutor::TTransactionContext& txc);
         void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-            std::optional<ui32> version, std::unique_ptr<IEventHandle> response);
+            std::optional<ui32> version, bool skipBridgeAccountingForSubrequests, std::unique_ptr<IEventHandle> response);
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
         void OnDataLoaded();

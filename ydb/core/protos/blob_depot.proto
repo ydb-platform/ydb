@@ -125,6 +125,8 @@ message TEvBlock {
     optional uint64 IssuerGuid = 3;
     optional uint32 Version = 4;
     optional uint32 WriteSourceOp = 5;
+    // Backing blocks inherit the initiating query's bridge accounting.
+    optional bool SkipBridgeAccountingForSubrequests = 6;
 }
 
 message TEvBlockResult {

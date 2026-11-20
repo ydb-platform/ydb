@@ -270,10 +270,6 @@ THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() 
     if (!snapshot || !snapshot->TotalCpuLimit) {
         return result;
     }
-    const auto totalCpu = snapshot->TotalCpuLimit;
-    if (!totalCpu) {
-        return result;
-    }
 
     // The pools created only to account the memory (see GetOrCreateMemoryPool) are not scheduled by CPU.
     TReadGuard lock(Mutex);
@@ -284,7 +280,7 @@ THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() 
             if (!ReadQueries.contains(fullPoolId)) {
                 return;
             }
-            result[fullPoolId] = double(pool->CpuFairShare) / totalCpu;
+            result[fullPoolId] = double(pool->CpuFairShare) / snapshot->TotalCpuLimit;
         } else {
             pool->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* child, size_t) {
                 self(self, databaseId, child);

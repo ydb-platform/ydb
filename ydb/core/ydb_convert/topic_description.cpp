@@ -176,6 +176,20 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
 
     out.set_content_based_deduplication(config.GetContentBasedDeduplication());
 
+    if (config.HasWriteMode()) {
+        switch (config.GetWriteMode()) {
+            case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+                (*out.mutable_attributes())["_write_mode"] = "available";
+                break;
+            case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+                (*out.mutable_attributes())["_write_mode"] = "unavailable";
+                break;
+            case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+                (*out.mutable_attributes())["_write_mode"] = "prohibited";
+                break;
+        }
+    }
+
     if (!config.GetRequireAuthWrite()) {
         (*out.mutable_attributes())["_allow_unauthenticated_write"] = "true";
     }

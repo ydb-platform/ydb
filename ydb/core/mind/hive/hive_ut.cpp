@@ -5793,6 +5793,117 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
+    // DC = [1,1,2,2,3,3], the nodes of the third data center are down while the tablets start.
+    // Returns the tablets in each data center, the tablets preferring the first data center separately.
+    std::pair<std::map<TString, std::vector<ui64>>, std::vector<ui64>> RunDataCenterBalancer(bool enabled) {
+        static constexpr int NUM_NODES = 6;
+        static constexpr int NUM_TABLETS = 24;
+        static constexpr int NUM_PREFERRING_TABLETS = 2;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        runtime.LocationCallback = GetLocation;
+        Setup(runtime, true, 1, [enabled](TAppPrepare& app) {
+            app.HiveConfig.SetTabletKickCooldownPeriod(0);
+            app.HiveConfig.SetResourceChangeReactionPeriod(0);
+            app.HiveConfig.SetMetricsWindowSize(1);
+            app.HiveConfig.SetEnableDataCenterBalancer(enabled);
+            app.HiveConfig.SetMaxMovementsOnDataCenterBalancer(0);
+        });
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+        auto setDown = [&](bool down) {
+            for (int i = 4; i < NUM_NODES; ++i) {
+                runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvSetDown(runtime.GetNodeId(i), down));
+                TAutoPtr<IEventHandle> handle;
+                runtime.GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(handle);
+            }
+        };
+        setDown(true);
+
+        std::vector<ui64> tablets;
+        std::vector<ui64> preferringTablets;
+        for (int i = 0; i < NUM_TABLETS + NUM_PREFERRING_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, TTabletTypes::Dummy, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            if (i >= NUM_TABLETS) {
+                ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(1));
+            }
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+            (i >= NUM_TABLETS ? preferringTablets : tablets).push_back(tabletId);
+        }
+
+        // Tablets with metrics are not balanced by count between nodes,
+        // and the usage is too low for balancing by resources
+        auto reportMetricsAndWaitForBalancer = [&]() {
+            for (ui64 tabletId : tablets) {
+                THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+                NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+                metric->SetTabletID(tabletId);
+                metric->MutableResourceUsage()->SetCPU(1000);
+                runtime.SendToPipe(hiveTablet, sender, metrics.Release());
+            }
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        };
+        reportMetricsAndWaitForBalancer();
+
+        setDown(false);
+
+        auto getDistribution = [&]() {
+            std::map<TString, std::vector<ui64>> dataCenterTablets;
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                TString dataCenter = GetLocation(tablet.GetNodeID() - nodeBase).GetDataCenterId();
+                dataCenterTablets[dataCenter].push_back(tablet.GetTabletID());
+            }
+            return dataCenterTablets;
+        };
+
+        auto distribution = getDistribution();
+        for (int i = 0; i < 20; ++i) {
+            if (distribution["1"].size() == NUM_TABLETS / 3 + NUM_PREFERRING_TABLETS
+                    && distribution["2"].size() == NUM_TABLETS / 3
+                    && distribution["3"].size() == NUM_TABLETS / 3) {
+                break;
+            }
+            reportMetricsAndWaitForBalancer();
+            distribution = getDistribution();
+        }
+        for (const auto& [dataCenter, dataCenterTablets] : distribution) {
+            Ctest << "DC " << dataCenter << ": " << dataCenterTablets.size() << " tablets" << Endl;
+        }
+        return {distribution, preferringTablets};
+    }
+
+    Y_UNIT_TEST(TestDataCenterBalancer) {
+        auto [distribution, preferringTablets] = RunDataCenterBalancer(true);
+        // the tablets preferring the first data center are neither counted nor moved
+        for (ui64 tabletId : preferringTablets) {
+            UNIT_ASSERT(std::ranges::find(distribution["1"], tabletId) != distribution["1"].end());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(distribution["1"].size(), 8 + preferringTablets.size());
+        UNIT_ASSERT_VALUES_EQUAL(distribution["2"].size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(distribution["3"].size(), 8);
+    }
+
+    Y_UNIT_TEST(TestDataCenterBalancerDisabled) {
+        // without the data center balancer nothing moves the busy tablets to the new data center
+        auto [distribution, preferringTablets] = RunDataCenterBalancer(false);
+        UNIT_ASSERT_VALUES_EQUAL(distribution["3"].size(), 0);
+    }
+
     Y_UNIT_TEST(TestHiveFollowersWithChangingDC) {
         static const int NUM_NODES = 6;
         static const int NUM_TABLETS = 1;

@@ -221,6 +221,53 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         UNIT_ASSERT_VALUES_EQUAL(TABLET_TYPE_SHORT_NAMES.size(), TABLET_TYPE_BY_SHORT_NAME.size());
     }
 
+    Y_UNIT_TEST(DataCenterBalanceStats) {
+        auto makeStats = [](std::vector<std::tuple<TDataCenterId, i64, i64>> dataCenters) {
+            TDataCenterBalanceStats stats;
+            for (const auto& [dataCenterId, tablets, nodes] : dataCenters) {
+                auto& stat = stats.DataCenters[dataCenterId];
+                stat.Tablets = tablets;
+                stat.Nodes = nodes;
+            }
+            return stats;
+        };
+
+        {
+            // a single data center is never imbalanced
+            auto stats = makeStats({{"1", 10, 2}});
+            UNIT_ASSERT_DOUBLES_EQUAL(stats.GetImbalance(), 0, 1e-9);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(0), 0);
+        }
+        {
+            auto stats = makeStats({{"1", 6, 2}, {"2", 6, 2}, {"3", 6, 2}});
+            UNIT_ASSERT_DOUBLES_EQUAL(stats.GetImbalance(), 0, 1e-9);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(0), 0);
+        }
+        {
+            // counts are compared per node
+            auto stats = makeStats({{"1", 9, 3}, {"2", 3, 1}});
+            UNIT_ASSERT_DOUBLES_EQUAL(stats.GetImbalance(), 0, 1e-9);
+        }
+        {
+            // the third data center is empty
+            auto stats = makeStats({{"1", 12, 2}, {"2", 12, 2}, {"3", 0, 2}});
+            UNIT_ASSERT_DOUBLES_EQUAL(stats.GetImbalance(), 1, 1e-9);
+            auto [heaviest, lightest] = stats.GetHeaviestAndLightest();
+            UNIT_ASSERT_VALUES_EQUAL(heaviest, "1");
+            UNIT_ASSERT_VALUES_EQUAL(lightest, "3");
+            // after 6 moves per node counts are 3, 6, 3 - one more move would make the first data center the lightest
+            UNIT_ASSERT_DOUBLES_EQUAL(stats.GetImbalance("1", "3", 6), 0.5, 1e-9);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(0), 6);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(4), 4);
+        }
+        {
+            // a move would only overshoot
+            auto stats = makeStats({{"1", 2, 1}, {"2", 1, 1}});
+            UNIT_ASSERT_DOUBLES_EQUAL(stats.GetImbalance(), 0.5, 1e-9);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetMovementsToBalance(0), 0);
+        }
+    }
+
     Y_UNIT_TEST(TestStDev) {
         using TSingleResource = std::tuple<double>;
 

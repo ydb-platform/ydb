@@ -2866,6 +2866,44 @@ namespace NKikimr {
     {
     };
 
+    struct TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult
+        : TEventPB<TEvVPhantomFlagStorageListChunksResult, NKikimrBlobStorage::TEvVPhantomFlagStorageListChunksResult,
+                EvVPhantomFlagStorageListChunksResult> {
+        TEvVPhantomFlagStorageListChunksResult();
+        TEvVPhantomFlagStorageListChunksResult(NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId);
+    };
+
+    struct TEvBlobStorage::TEvVPhantomFlagStorageListChunks
+        : TEventPB<TEvVPhantomFlagStorageListChunks, NKikimrBlobStorage::TEvVPhantomFlagStorageListChunks,
+                EvVPhantomFlagStorageListChunks> {
+        using TResult = TEvVPhantomFlagStorageListChunksResult;
+
+        TEvVPhantomFlagStorageListChunks();
+        TEvVPhantomFlagStorageListChunks(const TVDiskID& source, const TVDiskID& target);
+    };
+
+    struct TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult
+        : TEventPB<TEvVPhantomFlagStorageReadChunkResult, NKikimrBlobStorage::TEvVPhantomFlagStorageReadChunkResult,
+                EvVPhantomFlagStorageReadChunkResult> {
+        TEvVPhantomFlagStorageReadChunkResult();
+        TEvVPhantomFlagStorageReadChunkResult(NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId,
+                std::optional<ui32> chunkIndex);
+
+        TString ToString() const override;
+    };
+
+    struct TEvBlobStorage::TEvVPhantomFlagStorageReadChunk
+        : TEventPB<TEvVPhantomFlagStorageReadChunk, NKikimrBlobStorage::TEvVPhantomFlagStorageReadChunk,
+                EvVPhantomFlagStorageReadChunk> {
+        using TResult = TEvVPhantomFlagStorageReadChunkResult;
+
+        TEvVPhantomFlagStorageReadChunk();
+        TEvVPhantomFlagStorageReadChunk(const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex, ui64 generation,
+                std::optional<ui32> readOffset = std::nullopt, std::optional<ui32> readSize = std::nullopt);
+
+        std::optional<ui32> GetChunkIndex() const;
+    };
+
     //////////////////////////////////////////////////////////////////////////////////////////////
     // VSyncGuid
     //////////////////////////////////////////////////////////////////////////////////////////////

@@ -12,6 +12,7 @@ struct TPhantomFlagStorageProcessorContext {
     const NActors::TActorId SyncLogKeeperId;
     const NActors::TActorId ChunkKeeperId;
     const ui32 AppendBlockSize;
+    const bool EnableReplication;
 };
 
 ////////////////////////////////////////////////////////////////////////////

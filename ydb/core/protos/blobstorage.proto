@@ -840,6 +840,48 @@ message TEvVSyncFullResult {
     optional EFullSyncProtocol Protocol = 20;
 }
 
+message TEvVPhantomFlagStorageListChunks {
+    optional TVDiskID SourceVDiskID = 1;
+    optional TVDiskID VDiskID = 2;
+}
+
+message TEvVPhantomFlagStorageListChunksResult {
+    message TChunk {
+        optional uint32 ChunkIndex = 1;
+        // Chunks written before generation tracking use zero.
+        optional uint64 Generation = 2;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional TVDiskID VDiskID = 2;
+    repeated TChunk Chunks = 3;
+}
+
+message TEvVPhantomFlagStorageReadChunk {
+    optional TVDiskID SourceVDiskID = 1;
+    optional TVDiskID VDiskID = 2;
+    optional uint32 ChunkIndex = 3;
+    // Start at zero (the default) or pass NextReadOffset from a previous reply for this chunk.
+    optional uint32 ReadOffset = 4;
+    // Positive byte budget for the read. The donor caps it to fit the transport limit.
+    // A record starting within this budget is consumed in full. If unset, use the donor's limit.
+    optional uint32 ReadSize = 5;
+    // Must match the generation returned by ListChunks for the entire paged read.
+    optional uint64 Generation = 6;
+}
+
+message TEvVPhantomFlagStorageReadChunkResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional TVDiskID VDiskID = 2;
+    optional uint32 ChunkIndex = 3;
+    // Whole-blob DoNotKeep keys.
+    repeated NKikimrProto.TLogoBlobID Keys = 4;
+    // On success, the byte offset after the last consumed record, including at EOF.
+    optional uint32 NextReadOffset = 5;
+    // On success, true when the committed data has been exhausted.
+    optional bool Eof = 6;
+}
+
 message THandoffDelLogoBlob {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional uint64 Ingress = 2;

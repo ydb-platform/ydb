@@ -86,6 +86,7 @@ struct TEnvironmentSetup {
         const bool StartFakeWilsonCollectors = false;
         const bool EnableChunkKeeper = true;
         const bool EnablePersistentPhantomFlagStorage = false;
+        const bool EnablePhantomFlagStorageReplication = false;
         const bool SetupResourceBroker = false;
         // Global blob_storage_config knob. Unset stays unset, so the flag alone leaves the size-class heap.
         const std::optional<ui32> VDiskHeapAllocatorNumLeadingDisks = std::nullopt;
@@ -644,6 +645,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
+                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorageReplication, false, false, true, Settings.EnablePhantomFlagStorageReplication);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
                 ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
                 ADD_ICB_CONTROL(VDiskControls.EnableChecksumReadValidationOnVDisk, false, false, true, false);

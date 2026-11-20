@@ -2,6 +2,8 @@
 #include "blobstorage_synclogrecovery.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 
+#include <algorithm>
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -113,6 +115,7 @@ namespace NKikimr {
                                            const TEntryPointDbgInfo &lastEntryPointDbgInfo,
                                            const TSyncLogHeader &header,
                                            const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData,
+                                           ui64 phantomFlagStorageGeneration,
                                            const std::unordered_map<ui32, ui32>& chunksToExtract)
             : DiskSnapPtr(diskSnapPtr)
             , MemSnapPtr(memSnapPtr)
@@ -121,6 +124,7 @@ namespace NKikimr {
             , LastEntryPointDbgInfo(lastEntryPointDbgInfo)
             , Header(header)
             , PhantomFlagStorageData(phantomFlagStorageData)
+            , PhantomFlagStorageGeneration(phantomFlagStorageGeneration)
             , ChunksToExtract(chunksToExtract)
         {
             CheckSnapshotConsistency(); // For debug
@@ -150,9 +154,14 @@ namespace NKikimr {
             pb.SetPDiskGuid(Header.PDiskGuid);
             pb.SetVDiskIncarnationGuid(Header.VDiskIncarnationGuid);
             pb.SetLogStartLsn(LogStartLsn);
-            if (PhantomFlagStorageData) {
+            if (PhantomFlagStorageData || PhantomFlagStorageGeneration) {
                 auto* data = pb.MutablePhantomFlagStorageData();
-                PhantomFlagStorageData->Serialize(data);
+                if (PhantomFlagStorageData) {
+                    PhantomFlagStorageData->Serialize(data);
+                } else {
+                    data->SetChunkSize(DiskSnapPtr->ChunkSize);
+                }
+                data->SetGeneration(PhantomFlagStorageGeneration);
             }
             for (const auto& [chunkIdx, usedPagesNum] : ChunksToExtract) {
                 auto* entryProto = pb.AddChunksToExtract();
@@ -291,6 +300,7 @@ namespace NKikimr {
                                                             LastEntryPointDbgInfo,
                                                             Header,
                                                             PhantomFlagStorageData,
+                                                            PhantomFlagStorageGeneration,
                                                             ChunksToExtract));
         }
 
@@ -431,6 +441,9 @@ namespace NKikimr {
         // TSyncLog: PhantomFlagStorageData
         ////////////////////////////////////////////////////////////////////////
         void TSyncLog::UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data) {
+            if (data) {
+                PhantomFlagStorageGeneration = std::max(PhantomFlagStorageGeneration, data->LastChunkGeneration);
+            }
             PhantomFlagStorageData = std::move(data);
         }
 
@@ -441,6 +454,7 @@ namespace NKikimr {
             } else {
                 res.ChunkSize = GetChunkSize();
             }
+            res.LastChunkGeneration = PhantomFlagStorageGeneration;
             return res;
         }
 

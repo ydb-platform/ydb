@@ -774,7 +774,9 @@ namespace NKikimr {
 
         template <class TEv, class Decayed = std::decay_t<TEv>>
         static constexpr bool IsWithoutNotify = std::is_same_v<TEvGetLogoBlobIndexStatRequest, Decayed>
-                || std::is_same_v<TEvGetVDiskSpaceReportRequest, Decayed>;
+                || std::is_same_v<TEvGetVDiskSpaceReportRequest, Decayed>
+                || std::is_same_v<TEvBlobStorage::TEvVPhantomFlagStorageListChunks, Decayed>
+                || std::is_same_v<TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, Decayed>;
 
         template <class T>
         void NotifyIfNotReady(T &ev, const TActorContext &ctx) {
@@ -1721,6 +1723,16 @@ namespace NKikimr {
             ctx.Send(ev->Forward(SkeletonId));
         }
 
+        template<class TEventPtr>
+        void HandlePhantomFlagStorage(TEventPtr& ev) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
+                DatabaseAccessDeniedHandle(ev, ctx);
+                return;
+            }
+            Forward(ev, SkeletonId);
+        }
+
         void HandleCheckReadiness(TEvBlobStorage::TEvVCheckReadiness::TPtr& ev, const TActorContext& ctx) {
             if (GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 const auto& record = ev->Get()->Record;
@@ -2125,6 +2137,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseNotReadyHandle)
@@ -2171,9 +2185,9 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseNotReadyHandle)
-            // NOTE: Below is the only diff from StateLocalRecoveryInProgress --
-            //       we handle TEvBlobStorage::TEvVSyncGuid
             HFunc(TEvBlobStorage::TEvVSyncGuid, HandleRequestWithoutQoS)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorage)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorage)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseNotReadyHandle)
@@ -2224,6 +2238,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSync, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseErrorHandle)
@@ -2403,6 +2419,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSync, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVSyncFull, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVSyncGuid, HandleRequestWithoutQoS)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorage)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorage)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, HandleCheckReadiness)
             HFunc(TEvBlobStorage::TEvVCompact, Check)
             HFunc(TEvBlobStorage::TEvVDefrag, Check)

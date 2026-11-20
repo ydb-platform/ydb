@@ -7,6 +7,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_events.h>
 #include <ydb/core/util/stlog.h>
@@ -43,6 +45,16 @@ public:
     }
 
 private:
+    using TEvListFlagChunks = TEvBlobStorage::TEvVPhantomFlagStorageListChunks;
+    using TEvListFlagChunksResult = TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult;
+    using TEvReadFlagChunk = TEvBlobStorage::TEvVPhantomFlagStorageReadChunk;
+    using TEvReadFlagChunkResult = TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult;
+    using TFlagKeys = ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID>;
+
+    // Protobuf keys are smaller than their on-disk records. Leave room for lookahead and the reply envelope.
+    static constexpr ui32 MaxFlagChunkReadSize = static_cast<ui32>(
+        NActors::EventMaxByteSize - 1024 - TPhantomFlagStorageItem::ReadLookahead);
+
     struct TGetSnapshot {
         TActorId Requester;
         TSyncLogSnapshotPtr Snapshot;
@@ -68,6 +80,21 @@ private:
         bool BuilderRunning;
     };
 
+    struct TReadFlagsFromChunk {
+        TActorId Requester;
+        TVDiskID VDiskId;
+        ui64 Cookie;
+        ui32 Channel;
+        std::optional<ui32> ChunkIdx;
+        ui32 ReadOffset;
+        ui32 ReadSize;
+        ui32 ChunkDataSize = 0;
+
+        ui32 GetBufferedReadSize() const {
+            return std::min(ReadSize + TPhantomFlagStorageItem::ReadLookahead, ChunkDataSize - ReadOffset);
+        }
+    };
+
 private:
     //////////////////////////////////////////////////////////////////////
     // State functions
@@ -77,6 +104,8 @@ private:
         hFunc(TEvPhantomFlagExtractedFromChunk, Handle)
         hFunc(TEvPhantomFlagStorageDrop, Handle)
         hFunc(TEvChunkKeeperDiscoverResult, HandleInit)
+        hFunc(TEvListFlagChunks, Handle)
+        hFunc(TEvReadFlagChunk, Handle)
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
     )
 
@@ -89,6 +118,9 @@ private:
         hFunc(TEvPhantomFlagStorageWriteItems, Handle)
         hFunc(TEvPhantomFlagExtractedFromChunk, Handle)
         hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+        hFunc(TEvListFlagChunks, Handle)
+        hFunc(TEvReadFlagChunk, Handle)
+        hFunc(TEvPhantomFlagStorageCommitApplied, Handle)
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
         hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
     )
@@ -103,40 +135,42 @@ private:
             {"marker", "BSPFP02"},
             {"event", ev->Get()->ToString()});
         RequestInFlight = false;
+        bool manifestFiltered = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
-            std::unordered_set<ui32> discoveredChunks;
-            for (const auto& [chunkIdx, chunk] : ev->Get()->Chunks) {
-                discoveredChunks.insert(chunkIdx);
-                if (!Data.Chunks.contains(chunkIdx)) {
-                    // chunk was allocated but wasn't committed to SyncLog
-                    // entryPoint before crash
-                    Data.Chunks[chunkIdx] = TPhantomFlagStorageData::TChunk{
-                        .DataSize = 0,
-                    };
-                }
-            }
-
             std::unordered_map<ui32, TPhantomFlagStorageData::TChunk> chunks;
-            for (const auto& [chunkIdx, chunk] : Data.Chunks) {
-                if (discoveredChunks.contains(chunkIdx)) {
-                    chunks[chunkIdx] = chunk;
-                } else {
+            for (const auto& [chunkIdx, chunk] : ev->Get()->Chunks) {
+                const auto it = Data.Chunks.find(chunkIdx);
+                if (it != Data.Chunks.end() && it->second.DataSize) {
+                    chunks.emplace(chunkIdx, it->second);
+                } else if (!Ctx.SyncLogCtx->IsReadOnlyVDisk) {
+                    // Interrupted drops and unpublished allocations can leave ChunkKeeper ownership behind.
+                    // Older recovery can also carry these chunks forward as empty manifest entries.
                     EnqueueChunkDeletion(chunkIdx);
                 }
             }
-            std::exchange(Data.Chunks, chunks); // filter out deallocated chunks
+
+            for (const auto& [chunkIdx, chunk] : Data.Chunks) {
+                if (!chunks.contains(chunkIdx)) {
+                    manifestFiltered = true;
+                    break;
+                }
+            }
+            Data.Chunks = std::move(chunks);
             SelectTailChunk();
             break;
         }
-        default: {
-            // ChunkKeeper is disabled, unable to manage chunks, terminate this actor
+        default:
             PassAway();
             return;
         }
-        }
 
+        Initialized = true;
         Become(&TThis::StateWork);
+        if (manifestFiltered && !Ctx.SyncLogCtx->IsReadOnlyVDisk) {
+            // A new allocation must not reuse an index still referenced by the durable manifest.
+            CommitState(true);
+        }
         ProcessQueues();
     }
 
@@ -174,14 +208,20 @@ private:
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             const ui32 chunkIdx = *ev->Get()->ChunkIdx;
+            Y_ABORT_UNLESS(Data.LastChunkGeneration != Max<ui64>(), "PhantomFlagStorage chunk generation exhausted");
             Data.Chunks[chunkIdx] = TPhantomFlagStorageData::TChunk{
                 .DataSize = 0,
+                .Generation = ++Data.LastChunkGeneration,
             };
             TailChunkIdx = chunkIdx;
             TailAvailableSize = Data.ChunkSize;
             break;
         }
         default:
+            if (DropPending) {
+                ProcessQueues();
+                return;
+            }
             // retry
             AllocateNewChunk();
             return;
@@ -194,8 +234,6 @@ private:
             {"marker", "BSPFP05"},
             {"event", ev->Get()->ToString()});
         RequestInFlight = false;
-        Data.Chunks.erase(ev->Get()->ChunkIdx);
-        CommitState();
         ProcessQueues();
     }
 
@@ -210,6 +248,10 @@ private:
             TailAvailableSize -= PendingWriteSize;
         }
         Data.Chunks[chunkIdx].DataSize += std::exchange(PendingWriteSize, 0);
+        if (DropPending) {
+            ProcessQueues();
+            return;
+        }
         // Defer CommitState while a batch is still being drained: a partial
         // write must not be reflected in the persisted entry point. The
         // batch's atomic commit happens in FinishActiveBatch.
@@ -226,6 +268,10 @@ private:
             {"marker", "BSPFP07"},
             {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
+        if (ActiveFlagChunkRead) {
+            FinishFlagChunkRead(*ev->Get());
+            return;
+        }
         Y_ABORT_UNLESS(ActiveSnapshotRequest);
         ui32 chunkIdx = ev->Get()->ChunkIdx;
         Y_ABORT_UNLESS(ActiveSnapshotRequest->ReadingChunkIdx == chunkIdx);
@@ -250,6 +296,14 @@ private:
     }
 
     void Handle(const TEvPhantomFlagStorageDrop::TPtr&) {
+        if (RequestInFlight || CommitInFlight) {
+            DropPending = true;
+            return;
+        }
+        DropStorage();
+    }
+
+    void DropStorage() {
         YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagStorageDrop"),
             {"marker", "BSPFP11"},
             {"chunkCount", Data.Chunks.size()});
@@ -259,10 +313,141 @@ private:
         ActiveBatch.reset();
         PendingWrite.clear();
         PendingWriteSize = 0;
-        CommitState();
         for (const auto& [chunkIdx, chunk] : Data.Chunks) {
             EnqueueChunkDeletion(chunkIdx);
         }
+        // Keep this ordering when replication is disabled, so re-enabling it cannot revive an old generation.
+        Data.Chunks.clear();
+        CommitState(true);
+        ProcessQueues();
+    }
+
+    void Handle(const TEvPhantomFlagStorageCommitApplied::TPtr& ev) {
+        Y_DEBUG_ABORT_UNLESS(CommitInFlight && ev->Sender == Ctx.SyncLogKeeperId);
+        CommitInFlight = false;
+        ProcessQueues();
+    }
+
+    NKikimrProto::EReplyStatus GetExportStatus() const {
+        if (!Ctx.EnableReplication || Ctx.SyncLogCtx->EnablePhantomFlagStorage == 0) {
+            return NKikimrProto::NODATA;
+        }
+        if (!Initialized) {
+            return NKikimrProto::NOTREADY;
+        }
+        if (RequestInFlight || CommitInFlight || DropPending) {
+            return NKikimrProto::TRYLATER;
+        }
+        return NKikimrProto::OK;
+    }
+
+    void Handle(const TEvListFlagChunks::TPtr& ev) {
+        const NKikimrProto::EReplyStatus status = GetExportStatus();
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
+        auto result = std::make_unique<TEvListFlagChunksResult>(status, vdiskId);
+        if (status == NKikimrProto::OK) {
+            for (const auto& [chunkIdx, chunk] : Data.Chunks) {
+                if (chunk.DataSize) {
+                    auto* descriptor = result->Record.AddChunks();
+                    descriptor->SetChunkIndex(chunkIdx);
+                    descriptor->SetGeneration(chunk.Generation);
+                }
+            }
+        }
+        SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, result.release(),
+                ev->Cookie, ev->GetChannel(), Ctx.SyncLogCtx->VCtx, {});
+    }
+
+    void Handle(const TEvReadFlagChunk::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+        TReadFlagsFromChunk request{
+            .Requester = ev->Sender,
+            .VDiskId = vdiskId,
+            .Cookie = ev->Cookie,
+            .Channel = ev->GetChannel(),
+            .ChunkIdx = ev->Get()->GetChunkIndex(),
+            .ReadOffset = record.GetReadOffset(),
+            .ReadSize = MaxFlagChunkReadSize,
+        };
+        if (record.HasReadSize()) {
+            request.ReadSize = std::min(record.GetReadSize(), MaxFlagChunkReadSize);
+        }
+        if (!request.ChunkIdx || !request.ReadSize) {
+            ReplyToFlagChunkRead(request, NKikimrProto::ERROR);
+            return;
+        }
+        const NKikimrProto::EReplyStatus status = GetExportStatus();
+        if (status != NKikimrProto::OK) {
+            ReplyToFlagChunkRead(request, status);
+            return;
+        }
+        const ui32 chunkIdx = *request.ChunkIdx;
+        const auto it = Data.Chunks.find(chunkIdx);
+        if (it == Data.Chunks.end() || it->second.DataSize == 0) {
+            ReplyToFlagChunkRead(request, NKikimrProto::NOT_FOUND);
+            return;
+        }
+        if (record.GetGeneration() != it->second.Generation) {
+            ReplyToFlagChunkRead(request, NKikimrProto::RACE);
+            return;
+        }
+        request.ChunkDataSize = it->second.DataSize;
+        if (request.ChunkDataSize > Data.ChunkSize) {
+            ReplyToFlagChunkRead(request, NKikimrProto::CORRUPTED);
+            return;
+        }
+        if (request.ReadOffset > request.ChunkDataSize) {
+            ReplyToFlagChunkRead(request, NKikimrProto::ERROR);
+            return;
+        }
+        if (request.ReadOffset == request.ChunkDataSize) {
+            ReplyToFlagChunkRead(request, NKikimrProto::OK, {}, request.ReadOffset);
+            return;
+        }
+
+        request.ReadSize = std::min(request.ReadSize, request.ChunkDataSize - request.ReadOffset);
+        ActiveFlagChunkRead.emplace(request);
+        RequestInFlight = true;
+        Send(Ctx.SyncLogCtx->PDiskCtx->PDiskId,
+                new NPDisk::TEvChunkRead(Ctx.SyncLogCtx->PDiskCtx->Dsk->Owner,
+                        Ctx.SyncLogCtx->PDiskCtx->Dsk->OwnerRound,
+                        chunkIdx, request.ReadOffset, request.GetBufferedReadSize(), NPriRead::SyncLog, nullptr));
+    }
+
+    void ReplyToFlagChunkRead(const TReadFlagsFromChunk& request, NKikimrProto::EReplyStatus status,
+            TFlagKeys&& keys = {}, ui32 nextReadOffset = 0) {
+        std::unique_ptr<TEvReadFlagChunkResult> result = std::make_unique<TEvReadFlagChunkResult>(
+                status, request.VDiskId, request.ChunkIdx);
+        if (status == NKikimrProto::OK) {
+            result->Record.MutableKeys()->Swap(&keys);
+            result->Record.SetNextReadOffset(nextReadOffset);
+            result->Record.SetEof(nextReadOffset == request.ChunkDataSize);
+        }
+        SendVDiskResponse(TActivationContext::AsActorContext(), request.Requester, result.release(),
+                request.Cookie, request.Channel, Ctx.SyncLogCtx->VCtx, {});
+    }
+
+    void FinishFlagChunkRead(const NPDisk::TEvChunkReadResult& result) {
+        const TReadFlagsFromChunk request = *ActiveFlagChunkRead;
+        const ui32 bufferSize = request.GetBufferedReadSize();
+        TFlagKeys keys;
+        ui32 nextReadOffset = request.ReadOffset;
+        NKikimrProto::EReplyStatus status = NKikimrProto::CORRUPTED;
+        if (request.ChunkIdx == result.ChunkIdx && result.Offset == request.ReadOffset
+                && result.Data.IsReadable(0, bufferSize)) {
+            const TBlobStorageGroupType& groupType = Ctx.SyncLogCtx->VCtx->Top->GType;
+            const TStringBuf data(result.Data.DataPtr<const char>(0, bufferSize), bufferSize);
+            const std::optional<ui32> consumed = ReadPhantomFlagStorageKeys(
+                data, request.ReadSize, request.ChunkDataSize - request.ReadOffset, groupType, keys);
+            if (consumed) {
+                status = NKikimrProto::OK;
+                nextReadOffset += *consumed;
+            }
+        }
+        ReplyToFlagChunkRead(request, status, std::move(keys), nextReadOffset);
+        ActiveFlagChunkRead.reset();
+        RequestInFlight = false;
         ProcessQueues();
     }
 
@@ -312,6 +497,13 @@ private:
     }
 
     void ProcessQueues() {
+        if (RequestInFlight || CommitInFlight) {
+            return;
+        }
+        if (std::exchange(DropPending, false)) {
+            DropStorage();
+            return;
+        }
         while (!RequestInFlight && !RequestQueue.empty()) {
             TRequest request = std::move(RequestQueue.front());
             RequestQueue.pop_front();
@@ -321,7 +513,6 @@ private:
                 [&](TGetSnapshot& req) { ServeSnapshotRequest(std::move(req)); },
                 [&](const TDeleteChunk& req) { DeleteChunk(req.ChunkIdx); },
             }, request);
-            return;
         }
         ProcessWriteQueue();
     }
@@ -381,11 +572,7 @@ private:
     }
 
     void DeleteChunk(ui32 chunkIdx) {
-        if (Data.Chunks.contains(chunkIdx)) {
-            Send(Ctx.ChunkKeeperId, new TEvChunkKeeperFree(chunkIdx, SubsystemId));
-        } else {
-            RequestInFlight = false;
-        }
+        Send(Ctx.ChunkKeeperId, new TEvChunkKeeperFree(chunkIdx, SubsystemId));
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -459,36 +646,35 @@ private:
         ProcessQueues();
     }
 
-    void DecodeChunk(class TBufferWithGaps& bufferWithGaps, ui32 chunkIdx,
+    void DecodeChunk(const TBufferWithGaps& bufferWithGaps, ui32 chunkIdx,
             TPhantomFlags& flags, TPhantomFlagThresholds& thresholds) const {
-        if (!bufferWithGaps.IsReadable()) {
+        const ui32 dataSize = Data.Chunks.at(chunkIdx).DataSize;
+        // Legacy snapshots skip the entire chunk if its PDisk buffer has gaps.
+        if (!bufferWithGaps.IsReadable() || dataSize > bufferWithGaps.Size()) {
             return;
         }
-        TRcBuf buffer = bufferWithGaps.ToString();
-        const ui64 dataSize = Data.Chunks.at(chunkIdx).DataSize;
-        ui64 offset = 0;
-        while (offset < dataSize) {
-            TPhantomFlagStorageItem item = TPhantomFlagStorageItem::DeserializeFromRaw(
-                    buffer.Data() + offset);
-            switch (item.GetType()) {
+        TStringBuf data(bufferWithGaps.DataPtr<const char>(0, dataSize), dataSize);
+        while (!data.empty()) {
+            const std::optional<TPhantomFlagStorageItem> item = TPhantomFlagStorageItem::ReadFrom(data);
+            if (!item) {
+                return;
+            }
+            switch (item->GetType()) {
             case EPhantomFlagStorageItem::Flag:
-                flags.push_back(item.GetFlag().Record);
+                flags.push_back(item->GetFlag().Record);
                 break;
             case EPhantomFlagStorageItem::Threshold: {
-                TPhantomFlagStorageItem::TThreshold threshold = item.GetThreshold();
-                thresholds.AddBlob(threshold.OrderNumber, threshold.TabletId,
-                        threshold.Channel, threshold.Generation, threshold.Step);
+                const TPhantomFlagStorageItem::TThreshold threshold = item->GetThreshold();
+                if (threshold.OrderNumber < MaxExpectedDisksInGroup) {
+                    thresholds.AddBlob(threshold.OrderNumber, threshold.TabletId,
+                            threshold.Channel, threshold.Generation, threshold.Step);
+                }
                 break;
             }
             case EPhantomFlagStorageItem::Skip:
             case EPhantomFlagStorageItem::SkipOneByte:
                 break;
             }
-
-            if (item.SerializedSize() == 0) {
-                return;
-            }
-            offset += item.SerializedSize();
         }
     }
 
@@ -497,9 +683,11 @@ private:
         Send(Ctx.ChunkKeeperId, new TEvChunkKeeperAllocate(SubsystemId));
     }
 
-    void CommitState() {
+    void CommitState(bool acknowledgeCommit = false) {
+        Y_DEBUG_ABORT_UNLESS(!CommitInFlight);
+        CommitInFlight = Ctx.EnableReplication || acknowledgeCommit;
         Send(Ctx.SyncLogKeeperId, new TEvPhantomFlagStorageCommitData(
-                Data, std::exchange(PendingRetiredChunks, {})));
+                Data, std::exchange(PendingRetiredChunks, {}), CommitInFlight));
     }
 
     void IssueWrite() {
@@ -525,6 +713,9 @@ private:
 
     std::deque<TRequest> RequestQueue;
     bool RequestInFlight = false;
+    bool Initialized = false;
+    bool CommitInFlight = false;
+    bool DropPending = false;
 
     std::deque<TWriteBatch> BatchQueue;
     std::optional<TWriteBatch> ActiveBatch;
@@ -533,6 +724,7 @@ private:
     ui32 PendingWriteSize = 0;
 
     std::optional<TActiveSnapshotRequest> ActiveSnapshotRequest;
+    std::optional<TReadFlagsFromChunk> ActiveFlagChunkRead;
 
     std::optional<ui32> TailChunkIdx;
     ui64 TailAvailableSize = 0;

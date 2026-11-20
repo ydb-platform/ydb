@@ -46,6 +46,10 @@ namespace NKikimr {
             TEvBlobStorage::EvVSyncResult,
             TEvBlobStorage::EvVSyncFullResult,
             TEvBlobStorage::EvVSyncGuidResult,
+            TEvBlobStorage::EvVPhantomFlagStorageListChunks,
+            TEvBlobStorage::EvVPhantomFlagStorageListChunksResult,
+            TEvBlobStorage::EvVPhantomFlagStorageReadChunk,
+            TEvBlobStorage::EvVPhantomFlagStorageReadChunkResult,
             TEvBlobStorage::EvVBaldSyncLog,
             TEvBlobStorage::EvVBaldSyncLogResult,
 

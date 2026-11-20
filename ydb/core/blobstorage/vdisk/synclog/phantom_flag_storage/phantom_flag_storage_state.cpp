@@ -27,6 +27,7 @@ void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& da
                 .SyncLogKeeperId = syncLogKeeperId,
                 .ChunkKeeperId = chunkKeeperId,
                 .AppendBlockSize = appendBlockSize,
+                .EnableReplication = SlCtx->EnablePhantomFlagStorageReplication,
             });
     ProcessorId = TActivationContext::Register(processorActor);
 

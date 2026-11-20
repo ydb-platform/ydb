@@ -2337,6 +2337,59 @@ namespace NKikimr {
             ctx.Send(ev->Forward(Db->SyncFullHandlerID));
         }
 
+        NKikimrProto::EReplyStatus CheckPhantomFlagStorageRequest(const NKikimrBlobStorage::TVDiskID& sourceProto,
+                const NKikimrBlobStorage::TVDiskID& targetProto) const {
+            if (!IsCompleteVDiskID(sourceProto) || !IsCompleteVDiskID(targetProto)) {
+                return NKikimrProto::ERROR;
+            }
+            const TVDiskID source = VDiskIDFromVDiskID(sourceProto);
+            if (Config->BaseInfo.DonorMode || !SelfVDiskId.SameDisk(targetProto)
+                    || !SelfVDiskId.SameGroupAndGeneration(source) || !GInfo->IsValidId(source)
+                    || source == SelfVDiskId) {
+                return NKikimrProto::RACE;
+            }
+            if (!Config->EnablePhantomFlagStorageReplication || !Config->EnablePersistentPhantomFlagStorage) {
+                return NKikimrProto::NODATA;
+            }
+            if (!Db->SyncLogID) {
+                return NKikimrProto::NOTREADY;
+            }
+            return NKikimrProto::OK;
+        }
+
+        template<class TRequestPtr>
+        void ReplyPhantomFlagStorageError(TRequestPtr& ev, NKikimrProto::EReplyStatus status) {
+            std::unique_ptr<IEventBase> result = NErrBuilder::ErroneousResult(VCtx, status, {}, ev,
+                TActivationContext::Now(), SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, result.release(), ev->Cookie, VCtx, {});
+        }
+
+        void Handle(TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            const NKikimrProto::EReplyStatus status = CheckPhantomFlagStorageRequest(
+                record.GetSourceVDiskID(), record.GetVDiskID());
+            if (status != NKikimrProto::OK) {
+                ReplyPhantomFlagStorageError(ev, status);
+                return;
+            }
+            Forward(ev, Db->SyncLogID);
+        }
+
+        void Handle(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (!ev->Get()->GetChunkIndex()) {
+                ReplyPhantomFlagStorageError(ev, NKikimrProto::ERROR);
+                return;
+            }
+            const NKikimrProto::EReplyStatus status = CheckPhantomFlagStorageRequest(
+                record.GetSourceVDiskID(), record.GetVDiskID());
+            if (status != NKikimrProto::OK) {
+                ReplyPhantomFlagStorageError(ev, status);
+                return;
+            }
+            Forward(ev, Db->SyncLogID);
+        }
+
         ////////////////////////////////////////////////////////////////////////
         // LoggedRecord SECTOR
         ////////////////////////////////////////////////////////////////////////
@@ -2670,8 +2723,9 @@ namespace NKikimr {
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run chunk keeper actor
+            ChunkKeeperEnabledAtStartup = static_cast<bool>(Config->EnableChunkKeeper);
             IActor* chunkKeeperActor = CreateChunkKeeperActor(TChunkKeeperCtx{logCtx, Db->SkeletonID},
-                    std::move(ev->Get()->ChunkKeeperData), Config->EnableChunkKeeper, Config->BaseInfo.ReadOnly);
+                    std::move(ev->Get()->ChunkKeeperData), ChunkKeeperEnabledAtStartup, Config->BaseInfo.ReadOnly);
             Db->ChunkKeeperActorID.Set(ctx.Register(chunkKeeperActor));
             ActiveActors.Insert(Db->ChunkKeeperActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2719,7 +2773,8 @@ namespace NKikimr {
                     Db->SyncLogFirstLsnToKeep,
                     Config->BaseInfo.ReadOnly,
                     Config->EnablePhantomFlagStorage,
-                    Config->EnablePersistentPhantomFlagStorage,
+                    Config->EnablePersistentPhantomFlagStorage && ChunkKeeperEnabledAtStartup,
+                    Config->EnablePhantomFlagStorageReplication,
                     Config->PhantomFlagStorageLimit,
                     Config->VolatilePhantomFlagStorageBlobSizeLimit);
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
@@ -3718,6 +3773,8 @@ namespace NKikimr {
             HFunc(TEvCallOsiris, Handle)
             HFunc(TEvAnubisOsirisPut, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, Handle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, Handle)
             HFunc(TEvSyncGuidRecoveryDone, Handle)
             HFunc(TEvLocalSyncData, Handle)
             // TEvBlobStorage::TEvVStatus
@@ -3785,6 +3842,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVGetBarrier, Handle)
             HFunc(TEvBlobStorage::TEvVSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncFull, Handle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, Handle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, Handle)
             HFunc(TEvOsirisDone, Handle)
             // TEvCallOsiris
             HFunc(TEvAnubisOsirisPut, Handle)
@@ -3964,6 +4023,7 @@ namespace NKikimr {
         std::unique_ptr<NPDisk::TEvCutLog> CutLogDelayedMsg;
         ui64 StartupDataSyncBlockedUntilCutLsn = 0;
         bool LocalDbInitialized = false;
+        bool ChunkKeeperEnabledAtStartup = false;
         std::shared_ptr<TRopeArena> Arena;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
         NMonGroup::TReplGroup ReplMonGroup;

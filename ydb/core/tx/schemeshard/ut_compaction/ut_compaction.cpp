@@ -3712,7 +3712,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         };
 
         // Column tables have no index impl tables: CASCADE asks the shards to rewrite their portions to the current
-        // schema instead. The request carries the flag and the forced compaction id (a retry vs a new operation).
+        // schema instead. The request carries the flag and the forced compaction's TxId (a retry vs a new operation).
         std::vector<NKikimrTxDataShard::TEvCompactTable> requests;
         auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTable>(
             [&](const TEvDataShard::TEvCompactTable::TPtr& ev) { requests.push_back(ev->Get()->Record); });
@@ -3722,7 +3722,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
         UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
         UNIT_ASSERT(requests[0].GetCascade());
-        UNIT_ASSERT_VALUES_EQUAL(requests[0].GetForcedCompactionId(), compactionId);
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].GetTxId(), compactionId);
 
         // a cancel tells the shards nothing: the shard's late answer completes nothing
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);

@@ -2648,9 +2648,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         // the schemeshard's request; `cascade` unset leaves the flag out of the message
-        void SendCompact(const ui64 forcedCompactionId, const std::optional<bool> cascade) {
+        void SendCompact(const ui64 forcedCompactionTxId, const std::optional<bool> cascade) {
             auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, TableId);
-            request->Record.SetForcedCompactionId(forcedCompactionId);
+            request->Record.SetTxId(forcedCompactionTxId);
             if (cascade) {
                 request->Record.SetCascade(*cascade);
             }
@@ -2789,7 +2789,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
 
         auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, tableId);
-        request->Record.SetForcedCompactionId(1);
+        request->Record.SetTxId(1);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
         auto ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender);
         UNIT_ASSERT(ev);
@@ -3226,7 +3226,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     controller->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
                     const auto sender = runtime.AllocateEdgeActor();
                     auto compactRequest = std::make_unique<TEvDataShard::TEvCompactTable>(1, tableId);
-                    compactRequest->Record.SetForcedCompactionId(1);
+                    compactRequest->Record.SetTxId(1);
                     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, compactRequest.release());
                     TEvDataShard::TEvCompactTableResult::TPtr compacted;
                     for (ui32 attempt = 0; attempt < 30 && !compacted; ++attempt) {

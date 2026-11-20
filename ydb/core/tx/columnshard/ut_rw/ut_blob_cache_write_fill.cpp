@@ -71,7 +71,7 @@ public:
     void Compact() {
         ControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         auto compactRequest = std::make_unique<TEvDataShard::TEvCompactTable>(1, TableId);
-        compactRequest->Record.SetForcedCompactionId(1);
+        compactRequest->Record.SetTxId(1);
         ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, compactRequest.release());
         TEvDataShard::TEvCompactTableResult::TPtr compacted;
         for (ui32 attempt = 0; attempt < 30 && !compacted; ++attempt) {

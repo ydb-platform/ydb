@@ -344,7 +344,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
             return NOperationQueue::EStartStatus::EOperationRemove;
         }
         request->Record.SetCascade((*info)->Cascade);
-        request->Record.SetForcedCompactionId((*info)->Id);
+        request->Record.SetTxId((*info)->Id);
     }
 
     PipeClientCache->Send(

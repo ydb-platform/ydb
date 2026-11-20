@@ -1222,7 +1222,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (!record.HasForcedCompactionId()) {
+    if (!record.HasTxId()) {
         // not a forced compaction of this protocol (an older schemeshard): NOT_NEEDED, FAILED would be retried forever
         YDB_LOG_WARN("Forced compaction request without an id",
             {"tablet", TabletID()},
@@ -1253,10 +1253,10 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (ForcedCompactionId != record.GetForcedCompactionId()) {
+    if (ForcedCompactionTxId != record.GetTxId()) {
         // a new operation, not a retry (the schemeshard repeats the request until answered; a retry must not touch the
         // rewrite): CASCADE targets the current schema, a plain operation turns off the rewrite of a cancelled CASCADE
-        ForcedCompactionId = record.GetForcedCompactionId();
+        ForcedCompactionTxId = record.GetTxId();
         if (record.GetCascade()) {
             engine.SetSchemeNeedActualization(true);
         } else if (ForcedCompactionActualizeSchema) {

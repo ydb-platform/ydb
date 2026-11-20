@@ -4,12 +4,14 @@ A mark join answers `IN` or `EXISTS` for every left row. The left row stays. One
 
 The right side is placed in a hash table. A hit in that table is `true`. The rest of this note is about a miss: the answer is then either `null` or `false`.
 
+Spilling is supported. When memory runs low, the join writes its data to disk and finishes it later, the same way as the other hash joins.
+
 There are two kinds of keys.
 
 - A regular key puts rows in a group. In `t2.k = t1.k`, `k` is the regular key. If nulls are allowed to match, two nulls are one group. Otherwise a null regular key means `false`.
 - A mark key is a column of the `IN` test. A null there stays unknown. A mark key cannot treat null as equal to null.
 
-There are at most 32 mark keys, and each one is a single column. The optimizer does not produce this join yet. The tests in `ut/dq_hash_join_ut.cpp` call it directly.
+There are at most 32 mark keys, and each one is a single column. The optimizer does not produce this join yet. The tests in `comp_nodes/ut/dq_hash_join_ut.cpp` call it directly.
 
 ## One mark column, no group
 
@@ -123,7 +125,9 @@ Cost: the exact lookup and the answers that are known at once are O(L + R). The 
 
 ## Spilling
 
-The hash join spills its buckets and its left pages as usual. With no group, the saved right rows and the postponed left rows spill too. The second index does not spill. It is built for the bucket that is in memory and freed before the next one.
+Spilling is supported in every case above.
+
+The hash join spills its buckets and its left pages as usual. With several mark columns and no group, the saved right rows and the postponed left rows spill too. The second index does not spill. It is built for the bucket that is in memory and freed before the next one.
 
 ## Not supported
 

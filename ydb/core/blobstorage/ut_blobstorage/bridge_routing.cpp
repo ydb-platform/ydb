@@ -241,6 +241,51 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         CheckSingleBridgeResponseLatency(get, test.ResultAt.at(1) - start);
     }
 
+    Y_UNIT_TEST(RoutingRestartAnsweredByEjectedProxy) {
+        TQueuedRoutingTest test;
+        const ui32 groupId = test.Group.GetGroupID();
+        TDataChecker(test.Env).Write(groupId);
+        const TActorId service = test.Env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(MakeBlobStorageProxyID(groupId));
+        UNIT_ASSERT(service && service != test.Proxy);
+
+        // The bridge has received the next pile generation before the physical proxies.
+        for (auto& pile : *test.Group.MutableBridgeGroupState()->MutablePile()) {
+            pile.SetGroupGeneration(pile.GetGroupGeneration() + 1);
+        }
+        test.MakeRoutingAvailable();
+        test.HoldResults = true;
+        const auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
+        const TLogoBlobID id(100501, 1, 1, 0, 10, 0);
+        auto request = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::LowRead);
+        request->ExecutionRelay = relay;
+        const auto start = test.Env.Runtime->GetClock();
+        constexpr ui64 cookie = 42;
+        test.Env.Runtime->Send(new IEventHandle(test.Proxy, test.Edge, request.release(), 0, cookie), 1);
+        WaitUntil(test.Env, [&] { return test.HeldResults.size() == 2; }, "pile replies", TDuration::MilliSeconds(10), 100);
+
+        // Eject the group while the original bridge still holds the read. Its retry goes to the public group service.
+        NKikimrBlobStorage::TConfigRequest deletion;
+        deletion.AddCommand()->MutableDeleteSpecificGroups()->AddGroupIds(groupId);
+        const auto deleted = test.Env.Invoke(deletion);
+        UNIT_ASSERT_C(deleted.GetSuccess(), deleted.GetErrorDescription());
+        WaitUntil(test.Env, [&] { return !test.Env.Runtime->GetActor(service); }, "group proxy stopped", TDuration::MilliSeconds(10));
+        test.HoldResults = false;
+        for (auto& ev : std::exchange(test.HeldResults, {})) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvGetResult>()->Status, NKikimrProto::RACE);
+            test.Env.Runtime->Send(ev.release(), 1);
+        }
+        WaitUntil(test.Env, [&] { return test.Results.contains(cookie); }, "ejected group reply", TDuration::MilliSeconds(10), 100);
+        const auto& result = *test.Results.at(cookie);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, NKikimrProto::NO_GROUP, result.ToString());
+        UNIT_ASSERT(result.ExecutionRelay == relay);
+        const auto pool = GetBridgeRequestCounters(test.Env, 1);
+        const auto get = pool->GetSubgroup("handleClass", "GetLow")->GetSubgroup("sizeClass", "262144");
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetCounter("RoutingRestarts", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetSubgroup("status", "NO_GROUP")->GetCounter("completedRequests", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(get->GetCounter("bridgeRequestBytes", true)->Val(), id.BlobSize());
+        CheckSingleBridgeResponseLatency(get, test.ResultAt.at(cookie) - start);
+    }
+
     Y_UNIT_TEST(RestartLimitReturnsError) {
         TQueuedRoutingTest test;
         test.MakeRoutingAvailable();

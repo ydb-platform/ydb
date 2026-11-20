@@ -23,7 +23,7 @@ namespace NKikimr {
     };
 
     namespace {
-        class TRollbackReplyActor : public TActor<TRollbackReplyActor> {
+        class TForwardedReplyActor : public TActor<TForwardedReplyActor> {
             const TActorId Client;
             const bool TrackDelivery;
             const TMonotonic StartTime;
@@ -32,7 +32,7 @@ namespace NKikimr {
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ClientRelay;
 
         public:
-            TRollbackReplyActor(TActorId client, bool trackDelivery, TMonotonic startTime, ui64 requestBytes,
+            TForwardedReplyActor(TActorId client, bool trackDelivery, TMonotonic startTime, ui64 requestBytes,
                     const TBridgeProxyCounters::TRequestCounters& counters, std::shared_ptr<TEvBlobStorage::TExecutionRelay> relay)
                 : TActor(&TThis::StateFunc)
                 , Client(client)
@@ -1208,7 +1208,7 @@ namespace NKikimr {
             if (request.BridgeProxyPoolCounters) {
                 return request.BridgeProxyPoolCounters.get();
             }
-            // Physical DSProxy retries keep the relay when they come back through a reconverted bridge.
+            // A forwarded request can return to a bridge while its observer still owns the final sample.
             return request.ExecutionRelay ? request.ExecutionRelay->BridgeProxyPoolCounters.get() : nullptr;
         }
 
@@ -1360,21 +1360,28 @@ namespace NKikimr {
             }
         }
 
-        void ForwardToOrdinaryProxy(IEventHandle& ev, TEvBlobStorage::TEvRequestCommon& request) {
+        std::optional<TActorId> ObserveForwardedReply(IEventHandle& ev, TEvBlobStorage::TEvRequestCommon& request,
+                bool trackDelivery) {
             if (!request.BridgeProxyPoolCounters) {
+                return std::nullopt;
+            }
+            auto [counters, bytes] = RequestCounters.ForRequest(*request.BridgeProxyPoolCounters, *ev.GetBase());
+            const auto observer = RegisterWithSameMailbox(new TForwardedReplyActor(ev.Sender, trackDelivery,
+                request.BridgeProxyStartTime, bytes, counters, std::move(request.ExecutionRelay)));
+            request.ExecutionRelay = std::make_shared<TEvBlobStorage::TExecutionRelay>(std::move(request.BridgeProxyPoolCounters));
+            return observer;
+        }
+
+        void ForwardToOrdinaryProxy(IEventHandle& ev, TEvBlobStorage::TEvRequestCommon& request) {
+            const auto observer = ObserveForwardedReply(ev, request, ev.Flags & IEventHandle::FlagTrackDelivery);
+            if (!observer) {
                 TActivationContext::Send(ev.Forward(InnerProxyId));
                 return;
             }
-
-            auto [counters, bytes] = RequestCounters.ForRequest(*request.BridgeProxyPoolCounters, *ev.GetBase());
-            const auto observer = RegisterWithSameMailbox(new TRollbackReplyActor(ev.Sender,
-                ev.Flags & IEventHandle::FlagTrackDelivery, request.BridgeProxyStartTime, bytes, counters,
-                std::move(request.ExecutionRelay)));
-            request.ExecutionRelay = std::make_shared<TEvBlobStorage::TExecutionRelay>(std::move(request.BridgeProxyPoolCounters));
             // The original nondelivery recipient handles a group service ID. The inner proxy is a concrete actor.
             // Track this hop so a missing inner proxy releases the observer even for an untracked client request.
             const ui32 flags = (ev.Flags & ~IEventHandle::FlagForwardOnNondelivery) | IEventHandle::FlagTrackDelivery;
-            TActivationContext::Send(new IEventHandle(InnerProxyId, observer, ev.ReleaseBase().Release(), flags,
+            TActivationContext::Send(new IEventHandle(InnerProxyId, *observer, ev.ReleaseBase().Release(), flags,
                 ev.Cookie, nullptr, std::move(ev.TraceId)));
         }
 
@@ -1997,21 +2004,23 @@ namespace NKikimr {
                     } else if (msg->RacingGeneration < myGeneration) {
                         // when the group is decommitted, its service id points to the BlobDepot agent, which would take
                         // restarted request for its client's one; restart it right here then
-                        std::unique_ptr<IEventHandle> h(IsBehindAgent()
-                            ? handle.release()
-                            : CreateEventForBSProxy(handle->Sender, GroupId, handle->ReleaseBase().Release(),
+                        if (!IsBehindAgent()) {
+                            // The service can change to a BlobDepot agent or an ejected proxy before this retry arrives.
+                            const auto observer = ObserveForwardedReply(*handle, *common, /*trackDelivery=*/ true);
+                            handle.reset(CreateEventForBSProxy(observer.value_or(handle->Sender), GroupId, handle->ReleaseBase().Release(),
                                 handle->Cookie, std::move(handle->TraceId)));
+                        }
                         if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
                             // static group configuration is updated a bit differently, so we can't expect for instant update;
                             // here we introduce a backoff timer
                             constexpr ui32 maxCounter = 20;
                             constexpr double maxFactor = 6.0 / maxCounter;
                             auto timeout = TDuration::MicroSeconds(pow(10, Min(common->RestartCounter - 1, maxCounter) * maxFactor));
-                            TActivationContext::Schedule(timeout, h.release());
+                            TActivationContext::Schedule(timeout, handle.release());
                         } else {
                             // our generation is higher than the recipient's; we have to route this message through node warden
                             // to ensure proxy's configuration gets in place
-                            TActivationContext::Send(h.release());
+                            TActivationContext::Send(handle.release());
                         }
                     } else {
                         // we can retry this message (obviously, we HAD request executed at incorrect generation, but

@@ -695,7 +695,7 @@ struct TEvBlobStorage {
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE)");
 
     struct TExecutionRelay {
-        // A rollback observer owns the terminal sample while the request can still be routed by the bridge.
+        // A reply observer owns the terminal sample while the forwarded request can still be routed by a bridge.
         std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
     };
     static constexpr struct TCloneEventPolicy {} CloneEventPolicy{};
@@ -875,7 +875,6 @@ struct TEvBlobStorage {
             , FailOnSlowDown(parameters.FailOnSlowDown)
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
-            IsDSProxySubrequest = WriteSource == TWriteSource::DSProxyPatch || WriteSource == TWriteSource::SkeletonVMovedPatch;
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
             Y_ABORT_UNLESS(Buffer.size() < (40 * 1024 * 1024),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",

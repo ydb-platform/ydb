@@ -695,11 +695,11 @@ public:
         Become(&TBlobStorageGroupPatchRequest::NaiveState);
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, OriginalId.BlobSize(), Deadline,
             NKikimrBlobStorage::AsyncRead);
-        get->IsDSProxySubrequest = true;
         get->Orbit = std::move(Orbit);
         if (OriginalGroupId == Info->GroupID) {
             SendToProxy(std::move(get), PatchedId.Hash(), Span.GetTraceId());
         } else {
+            get->IsDSProxySubrequest = true;
             SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
     }

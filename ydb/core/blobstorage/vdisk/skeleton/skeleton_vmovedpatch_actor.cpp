@@ -167,6 +167,7 @@ namespace NKikimr {
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::SkeletonVMovedPatch,
                         });
+                put->IsDSProxySubrequest = true;
                 put->Orbit = std::move(Orbit);
 
                 YDB_LOG_DEBUG_CTX(ctx, "Send Put ub TEvVMovedPatch",

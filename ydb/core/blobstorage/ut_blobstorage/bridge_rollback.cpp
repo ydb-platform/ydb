@@ -659,9 +659,7 @@ Y_UNIT_TEST_SUITE(BridgeRollback) {
             UNIT_ASSERT(result);
             UNIT_ASSERT_VALUES_EQUAL(result->Cookie, cookie);
             UNIT_ASSERT(result->Get()->ExecutionRelay == relay);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
+            CheckGetResult(*result->Get(), data);
         };
 
         const auto start = env.Runtime->GetClock();

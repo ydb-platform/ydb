@@ -5,9 +5,11 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <util/string/printf.h>
@@ -20,6 +22,61 @@ using namespace Tests;
 using NClient::TValue;
 
 namespace {
+
+class TWritePreMvccRow : public NTabletFlatExecutor::TTransactionBase<NDataShard::TDataShard> {
+public:
+    TWritePreMvccRow(NDataShard::TDataShard* shard, ui32 localTableId, bool& committed)
+        : TBase(shard)
+        , LocalTableId(localTableId)
+        , Committed(committed)
+    {}
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
+        const ui32 key = 1, value = 11;
+        const TRawTypeValue rawKey(&key, sizeof(key), NScheme::NTypeIds::Uint32);
+        const NIceDb::TUpdateOp update(2, NTable::ECellOp::Set,
+            TRawTypeValue(&value, sizeof(value), NScheme::NTypeIds::Uint32));
+        txc.DB.Update(LocalTableId, NTable::ERowOp::Upsert, {&rawKey, 1}, {&update, 1}, TRowVersion::Min());
+
+        // SysMvcc_State uses this key in the persisted DataShard schema.
+        constexpr ui64 mvccStateKey = 25;
+        constexpr ui64 disabled = ui64(NDataShard::EMvccState::MvccDisabled);
+        const auto& scheme = txc.DB.GetScheme();
+        const ui32 sysTable = scheme.TableNames.at("Sys");
+        const ui32 valueTag = scheme.GetTableInfo(sysTable)->ColumnNames.at("Uint64");
+        const TRawTypeValue sysKey(&mvccStateKey, sizeof(mvccStateKey), NScheme::NTypeIds::Uint64);
+        const NIceDb::TUpdateOp sysUpdate(valueTag, NTable::ECellOp::Set,
+            TRawTypeValue(&disabled, sizeof(disabled), NScheme::NTypeIds::Uint64));
+        txc.DB.Update(sysTable, NTable::ERowOp::Upsert, {&sysKey, 1}, {&sysUpdate, 1});
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        Committed = true;
+    }
+
+private:
+    ui32 LocalTableId;
+    bool& Committed;
+};
+
+class TSubmitPreMvccRow : public TActorBootstrapped<TSubmitPreMvccRow> {
+public:
+    TSubmitPreMvccRow(NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor,
+            TAutoPtr<NTabletFlatExecutor::ITransaction> tx)
+        : Executor(executor)
+        , Tx(tx)
+    {}
+
+    void Bootstrap() {
+        Executor->Enqueue(Tx);
+        PassAway();
+    }
+
+private:
+    NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
+    TAutoPtr<NTabletFlatExecutor::ITransaction> Tx;
+};
 
 // TEvTabletSetTableInfo is not copyable (all-const members), so observers snapshot it.
 struct TReportedTableInfo {
@@ -129,6 +186,76 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT(event);
         UNIT_ASSERT_EQUAL(event->GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(event->GetState(), NDataShard::TShardState::WaitScheme);
+    }
+
+    Y_UNIT_TEST(PreMvccMigrationRecordsUnavailableHistory) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false).SetKeepSnapshotTimeout(TDuration::Hours(1));
+        settings.FeatureFlags.SetEnableSnapshotsLocking(false);
+        settings.FeatureFlags.SetEnableDataShardSnapshotLocking(true);
+
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        const auto shard = shards.at(0);
+        const auto beforeWrite = AcquireReadSnapshot(runtime, "/Root");
+
+        // Install a pre-MVCC row and state marker in the actual tablet DB.
+        // An unversioned row would be visible even at beforeWrite if admitted.
+        auto* dataShard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shard)));
+        UNIT_ASSERT(dataShard);
+        auto* executor = dynamic_cast<NTabletFlatExecutor::NFlatExecutorSetup::IExecutor*>(
+            runtime.FindActor(dataShard->ExecutorID()));
+        UNIT_ASSERT(executor);
+        bool committed = false;
+        runtime.Register(new TSubmitPreMvccRow(executor,
+            new TWritePreMvccRow(dataShard, dataShard->GetLocalTableId(tableId), committed)));
+        runtime.WaitFor("pre-MVCC row committed", [&] { return committed; }, TDuration::Seconds(30));
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        const auto persistent = CreateVolatileSnapshot(server, {"/Root/table-1"}, TDuration::Hours(1));
+        UNIT_ASSERT(beforeWrite < persistent);
+        UNIT_ASSERT(!GetRemovedRowVersions(server, shard).Contains(beforeWrite, beforeWrite.Next()));
+
+        auto& app = runtime.GetAppData(0);
+        app.FeatureFlags.SetEnableSnapshotsLocking(true);
+        UNIT_ASSERT(app.FeatureFlags.GetEnableDataShardSnapshotLocking());
+        app.SnapshotRegistryHolder->Set(nullptr);
+        const auto readAt = [&](const TRowVersion& version, ui64 readId) {
+            auto request = std::make_unique<TEvDataShard::TEvRead>();
+            auto& record = request->Record;
+            record.SetReadId(readId);
+            record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            record.AddColumns(1);
+            record.AddColumns(2);
+            record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            version.ToProto(record.MutableSnapshot());
+            AddFullRangeQuery(*request);
+            return SendRead(server, shard, request.release(), sender, 0,
+                GetPipeConfigWithRetries(), {}, TDuration::Seconds(30));
+        };
+
+        for (ui64 boot = 0; boot < 2; ++boot) {
+            RebootTablet(runtime, shard, sender);
+            const auto ranges = GetRemovedRowVersions(server, shard);
+            auto* restarted = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shard)));
+            UNIT_ASSERT(restarted);
+            UNIT_ASSERT(!app.SnapshotRegistryHolder->Get());
+            UNIT_ASSERT(persistent < restarted->GetSnapshotManager().GetLowWatermark());
+            UNIT_ASSERT(ranges.Contains(beforeWrite, beforeWrite.Next()));
+            UNIT_ASSERT(!ranges.Contains(persistent, persistent.Next()));
+
+            const auto stale = readAt(beforeWrite, 2 * boot + 1);
+            UNIT_ASSERT_VALUES_EQUAL(stale->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+            const auto kept = readAt(persistent, 2 * boot + 2);
+            UNIT_ASSERT_VALUES_EQUAL(kept->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(kept.get()), "1, 11\n");
+            UNIT_ASSERT(kept->Record.GetFinished());
+        }
     }
 
     void TestTablePath(bool oldCreate, bool restart)

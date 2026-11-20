@@ -153,6 +153,13 @@ namespace NTable {
             if (row != ERowOp::Erase) {
                 WriteRow(row, version, KeyState.DelayedErase ? KeyState.LastVersion : TRowVersion::Max());
                 KeyState.LastWritten = version;
+            } else if (!KeyState.Written && KeyState.DelayedErase) {
+                // Consecutive erases have the same row image, but their newest
+                // version is still needed for snapshot write conflict checks.
+                // Keep it before the older erase replaces LastVersion, which
+                // bounds the visibility of any following historical data.
+                WriteRow(EraseRowState, KeyState.LastVersion, TRowVersion::Max());
+                KeyState.LastWritten = KeyState.LastVersion;
             }
 
             KeyState.LastVersion = version;
@@ -161,7 +168,11 @@ namespace NTable {
 
         ui32 EndKey()
         {
-            if (!KeyState.Final && KeyState.DelayedErase) {
+            if (KeyState.DelayedErase && (!KeyState.Final ||
+                (!KeyState.Written && KeyState.LastVersion > TRowVersion::Min())))
+            {
+                // Even a final key needs its newest erase as a conflict fence.
+                // It can be dropped after version cleanup rewinds it to Min.
                 WriteRow(EraseRowState, KeyState.LastVersion, TRowVersion::Max());
                 KeyState.LastWritten = KeyState.LastVersion;
                 KeyState.DelayedErase = false;
@@ -291,6 +302,10 @@ namespace NTable {
 
             Y_DEBUG_ABORT_UNLESS(minVersion < maxVersion);
 
+            const bool retainedErase = KeyState.Final && row == ERowOp::Erase && minVersion > TRowVersion::Min();
+            const TRowVersion garbageVersion = row == ERowOp::Erase && minVersion > TRowVersion::Min()
+                ? minVersion : maxVersion;
+
             ui64 overheadBytes = 0;
             for (size_t groupIdx : xrange(Groups.size())) {
                 auto& g = Groups[groupIdx];
@@ -327,6 +342,7 @@ namespace NTable {
             bool erased = (row == ERowOp::Erase || maxVersion < TRowVersion::Max());
             Current.Drops += erased ? 1 : 0;
             Current.HiddenRows += (maxVersion < TRowVersion::Max() ? 1 : 0);
+            Current.RetainedErases += retainedErase ? 1 : 0;
 
             if (!Current.Versioned && (minVersion > TRowVersion::Min() || maxVersion < TRowVersion::Max())) {
                 Current.Versioned = true;
@@ -367,9 +383,10 @@ namespace NTable {
 
             FinishMainKey(erased);
 
-            if (maxVersion < TRowVersion::Max()) {
-                // Count overhead bytes if everything up to maxVersion is removed
-                Current.GarbageStatsBuilder.Add(maxVersion, overheadBytes);
+            if (garbageVersion < TRowVersion::Max()) {
+                // A removed prefix ending at this version makes a hidden row
+                // unreachable, or rewinds a head erase to Min for final elision.
+                Current.GarbageStatsBuilder.Add(garbageVersion, overheadBytes);
                 if (Current.GarbageStatsBuilder.Size() > GarbageStatsMaxBuildSize) {
                     Current.GarbageStatsBuilder.ShrinkTo(GarbageStatsMaxSize);
                 }
@@ -573,6 +590,7 @@ namespace NTable {
                 WriteStats.Coded += Current.Coded;
                 WriteStats.HiddenRows += Current.HiddenRows;
                 WriteStats.HiddenDrops += Current.HiddenDrops;
+                WriteStats.RetainedErases += Current.RetainedErases;
 
                 Current.BTreeGroupIndexes.clear();
                 Current.BTreeHistoricIndexes.clear();
@@ -741,6 +759,9 @@ namespace NTable {
                 stat->SetCoded(Current.Coded);
                 stat->SetDrops(Current.Drops);
                 stat->SetRows(Current.Rows);
+                if (Current.RetainedErases > 0) {
+                    stat->SetRetainedErases(Current.RetainedErases);
+                }
                 if (Current.HiddenRows > 0) {
                     stat->SetHiddenRows(Current.HiddenRows);
                     stat->SetHiddenDrops(Current.HiddenDrops);
@@ -1311,6 +1332,7 @@ namespace NTable {
             ui64 Coded = 0;
             ui64 HiddenRows = 0;
             ui64 HiddenDrops = 0;
+            ui64 RetainedErases = 0;
             ui64 BTreeIndexErasedRowCount = 0;
             ui64 BTreeGroupDataSize = 0;
 

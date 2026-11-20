@@ -22,6 +22,33 @@
 namespace NKikimr {
 namespace NDataShard {
 
+namespace {
+
+std::optional<TRowVersion> ExtractReadSnapshot(const NKikimrDataEvents::TEvWrite& record) {
+    // Only row operations need an MVCC history pin. A lock-only commit uses
+    // the wire snapshot to validate its staged writes against the upgrade boundary.
+    if (record.HasMvccSnapshot() && record.OperationsSize() > 0) {
+        return TRowVersion(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
+    }
+    return std::nullopt;
+}
+
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> DeserializeWriteRequest(const TString& txBody) {
+    NKikimrTxDataShard::TSerializedEvent proto;
+    if (!proto.ParseFromString(txBody)) {
+        return nullptr;
+    }
+
+    TEventSerializationInfo serializationInfo;
+    serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
+
+    TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
+    return std::unique_ptr<NEvents::TDataEvents::TEvWrite>(
+        static_cast<NEvents::TDataEvents::TEvWrite*>(NEvents::TDataEvents::TEvWrite::Load(&buffer)));
+}
+
+} // namespace
+
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
         const NWilson::TTraceId& traceId, bool mvccSnapshotRead)
     : KeyValidator(*self)
@@ -121,6 +148,29 @@ bool TValidatedWriteTx::IsReadOnlyPrepare(const TSysLocks& sysLocks) const {
         }
     }
     return true;
+}
+
+std::optional<TTableId> TValidatedWriteTx::FindUnsafeSnapshotWriteLock(TDataShard& self) const {
+    if (!KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit ||
+        LockMode != TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation ||
+        !MvccSnapshot || self.GetSnapshotManager().IsSnapshotWriteSafe(*MvccSnapshot))
+    {
+        return std::nullopt;
+    }
+
+    // A write staged before upgrade may have passed its conflict check after
+    // legacy compaction discarded the evidence. A commit can contain only its lock.
+    const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+    for (const auto& lockProto : KqpLocks->GetLocks()) {
+        if (lockProto.GetDataShard() != TabletId && !allowAncestorLocks) {
+            continue;
+        }
+        const auto lock = self.SysLocksTable().GetRawLock(lockProto.GetLockId());
+        if (lock && lock->IsWriteLock()) {
+            return TTableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+        }
+    }
+    return std::nullopt;
 }
 
 std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperation::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator, const NWilson::TTraceId& traceId) {
@@ -463,6 +513,7 @@ void TWriteOperation::FillTxData(TValidatedWriteTx::TPtr writeTx)
 
     Target = writeTx->GetSource();
     WriteTx = writeTx;
+    ReadSnapshot = writeTx->HasOperations() ? writeTx->GetMvccSnapshot() : std::nullopt;
 }
 
 void TWriteOperation::FillTxData(TDataShard* self, const TActorId& target, const TString& txBody, const TVector<TSysTables::TLocksTable::TLock>& locks, ui64 artifactFlags)
@@ -519,25 +570,70 @@ TString TWriteOperation::GetTxBody() const {
     return str;
 }
 
-bool TWriteOperation::TrySetTxBody(const TString& txBody) {
-    Y_ENSURE(!WriteRequest);
+bool TWriteOperation::RestoreReadSnapshot(const TString& txBody) {
+    auto writeRequest = DeserializeWriteRequest(txBody);
+    if (!writeRequest) {
+        return false;
+    }
+    ReadSnapshot = ExtractReadSnapshot(writeRequest->Record);
+    ReadSnapshotNeedsRecoveryCheck = ReadSnapshot.has_value();
+    return true;
+}
 
-    NKikimrTxDataShard::TSerializedEvent proto;
-    const bool success = proto.ParseFromString(txBody);
-    if (!success) {
+bool TWriteOperation::CanAbortPreparedWrite() const {
+    if (IsOutRSStored()) {
         return false;
     }
 
-    TEventSerializationInfo serializationInfo;
-    serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
+    const auto& locks = WriteTx->GetKqpLocks();
+    if (!locks || std::ranges::none_of(locks->GetReceivingShards(), [&](ui64 shard) { return shard != TabletId; })) {
+        return true;
+    }
 
-    TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
-    NKikimr::NEvents::TDataEvents::TEvWrite* writeRequest = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
+    // A receiver-only participant cannot stop peers that do not wait for its vote.
+    return locks->GetOp() == NKikimrDataEvents::TKqpLocks::Commit &&
+        std::ranges::find(locks->GetSendingShards(), TabletId) != locks->GetSendingShards().end();
+}
+
+std::optional<TTableId> TWriteOperation::FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const {
+    if (IsImmediate() || !WriteTx->GetMvccSnapshot() || !CanAbortPreparedWrite()) {
+        return std::nullopt;
+    }
+    if (auto table = WriteTx->FindUnsafeSnapshotWriteLock(self)) {
+        return table;
+    }
+    if (!ReadSnapshot) {
+        return std::nullopt;
+    }
+
+    const auto& snapshots = self.GetSnapshotManager();
+    const bool canCheckWriteConflicts = WriteTx->GetLockMode() != TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation ||
+        snapshots.IsSnapshotWriteSafe(*ReadSnapshot);
+    const bool checkRemovedHistory = ReadSnapshotNeedsRecoveryCheck && *ReadSnapshot < snapshots.GetLowWatermark();
+    if (canCheckWriteConflicts && !checkRemovedHistory) {
+        return std::nullopt;
+    }
+    for (const auto& operation : WriteTx->GetOperations()) {
+        const auto& tableId = operation.GetTableId();
+        // The recovered operation itself pins the version. This check asks
+        // whether history was already missing when that pin was recovered.
+        if (!canCheckWriteConflicts || !snapshots.IsSnapshotReadable(db, tableId, *ReadSnapshot, /* locallyAcquired */ true)) {
+            return tableId;
+        }
+    }
+    return std::nullopt;
+}
+
+bool TWriteOperation::TrySetTxBody(const TString& txBody) {
+    Y_ENSURE(!WriteRequest);
+
+    auto writeRequest = DeserializeWriteRequest(txBody);
     if (!writeRequest) {
         return false;
     }
 
-    WriteRequest.reset(writeRequest);
+    ReadSnapshot = ExtractReadSnapshot(writeRequest->Record);
+    WriteRequest = std::move(writeRequest);
     WriteRequestTraceId = NWilson::TTraceId();
     return true;
 }
@@ -558,6 +654,7 @@ bool TWriteOperation::BuildWriteTx(TDataShard* self)
 {
     if (!WriteTx) {
         Y_ENSURE(WriteRequest);
+        ReadSnapshot = ExtractReadSnapshot(WriteRequest->Record);
         WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, WriteRequestTraceId, IsMvccSnapshotRead());
     }
     return bool(WriteTx);
@@ -738,25 +835,8 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
         plan.push_back(EExecutionUnitKind::LoadWriteDetails);
-
-        plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-
-        if (AppData()->FeatureFlags.GetEnableDataShardWriteAlwaysVolatile()) {
-            // Note: previous generation may have persisted InReadSets
-            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
-            plan.push_back(EExecutionUnitKind::LoadInRS);
-        } else {
-            plan.push_back(EExecutionUnitKind::BuildWriteOutRS);
-            plan.push_back(EExecutionUnitKind::StoreAndSendWriteOutRS);
-            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
-            plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-        }
-
-        plan.push_back(EExecutionUnitKind::BlockFailPoint);
-        plan.push_back(EExecutionUnitKind::ExecuteWrite);
-
-        plan.push_back(EExecutionUnitKind::CompleteWrite);
-        plan.push_back(EExecutionUnitKind::CompletedOperations);
+        // LoadWriteDetails selects the execution path using the write body
+        // and any read-set decisions already persisted for the operation.
     }
     RewriteExecutionPlan(plan);
 }
@@ -779,6 +859,8 @@ bool TWriteOperation::OnRestoreMigrated(TDataShard&, const TString& body) {
     if (!TrySetTxBody(body)) {
         return false;
     }
+
+    ReadSnapshotNeedsRecoveryCheck = ReadSnapshot.has_value();
 
     // Make sure event is tracked as soon as possible
     TrackMemory();

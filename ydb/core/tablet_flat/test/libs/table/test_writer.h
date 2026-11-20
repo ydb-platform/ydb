@@ -141,6 +141,7 @@ namespace NTest {
                         stat.HasRows() ? stat.GetRows() : 0,
                         stat.HasHiddenRows() ? stat.GetHiddenRows() : 0,
                         stat.HasHiddenDrops() ? stat.GetHiddenDrops() : 0,
+                        stat.HasRetainedErases() ? stat.GetRetainedErases() : 0,
                     },
                     run ? std::move(run) : TSlices::All()
                 );

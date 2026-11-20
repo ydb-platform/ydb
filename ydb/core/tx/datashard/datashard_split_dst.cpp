@@ -5,6 +5,8 @@
 
 #include <util/string/escape.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
@@ -206,7 +208,7 @@ public:
             RestoreLocalHnswMetadata(txc);
         }
 
-        bool restoreLegacyRemovedRowVersions = false;
+        THashSet<ui32> legacyLocalTableIds;
         for (ui32 i = 0 ; i < Ev->Get()->Record.TableSnapshotSize(); ++i) {
             ui32 localTableId = Ev->Get()->Record.GetTableSnapshot(i).GetTableId();
             TString compressedBody = Ev->Get()->Record.GetTableSnapshot(i).GetSnapshotData();
@@ -219,7 +221,7 @@ public:
                 TSnapshotManager::RestoreRemovedRowVersions(txc.DB, localTableId,
                     tableSnapshot.GetRemovedRowVersions());
             } else if (localTableId >= Schema::MinLocalTid) {
-                restoreLegacyRemovedRowVersions = true;
+                legacyLocalTableIds.insert(localTableId);
             }
         }
 
@@ -243,6 +245,13 @@ public:
         TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId());
         if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
             Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
+
+        // Missing metadata means this source could have compacted with a
+        // writer that drops the last erase of an absent key.
+        const auto writeSafetyBoundary = record.HasMvccSnapshotWriteSafetyBoundary()
+            ? TRowVersion::FromProto(record.GetMvccSnapshotWriteSafetyBoundary())
+            : Max(lowWatermark, minWriteVersion, completeEdge, incompleteEdge, immediateWriteEdge);
+        Self->GetSnapshotManager().RaiseSnapshotWriteSafetyBoundary(db, writeSafetyBoundary);
 
         // Would be true for the first snapshot we receive, e.g. during a merge
         const bool isFirstSnapshot = Self->ReceiveSnapshotsFrom.size() == Self->DstSplitDescription->SourceRangesSize();
@@ -276,11 +285,41 @@ public:
             }
         }
 
-        if (restoreLegacyRemovedRowVersions) {
+        if (!legacyLocalTableIds.empty()) {
             // Old sources only guaranteed persistent snapshots below their
-            // watermark. Restore those read guarantees even if the registry is
-            // unready, independently of optional additional cleanup below.
-            Self->GetSnapshotManager().RemoveRowVersions(txc.DB, TRowVersion::Min(), lowWatermark);
+            // watermark. Reconstruct each legacy table's removed gaps from this
+            // source's pins, not the destination intersection: a modern source
+            // may retain the same point only through the registry.
+            TVector<TRowVersion> sourceSnapshots;
+            for (const auto& [pathId, table] : Self->GetUserTables()) {
+                if (!legacyLocalTableIds.contains(table->LocalTid)) {
+                    continue;
+                }
+                sourceSnapshots.clear();
+                for (const auto& snapshot : record.GetPersistentSnapshots()) {
+                    if (snapshot.GetFlags() & TSnapshot::FlagRemoved) {
+                        continue;
+                    }
+                    if (snapshot.GetOwnerId() == Self->GetPathOwnerId() && snapshot.GetPathId() == pathId) {
+                        const TRowVersion version(snapshot.GetStep(), snapshot.GetTxId());
+                        if (version < lowWatermark) {
+                            sourceSnapshots.push_back(version);
+                        }
+                    }
+                }
+                std::sort(sourceSnapshots.begin(), sourceSnapshots.end());
+                sourceSnapshots.erase(std::unique(sourceSnapshots.begin(), sourceSnapshots.end()), sourceSnapshots.end());
+                TRowVersion lower = TRowVersion::Min();
+                for (const auto& version : sourceSnapshots) {
+                    if (lower < version) {
+                        txc.DB.RemoveRowVersions(table->LocalTid, lower, version);
+                    }
+                    lower = version.Next();
+                }
+                if (lower < lowWatermark) {
+                    txc.DB.RemoveRowVersions(table->LocalTid, lower, lowWatermark);
+                }
+            }
         }
 
         // Restore ancestor locks transferred from the src shard.
@@ -411,7 +450,10 @@ public:
             : TTransactionBase(self)
         {}
 
-        bool Execute(TTransactionContext&, const TActorContext&) override {
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            // The last source's removed ranges become visible after the transfer
+            // transaction commits. Reconcile imported persistent records before serving reads.
+            Self->GetSnapshotManager().MarkSnapshotsWithRemovedHistory(txc.DB);
             return true;
         }
 

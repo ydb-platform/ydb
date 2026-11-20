@@ -709,9 +709,12 @@ class TDataShard
             struct Flags64 :        Column<8, NScheme::NTypeIds::Uint64> {};
             struct Source :         Column<9, NScheme::NTypeIds::ActorId> {};
             struct Cookie :         Column<10, NScheme::NTypeIds::Uint64> {};
+            struct ReadSnapshotStep : Column<11, NScheme::NTypeIds::Uint64> {};
+            struct ReadSnapshotTxId : Column<12, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, Kind, Flags, State, InRSRemain, MaxStep, ReceivedAt, Flags64, Source, Cookie>;
+            using TColumns = TableColumns<TxId, Kind, Flags, State, InRSRemain, MaxStep, ReceivedAt, Flags64, Source, Cookie,
+                ReadSnapshotStep, ReadSnapshotTxId>;
         };
 
         struct TxDetails : Table<4> {
@@ -1331,6 +1334,10 @@ class TDataShard
 
             Sys_SubDomainTablesMetricsLevel = 48,
             Sys_DatabaseFreeze = 49,
+
+            SysMvcc_SnapshotWriteSafetyStep = 50,
+            SysMvcc_SnapshotWriteSafetyTxId = 51,
+            SysMvcc_SnapshotWriteSafetyGeneration = 52,
 
             // reserved
             SysPipeline_Flags = 1000,

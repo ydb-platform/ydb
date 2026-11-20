@@ -14,6 +14,18 @@ public:
     TTxType GetTxType() const override { return TXTYPE_CLEANUP; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        const bool expireSnapshotsAllowed = Self->IsStateActive() && (
+                Self->State == TShardState::Ready ||
+                Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
+                Self->State == TShardState::SplitSrcMakeSnapshot);
+
+        // These gauges describe active snapshot cleanup, so clear the last
+        // measurement even when an inactive state makes us return early.
+        if (!expireSnapshotsAllowed) {
+            Self->SetCounter(COUNTER_MVCC_SNAPSHOT_REGISTRY_WAITING, 0);
+            Self->SetCounter(COUNTER_MVCC_SNAPSHOT_REGISTRY_CLEANUP_LAG_MS, 0);
+        }
+
         if (!Self->IsStateActive()) {
             YDB_LOG_INFO_CTX(ctx, "Cleanup tx at non-ready tablet",
                 {"tabletId", Self->TabletID()},
@@ -46,11 +58,6 @@ public:
 
         // Allow scheduling of new cleanup transactions
         Self->CleanupQueue.Reset(ctx);
-
-        const bool expireSnapshotsAllowed = (
-                Self->State == TShardState::Ready ||
-                Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-                Self->State == TShardState::SplitSrcMakeSnapshot);
 
         if (expireSnapshotsAllowed && Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
             YDB_LOG_DEBUG_CTX(ctx, "Removed expired snapshots",

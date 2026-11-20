@@ -1002,6 +1002,37 @@ public:
                 }
             }
 
+            // Writes such as UPDATE read at the snapshot. Validate history only
+            // after classifying duplicate deliveries: already applied operations
+            // do not read it again, even when their original snapshot is gone.
+            // Prepared writes validate and pin their snapshot before voting.
+            const auto& snapshots = DataShard.GetSnapshotManager();
+            if (const auto& snapshot = writeOp->GetReadSnapshot(); op->IsImmediate() && snapshot) {
+                const bool canCheckWriteConflicts = writeTx->GetLockMode() != TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation ||
+                    snapshots.IsSnapshotWriteSafe(*snapshot);
+                if (!canCheckWriteConflicts || *snapshot < snapshots.GetLowWatermark()) {
+                    for (size_t i = 0; i < writeTx->GetOperations().size(); ++i) {
+                        if (writeOp->DuplicateWriteOpIdxs.contains(i)) {
+                            continue;
+                        }
+                        const auto& tableId = writeTx->GetOperations()[i].GetTableId();
+                        if (!canCheckWriteConflicts || !snapshots.IsSnapshotReadable(txc.DB, tableId, *snapshot)) {
+                            const TString snapshotError = TStringBuilder()
+                                << "Operation " << *op << " writes at stale snapshot " << *snapshot
+                                << " for table " << tableId << " at " << tabletId
+                                << (canCheckWriteConflicts ? "" : " with incomplete write history");
+                            // The batch is valid, but needs a new transaction snapshot.
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, snapshotError);
+                            guardLocks.WriteSeqNumUpdate.Clear();
+                            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD,
+                                "TExecuteWriteUnit::Execute: cannot write at snapshot",
+                                {"errorMessage", snapshotError});
+                            return EExecutionStatus::Executed;
+                        }
+                    }
+                }
+            }
+
             Y_DEFER {
                 // We need to clear OutReadSets and AwaitingDecisions for
                 // volatile transactions, except when we commit them.
@@ -1013,34 +1044,42 @@ public:
 
             const bool requireReadOnlyLocks = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
 
-            auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-                ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId,
-                    op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks, requireReadOnlyLocks)
-                : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets,
-                    allowAncestorLocks, requireReadOnlyLocks);
+            const auto unavailableTable = op->IsImmediate()
+                ? writeTx->FindUnsafeSnapshotWriteLock(DataShard)
+                : writeOp->FindUnavailablePreparedReadSnapshot(DataShard, txc.DB);
+            bool validated = false;
+            TVector<NKikimrDataEvents::TLock> brokenLocks;
+            if (!unavailableTable) {
+                std::tie(validated, brokenLocks) = op->HasVolatilePrepareFlag()
+                    ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId,
+                        op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks, requireReadOnlyLocks)
+                    : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets,
+                        allowAncestorLocks, requireReadOnlyLocks);
+            }
 
             if (!validated) {
-                YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",
-                    {"operation", *op},
-                    {"tabletId", tabletId});
-                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
-                writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(brokenLocks.size());
-
-                // Get victim QuerySpanId from the first broken lock
-                TMaybe<ui64> victimQuerySpanId = brokenLocks.empty() ? Nothing()
-                    : sysLocks.GetVictimQuerySpanIdForLock(brokenLocks[0].GetLockId());
-                NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
-                                                  victimQuerySpanId);
-
-                {
+                if (unavailableTable) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, TStringBuilder()
+                        << "Operation " << *op << " writes at stale snapshot " << *writeTx->GetMvccSnapshot()
+                        << " for table " << *unavailableTable << " at " << tabletId);
+                } else {
+                    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",
+                        {"operation", *op},
+                        {"tabletId", tabletId});
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
                     auto* txStats = writeOp->GetWriteResult()->Record.MutableTxStats();
-                    for (const auto& brokenLock : brokenLocks) {
-                        FillDeferredBreakerInfo(brokenLock.GetLockId(), txStats);
-                    }
-                }
+                    txStats->SetLocksBrokenAsVictim(brokenLocks.size());
 
-                for (auto& brokenLock : brokenLocks) {
-                    writeOp->GetWriteResult()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
+                    // Get victim QuerySpanId from the first broken lock
+                    TMaybe<ui64> victimQuerySpanId = brokenLocks.empty() ? Nothing()
+                        : sysLocks.GetVictimQuerySpanIdForLock(brokenLocks[0].GetLockId());
+                    NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
+                                                      victimQuerySpanId);
+
+                    for (auto& brokenLock : brokenLocks) {
+                        FillDeferredBreakerInfo(brokenLock.GetLockId(), txStats);
+                        writeOp->GetWriteResult()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
+                    }
                 }
 
                 KqpEraseLocks(kqpLocks, sysLocks, allowAncestorLocks);

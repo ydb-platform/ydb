@@ -85,7 +85,6 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         bool done = ReadEverything(txc);
 
         if (done && Self->State != TShardState::Offline) {
-            Self->SnapshotManager.Fix_KIKIMR_14259(txc.DB);
             for (const auto& pr : Self->TableInfos) {
                 pr.second->Fix_KIKIMR_17222(txc.DB);
             }
@@ -151,6 +150,14 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
         if (wasEmpty && Self->TransQueue.GetPlan().size()) {
             Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         }
+    }
+
+    if (Self->State != TShardState::Offline) {
+        // Persisted removal ranges already describe unavailable history.
+        // Wait for both durable and migrated volatile read-snapshot pins before
+        // cleaning retained gaps below the watermark during initialization.
+        Self->SnapshotManager.CleanupUnretainedRowVersions(
+            txc.DB, TRowVersion::Min(), Self->SnapshotManager.GetLowWatermark());
     }
 
     InMemoryStateActorStarted = Self->StartInMemoryStateActor();
@@ -349,8 +356,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
 #undef PRECHARGE_SYS_TABLE
     }
-
-    txc.DB.NoMoreUnprechargedReadsForTx();
 
     // Reads from Sys table
     LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
@@ -593,6 +598,10 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         // TODO: add propose blockers to blockers list
     }
+
+    // Legacy prepared writes load their read-snapshot pins from individual
+    // TxDetails bodies. Allow those point reads before requiring precharge.
+    txc.DB.NoMoreUnprechargedReadsForTx();
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Snapshots::TableId)) {
         if (!Self->SnapshotManager.Reload(db))
@@ -909,7 +918,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         }
         updated = true;
     }
-    if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
+    const bool schemeChanged = FollowerState.LastSchemeUpdate < lastSchemeUpdate;
+    if (schemeChanged) {
         if (!db.Table<Schema::UserTables>().Precharge()) {
             precharged = false;
         }
@@ -956,7 +966,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         FollowerState.LastSysUpdate = lastSysUpdate;
     }
 
-    if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
+    if (schemeChanged) {
         YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower",
             {"tabletId", TabletID()},
             {"prev", FollowerState.LastSchemeUpdate},
@@ -1040,6 +1050,9 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         }
 
         FollowerState.LastSnapshotsUpdate = lastSnapshotsUpdate;
+    } else if (schemeChanged) {
+        // A legacy leader changes the schema on TRUNCATE without updating its persistent snapshots.
+        SnapshotManager.MarkSnapshotsWithRemovedHistory(txc.DB);
     }
 
     return true;

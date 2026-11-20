@@ -39,6 +39,10 @@ enum ESimpleCounters {
     COUNTER_LOCK_ROWS_INFLIGHT = 29                                [(CounterOpts) = {Name: "LockRowsInFlight"}];
     COUNTER_LOCK_ROWS_WAITING = 30                                 [(CounterOpts) = {Name: "LockRowsWaiting"}];
     COUNTER_CHANGE_QUEUE_BYTES = 31                                [(CounterOpts) = {Name: "ChangeQueueBytes"}];
+    // Whether MVCC cleanup is blocked by a missing snapshot registry (0 or 1).
+    COUNTER_MVCC_SNAPSHOT_REGISTRY_WAITING = 32                     [(CounterOpts) = {Name: "MvccSnapshotRegistryWaiting"}];
+    // Registry-induced cleanup delay; zero while the registry is unavailable.
+    COUNTER_MVCC_SNAPSHOT_REGISTRY_CLEANUP_LAG_MS = 33               [(CounterOpts) = {Name: "MvccSnapshotRegistryCleanupLagMs"}];
 }
 
 enum ECumulativeCounters {

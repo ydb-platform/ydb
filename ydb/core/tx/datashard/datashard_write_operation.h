@@ -71,6 +71,7 @@ public:
         return TxInfo().HasWrites();
     }
     bool IsReadOnlyPrepare(const TSysLocks& sysLocks) const;
+    std::optional<TTableId> FindUnsafeSnapshotWriteLock(TDataShard& self) const;
     bool HasLockedWrites() const {
         return HasWrites() && LockTxId;
     }
@@ -172,6 +173,9 @@ public:
     void FillVolatileTxData(TDataShard* self);
 
     TString GetTxBody() const;
+    bool RestoreReadSnapshot(const TString& txBody);
+    bool CanAbortPreparedWrite() const;
+    std::optional<TTableId> FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const;
     bool TrySetTxBody(const TString& txBody);
     void SetTxBody(const TString& txBody);
     void ClearTxBody();
@@ -206,7 +210,7 @@ public:
         ArtifactFlags |= OUT_RS_STORED;
     }
 
-    bool IsOutRSStored() {
+    bool IsOutRSStored() const {
         return ArtifactFlags & OUT_RS_STORED;
     }
 
@@ -320,6 +324,10 @@ private:
     YDB_ACCESSOR_DEF(ui64, SubDomainPathId);
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
     YDB_ACCESSOR_DEF(absl::flat_hash_set<size_t>, DuplicateWriteOpIdxs);
+    // Commit-time operations may read older history while writing at the
+    // current/planned version. Keep this pin even when their data is released.
+    YDB_ACCESSOR_DEF(std::optional<TRowVersion>, ReadSnapshot);
+    bool ReadSnapshotNeedsRecoveryCheck = false;
 
     ui64 PageFaultCount = 0;
 };

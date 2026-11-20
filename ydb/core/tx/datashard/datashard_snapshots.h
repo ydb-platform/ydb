@@ -119,6 +119,7 @@ public:
     bool Reload(NIceDb::TNiceDb& db);
     bool ReloadSys(NIceDb::TNiceDb& db);
     bool ReloadSnapshots(NIceDb::TNiceDb& db);
+    void MarkSnapshotsWithRemovedHistory(NTable::TDatabase& db);
 
     void InitExpireQueue(TInstant now);
 
@@ -161,6 +162,19 @@ public:
     void SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout);
 
     TRowVersion GetLowWatermark() const;
+
+    // Old compaction may already have discarded evidence of writes. A
+    // snapshot below this boundary can still be readable but cannot be used
+    // to check for write conflicts.
+    TRowVersion GetSnapshotWriteSafetyBoundary() const {
+        return SnapshotWriteSafetyBoundary;
+    }
+
+    bool IsSnapshotWriteSafe(const TRowVersion& version) const {
+        return version >= SnapshotWriteSafetyBoundary;
+    }
+
+    void RaiseSnapshotWriteSafetyBoundary(NIceDb::TNiceDb& db, const TRowVersion& version);
 
     bool IsSnapshotRetentionEnabled() const;
 
@@ -212,8 +226,6 @@ public:
     void PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
 
-    void Fix_KIKIMR_14259(NTable::TDatabase& db);
-
     // Optional additional cleanup of every user table, subject to retention and
     // local acquisitions. A watermark can contain retained points below it; it
     // does not prove that the entire preceding range has already been removed.
@@ -232,7 +244,6 @@ public:
 private:
     TSnapshotRetentionPolicy GetSnapshotRetentionPolicy() const;
     TRowVersion GetLeastAcquiredPipelineSnapshot() const;
-    bool IsSnapshotAcquiredByIterator(const TTableId& tableId, const TRowVersion& version) const;
     bool CleanupRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to,
         const TSnapshotRetentionPolicy& policy);
 
@@ -246,6 +257,7 @@ private:
     TRowVersion IncompleteEdge = TRowVersion::Min();
     TRowVersion CompleteEdge = TRowVersion::Min();
     TRowVersion LowWatermark = TRowVersion::Min();
+    TRowVersion SnapshotWriteSafetyBoundary = TRowVersion::Min();
     TRowVersion ImmediateWriteEdge = TRowVersion::Min();
     TRowVersion ImmediateWriteEdgeReplied = TRowVersion::Min();
     TRowVersion UnprotectedReadEdge = TRowVersion::Min();
@@ -262,8 +274,6 @@ private:
     THashMap<TSnapshotKey, size_t> References;
 
     TMonotonic LastAdvanceWatermark{};
-    bool SnapshotRegistryWarningLogged = false;
-    bool SnapshotRegistryLagWarningLogged = false;
 };
 
 }   // namespace NDataShard

@@ -269,7 +269,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         }
     }
 
-    if (!CreateConsistentCopyTables(opId, modifyScheme, context, result)) {
+    if (!CreateConsistentCopyTables(opId, modifyScheme, context, result, /*allowPgForBackup*/ true)) {
         return result;
     }
 

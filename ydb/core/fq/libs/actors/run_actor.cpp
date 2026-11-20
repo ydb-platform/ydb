@@ -3,6 +3,8 @@
 #include "proxy.h"
 #include "table_bindings_from_bindings.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
@@ -59,11 +61,13 @@
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/yson/node/node_io.h>
+#include <util/generic/algorithm.h>
 #include <util/string/split.h>
 #include <util/system/hostname.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -71,6 +75,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
@@ -122,15 +127,54 @@ struct TEvPrivate {
     };
 };
 
+constexpr const char* PgCompatibilityDisabled = "PostgreSQL compatibility is disabled";
+
+bool IsPgProgram(TStringBuf program) {
+    if (program.empty()) {
+        return false;
+    }
+    using namespace NKikimr::NMiniKQL;
+    TScopedAlloc alloc(__LOCATION__);
+    TTypeEnvironment env(alloc);
+    const auto root = DeserializeRuntimeNode(program, env);
+    TExploringNodeVisitor visitor;
+    visitor.Walk(root.GetNode(), env);
+    return AnyOf(visitor.GetNodes(), [](const TNode* node) {
+        const auto* type = node->GetType();
+        if (type->GetKind() == TType::EKind::Type) {
+            return static_cast<const TType*>(node)->GetKind() == TType::EKind::Pg;
+        }
+        return type->GetKind() == TType::EKind::Callable
+            && NKikimr::NKqp::IsPgCallable(static_cast<const TCallableType*>(type)->GetName());
+    });
+}
+
+bool IsPgGraph(const NFq::NProto::TGraphParams& graph) {
+    return AnyOf(graph.GetStageProgram(), [](const auto& entry) {
+        return IsPgProgram(entry.second);
+    }) || AnyOf(graph.GetTasks(), [](const auto& task) {
+        return IsPgProgram(task.GetProgram().GetRaw());
+    });
+}
+
 class TTraceOptPipelineConfigurator: public IPipelineConfigurator {
 public:
-    TTraceOptPipelineConfigurator() = default;
+    explicit TTraceOptPipelineConfigurator(bool disablePgCompatibility)
+        : DisablePgCompatibility(disablePgCompatibility)
+    {}
 
     void AfterCreate(TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
     }
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
+        if (DisablePgCompatibility) {
+            pipeline->Add(CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                output = input;
+                return NKikimr::NKqp::ValidateOptimizedKqpPgTypes(input, ctx)
+                    ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error;
+            }), "CheckPgTypes");
+        }
         pipeline->Add(TExprLogTransformer::Sync("OptimizedExpr", NYql::NLog::EComponent::Core, NYql::NLog::ELevel::TRACE), "OptTrace",
             TIssuesIds::CORE, "OptTrace");
     }
@@ -138,9 +182,10 @@ public:
     void AfterOptimize(TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
     }
-};
 
-static TTraceOptPipelineConfigurator TraceOptPipelineConfigurator;
+private:
+    const bool DisablePgCompatibility;
+};
 
 class TProgramRunnerActor: public NActors::TActorBootstrapped<TProgramRunnerActor> {
 public:
@@ -159,6 +204,7 @@ public:
         , SqlSettings(sqlSettings)
         , ExecuteMode(executeMode)
         , QueryId(queryId)
+        , PipelineConfigurator(sqlSettings.PGDisable)
     {
     }
 
@@ -194,8 +240,21 @@ public:
                     return;
                 }
 
-                Compiled = true;
+                if (SqlSettings.PGDisable) {
+                    const auto invalid = FindNode(Program->ExprRoot(), [](const TExprNode::TPtr& node) {
+                        return node->IsCallable() && (NKikimr::NKqp::IsPgCallable(node->Content())
+                            || (node->IsCallable("Configure") && node->ChildrenSize() == 4
+                                && node->Child(2)->IsAtom("CostBasedOptimizer") && node->Child(3)->IsAtom("pg")));
+                    });
+                    if (invalid) {
+                        Issues.AddIssue(YqlIssue(Program->ExprCtx().GetPosition(invalid->Pos()),
+                            TIssuesIds::KIKIMR_BAD_REQUEST, PgCompatibilityDisabled));
+                        SendStatusAndDie(TProgram::TStatus::Error, PgCompatibilityDisabled);
+                        return;
+                    }
+                }
 
+                Compiled = true;
                 if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
                     SendStatusAndDie(TProgram::TStatus::Ok);
                     return;
@@ -206,13 +265,13 @@ public:
             TProgram::TFutureStatus futureStatus;
             switch (ExecuteMode) {
                 case FederatedQuery::ExecuteMode::EXPLAIN:
-                    futureStatus = Program->OptimizeAsyncWithConfig("", TraceOptPipelineConfigurator);
+                    futureStatus = Program->OptimizeAsyncWithConfig("", PipelineConfigurator);
                     break;
                 case FederatedQuery::ExecuteMode::VALIDATE:
                     futureStatus = Program->ValidateAsync("");
                     break;
                 case FederatedQuery::ExecuteMode::RUN:
-                    futureStatus = Program->RunAsyncWithConfig("", TraceOptPipelineConfigurator);
+                    futureStatus = Program->RunAsyncWithConfig("", PipelineConfigurator);
                     break;
                 default:
                     SendStatusAndDie(TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
@@ -302,6 +361,7 @@ private:
     const NSQLTranslation::TTranslationSettings SqlSettings;
     const FederatedQuery::ExecuteMode ExecuteMode;
     const TString QueryId;
+    const TTraceOptPipelineConfigurator PipelineConfigurator;
     bool Parsed = false;
     bool Compiled = false;
 };
@@ -362,6 +422,7 @@ public:
             {"queryId", Params.QueryId},
             {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
 
+        DisablePgCompatibility = NKikimr::HasAppData() && NKikimr::AppData()->FeatureFlags.GetDisablePgCompatibility();
         FillConnections();
 
         QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
@@ -948,6 +1009,10 @@ private:
         }
 
         if (ev->Get()->IsEvaluation) {
+            if (DisablePgCompatibility && IsPgGraph(ev->Get()->GraphParams)) {
+                Abort(PgCompatibilityDisabled, FederatedQuery::QueryMeta::FAILED);
+                return;
+            }
             auto info = RunEvalDqGraph(ev->Get()->GraphParams);
             info.Result = ev->Get()->Result;
             EvalInfos.emplace(info.ExecuterId, info);
@@ -1618,6 +1683,10 @@ private:
 
     void RunNextDqGraph() {
         auto& dqGraphParams = DqGraphParams.at(DqGraphIndex);
+        if (DisablePgCompatibility && IsPgGraph(dqGraphParams)) {
+            Abort(PgCompatibilityDisabled, FederatedQuery::QueryMeta::FAILED);
+            return;
+        }
         TDqConfiguration::TPtr dqConfiguration = MakeIntrusive<TDqConfiguration>();
         dqConfiguration->Dispatch(dqGraphParams.GetSettings());
         dqConfiguration->FreezeDefaults();
@@ -2116,6 +2185,7 @@ private:
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
+        sqlSettings.PGDisable = DisablePgCompatibility;
         sqlSettings.Flags.insert(
             { "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });
         // PQ topic metadata is exposed as __ydb_-prefixed system columns (e.g. __ydb_offset,
@@ -2386,6 +2456,7 @@ private:
     TInstant CreatedAt;
     FederatedQuery::QueryAction Action = FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED;
     TMap<NActors::TActorId, TEvaluationGraphInfo> EvalInfos;
+    bool DisablePgCompatibility = false;
     std::vector<NFq::NProto::TGraphParams> DqGraphParams;
     std::vector<i32> DqGrapResultIndices;
     i32 DqGraphIndex = 0;

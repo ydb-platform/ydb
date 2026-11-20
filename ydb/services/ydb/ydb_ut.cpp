@@ -3316,6 +3316,7 @@ tx_meta {
                 "path: \"/Root/TheTable\""
                 "columns { name: \"Key\"             type: { pg_type { type_name: \"pgint8\" } } }"
                 "columns { name: \"Value\"           type: { pg_type { type_name: \"pgtext\" } } }"
+                "columns { name: \"NativeValue\" type: { optional_type { item { type_id: UINT64 } } } }"
                 "primary_key: [\"Key\", \"Value\"]");
             ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
             Ydb::Table::CreateTableResponse response;
@@ -3348,9 +3349,9 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
             TStringBuilder requestBuilder;
-            requestBuilder << "UPSERT INTO `Root/TheTable` (Key, Value) VALUES";
+            requestBuilder << "UPSERT INTO `Root/TheTable` (Key, Value, NativeValue) VALUES";
             for (auto pair : data) {
-                requestBuilder << "(" << std::get<0>(pair) << "pi, \"" << std::get<1>(pair) << "\"pt),";
+                requestBuilder << "(" << std::get<0>(pair) << "pi, \"" << std::get<1>(pair) << "\"pt, " << std::get<0>(pair) << "ul),";
             }
             TString req(requestBuilder);
             req.back() = ';';
@@ -3483,16 +3484,47 @@ tx_meta {
             featureFlags.SetDisablePgCompatibility(true);
 
             auto stub = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
             Ydb::Table::ReadTableRequest request;
             request.set_path("/Root/TheTable");
-            Ydb::Table::ReadTableResponse response;
-            auto reader = stub->StreamReadTable(&context, request);
-            UNIT_ASSERT(reader->Read(&response));
-            UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SCHEME_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "PostgreSQL compatibility is disabled");
-            UNIT_ASSERT(!reader->Read(&response));
-            UNIT_ASSERT(reader->Finish().ok());
+            request.add_columns("NativeValue");
+
+            {
+                grpc::ClientContext context;
+                Ydb::Table::ReadTableResponse response;
+                auto reader = stub->StreamReadTable(&context, request);
+                size_t i = 0;
+                while (reader->Read(&response)) {
+                    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+                    for (const auto& row : response.result().result_set().rows()) {
+                        UNIT_ASSERT_VALUES_EQUAL(row.items_size(), 1);
+                        UNIT_ASSERT(i < data.size());
+                        UNIT_ASSERT_VALUES_EQUAL(row.items(0).uint64_value(), std::get<0>(data[i++]));
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(i, data.size());
+                UNIT_ASSERT(reader->Finish().ok());
+            }
+
+            const auto expectPgRejected = [&](const Ydb::Table::ReadTableRequest& deniedRequest) {
+                grpc::ClientContext context;
+                Ydb::Table::ReadTableResponse response;
+                auto reader = stub->StreamReadTable(&context, deniedRequest);
+                UNIT_ASSERT(reader->Read(&response));
+                UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SCHEME_ERROR);
+                UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "PostgreSQL compatibility is disabled");
+                UNIT_ASSERT(!reader->Read(&response));
+                UNIT_ASSERT(reader->Finish().ok());
+            };
+
+            auto pgProjection = request;
+            pgProjection.add_columns("Value");
+            expectPgRejected(pgProjection);
+
+            auto pgBound = request;
+            auto* lowerBound = pgBound.mutable_key_range()->mutable_greater_or_equal();
+            lowerBound->mutable_type()->mutable_tuple_type()->add_elements()->mutable_pg_type()->set_type_name("pgint8");
+            lowerBound->mutable_value()->add_items()->set_text_value("50");
+            expectPgRejected(pgBound);
         }
     }
 

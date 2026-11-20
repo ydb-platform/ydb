@@ -734,11 +734,23 @@ IActor* MakeCreateBindingActor(const TActorId& proxyActorId, TEvControlPlaneProx
 }
 
 IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
-    TDuration requestTimeout, TCounters& counters, const ::NFq::TComputeConfig& computeConfig) {
-    auto queryFactoryMethod = [computeConfig](
+    TDuration requestTimeout, TCounters& counters, const ::NFq::TComputeConfig& computeConfig, EModifyBindingStage stage) {
+    auto queryFactoryMethod = [computeConfig, stage](
                                   const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request) -> std::vector<TSchemaQueryTask> {
         auto sourceName = request->Get()->ConnectionContent->name();
         auto oldTableName = request->Get()->OldBindingContent->name();
+
+        switch (stage) {
+            case EModifyBindingStage::CreateNew:
+                return {TSchemaQueryTask{.SQL = MakeCreateExternalDataTableQuery(request->Get()->Request.content(), sourceName, false)}};
+            case EModifyBindingStage::DropOld:
+            case EModifyBindingStage::DropNew:
+                return {TSchemaQueryTask{
+                    .SQL = MakeDeleteExternalDataTableQuery(stage == EModifyBindingStage::DropOld ? oldTableName : request->Get()->Request.content().name()),
+                    .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
+            case EModifyBindingStage::Modify:
+                break;
+        }
 
         bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
         if (replaceSupported && oldTableName == request->Get()->Request.content().name()) {

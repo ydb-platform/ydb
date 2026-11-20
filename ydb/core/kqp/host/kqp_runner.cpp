@@ -100,6 +100,9 @@ public:
 
         if (!TransformerFinished) {
             TransformerFinished = true;
+            if (Config->FeatureFlags.GetDisablePgCompatibility() && !ValidateOptimizedKqpPgTypes(input, ctx)) {
+                return TStatus::Error;
+            }
             auto& preparedQuery = *TransformCtx.QueryCtx->PreparingQuery;
             TKqpPhysicalQuery physicalQuery(input);
 

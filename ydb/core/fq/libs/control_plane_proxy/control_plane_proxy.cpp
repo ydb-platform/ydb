@@ -40,6 +40,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/retry/retry_policy.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -2099,10 +2100,30 @@ private:
             return;
         }
 
+        const auto usesPg = [](const FederatedQuery::BindingContent& content) {
+            const auto& objectStorage = content.setting().object_storage();
+            return AnyOf(objectStorage.subset(), [](const auto& subset) {
+                return AnyOf(subset.schema().column(), [](const auto& column) {
+                    const auto& type = column.type();
+                    return type.has_pg_type() || type.optional_type().item().has_pg_type();
+                });
+            });
+        };
+        auto& binding = *ev->Get();
+        const bool pgBinding = isComputeYDBSyncEnabled && (usesPg(*binding.OldBindingContent) || usesPg(binding.Request.content()));
+        const bool pgRename = pgBinding && binding.OldBindingContent->name() != binding.Request.content().name();
+
+        if (pgRename && binding.PgRenameValidated && !binding.ComputeYDBOperationWasPerformed) {
+            binding.YDBClient = CreateNewTableClient(ev, Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory);
+            Register(MakeModifyBindingActor(ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters,
+                Config.ComputeConfig, EModifyBindingStage::CreateNew));
+            return;
+        }
+
         if (!ev->Get()->ControlPlaneYDBOperationWasPerformed) {
             Register(new TRequestActor<TEvControlPlaneStorage::TEvModifyBindingRequest, TEvControlPlaneStorage::TEvModifyBindingResponse,
                 TEvControlPlaneProxy::TEvModifyBindingRequest, TEvControlPlaneProxy::TEvModifyBindingResponse>(
-                ev, Config, ControlPlaneStorageServiceActorId(), requestCounters, probe, availablePermissions, !isComputeYDBSyncEnabled));
+                ev, Config, ControlPlaneStorageServiceActorId(), requestCounters, probe, availablePermissions, !isComputeYDBSyncEnabled, pgRename));
             return;
         }
 
@@ -2110,12 +2131,18 @@ private:
             if (!ev->Get()->YDBClient) {
                 ev->Get()->YDBClient = CreateNewTableClient(ev, Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory);
             }
-            if (!ev->Get()->ComputeYDBOperationWasPerformed) {
+            if (!binding.ComputeYDBOperationWasPerformed && !(pgBinding && binding.Response->AuditDetails.IdempotencyResult)) {
                 Register(
                     MakeModifyBindingActor(ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters, Config.ComputeConfig));
                 return;
             }
-            Send(sender, ev->Get()->Response.release());
+            if (pgRename && !binding.PgRenameCleanupStarted) {
+                binding.PgRenameCleanupStarted = true;
+                const auto stage = binding.Response->Issues.Empty() ? EModifyBindingStage::DropOld : EModifyBindingStage::DropNew;
+                Register(MakeModifyBindingActor(ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters, Config.ComputeConfig, stage));
+                return;
+            }
+            Send(sender, binding.Response.release());
         }
     }
 

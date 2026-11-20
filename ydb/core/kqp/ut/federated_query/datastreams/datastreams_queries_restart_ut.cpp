@@ -182,6 +182,40 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
             DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
     }
 
+    Y_UNIT_TEST_F(PgPolicyPreservesCheckpointOnRejectedRestart, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        CreateScopedTopic("pgPolicyInput");
+        CreateScopedTopic("pgPolicyOutput");
+        CreatePqSource("pgPolicySource");
+
+        ExecQuery(R"(
+            CREATE STREAMING QUERY pgPolicyQuery AS
+            DO BEGIN
+                $in = SELECT value FROM pgPolicySource.pgPolicyInput WITH (
+                    FORMAT = "json_each_row", SCHEMA = (value String NOT NULL)
+                )
+                WHERE (FromPg(Pg::abs(ToPg(CAST(Length(value) AS Int32)))) ?? 0) > 0;
+                INSERT INTO pgPolicySource.pgPolicyOutput SELECT value FROM $in;
+            END DO;
+        )");
+        WriteTopicMessage("pgPolicyInput", R"({"value": "before"})");
+        ReadTopicMessages("pgPolicyOutput", {"before"}, TInstant::Now() - TDuration::Seconds(100));
+        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = FALSE)");
+        const auto checkpointId = GetStreamingQueryCheckpointId("pgPolicyQuery");
+        UNIT_ASSERT(!checkpointId.empty());
+
+        auto& featureFlags = GetRuntime().GetAppData().FeatureFlags;
+        featureFlags.SetDisablePgCompatibility(true);
+        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = TRUE)", EStatus::UNSUPPORTED,
+            "PostgreSQL compatibility is disabled");
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId("pgPolicyQuery"), checkpointId);
+
+        featureFlags.SetDisablePgCompatibility(false);
+        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = TRUE)");
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId("pgPolicyQuery"), checkpointId);
+        ExecQuery("DROP STREAMING QUERY pgPolicyQuery");
+    }
+
     Y_UNIT_TEST(LocalConnectionOperationTimeout) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);

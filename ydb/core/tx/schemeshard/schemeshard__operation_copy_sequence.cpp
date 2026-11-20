@@ -420,6 +420,7 @@ public:
 };
 
 class TCopySequence: public TSubOperation {
+    bool AllowPgForBackup = false;
     virtual const char* Name() const override final { return "TCopySequence"; }
 
     static TTxState::ETxState NextState() {
@@ -469,6 +470,11 @@ class TCopySequence: public TSubOperation {
 
 public:
     using TSubOperation::TSubOperation;
+
+    TCopySequence(TOperationId id, const TTxTransaction& tx, bool allowPgForBackup)
+        : TSubOperation(id, tx)
+        , AllowPgForBackup(allowPgForBackup)
+    {}
 
     THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -549,7 +555,7 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
         TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
-        if (AppData()->FeatureFlags.GetDisablePgCompatibility() && !parentPath.IsBackupTable()
+        if (!AllowPgForBackup && AppData()->FeatureFlags.GetDisablePgCompatibility() && !parentPath.IsBackupTable()
                 && NPg::TypeDescFromPgTypeName(NMiniKQL::AdaptLegacyYqlType(srcSequence->Description.GetDataType()))) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for the source sequence");
             return result;
@@ -702,9 +708,9 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx)
+ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx, bool allowPgForBackup)
 {
-    return MakeSubOperation<TCopySequence>(id, tx);
+    return MakeSubOperation<TCopySequence>(id, tx, allowPgForBackup);
 }
 
 ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state) {

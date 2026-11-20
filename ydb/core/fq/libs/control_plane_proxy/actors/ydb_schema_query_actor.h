@@ -36,8 +36,16 @@ NActors::IActor* MakeCreateBindingActor(const TActorId& proxyActorId, TEvControl
     TDuration requestTimeout, TCounters& counters, TPermissions permissions, const TComputeConfig& computeConfig, bool withoutRollback = false,
     TMaybe<TString> bindingId = Nothing());
 
+enum class EModifyBindingStage {
+    Modify,
+    CreateNew,
+    DropOld,
+    DropNew,
+};
+
 NActors::IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
-    TDuration requestTimeout, TCounters& counters, const TComputeConfig& computeConfig);
+    TDuration requestTimeout, TCounters& counters, const TComputeConfig& computeConfig,
+    EModifyBindingStage stage = EModifyBindingStage::Modify);
 
 NActors::IActor* MakeDeleteBindingActor(
     const TActorId& proxyActorId, TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr request, TDuration requestTimeout, TCounters& counters);

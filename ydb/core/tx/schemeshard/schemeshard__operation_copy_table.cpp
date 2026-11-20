@@ -414,6 +414,7 @@ class TCopyTable: public TSubOperation {
 
     THashSet<TString> LocalSequences;
     TMaybe<TPathElement::EPathState> TargetState;
+    bool AllowPgForBackup = false;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -469,10 +470,11 @@ public:
         TargetState = state->TargetPathTargetState;
     }
 
-    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
+    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState, bool allowPgForBackup)
         : TSubOperation(id, tx)
         , LocalSequences(localSequences)
         , TargetState(targetState)
+        , AllowPgForBackup(allowPgForBackup)
     {
     }
 
@@ -722,7 +724,7 @@ public:
 
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
             .EnableTablePgTypes = true,
-            .DisablePgCompatibility = !isBackup && AppData()->FeatureFlags.GetDisablePgCompatibility(),
+            .DisablePgCompatibility = !isBackup && !AllowPgForBackup && AppData()->FeatureFlags.GetDisablePgCompatibility(),
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
             .EnableDetailedMetrics = true,
@@ -917,9 +919,9 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
+ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState, bool allowPgForBackup)
 {
-    return MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState);
+    return MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState, allowPgForBackup);
 }
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state) {

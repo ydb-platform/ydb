@@ -434,9 +434,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>> response =
         std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
-    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request = request,
-                             tablePathPrefix = YdbConnection->TablePathPrefix, idempotencyKeyTtl = Config->IdempotencyKeyTtl,
-                             commonCounters = requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request = request, validateOnly = event.ValidateOnly,
+                             observedRevision = event.ObservedRevision, tablePathPrefix = YdbConnection->TablePathPrefix,
+                             idempotencyKeyTtl = Config->IdempotencyKeyTtl, commonCounters = requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
                 << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
@@ -481,10 +481,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                 << "Binding does not exist or permission denied. Please check the id binding or your access rights";
         }
 
-        auto& meta = *binding.mutable_meta();
-        meta.set_revision(meta.revision() + 1);
-        meta.set_modified_by(user);
-        *meta.mutable_modified_at() = NProtoInterop::CastToProto(TInstant::Now());
+        if (observedRevision && binding.meta().revision() != *observedRevision) {
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST)
+                << "Revision of the binding has been changed already. Please restart the request with a new revision";
+        }
 
         auto& content = *binding.mutable_content();
 
@@ -505,6 +505,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                 << "Connection id cannot be changed. Please specify the same connection id";
         }
 
+        if (validateOnly) {
+            response->second.Before = std::move(binding);
+            return std::make_pair(TString{}, NYdb::TParamsBuilder{}.Build());
+        }
+
+        auto& meta = *binding.mutable_meta();
+        meta.set_revision(meta.revision() + 1);
+        meta.set_modified_by(user);
+        *meta.mutable_modified_at() = NProtoInterop::CastToProto(TInstant::Now());
         content = request.content();
 
         FederatedQuery::Internal::BindingInternal bindingInternal;

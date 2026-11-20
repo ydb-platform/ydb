@@ -831,6 +831,7 @@ private:
             YQL_ENSURE(preparedQuery);
             NKikimrKqp::TQueryPhysicalGraph physicalGraph;
             *physicalGraph.MutablePreparedQuery() = *preparedQuery;
+            physicalGraph.SetCompiledWithPgCompatibilityDisabled(Request.CompiledWithPgCompatibilityDisabled);
             TasksGraph.PersistTasksGraphInfo(physicalGraph);
             Request.QueryPhysicalGraph = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(std::move(physicalGraph));
         }

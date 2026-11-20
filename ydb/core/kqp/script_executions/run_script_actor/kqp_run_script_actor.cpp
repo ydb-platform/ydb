@@ -121,6 +121,7 @@ private:
         auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record = request;
         ev->SetSaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph);
+        ev->DisablePgCompatibility = settings.DisablePgCompatibility;
         ev->SetDisableDefaultTimeout(settings.DisableDefaultTimeout);
 
         if (settings.PhysicalGraph) {

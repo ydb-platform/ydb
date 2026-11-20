@@ -776,6 +776,16 @@ public:
             }
         }
 
+        std::optional<bool> disablePgCompatibility;
+        if (ev.QueryPhysicalGraph) {
+            disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
+            if (*disablePgCompatibility && !ev.QueryPhysicalGraph->GetCompiledWithPgCompatibilityDisabled()) {
+                SendFailResponse(Ydb::StatusIds::UNSUPPORTED,
+                    "PostgreSQL compatibility is disabled and the saved plan was not compiled in that mode");
+                return;
+            }
+        }
+
         auto meta = GetOperationMeta();
 
         // Start request.
@@ -794,6 +804,7 @@ public:
                 .Counters = Counters,
                 .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
                 .PhysicalGraph = ev.QueryPhysicalGraph,
+                .DisablePgCompatibility = disablePgCompatibility,
                 .DisableDefaultTimeout = ev.DisableDefaultTimeout,
                 .CheckpointId = ev.CheckpointId,
                 .StreamingQueryPath = ev.StreamingQueryPath,

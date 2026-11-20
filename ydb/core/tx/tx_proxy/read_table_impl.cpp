@@ -23,6 +23,8 @@
 
 #include <util/stream/trace.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
@@ -611,6 +613,12 @@ private:
         }
 
         const bool disablePgCompatibility = AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
+        const auto& keyRange = Settings.KeyRange;
+        const int boundSize = disablePgCompatibility ? std::max({
+            keyRange.greater_or_equal().type().tuple_type().elements_size(),
+            keyRange.greater().type().tuple_type().elements_size(),
+            keyRange.less_or_equal().type().tuple_type().elements_size(),
+            keyRange.less().type().tuple_type().elements_size()}) : 0;
         TVector<NScheme::TTypeInfo> keyTypes(res.Columns.size());
         TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
         TVector<TConversionTypeInfo> keyConversionTypesInfos(res.Columns.size());
@@ -639,7 +647,7 @@ private:
                     continue;
                 }
 
-                if (disablePgCompatibility && (selected || col.KeyOrder != -1) && col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                if (disablePgCompatibility && (selected || (col.KeyOrder >= 0 && col.KeyOrder < boundSize)) && col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
                     if (UserToken && res.SecurityObject && !res.SecurityObject->CheckAccess(NACLib::SelectRow, *UserToken)) {
                         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED));
                         return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,

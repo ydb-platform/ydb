@@ -130,9 +130,9 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
 
 static NKikimr::NSchemeShard::ISubOperation::TPtr CreateCopyAnyTable(
         const NKikimr::NSchemeShard::TPath& srcPath, NKikimr::NSchemeShard::TOperationId id, const NKikimr::NSchemeShard::TTxTransaction& tx,
-        const THashSet<TString>& localSequences = { }, TMaybe<NKikimr::NSchemeShard::TPathElement::EPathState> targetState = {}) {
+        const THashSet<TString>& localSequences, bool allowPgForBackup, TMaybe<NKikimr::NSchemeShard::TPathElement::EPathState> targetState = {}) {
     if (srcPath->IsTable()) {
-        return NKikimr::NSchemeShard::CreateCopyTable(id, tx, localSequences, targetState);
+        return NKikimr::NSchemeShard::CreateCopyTable(id, tx, localSequences, targetState, allowPgForBackup);
     }
     return NKikimr::NSchemeShard::CreateReadOnlyCopyColumnTable(id, tx);
 }
@@ -143,7 +143,7 @@ bool CreateConsistentCopyTables(
     TOperationId nextId,
     const TTxTransaction& tx,
     TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result)
+    TVector<ISubOperation::TPtr>& result, bool allowPgForBackup)
 {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
@@ -239,13 +239,14 @@ bool CreateConsistentCopyTables(
                                 NextPartId(nextId, result),
                                 CopyAnyTableTask(srcPath, dstPath, descr),
                                 sequences,
+                                allowPgForBackup,
                                 descr.GetTargetPathTargetState()));
         } else {
             result.push_back(CreateCopyAnyTable(
                                 srcPath,
                                 NextPartId(nextId, result),
                                 CopyAnyTableTask(srcPath, dstPath, descr),
-                                sequences));
+                                sequences, allowPgForBackup));
         }
 
         // Log information about the table being copied
@@ -408,12 +409,12 @@ bool CreateConsistentCopyTables(
                 }
 
                 result.push_back(CreateCopyAnyTable(srcImplTable, NextPartId(nextId, result),
-                    CopyAnyTableTask(srcImplTable, dstImplTable, indexDescr), GetLocalSequences(context, srcImplTable)));
-                AddCopySequences(nextId, tx, context, result, srcImplTable, dstImplTable.PathString());
+                    CopyAnyTableTask(srcImplTable, dstImplTable, indexDescr), GetLocalSequences(context, srcImplTable), allowPgForBackup));
+                AddCopySequences(nextId, tx, context, result, srcImplTable, dstImplTable.PathString(), allowPgForBackup);
             }
         }
 
-        AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString());
+        AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString(), allowPgForBackup);
     }
 
     return true;
@@ -439,7 +440,7 @@ THashSet<TString> GetLocalSequences(TOperationContext& context, const TPath& src
 }
 
 void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result, const TPath& srcTable, const TString& dstPath)
+    TVector<ISubOperation::TPtr>& result, const TPath& srcTable, const TString& dstPath, bool allowPgForBackup)
 {
     for (const auto& [subName, subPathId] : srcTable.Base()->GetChildren()) {
         TPath subPath = srcTable.Child(subName);
@@ -454,7 +455,7 @@ void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationC
             copySequence->SetCopyFrom(subPath.PathString());
             *scheme.MutableSequence() = sequenceDesc;
 
-            result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
+            result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme, allowPgForBackup));
         }
     }
 }

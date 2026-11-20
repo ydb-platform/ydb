@@ -635,7 +635,67 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         checkResult(execute(pgQuery), "[[42]]", true);
         checkResult(execute(nativeQuery), "[[43]]", true);
         checkResult(pgPrepared.Execute(txControl, execSettings).ExtractValueSync(), "[[42]]", true);
+        checkResult(nativePrepared.Execute(txControl, unusedPgParams, execSettings).ExtractValueSync(), "[[44]]", false);
         checkResult(nativePrepared.Execute(txControl, unusedPgParams, execSettings).ExtractValueSync(), "[[44]]", true);
+    }
+
+    Y_UNIT_TEST(DisablePgCompatibilityPreservesPreparedQueryId) {
+        TKikimrSettings settings;
+        settings.SetDisablePgCompatibility(false).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetCompileQueryCacheSize(1);
+        TKikimrRunner kikimr(settings);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto prepared = session.PrepareDataQuery("SELECT 44 AS value;").ExtractValueSync();
+        UNIT_ASSERT_C(prepared.IsSuccess(), prepared.GetIssues().ToString());
+        auto query = prepared.GetQuery();
+        const auto txControl = TTxControl::BeginTx().CommitTx();
+        const auto execSettings = TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        for (const bool disablePgCompatibility : {true, false}) {
+            NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+            flags.SetDisablePgCompatibility(disablePgCompatibility);
+            appData.UpdateRuntimeFlags(flags);
+            for (const bool fromCache : {false, true}) {
+                const auto result = query.Execute(txControl, execSettings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CompareYson("[[44]]", FormatResultSetYson(result.GetResultSet(0)));
+                const auto stats = result.GetStats();
+                UNIT_ASSERT(stats);
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::TProtoAccessor::GetProto(*stats).compilation().from_cache(), fromCache);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DisablePgCompatibilityAllowsNativeProjection) {
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Mixed (
+                id Uint64 NOT NULL,
+                legacy PgInt4,
+                PRIMARY KEY (id)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        const auto txControl = TTxControl::BeginTx().CommitTx();
+        const auto populated = session.ExecuteDataQuery("UPSERT INTO Mixed (id, legacy) VALUES (1u, 42p);", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
+
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        appData.UpdateRuntimeFlags(flags);
+
+        const auto native = session.ExecuteDataQuery("SELECT id FROM Mixed;", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(native.IsSuccess(), native.GetIssues().ToString());
+        CompareYson("[[1u]]", FormatResultSetYson(native.GetResultSet(0)));
+
+        for (const TString query : {"SELECT legacy FROM Mixed;", "SELECT id FROM Mixed WHERE legacy IS NULL;"}) {
+            const auto pg = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(pg.GetStatus(), EStatus::UNSUPPORTED, pg.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(pg.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        }
     }
 
     Y_UNIT_TEST(SecondaryIndex_PgKey) {

@@ -363,7 +363,12 @@ struct TEvControlPlaneStorage {
     using TEvListBindingsResponse = TControlPlaneNonAuditableResponse<FederatedQuery::ListBindingsResult, EvListBindingsResponse>;
     using TEvDescribeBindingRequest = TControlPlaneRequest<FederatedQuery::DescribeBindingRequest, EvDescribeBindingRequest>;
     using TEvDescribeBindingResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeBindingResult, EvDescribeBindingResponse>;
-    using TEvModifyBindingRequest = TControlPlaneRequest<FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest>;
+    struct TEvModifyBindingRequest : TBaseControlPlaneRequest<TEvModifyBindingRequest, FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest> {
+        using TBaseControlPlaneRequest::TBaseControlPlaneRequest;
+
+        TMaybe<i64> ObservedRevision;
+        bool ValidateOnly = false;
+    };
     using TEvModifyBindingResponse =
         TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding, EvModifyBindingResponse>;
     using TEvDeleteBindingRequest = TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>;

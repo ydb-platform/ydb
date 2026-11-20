@@ -436,11 +436,11 @@ ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {}, bool allowPgForBackup = false);
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
-    const THashSet<TString>& localSequences = { }, TMaybe<TPathElement::EPathState> targetState = {});
+    const THashSet<TString>& localSequences = { }, TMaybe<TPathElement::EPathState> targetState = {}, bool allowPgForBackup = false);
 ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
@@ -560,10 +560,10 @@ ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction&
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
 bool CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result);
+    TVector<ISubOperation::TPtr>& result, bool allowPgForBackup = false);
 THashSet<TString> GetLocalSequences(TOperationContext& context, const TPath& srcTable);
 void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result, const TPath& srcTable, const TString& dstPath);
+    TVector<ISubOperation::TPtr>& result, const TPath& srcTable, const TString& dstPath, bool allowPgForBackup = false);
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
@@ -735,7 +735,7 @@ ISubOperation::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx)
 ISubOperation::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx, bool allowPgForBackup);
 ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState state);

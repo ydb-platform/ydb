@@ -77,7 +77,7 @@ public:
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
-        , DisablePgCompatibility_(AppData()->FeatureFlags.GetDisablePgCompatibility())
+        , DisablePgCompatibility_(ev->Get()->DisablePgCompatibility.value_or(AppData()->FeatureFlags.GetDisablePgCompatibility()))
         , StartTime(TInstant::Now())
         , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)

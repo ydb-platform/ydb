@@ -154,6 +154,7 @@ private:
         return Index.size();
     }
 
+    void EraseQueryIndex(const TKqpCompileResult& compileResult);
     void InsertQuery(const TKqpCompileResult::TConstPtr& compileResult);
 
     void DecBytes(ui64 bytes) {

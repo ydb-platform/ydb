@@ -49,6 +49,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
             {NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled"}});
         env.TestWaitNotification(runtime, txId);
 
+        AsyncAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            TTLSettings {
+                Enabled { ColumnName: "value" ExpireAfterSeconds: 3600 ColumnUnit: UNIT_SECONDS }
+            }
+        )");
+        TestModificationResults(runtime, txId, {
+            {NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled"}});
+        env.TestWaitNotification(runtime, txId);
+
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             DropColumns { Name: "value" }

@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         diffs[0].Set(TString("X"), 0);
         env.Runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, targetGroup, new TEvBlobStorage::TEvPatch(sourceGroup, originalId, patchedId,
-                0, std::move(diffs), 1, TInstant::Max()));
+                0, std::move(diffs), 1, env.Runtime->GetClock() + TDuration::Minutes(1)));
         });
         const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPatchResult>(edge, false);
         env.Runtime->FilterFunction = {};

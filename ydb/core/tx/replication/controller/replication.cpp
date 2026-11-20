@@ -72,14 +72,17 @@ class TReplication::TImpl: public TLagProvider {
     TVector<TSecretProbeTopic> GetSecretProbeTopics() const {
         THashSet<TString> basesWithSchemaChanges;
         for (const auto& [_, target] : Targets) {
-            if (target->GetKind() == ETargetKind::Table && target->GetStreamSchemaChanges().value_or(false)) {
+            if (target->GetKind() == ETargetKind::Table && target->GetStreamState() == EStreamState::Ready
+                && target->GetStreamSchemaChanges().value_or(false))
+            {
                 basesWithSchemaChanges.insert(CanonizePath(target->GetSrcPath()));
             }
         }
 
         TVector<TSecretProbeTopic> topics(::Reserve(Targets.size()));
         for (const auto& [_, target] : Targets) {
-            if (target->GetStreamState() == EStreamState::Removed) {
+            // Pending feeds can finish setup only after the replication leaves Error.
+            if (target->GetStreamState() != EStreamState::Ready) {
                 continue;
             }
             auto& topic = topics.emplace_back();
@@ -87,7 +90,7 @@ class TReplication::TImpl: public TLagProvider {
             if (target->GetKind() == ETargetKind::IndexTable) {
                 const auto indexPath = target->GetSrcIndexPath();
                 auto base = CanonizePath(TString(ExtractParent(indexPath)));
-                if (basesWithSchemaChanges.contains(base) && target->GetStreamState() == EStreamState::Ready) {
+                if (basesWithSchemaChanges.contains(base)) {
                     topic.SchemaManagedIndex = TSecretProbeTopic::TIndex{target->GetId(), std::move(base), TString(ExtractBase(indexPath))};
                 }
             }

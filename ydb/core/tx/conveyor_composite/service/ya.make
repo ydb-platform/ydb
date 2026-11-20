@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/tx/conveyor_composite/tracing
     ydb/core/tx/conveyor_composite/usage
     ydb/library/actors/async
+    ydb/library/actors/core
     ydb/library/yql/dq/actors/compute
 )
 

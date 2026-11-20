@@ -4,6 +4,7 @@
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -14,12 +15,11 @@ using namespace PersQueue::V1;
 
 TCommitOffsetActor::TCommitOffsetActor(
         TEvCommitOffsetRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
-        const TActorId& schemeCache, const TActorId& newSchemeCache,
+        const TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
     : TBase(request)
     , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
-    , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
     , Counters(counters)
@@ -31,7 +31,6 @@ TCommitOffsetActor::TCommitOffsetActor(
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
     , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
-    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
     , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
     , Counters(nullptr)
@@ -92,7 +91,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
+            Request().GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
     ));
 }
 

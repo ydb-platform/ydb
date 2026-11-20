@@ -75,6 +75,13 @@ std::expected<TResolvedName, TString> ResolveName(
     bool enableRelativePaths = false
 );
 
+/**
+ * Scheme path that must not be rewritten (legacy primary or modern secondary).
+ * Path is only canonized. In federation mode NavigateDatabase is LbRoot/account when
+ * path is under LbUserDatabaseRoot/account/..., otherwise the request database unchanged.
+ */
+TResolvedName ResolveSchemePath(TStringBuf database, TStringBuf path);
+
 struct TFederationAccountTarget {
     TString Path;            // absolute under federationRoot
     TString AccountDatabase; // federationRoot/account

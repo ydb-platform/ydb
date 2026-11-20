@@ -17,8 +17,6 @@
 #ifndef GRPC_SUPPORT_JSON_H
 #define GRPC_SUPPORT_JSON_H
 
-#include <grpc/support/port_platform.h>
-
 #include <stdint.h>
 
 #include <map>
@@ -29,6 +27,8 @@
 
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/types/variant.h"
+
+#include <grpc/support/port_platform.h>
 
 namespace grpc_core {
 namespace experimental {

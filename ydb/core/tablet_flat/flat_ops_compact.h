@@ -120,6 +120,16 @@ namespace NTabletFlatExecutor {
             }
         };
 
+        struct TFtSegment {
+            ui64 MaxId;
+            TVector<ui8> Buf;
+
+            TFtSegment(NFulltext::TDeltaWriter& wr):
+                MaxId(wr.GetMaxId()),
+                Buf(wr.GetBuf().begin(), wr.GetBuf().end()) {
+            }
+        };
+
         // Fulltext compaction state
         TSerializedCellVec FtCurrentPrefix;
         TString FtCurrentToken;
@@ -138,8 +148,8 @@ namespace NTabletFlatExecutor {
         // We have to preserve delete markers (removed segments) on non-final compaction (!Conf->Params->IsFinal)
         ui64 RemovedGen = 0;
         size_t RemovedDeltas = 0;
-        NFulltext::TMultiDeltaReader RemovedMerger;
         NFulltext::TDeltaWriter RemovedWriter;
+        TVector<TFtSegment> RemovedSegments, AddedSegments;
 
         const TCompactCfg* Conf;
         TIntrusiveConstPtr<TScheme> Scheme;
@@ -278,12 +288,12 @@ namespace NTabletFlatExecutor {
                     FtMerger.Start();
                     ui64 docId = 0;
                     ui32 freq = 0;
-                    while (FtMerger.Read(docId, freq)) {
+                    while (FtMerger.ReadPositive(docId, freq)) {
                         FtWriter.Add(docId, freq);
                         if (FtWriter.GetCount() >= Conf->FulltextMaxSegment) {
                             // Flush current segment
                             // It's the final level, so we don't have to preserve deltas here
-                            WriteFulltextSegment(FtWriter, true, std::numeric_limits<NTableIndex::NFulltext::TGen>::max());
+                            WriteFulltextSegment(FtWriter.GetMaxId(), FtWriter.GetBuf(), true, std::numeric_limits<NTableIndex::NFulltext::TGen>::max());
                             FtWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
                         }
                     }
@@ -329,10 +339,7 @@ namespace NTabletFlatExecutor {
             Writer->EndKey();
         }
 
-        // Write a single merged fulltext segment through Writer
-        void WriteFulltextSegment(const NFulltext::TDeltaWriter& wr, bool added, NTableIndex::NFulltext::TGen gen) {
-            ui64 maxId = wr.GetMaxId();
-
+        void WriteFulltextSegment(ui64 maxId, TConstArrayRef<ui8> segBuf, bool added, NTableIndex::NFulltext::TGen gen) {
             // Build key cells: (token, gen, maxId) — gen before maxId
             TSmallVec<TCell> keyCells(FtCurrentPrefix.GetCells().begin(), FtCurrentPrefix.GetCells().end());
             keyCells.push_back(TCell(FtCurrentToken.data(), FtCurrentToken.size()));
@@ -352,7 +359,6 @@ namespace NTabletFlatExecutor {
             rs.Set(FtAddedPos, NTable::ECellOp::Set, TCell::Make(added));
 
             // Set __ydb_segment = merged segment data
-            auto segBuf = wr.GetBuf();
             rs.Set(FtSegmentPos, NTable::ECellOp::Set, TCell((const char*)segBuf.data(), segBuf.size()));
 
             Writer->BeginKey(keyCells);
@@ -364,7 +370,6 @@ namespace NTabletFlatExecutor {
             if (!FtMergerStarted) {
                 FtMergerStarted = true;
                 FtMerger.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
-                RemovedMerger.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
                 AddedDeltas = 0;
                 RemovedDeltas = 0;
                 AddedGen = std::numeric_limits<NTableIndex::NFulltext::TGen>::max();
@@ -379,14 +384,13 @@ namespace NTabletFlatExecutor {
                         // Skip erased keys
                         continue;
                     }
+                    FtMerger.Add(ver.Added, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
                     if (Conf->Params->IsFinal || ver.Added) {
-                        FtMerger.Add(ver.Added, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
                         if (!Conf->Params->IsFinal && AddedGen > key.Gen) {
                             AddedGen = key.Gen;
                         }
                         AddedDeltas++;
                     } else {
-                        RemovedMerger.Add(true, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
                         if (RemovedGen > key.Gen) {
                             RemovedGen = key.Gen;
                         }
@@ -421,17 +425,29 @@ namespace NTabletFlatExecutor {
                 }
             }
             if (RemovedDeltas > 0) {
-                RemovedMerger.Start();
-                FlushSegments(RemovedMerger, RemovedWriter, false, RemovedGen);
+                // Flush and accumulate in RemovedSegments/AddedSegments
+                FlushSegments();
+                for (auto& seg: RemovedSegments) {
+                    WriteFulltextSegment(seg.MaxId, seg.Buf, false, RemovedGen);
+                }
+                if (RemovedWriter.GetCount() > 0) {
+                    WriteFulltextSegment(RemovedWriter.GetMaxId(), RemovedWriter.GetBuf(), false, RemovedGen);
+                }
             }
             for (const auto& key: FtTokenBuf) {
                 if (!key.IsMergeable(FtMinRowVersion) && key.Gen > RemovedGen && key.Gen < AddedGen) {
                     ReplayKey(key);
                 }
             }
-            if (AddedDeltas > 0) {
-                FtMerger.Start();
-                FlushSegments(FtMerger, FtWriter, true, AddedGen);
+            if (RemovedDeltas == 0) {
+                // Otherwise, flush only added segments with instant streaming
+                FlushSegments();
+            }
+            for (auto& seg: AddedSegments) {
+                WriteFulltextSegment(seg.MaxId, seg.Buf, true, AddedGen);
+            }
+            if (FtWriter.GetCount() > 0) {
+                WriteFulltextSegment(FtWriter.GetMaxId(), FtWriter.GetBuf(), true, AddedGen);
             }
             for (const auto& key: FtTokenBuf) {
                 if (!key.IsMergeable(FtMinRowVersion) && key.Gen > AddedGen) {
@@ -440,26 +456,39 @@ namespace NTabletFlatExecutor {
             }
 
             FtMergerStarted = false;
+            RemovedSegments.clear();
+            AddedSegments.clear();
             FtMerger.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
             FtWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
-            RemovedMerger.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
             RemovedWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
             FtTokenBuf.clear();
         }
 
-        void FlushSegments(NFulltext::TMultiDeltaReader& merger, NFulltext::TDeltaWriter& writer, bool added, NTableIndex::NFulltext::TGen gen) {
+        void FlushSegments() {
             ui64 docId = 0;
-            ui32 freq = 0;
-            while (merger.Read(docId, freq)) {
-                writer.Add(docId, freq);
-                if (writer.GetCount() >= Conf->FulltextMaxSegment) {
-                    // Flush current segment
-                    WriteFulltextSegment(writer, added, gen);
-                    writer.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
+            i64 freq = 0;
+            FtMerger.Start();
+            while (FtMerger.Read(docId, freq)) {
+                if (freq > 0) {
+                    Y_ENSURE(freq <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
+                    FtWriter.Add(docId, (ui32)freq);
+                    if (FtWriter.GetCount() >= Conf->FulltextMaxSegment) {
+                        if (RemovedDeltas > 0) {
+                            AddedSegments.emplace_back(FtWriter);
+                        } else {
+                            WriteFulltextSegment(FtWriter.GetMaxId(), FtWriter.GetBuf(), true, AddedGen);
+                        }
+                        FtWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
+                    }
+                } else if (RemovedDeltas > 0) {
+                    // Flush negative frequencies only on non-final compaction
+                    Y_ENSURE((-freq) <= Max<ui32>(), "Merged fulltext frequency exceeds ui32");
+                    RemovedWriter.Add(docId, (ui32)-freq);
+                    if (RemovedWriter.GetCount() >= Conf->FulltextMaxSegment) {
+                        RemovedSegments.emplace_back(RemovedWriter);
+                        RemovedWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
+                    }
                 }
-            }
-            if (writer.GetCount() > 0) {
-                WriteFulltextSegment(writer, added, gen);
             }
         }
     };

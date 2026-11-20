@@ -27,6 +27,9 @@
     "name": "yt.BlockMapJoin"
   },
   {
+    "name": "yt.BlockMapJoinLimit"
+  },
+  {
     "name": "yt.BlockReaderSupportedDataTypes"
   },
   {
@@ -34,6 +37,9 @@
   },
   {
     "name": "yt.BufferRowCount"
+  },
+  {
+    "name": "yt.BypassMergeWithInputSettings"
   },
   {
     "name": "yt.ColumnGroupMode"

@@ -18,7 +18,8 @@ def test_hermetic_node_modules_requires_explicit_enablement(hermetic, local_cli,
         "TS_LOCAL_CLI": local_cli,
         "_SUPPORTS_HERMETIC_NODE_MODULES": supported,
     }
-    unit = SimpleNamespace(get=values.get, get_subst=values.get)
+    raw_values = dict(values, TS_LOCAL_CLI="$_TS_LOCAL_CLI_DEFAULT")
+    unit = SimpleNamespace(get=raw_values.get, get_subst=values.get)
 
     assert nots._use_hermetic_node_modules(unit) == (
         hermetic == "yes" and local_cli == "no" and supported == "yes"
@@ -154,7 +155,7 @@ def test_library_configure_preserves_regular_build_script_behavior(
 @pytest.mark.parametrize("check_type", ["lint", "test"])
 def test_ts_check_preserves_data_and_runs_user_recipes_after_setup(monkeypatch, hermetic, check_type):
     image = "docker://registry.yandex.net/test@sha256:" + "a" * 64 + "=test:latest"
-    policy = "arcadia/devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
+    policy = "arcadia/devtools/frontend_build_platform/nots/tier0-settings/src/settings.yaml"
     values = {
         "_TS_CHECK_LIST": f"~~~nots:check {check_type} no",
         "TEST_DATA_VALUE": "arcadia/app/fixture.json",
@@ -349,6 +350,7 @@ def test_settings_files_invalidate_graph_configuration(monkeypatch, tmp_path, li
     errors = []
     unit = SimpleNamespace(
         get=lambda name: values.get(name, ""),
+        get_subst=lambda name: values.get(name, ""),
         set=lambda pair: values.update([pair]),
         resolve=lambda value: value.replace("$S", str(tmp_path)),
         onpeerdir=lambda _: None,

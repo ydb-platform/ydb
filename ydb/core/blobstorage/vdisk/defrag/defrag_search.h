@@ -73,7 +73,7 @@ namespace NKikimr {
         TKeyLogoBlob Key;
         std::optional<TMemRecLogoBlob> MemRec;
         NMatrix::TVectorType SeenParts;
-        std::array<std::tuple<ui64, TDiskPart, const TLevelSegment*>, 8> PartInfo;
+        std::array<std::tuple<ui64, TDiskPart, const TLevelSegment*>, TErasureType::MaxTotalParts> PartInfo;
 
         template<typename TSnap>
         static void CollectStripeSsts(const TSnap& snap, std::vector<TDiskPart>& extents) {

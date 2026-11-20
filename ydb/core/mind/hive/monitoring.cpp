@@ -833,6 +833,7 @@ public:
     bool ChangeRequest = false;
     std::optional<TString> Status;
     TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the operations log
+    std::optional<NKikimrConfig::THiveConfig::EBridgeTabletPlacement> PreviousBridgeTabletPlacement;
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -1012,6 +1013,7 @@ public:
         UpdateConfig(db, "TabletEventHistorySize", configUpdates);
         UpdateConfig(db, "NodeEventHistorySize", configUpdates);
         UpdateConfig(db, "CountersExportMode", configUpdates);
+        UpdateConfig(db, "BridgeTabletPlacement", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1083,6 +1085,7 @@ public:
 
         if (ChangeRequest && !Status) {
             Self->BuildCurrentConfig();
+            PreviousBridgeTabletPlacement = previousConfig.GetBridgeTabletPlacement();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
             const google::protobuf::Descriptor* descriptor = NKikimrConfig::THiveConfig::GetDescriptor();
@@ -1184,6 +1187,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (PreviousBridgeTabletPlacement) {
+            Self->OnBridgeTabletPlacementChanged(*PreviousBridgeTabletPlacement);
+        }
         if (ChangeRequest) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"" << Status.value_or("ok") << "\"}"));
         } else {
@@ -1465,6 +1471,7 @@ public:
         ShowConfig(out, "TabletEventHistorySize");
         ShowConfig(out, "NodeEventHistorySize");
         ShowConfig(out, "CountersExportMode");
+        ShowConfig(out, "BridgeTabletPlacement");
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();
@@ -1664,32 +1671,25 @@ public:
             jsonUpdate["MaxCount"] = *maxCount;
             jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
             db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, changeType).Update<Schema::TabletAvailabilityRestrictions::MaxCount>(*maxCount);
-            Node->TabletAvailabilityRestrictions[changeType] = *maxCount;
-            auto it = Node->TabletAvailability.find(changeType);
-            if (it != Node->TabletAvailability.end()) {
-                it->second.UpdateRestriction(*maxCount);
-            }
+            Node->SetTabletAvailabilityRestriction(changeType, *maxCount);
         }
-        if (resetType != TTabletTypes::TypeInvalid) {
+        // For types the node does not report, reset can only remove an existing restriction
+        if (resetType != TTabletTypes::TypeInvalid
+            && (Node->TabletAvailability.contains(resetType) || Node->TabletAvailabilityRestrictions.contains(resetType))) {
             ChangeRequest = true;
             eventDetails << "type=" << GetTabletTypeShortName(resetType) << " maxCount=default ";
             NJson::TJsonValue jsonUpdate;
             jsonUpdate["Type"] = GetTabletTypeShortName(resetType);
             jsonUpdate["MaxCount"] = "[default]";
             jsonOperation["TabletAvailability"].AppendValue(std::move(jsonUpdate));
-            Node->TabletAvailabilityRestrictions.erase(resetType);
-            auto it = Node->TabletAvailability.find(resetType);
-            if (it != Node->TabletAvailability.end()) {
-                it->second.RemoveRestriction();
-                if (it->second.IsSet) {
-                    db.Table<Schema::TabletAvailabilityRestrictions>()
-                      .Key(NodeId, resetType)
-                      .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
-                } else {
-                    db.Table<Schema::TabletAvailabilityRestrictions>()
-                      .Key(NodeId, resetType)
-                      .Delete();
-                }
+            if (Node->ResetTabletAvailabilityRestriction(resetType)) {
+                db.Table<Schema::TabletAvailabilityRestrictions>()
+                  .Key(NodeId, resetType)
+                  .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
+            } else {
+                db.Table<Schema::TabletAvailabilityRestrictions>()
+                  .Key(NodeId, resetType)
+                  .Delete();
             }
         }
         if (ChangeRequest) {
@@ -2961,6 +2961,7 @@ public:
         ui64 LeaderCount = 0;
         ui64 FollowerCount = 0;
         ui64 MaxCount = 0;
+        bool Explicit = false; // availability is set on the node, overriding DefaultTabletLimit
 
         TTabletsRunningInfo(TNodeId node, TTabletTypes::EType tabletType) : NodeId(node)
                                                                           , TabletType(tabletType)
@@ -2970,14 +2971,22 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
-            str << "<span title='" << TTabletTypes::EType_Name(TabletType) << "' ";
+            str << "<span title='" << TTabletTypes::EType_Name(TabletType)
+                << (Explicit ? " (set on node)" : " (default)") << "' ";
             if (MaxCount > 0) {
                 str << " class='box' ";
             } else {
                 str << " class='box box-disabled' ";
             }
-            if (totalCount > MaxCount) {
-                str << " style='color: red' ";
+            if (totalCount > MaxCount || Explicit) {
+                str << " style='";
+                if (totalCount > MaxCount) {
+                    str << "color: red;";
+                }
+                if (Explicit) {
+                    str << "font-weight: bold;";
+                }
+                str << "' ";
             }
             str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
                 << "(this," << NodeId << "," << (ui32)TabletType << ")";
@@ -3026,6 +3035,9 @@ public:
                 tabletsByType.emplace_back(pr.first, tabletType);
                 auto& current = tabletsByType.back();
                 current.MaxCount = pr.second.GetMaxCountForTabletType(tabletType);
+                if (auto itAvailability = pr.second.TabletAvailability.find(tabletType); itAvailability != pr.second.TabletAvailability.end()) {
+                    current.Explicit = itAvailability->second.IsSet;
+                }
                 auto tabletsRunningIt = pr.second.TabletsRunningByType.find(tabletType);
                 if (tabletsRunningIt == pr.second.TabletsRunningByType.end()) {
                     continue;
@@ -5794,7 +5806,12 @@ public:
         {
             TStringBuilder restrictions;
             for (const auto& [type, maxCount] : node.TabletAvailabilityRestrictions) {
-                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=" << maxCount;
+                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=";
+                if (maxCount == TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE) {
+                    restrictions << "allowed";
+                } else {
+                    restrictions << maxCount;
+                }
             }
             add("TabletAvailabilityRestrictions", restrictions);
         }

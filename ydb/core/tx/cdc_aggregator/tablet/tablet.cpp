@@ -1,3 +1,4 @@
+#include "cdc_aggregator_heartbeat_broadcaster.h"
 #include "tablet.h"
 #include "tablet_impl.h"
 
@@ -5,8 +6,6 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 #include <ydb/library/actors/core/log.h>
-
-#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
@@ -16,6 +15,13 @@ TCdcAggregator::TCdcAggregator(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
+}
+
+void TCdcAggregator::Die(const TActorContext& ctx) {
+    if (CdcAggregatorHeartbeatBroadcaster) {
+        ctx.Send(CdcAggregatorHeartbeatBroadcaster, new TEvents::TEvPoison);
+    }
+    IActor::Die(ctx);
 }
 
 void TCdcAggregator::OnDetach(const TActorContext& ctx) {
@@ -59,14 +65,11 @@ void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
 }
 
-void TCdcAggregator::Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"ev", ev->Get()->ToString()});
-
-    auto result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
-    result->Record.SetStatus(NKikimrCdcAggregator::TEvWriteHeartbeatsResult::NOT_READY);
-    result->Record.SetOrigin(TabletID());
-    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
+void TCdcAggregator::BroadcastHeartbeat(const NPQ::THeartbeat& heartbeat, const TActorContext& ctx) {
+    if (!CdcAggregatorHeartbeatBroadcaster) {
+        CdcAggregatorHeartbeatBroadcaster = ctx.Register(CreateCdcAggregatorHeartbeatBroadcaster(CdcAggregatorStream->GetTopic()));
+    }
+    ctx.Send(CdcAggregatorHeartbeatBroadcaster, new TEvCdcAggregatorHeartbeatBroadcaster::TEvBroadcastHeartbeat(heartbeat));
 }
 
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, const TActorContext& ctx) {
@@ -75,11 +78,7 @@ void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, con
 
     auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
     if (CdcAggregatorStream) {
-        TVector<ui64> sources(CdcAggregatorStream->GetSourceDataShardIds().begin(), CdcAggregatorStream->GetSourceDataShardIds().end());
-        std::sort(sources.begin(), sources.end());
-        for (const auto dataShardId : sources) {
-            result->Record.AddSources()->SetDataShardId(dataShardId);
-        }
+        result->Record = CdcAggregatorStreamProtoConverter.SerializeDescribeTrackingResult(*CdcAggregatorStream);
     }
     ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }

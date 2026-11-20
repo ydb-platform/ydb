@@ -1,8 +1,11 @@
 #pragma once
 
 #include "packing.h"
+#include "tuple_simd_target.h"
 
 #include <array>
+
+TUPLE_LAYOUT_TARGET_PUSH
 
 // This implementation is instantiated only by the ISA-specific libraries.
 
@@ -547,3 +550,5 @@ Y_FORCE_INLINE void SIMDPack<TTraits>::UnpackTupleOr(
 } // namespace NPackedTuple
 } // namespace NMiniKQL
 } // namespace NKikimr
+
+TUPLE_LAYOUT_TARGET_POP

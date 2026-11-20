@@ -2,16 +2,18 @@ YQL_LIBRARY()
 
 SRCS(
     events.h
+    service_id.cpp
+    service_id.h
 )
 
 PEERDIR(
     util
-    ydb/library/actors/core
-    ydb/library/query_actor
-    yql/essentials/core/minsketch
-    yql/essentials/core/histogram
     ydb/core/protos
     ydb/core/scheme
+    ydb/library/actors/core
+    ydb/library/query_actor
+    yql/essentials/core/histogram
+    yql/essentials/core/minsketch
 )
 
 END()

@@ -31,6 +31,8 @@ public:
     const TOperationId& Id() const;
     bool Ready() const;
     const TStatus& Status() const;
+    // Whether the server supplied operation metadata.
+    bool HasMetadata() const;
     TInstant CreateTime() const;
     TInstant EndTime() const;
     const std::string& CreatedBy() const;

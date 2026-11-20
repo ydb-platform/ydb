@@ -39,6 +39,7 @@ class GPR_DLL ConfigVars {
     y_absl::optional<bool> enable_fork_support;
     y_absl::optional<bool> abort_on_leaks;
     y_absl::optional<bool> not_use_system_ssl_roots;
+    y_absl::optional<bool> absl_logging;
     y_absl::optional<TString> dns_resolver;
     y_absl::optional<TString> verbosity;
     y_absl::optional<TString> stacktrace_minloglevel;
@@ -103,6 +104,8 @@ class GPR_DLL ConfigVars {
   bool NotUseSystemSslRoots() const { return not_use_system_ssl_roots_; }
   // A colon separated list of cipher suites to use with OpenSSL
   y_absl::string_view SslCipherSuites() const { return ssl_cipher_suites_; }
+  // Use y_absl logging from within gpr_log.
+  bool AbslLogging() const { return absl_logging_; }
 
  private:
   explicit ConfigVars(const Overrides& overrides);
@@ -112,6 +115,7 @@ class GPR_DLL ConfigVars {
   bool enable_fork_support_;
   bool abort_on_leaks_;
   bool not_use_system_ssl_roots_;
+  bool absl_logging_;
   TString dns_resolver_;
   TString verbosity_;
   TString stacktrace_minloglevel_;

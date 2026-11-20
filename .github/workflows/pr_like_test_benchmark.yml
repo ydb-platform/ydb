@@ -23,6 +23,23 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
+      - name: Install TA profilers
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: \
+            --target "$RUNNER_TEMP/ta-profiler" py-spy==0.4.4
+          if ! perf version >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y linux-tools-common linux-tools-generic
+          fi
+          TA_PERF=$(command -v perf)
+          if ! "$TA_PERF" version >/dev/null 2>&1; then
+            TA_PERF=$(find /usr/lib/linux-tools -type f -name perf | sort -V | tail -n 1)
+          fi
+          sudo -n "$TA_PERF" stat -e cpu-clock -- true
+          echo "TA_PERF=$TA_PERF" >> "$GITHUB_ENV"
+          echo "TA_PYSPY=$RUNNER_TEMP/ta-profiler/bin/py-spy" >> "$GITHUB_ENV"
+
       - name: Build and test
         uses: ./.github/actions/build_and_test_ya
         with:

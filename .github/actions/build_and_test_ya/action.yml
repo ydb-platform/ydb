@@ -606,6 +606,18 @@ runs:
           YA_MAKE_NAME="ya_make_try_${RETRY}"
           analytics start "ya_make_try_${RETRY}"
 
+          TA_PROFILE_PID=""
+          if [ "$RETRY" = 1 ]; then
+            TA_PROFILE_STOP="$TMP_DIR/ta-profile.stop"
+            rm -f "$TA_PROFILE_STOP"
+            mkdir -p "$CURRENT_PUBLIC_DIR/ta_profile"
+            sudo -n -E python3 .github/scripts/tests/profile_ta.py \
+              "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" "$CURRENT_PUBLIC_DIR/ta_profile" \
+              "$TMP_DIR/ta-profile-private" "$TA_PROFILE_STOP" \
+              > "$CURRENT_PUBLIC_DIR/ta_profile/collector.log" 2>&1 &
+            TA_PROFILE_PID=$!
+          fi
+
           set +e
           # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
           # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
@@ -617,6 +629,11 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+          if [ -n "$TA_PROFILE_PID" ]; then
+            touch "$TA_PROFILE_STOP"
+            wait "$TA_PROFILE_PID" || echo "TA profiler failed; see ta_profile/collector.log"
+            sudo chown -R "$(id -u):$(id -g)" "$CURRENT_PUBLIC_DIR/ta_profile" "$TMP_DIR/ta-profile-private"
+          fi
           if [ $RC -eq 0 ]; then
             analytics end "$YA_MAKE_NAME"
           else

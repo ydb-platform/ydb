@@ -3928,11 +3928,8 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.Generation = 0;
                 userInfo.Step = 0;
                 userInfo.PipeClient = {};
-<<<<<<< HEAD
-=======
                 userInfo.ReadSessionActor = {};
                 FailStaleSessionReadRequests(operation.GetConsumer(), ActorContext());
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
             }
         }
 

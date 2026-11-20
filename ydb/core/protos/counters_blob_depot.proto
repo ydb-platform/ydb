@@ -35,10 +35,10 @@ enum ESimpleCounters {
     COUNTER_SPACE_COLOR_ORANGE = 27 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Orange"}];
     COUNTER_SPACE_COLOR_RED = 28 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Red"}];
     COUNTER_SPACE_COLOR_BLACK = 29 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Black"}];
-    COUNTER_S3_ROUTER_IS_USING_PROXY = 30 [(NKikimr.CounterOpts) = {Name: "S3/Router/IsUsingProxy"}];
-    COUNTER_S3_GET_READS_IN_FLIGHT = 31 [(NKikimr.CounterOpts) = {Name: "S3/Get/ReadsInFlight"}];
-    COUNTER_S3_GET_MAX_READS_IN_FLIGHT = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/MaxReadsInFlight"}];
-    COUNTER_S3_GET_PENDING_QUEUE_SIZE = 33 [(NKikimr.CounterOpts) = {Name: "S3/Get/PendingQueueSize"}];
+    COUNTER_S3_ROUTER_IS_USING_PROXY_DEPRECATED = 30 [deprecated = true];
+    COUNTER_S3_GET_READS_IN_FLIGHT_DEPRECATED = 31 [deprecated = true];
+    COUNTER_S3_GET_MAX_READS_IN_FLIGHT_DEPRECATED = 32 [deprecated = true];
+    COUNTER_S3_GET_PENDING_QUEUE_SIZE_DEPRECATED = 33 [deprecated = true];
     COUNTER_AGENTS_BLOCKING_GC = 34 [(NKikimr.CounterOpts) = {Name: "AgentsBlockingGC"}];
 }
 
@@ -49,7 +49,7 @@ enum ECumulativeCounters {
     COUNTER_DECOMMIT_GET_BYTES = 3 [(NKikimr.CounterOpts) = {Name: "Decommit/GetBytes"}];
     COUNTER_DECOMMIT_PUT_OK_BYTES = 4 [(NKikimr.CounterOpts) = {Name: "Decommit/PutOkBytes"}];
     COUNTER_S3_PUTS_OK = 5 [(NKikimr.CounterOpts) = {Name: "S3/Puts/Ok"}];
-    COUNTER_S3_PUTS_ERROR = 6 [(NKikimr.CounterOpts) = {Name: "S3/Puts/Error"}];
+    COUNTER_S3_PUTS_ERROR_DEPRECATED = 6 [deprecated = true];
     COUNTER_S3_PUTS_BYTES = 7 [(NKikimr.CounterOpts) = {Name: "S3/Puts/OkBytes"}];
     COUNTER_S3_DELETES_OK = 8 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/Ok"}];
     COUNTER_S3_DELETES_ERROR = 9 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/Error"}];
@@ -59,24 +59,24 @@ enum ECumulativeCounters {
     COUNTER_PICK_CHANNELS_FAILURES = 13 [(NKikimr.CounterOpts) = {Name: "PickChannels/Failures"}];
     COUNTER_S3_PUT_THROTTLE_ACTIVATIONS = 14 [(NKikimr.CounterOpts) = {Name: "S3/Put/ThrottleActivations"}];
     COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS = 15 [(NKikimr.CounterOpts) = {Name: "S3/Delete/ThrottleActivations"}];
-    COUNTER_S3_ROUTER_BALANCER_REQUESTS = 16 [(NKikimr.CounterOpts) = {Name: "S3/Router/Balancer/Requests"}];
-    COUNTER_S3_ROUTER_BALANCER_ERRORS = 17 [(NKikimr.CounterOpts) = {Name: "S3/Router/Balancer/Errors"}];
-    COUNTER_S3_ROUTER_NON_BALANCER_REQUESTS = 18 [(NKikimr.CounterOpts) = {Name: "S3/Router/NonBalancer/Requests"}];
-    COUNTER_S3_ROUTER_NON_BALANCER_ERRORS = 19 [(NKikimr.CounterOpts) = {Name: "S3/Router/NonBalancer/Errors"}];
-    COUNTER_S3_ROUTER_NON_BALANCER_BYTES_READ = 20 [(NKikimr.CounterOpts) = {Name: "S3/Router/NonBalancer/BytesRead"}];
-    COUNTER_S3_ROUTER_NON_BALANCER_BYTES_WRITTEN = 21 [(NKikimr.CounterOpts) = {Name: "S3/Router/NonBalancer/BytesWritten"}];
-    COUNTER_S3_ROUTER_BALANCER_RESOLVE_REQUESTS = 22 [(NKikimr.CounterOpts) = {Name: "S3/Router/BalancerResolve/Requests"}];
-    COUNTER_S3_ROUTER_BALANCER_RESOLVE_SUCCESSES = 23 [(NKikimr.CounterOpts) = {Name: "S3/Router/BalancerResolve/Successes"}];
-    COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES = 24 [(NKikimr.CounterOpts) = {Name: "S3/Router/BalancerResolve/Failures"}];
-    COUNTER_S3_ROUTER_ENDPOINT_SWITCHES = 25 [(NKikimr.CounterOpts) = {Name: "S3/Router/EndpointSwitches"}];
-    COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS = 26 [(NKikimr.CounterOpts) = {Name: "S3/Router/FiveXxRefreshTriggers"}];
-    COUNTER_S3_ROUTER_PENDING_REJECTS = 27 [(NKikimr.CounterOpts) = {Name: "S3/Router/Pending/Rejects"}];
-    COUNTER_S3_GETS_OK = 28 [(NKikimr.CounterOpts) = {Name: "S3/Gets/Ok"}];
-    COUNTER_S3_GETS_ERROR = 29 [(NKikimr.CounterOpts) = {Name: "S3/Gets/Error"}];
-    COUNTER_S3_GETS_BYTES = 30 [(NKikimr.CounterOpts) = {Name: "S3/Gets/OkBytes"}];
-    COUNTER_S3_GETS_SLOW_DOWN = 31 [(NKikimr.CounterOpts) = {Name: "S3/Gets/SlowDown"}];
-    COUNTER_S3_GET_THROTTLE_ACTIVATIONS = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/ThrottleActivations"}];
-    COUNTER_S3_ROUTER_RETIRING_WRAPPERS_ABORTED = 33 [(NKikimr.CounterOpts) = {Name: "S3/Router/RetiringWrappersAborted"}];
+    COUNTER_S3_ROUTER_BALANCER_REQUESTS_DEPRECATED = 16 [deprecated = true];
+    COUNTER_S3_ROUTER_BALANCER_ERRORS_DEPRECATED = 17 [deprecated = true];
+    COUNTER_S3_ROUTER_NON_BALANCER_REQUESTS_DEPRECATED = 18 [deprecated = true];
+    COUNTER_S3_ROUTER_NON_BALANCER_ERRORS_DEPRECATED = 19 [deprecated = true];
+    COUNTER_S3_ROUTER_NON_BALANCER_BYTES_READ_DEPRECATED = 20 [deprecated = true];
+    COUNTER_S3_ROUTER_NON_BALANCER_BYTES_WRITTEN_DEPRECATED = 21 [deprecated = true];
+    COUNTER_S3_ROUTER_BALANCER_RESOLVE_REQUESTS_DEPRECATED = 22 [deprecated = true];
+    COUNTER_S3_ROUTER_BALANCER_RESOLVE_SUCCESSES_DEPRECATED = 23 [deprecated = true];
+    COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES_DEPRECATED = 24 [deprecated = true];
+    COUNTER_S3_ROUTER_ENDPOINT_SWITCHES_DEPRECATED = 25 [deprecated = true];
+    COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS_DEPRECATED = 26 [deprecated = true];
+    COUNTER_S3_ROUTER_PENDING_REJECTS_DEPRECATED = 27 [deprecated = true];
+    COUNTER_S3_GETS_OK_DEPRECATED = 28 [deprecated = true];
+    COUNTER_S3_GETS_ERROR_DEPRECATED = 29 [deprecated = true];
+    COUNTER_S3_GETS_BYTES_DEPRECATED = 30 [deprecated = true];
+    COUNTER_S3_GETS_SLOW_DOWN_DEPRECATED = 31 [deprecated = true];
+    COUNTER_S3_GET_THROTTLE_ACTIVATIONS_DEPRECATED = 32 [deprecated = true];
+    COUNTER_S3_ROUTER_RETIRING_WRAPPERS_ABORTED_DEPRECATED = 33 [deprecated = true];
     COUNTER_MOVE_DATA_BLOBS_MOVED = 34 [(NKikimr.CounterOpts) = {Name: "MoveData/BlobsMoved"}];
     COUNTER_MOVE_DATA_BYTES_MOVED = 35 [(NKikimr.CounterOpts) = {Name: "MoveData/BytesMoved"}];
 }
@@ -104,81 +104,10 @@ enum EPercentileCounters {
 
     COUNTER_PERCENTILE_SELECT_GROUPS = 0 [(NKikimr.CounterOpts) = { Name: "SelectGroups" }];
 
-    COUNTER_S3_ROUTER_BALANCER_LATENCY_MS = 1 [(NKikimr.CounterOpts) = {
-        Name: "S3/Router/Balancer/LatencyMs",
-        Ranges: { Value: 1        Name: "1"      }
-        Ranges: { Value: 2        Name: "2"      }
-        Ranges: { Value: 5        Name: "5"      }
-        Ranges: { Value: 10       Name: "10"     }
-        Ranges: { Value: 25       Name: "25"     }
-        Ranges: { Value: 50       Name: "50"     }
-        Ranges: { Value: 100      Name: "100"    }
-        Ranges: { Value: 250      Name: "250"    }
-        Ranges: { Value: 500      Name: "500"    }
-        Ranges: { Value: 1000     Name: "1000"   }
-        Ranges: { Value: 2500     Name: "2500"   }
-        Ranges: { Value: 5000     Name: "5000"   }
-        Ranges: { Value: 10000    Name: "10000"  }
-        Ranges: { Value: 30000    Name: "30000"  }
-        Ranges: { Value: 60000    Name: "60000"  }
-    }];
-
-    COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS = 2 [(NKikimr.CounterOpts) = {
-        Name: "S3/Router/NonBalancer/LatencyMs",
-        Ranges: { Value: 1        Name: "1"      }
-        Ranges: { Value: 2        Name: "2"      }
-        Ranges: { Value: 5        Name: "5"      }
-        Ranges: { Value: 10       Name: "10"     }
-        Ranges: { Value: 25       Name: "25"     }
-        Ranges: { Value: 50       Name: "50"     }
-        Ranges: { Value: 100      Name: "100"    }
-        Ranges: { Value: 250      Name: "250"    }
-        Ranges: { Value: 500      Name: "500"    }
-        Ranges: { Value: 1000     Name: "1000"   }
-        Ranges: { Value: 2500     Name: "2500"   }
-        Ranges: { Value: 5000     Name: "5000"   }
-        Ranges: { Value: 10000    Name: "10000"  }
-        Ranges: { Value: 30000    Name: "30000"  }
-        Ranges: { Value: 60000    Name: "60000"  }
-    }];
-
-    COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS = 3 [(NKikimr.CounterOpts) = {
-        Name: "S3/Router/BalancerResolve/LatencyMs",
-        Ranges: { Value: 1        Name: "1"      }
-        Ranges: { Value: 2        Name: "2"      }
-        Ranges: { Value: 5        Name: "5"      }
-        Ranges: { Value: 10       Name: "10"     }
-        Ranges: { Value: 25       Name: "25"     }
-        Ranges: { Value: 50       Name: "50"     }
-        Ranges: { Value: 100      Name: "100"    }
-        Ranges: { Value: 250      Name: "250"    }
-        Ranges: { Value: 500      Name: "500"    }
-        Ranges: { Value: 1000     Name: "1000"   }
-        Ranges: { Value: 2500     Name: "2500"   }
-        Ranges: { Value: 5000     Name: "5000"   }
-        Ranges: { Value: 10000    Name: "10000"  }
-        Ranges: { Value: 30000    Name: "30000"  }
-        Ranges: { Value: 60000    Name: "60000"  }
-    }];
-
-    COUNTER_S3_ROUTER_PENDING_LATENCY_MS = 4 [(NKikimr.CounterOpts) = {
-        Name: "S3/Router/Pending/LatencyMs",
-        Ranges: { Value: 1        Name: "1"      }
-        Ranges: { Value: 2        Name: "2"      }
-        Ranges: { Value: 5        Name: "5"      }
-        Ranges: { Value: 10       Name: "10"     }
-        Ranges: { Value: 25       Name: "25"     }
-        Ranges: { Value: 50       Name: "50"     }
-        Ranges: { Value: 100      Name: "100"    }
-        Ranges: { Value: 250      Name: "250"    }
-        Ranges: { Value: 500      Name: "500"    }
-        Ranges: { Value: 1000     Name: "1000"   }
-        Ranges: { Value: 2500     Name: "2500"   }
-        Ranges: { Value: 5000     Name: "5000"   }
-        Ranges: { Value: 10000    Name: "10000"  }
-        Ranges: { Value: 30000    Name: "30000"  }
-        Ranges: { Value: 60000    Name: "60000"  }
-    }];
+    COUNTER_S3_ROUTER_BALANCER_LATENCY_MS_DEPRECATED = 1 [deprecated = true];
+    COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS_DEPRECATED = 2 [deprecated = true];
+    COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS_DEPRECATED = 3 [deprecated = true];
+    COUNTER_S3_ROUTER_PENDING_LATENCY_MS_DEPRECATED = 4 [deprecated = true];
 }
 
 enum ETxTypes {

@@ -73,7 +73,7 @@ A missing group is `false` even when `x` is null. The subquery for that `k` retu
 
 If the mark column cannot be null on either side, the second index is not built. A miss is `false`. If only the right side can contain null, the index keeps groups that have a null `y`.
 
-The second index is not spilled. It lives only while its bucket is in memory, and it is freed before the next bucket. One group always sits in one bucket, so spilling does not cut it apart.
+The second index is not spilled. One group always sits in one bucket. When that index is built and dropped is described in [Buckets and spilling](#buckets-and-spilling).
 
 Lookup: O(1). One lookup by the full key, and on a miss one lookup by `k`. The lookup by `k` stops at the first row of the group, so a large group does not make it slower.
 
@@ -144,11 +144,21 @@ Whole join: the hash table and the immediate answers are O(L + R). The later com
 - `(30, 50)` matches nothing. The answer is `false`.
 - `(null, 20)` against `(10, 20)`: the first column is null, and `20` equals `20`. The answer is `null`.
 
-## Spilling
+## Buckets and spilling
 
-Spilling is supported in every case above.
+The rows are split into a fixed set of buckets. A bucket is either kept in memory or written to disk.
 
-The hash join spills its buckets and its left pages as usual. With several mark columns and no group, the saved right rows and the postponed left rows spill too. The second index does not spill. It is built for the bucket that is in memory and freed before the next one.
+Rows of one group stay in one bucket. Before a row is placed, the low bits of its hash are replaced with a hash of the regular key, or of the `null == null` key. The left row of the same group gets the same bits, so it lands in the same bucket. A group is never cut apart. One very large group cannot be spilled in pieces: the whole bucket goes to disk.
+
+While memory is low, some buckets are written to disk. The left rows of those buckets are written too, and they are not answered yet.
+
+The buckets that stay in memory are turned into hash tables, one bucket at a time. When a bucket's table is ready, the second index for that bucket is built from the same rows. These indexes stay until every in-memory left row has been answered. Then they are dropped. They are not written to disk.
+
+A spilled bucket is read back later, on its own. Its hash table and its second index are built again, its left rows are answered, and the index is dropped before the next spilled bucket.
+
+The second index has nothing of its own to spill. If memory runs out while that index is being built, the join stops.
+
+The case with several mark columns and no group has no second index and no group. Its hash buckets are the usual ones. Rows that must be compared later are copied into their own buckets. Those buckets are filled round-robin, not by the join key, and they do spill. After the left side is read, the saved right rows are loaded back in blocks that fit in memory, and each postponed left row is compared with the current block.
 
 ## Not supported
 

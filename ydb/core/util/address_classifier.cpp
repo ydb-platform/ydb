@@ -28,7 +28,7 @@ TString ExtractIPAddress(const TString& peer) {
     if (!ok || !hostname.empty() || hostAddress.Ip.Type() == TIpv6Address::LAST) {
         return {};
     }
-    return hostAddress.Ip.ToString(false);
+    return hostAddress.Ip.ToString(hostAddress.Ip.ScopeId() != 0);
 }
 
 TString ParseAddress(const TString& address, TString& hostname, ui32& port) {

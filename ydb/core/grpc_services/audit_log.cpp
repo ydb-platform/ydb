@@ -17,9 +17,9 @@ static const TString EmptyValue = "{none}";
 void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
 {
     static const TString GrpcConnComponentName = "grpc-conn";
-    const TString remoteAddress = NKikimr::NAddressClassifier::ExtractIPAddress(ctx->GetPeerName());
 
     AUDIT_LOG(
+        const TString remoteAddress = NKikimr::NAddressClassifier::ExtractIPAddress(ctx->GetPeerName());
         AUDIT_PART("component", GrpcConnComponentName)
 
         AUDIT_PART("remote_address", (!remoteAddress.empty() ? remoteAddress : EmptyValue))

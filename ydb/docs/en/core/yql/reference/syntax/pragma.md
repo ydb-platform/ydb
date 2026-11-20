@@ -77,6 +77,8 @@ PRAGMA RelativePathPrefix = "folder";
 SELECT * FROM test;
 ```
 
+{% if feature_bulk_tables %}
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Value type | Default |
@@ -84,6 +86,12 @@ SELECT * FROM test;
 | Flag | false |
 
 EACH uses [TablePathPrefix](#table-path-prefix) for each list item.
+
+{% else %}
+
+<a id="use-table-prefix-for-each"></a>
+
+{% endif %}
 
 ### Warning {#warning}
 

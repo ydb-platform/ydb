@@ -346,6 +346,8 @@ Builds a `Callable` given a function name and optional `external user types`, `R
 * `Udf(Foo::Bar, "1e9+7" as RunConfig)(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
 * `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [YQL 2025.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/en/changelog/2025.03.md).
 
+{% if feature_mapreduce %}
+
 You can also specify additional settings as named arguments; their type must be `String` or numeric literal:
 
 * Cpu - a factor describing how much CPU the udf consumes. Must be a positive number. The default value is "1". The higher this value, the more parallelism is required to call such a udf. Example: "4.5".
@@ -353,6 +355,8 @@ You can also specify additional settings as named arguments; their type must be 
   Supported formats:
   1. Value in bytes (non-negative integer)
   2. String representations with suffixes: "K", "M", "G" (for example, "2048M", "1G", "512K")
+
+{% endif %}
 
 ### Signatures
 
@@ -381,6 +385,8 @@ $config = @@{
 SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
 ```
 
+{% if feature_mapreduce %}
+
 ```yql
 SELECT Udf(Foo::Bar, 4.5 as Cpu, 100000000 as ExtraMem)(1);
 ```
@@ -388,6 +394,8 @@ SELECT Udf(Foo::Bar, 4.5 as Cpu, 100000000 as ExtraMem)(1);
 ```yql
 SELECT Udf(Foo::Bar, "4.5" as Cpu, "100M" as ExtraMem)(1);
 ```
+
+{% endif %}
 
 ## CurrentUtc... {#current-utc}
 
@@ -1126,6 +1134,22 @@ SELECT Block(($arg)->{
 
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 
+{% if backend_name == "YDB" %}
+
+`EvaluateExpr` evaluates an expression before the main part of a query and substitutes the result as a literal. It is available in Query Service. For example, you can precompute a value for a filter or a row limit.
+
+The only argument is the expression to evaluate. It must be evaluable before reading the input rows: it cannot reference column values of the current row.
+
+`EvaluateAtom` evaluates names, such as a table name in a [named expression](../syntax/expressions.md#named-nodes). Dynamic name support depends on the API: use Query Service; Table Service does not support `EvaluateAtom`.
+
+### Examples
+
+```yql
+SELECT EvaluateExpr(2 + 2) AS value; -- 4
+```
+
+{% else %}
+
 Evaluate an expression before the start of the main calculation and input its result to the query as a literal (constant). In many contexts, where only a constant would be expected in standard SQL (for example, in table names, in the number of rows in [LIMIT](../syntax/select/limit_offset.md), and so on), this functionality is implicitly enabled automatically.
 
 EvaluateExpr can be used where the grammar already expects an expression. For example, you can use it to:
@@ -1144,7 +1168,6 @@ The only argument for both functions is the expression for calculation and subst
 Restrictions:
 
 * The expression must not trigger MapReduce operations.
-* This functionality is fully locked in YQL over YDB.
 
 ### Examples
 
@@ -1157,6 +1180,8 @@ SELECT EvaluateExpr(
 ```
 
 
+
+{% endif %}
 
 {% endif %}
 

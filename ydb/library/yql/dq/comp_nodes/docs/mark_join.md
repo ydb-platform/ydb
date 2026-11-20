@@ -2,31 +2,24 @@
 
 A mark join answers `IN` or `EXISTS` for every left row. The left row stays. One extra column says `true`, `false`, or `null`.
 
-Each join key is one of three kinds.
+A join key is either mark or regular:
 
-- A mark key is marked as mark. It is a column of the `IN` test. A null there stays unknown.
-- A key marked as `null == null` treats two nulls as equal.
-- Every other key is a regular key. A null there does not match a null, and the answer is `false`.
+- A mark key is a column of the `IN` test
+- A regular key puts rows in a group. A regular key may also have the `null == null` rule.
 
-A key cannot be both a mark key and a `null == null` key. The join checks this and rejects the overlap.
+A mark key cannot have the `null == null` rule. The join checks this and rejects it.
 
-The right side is built into a hash table. The table key is the whole join key: regular keys, `null == null` keys, and mark keys. `true` comes only from a lookup in this table.
+The right side is built into a hash table. The table key is the whole join key, mark keys and regular keys. `true` comes only from a lookup in this table.
 
 The rest of this note is about the other two answers, `false` and `null`, for each left row.
 
-Spilling is supported. When memory runs low, the join writes its data to disk and finishes it later, the same way as the other hash joins.
-
-A regular key or a `null == null` key puts rows in a group. In `t2.k = t1.k`, `k` is that key. If it is marked `null == null`, two nulls are one group.
-
-There are at most 32 mark keys, and each one is a single column. The optimizer does not produce this join yet. The tests in `comp_nodes/ut/dq_hash_join_ut.cpp` call it directly.
-
-## One mark column, no group
+## One mark column, no regular keys
 
 ```sql
 SELECT x IN (SELECT y FROM t2) FROM t1;
 ```
 
-While the hash table is built, the join remembers two facts: the right side is not empty, and some `y` is null.
+While the hash table is built, the join sets two flags: `BuildNotEmpty_` when the right side is not empty, and `BuildHasNull_` when some `y` is null.
 
 | `x` | right side | answer |
 |---|---|---|
@@ -36,13 +29,17 @@ While the hash table is built, the join remembers two facts: the right side is n
 | `3` | `1`, `2` | `false` |
 | null | empty | `false` |
 
-One null on the right answers every miss the same way, so the right side is not read again.
+For a left value that is not null, the check is:
 
-L is the number of left rows. R is the number of right rows.
+- look up the full key. A hit is `true`
+- if there is no hit, look at `BuildHasNull_`. If it is set, the answer is `null`
+- otherwise the answer is `false`
 
+`BuildNotEmpty_` answers a left `null`. That value is not looked up. If the right side has any row, the answer is `null`. If it is empty, the answer is `false`.
+
+#### Complexity
 Lookup: O(1). A hit is one hash lookup. A miss checks two booleans.
 
-Whole join: both sides are read once, O(L + R). Extra memory is those two booleans.
 
 ## One mark column, with a group
 
@@ -148,7 +145,7 @@ Whole join: the hash table and the immediate answers are O(L + R). The later com
 
 The rows are split into a fixed set of buckets. A bucket is either kept in memory or written to disk.
 
-Rows of one group stay in one bucket. Before a row is placed, the low bits of its hash are replaced with a hash of the regular key, or of the `null == null` key. The left row of the same group gets the same bits, so it lands in the same bucket. A group is never cut apart. One very large group cannot be spilled in pieces: the whole bucket goes to disk.
+Rows of one group stay in one bucket. Before a row is placed, the low bits of its hash are replaced with a hash of the regular key. The left row of the same group gets the same bits, so it lands in the same bucket. A group is never cut apart. One very large group cannot be spilled in pieces: the whole bucket goes to disk.
 
 While memory is low, some buckets are written to disk. The left rows of those buckets are written too, and they are not answered yet.
 

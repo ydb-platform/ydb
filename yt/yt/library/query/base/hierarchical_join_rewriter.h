@@ -1,0 +1,17 @@
+#pragma once
+
+#include "public.h"
+
+#include <yt/yt/core/logging/log.h>
+
+namespace NYT::NQueryClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TQueryPtr InsertHierarchicalJoins(
+    const TQueryPtr& query,
+    const NLogging::TLogger& Logger);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NQueryClient

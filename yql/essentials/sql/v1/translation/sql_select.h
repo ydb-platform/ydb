@@ -71,7 +71,7 @@ private:
         }
     };
 
-    bool ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> placement, TStringBuf what);
+    bool ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> placement, TStringBuf what, TPosition pos);
     bool NeedPassLimitOrderByToUnderlyingSelect(TMaybe<TSelectKindPlacement> placement);
 
     struct TBuildExtra {

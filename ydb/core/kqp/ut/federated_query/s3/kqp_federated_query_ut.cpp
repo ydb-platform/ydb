@@ -3264,10 +3264,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST_TWIN(TestSecureScriptExecutions, EnforceUserToken) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(EnforceUserToken);
 
         auto kikimr = std::make_shared<TKikimrRunner>(
             NKqp::TKikimrSettings(appConfig).SetEnableSecureScriptExecutions(true).SetInitFederatedQuerySetupFactory(true));
+        // The runner initializes default profiles through an anonymous console request.
+        kikimr->GetTestServer().GetRuntime()->GetAppData().EnforceUserTokenRequirement = EnforceUserToken;
 
         constexpr char aToken[] = "A@" BUILTIN_ACL_DOMAIN;
         auto userA = kikimr->GetQueryClient(TClientSettings().AuthToken(aToken));

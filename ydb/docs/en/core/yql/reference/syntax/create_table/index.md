@@ -210,6 +210,10 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [Partitioning Row-Oriented Tables](../../../../concepts/datamodel/table.md#partitioning_row_table) section.
 
+<<<<<<< HEAD
+=======
+  This code will create a row table with automatic partitioning enabled by partition size (`AUTO_PARTITIONING_BY_SIZE`) and a preferred partition size (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) of 512 mebibytes (MiB). The full list of row table partitioning options is in the [Row table partitioning](../../../../concepts/datamodel/table.md#partitioning_row_table) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
+>>>>>>> 6cc7a689204 ([YDBDOCS-2875] Correct AUTO_PARTITIONING_PARTITION_SIZE_MB default and units (#52607))
 
 - Creating a column-oriented table
 

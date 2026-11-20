@@ -87,8 +87,8 @@ public:
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isShutdown = false);
-    std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
+    std::unique_ptr<IEventHandle> PrepareExecution();
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
     bool CompletedCA(ui64 taskId, TActorId computeActor);
     void TaskNotStarted(ui64 taskId);

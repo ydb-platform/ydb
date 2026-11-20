@@ -682,11 +682,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
     return {};
 }
 
-std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
-    if (auto err = AssignTasksToNodes()) {
-        return err;
-    }
-
+std::unique_ptr<IEventHandle> TKqpPlanner::PrepareExecution() {
     const auto scanTasksCount = TasksGraph.GetTasks().size() - UnassignedTasks.size();
 
     YDB_LOG_DEBUG("Task placement snapshot after planning",

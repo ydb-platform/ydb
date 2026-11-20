@@ -213,7 +213,8 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
                     .EnableCheckpoints = false,
                     .EnableWatermarks = false,
                 });
-                auto error = planner.PlanExecution();
+                UNIT_ASSERT(!planner.AssignTasksToNodes());
+                auto error = planner.PrepareExecution();
                 UNIT_ASSERT(error);
                 UNIT_ASSERT(error->Recipient == executer);
                 auto* abort = error->Get<TEvKqp::TEvAbortExecution>();

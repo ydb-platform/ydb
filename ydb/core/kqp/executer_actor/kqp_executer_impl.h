@@ -1571,7 +1571,10 @@ protected:
             .StreamingQuery = CheckpointCoordinatorId || StreamingQueryNodesManagerId ? StreamingQuery.get() : nullptr,
         });
 
-        auto err = Planner->PlanExecution();
+        auto err = Planner->AssignTasksToNodes();
+        if (!err) {
+            err = Planner->PrepareExecution();
+        }
         if (err) {
             TlsActivationContext->Send(err.release());
             return false;

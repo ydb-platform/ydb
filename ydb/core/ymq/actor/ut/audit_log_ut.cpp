@@ -44,19 +44,21 @@ public:
         Runtime_.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) { return Observe(ev); });
     }
 
-    std::string RunLocal(const TString& ticket) {
+    std::string RunLocal(const TString& ticket, const TString& sourceAddress = {}) {
         NKikimrClient::TSqsRequest request;
         request.SetRequestId("local-audit-token");
         auto* createUser = request.MutableCreateUser();
         createUser->MutableAuth()->SetUserName("audit-account");
         createUser->MutableAuth()->SetMaskedToken("masked-token");
+        createUser->MutableAuth()->SetSourceAddress(sourceAddress);
         createUser->MutableCredentials()->SetOAuthToken(ticket);
         // An empty user name is rejected after authorization.
         Runtime_.Register(CreateActionActor(request, MakeHolder<TNoopReplyCallback>()));
-        return WaitForAuditLine();
+        return WaitForAuditLine(sourceAddress);
     }
 
-    std::string RunCloud(TAuthActorData::ESqsRequestFormat format = TAuthActorData::Xml) {
+    std::string RunCloud(TAuthActorData::ESqsRequestFormat format = TAuthActorData::Xml,
+            const TString& sourceAddress = {}) {
         auto& config = Runtime_.GetAppData().SqsConfig;
         config.SetYandexCloudMode(true);
         config.SetYandexCloudFolderServiceAddress("folder-service");
@@ -77,6 +79,7 @@ public:
             .Counters = &counters,
             .IAMToken = RawToken,
             .FolderID = "folder",
+            .SourceAddress = sourceAddress,
         };
         if (format == TAuthActorData::Json) {
             Runtime_.Register(new THttpProxyAuthRequestProxy(std::move(data), {}, EdgeActor_));
@@ -90,11 +93,12 @@ public:
                     {NYmq::V1::USER_SID, response->Get()->Sid},
                     {NYmq::V1::SANITIZED_TOKEN, response->Get()->SanitizedToken},
                     {NYmq::V1::REQUEST_ID, "json-audit-token"},
+                    {NYmq::V1::SOURCE_ADDRESS, sourceAddress},
                 });
         } else {
             Runtime_.Register(new TCloudAuthRequestProxy(std::move(data), {}));
         }
-        return WaitForAuditLine();
+        return WaitForAuditLine(sourceAddress);
     }
 
 private:
@@ -147,12 +151,14 @@ private:
         }
     }
 
-    std::string WaitForAuditLine() {
+    std::string WaitForAuditLine(const TString& sourceAddress) {
         Runtime_.WaitFor("YMQ audit record", [&] {
             return AnyOf(AuditLines_, [](const auto& line) { return line.find("component=ymq") != std::string::npos; });
         }, TDuration::Seconds(10));
         const auto line = Tests::FindAuditLine(AuditLines_, "component=ymq");
         UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "remote_address="
+            << (sourceAddress ? sourceAddress : "{none}"));
         UNIT_ASSERT_C(line.find(RawToken.c_str()) == std::string::npos, line);
         if (AuthorizedTicket_) {
             UNIT_ASSERT_VALUES_EQUAL(*AuthorizedTicket_, RawToken);
@@ -171,10 +177,12 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(YmqAuditLog) {
-    Y_UNIT_TEST(LocalAuthorizationPreservesSanitizedToken) {
-        TAuditLogRuntime runtime(SanitizedToken);
-        const auto line = runtime.RunLocal(RawToken);
-        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+    Y_UNIT_TEST(LocalAuthorizationPreservesAuditFields) {
+        for (const TString sourceAddress : {"192.0.2.1", "2001:db8::1"}) {
+            TAuditLogRuntime runtime(SanitizedToken);
+            const auto line = runtime.RunLocal(RawToken, sourceAddress);
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+        }
     }
 
     Y_UNIT_TEST(LocalTokenWithoutSanitizedValueIsWrittenAsNone) {
@@ -189,10 +197,12 @@ Y_UNIT_TEST_SUITE(YmqAuditLog) {
         UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token={none}");
     }
 
-    Y_UNIT_TEST(CloudAuthorizationPreservesSanitizedToken) {
-        TAuditLogRuntime runtime(SanitizedToken);
-        const auto line = runtime.RunCloud();
-        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+    Y_UNIT_TEST(CloudAuthorizationPreservesAuditFields) {
+        for (const TString sourceAddress : {"192.0.2.1", "2001:db8::1"}) {
+            TAuditLogRuntime runtime(SanitizedToken);
+            const auto line = runtime.RunCloud(TAuthActorData::Xml, sourceAddress);
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+        }
     }
 
     Y_UNIT_TEST(CloudTokenWithoutSanitizedValueIsWrittenAsNone) {
@@ -201,10 +211,12 @@ Y_UNIT_TEST_SUITE(YmqAuditLog) {
         UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token={none}");
     }
 
-    Y_UNIT_TEST(CloudJsonAuthorizationPreservesSanitizedToken) {
-        TAuditLogRuntime runtime(SanitizedToken);
-        const auto line = runtime.RunCloud(TAuthActorData::Json);
-        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+    Y_UNIT_TEST(CloudJsonAuthorizationPreservesAuditFields) {
+        for (const TString sourceAddress : {"192.0.2.1", "2001:db8::1"}) {
+            TAuditLogRuntime runtime(SanitizedToken);
+            const auto line = runtime.RunCloud(TAuthActorData::Json, sourceAddress);
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "sanitized_token=" << SanitizedToken);
+        }
     }
 
     Y_UNIT_TEST(CloudJsonTokenWithoutSanitizedValueIsWrittenAsNone) {

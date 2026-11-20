@@ -26,7 +26,6 @@ class TMirror3dcGetStrategy : public IStrategy {
         TBlobStorageGroupInfo::TSubgroupVDisks Uncertain;
         TBlobStorageGroupInfo::TSubgroupVDisks Unknown;
         bool HasErrors = false;
-        TBlobStorageGroupInfo::EBlobState BlobState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
 
         TReadState(const TBlobStorageGroupInfo::TTopology& topology, const TIntervalSet<i32>& needed)
             : Needed(needed)
@@ -84,9 +83,6 @@ class TMirror3dcGetStrategy : public IStrategy {
         // Without ERROR, NOT_YET replies confirm missing data for an ordinary Get.
         const auto absenceState = checker.GetBlobState(readState.Parts,
             readState.HasErrors ? readState.Uncertain : readState.Failed);
-        if (!PhantomCheck && absenceState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
-            return EStrategyOutcome::Error("Cannot establish absence of a mirror-3-dc blob");
-        }
         if (PhantomCheck) {
             // A likely phantom is still an error until every disk confirms missing data.
             state->LooksLikePhantom = absenceState != TBlobStorageGroupInfo::EBS_DISINTEGRATED;
@@ -116,9 +112,6 @@ class TMirror3dcGetStrategy : public IStrategy {
             }
         }
         if (!readState.Missing) {
-            if (readState.BlobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
-                return EStrategyOutcome::Error("Mirror-3-dc read exceeds the ensured failure model");
-            }
             if (checker.CheckQuorumForLayout(readState.Parts)) {
                 state->WholeSituation = TBlobState::ESituation::Present;
                 return EStrategyOutcome::DONE;
@@ -130,12 +123,15 @@ class TMirror3dcGetStrategy : public IStrategy {
             const auto outcome = TMirror3dcPutStrategy(TEvBlobStorage::TEvPut::TacticMaxThroughput,
                 false, AcceleratePut).Process(*logCtx, *state, info, *blackboard, *groupDiskRequests,
                     accelerationParams);
-            if (outcome == EStrategyOutcome::DONE) {
+            if (outcome == EStrategyOutcome::ERROR) {
+                // An outstanding read can still confirm the existing layout when repair cannot write.
+                if (readState.Unknown && checker.CheckEnsuredLayout(readState.Parts, readState.Unknown)) {
+                    return EStrategyOutcome::IN_PROGRESS;
+                }
+                state->WholeSituation = TBlobState::ESituation::Error;
+                return EStrategyOutcome::DONE;
+            } else if (outcome == EStrategyOutcome::DONE) {
                 state->WholeSituation = TBlobState::ESituation::Present;
-            }
-            // An outstanding read can still confirm the existing layout when repair cannot write.
-            if (outcome == EStrategyOutcome::ERROR && readState.Unknown && checker.CheckEnsuredLayout(readState.Parts, readState.Unknown)) {
-                return EStrategyOutcome::IN_PROGRESS;
             }
             return outcome;
         }
@@ -223,9 +219,10 @@ public:
         }
 
         if (MustRestoreFirst) {
-            readState.BlobState = checker->GetBlobState(readState.Parts, readState.Failed);
-            if (!PhantomCheck && readState.BlobState == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
-                return EStrategyOutcome::Error("Mirror-3-dc restore exceeds the ensured failure model");
+            if ((!PhantomCheck || !readState.Missing)
+                    && checker->GetBlobState(readState.Parts, readState.Failed) == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
+                state.WholeSituation = TBlobState::ESituation::Error;
+                return EStrategyOutcome::DONE;
             }
             return ProcessRestore(&logCtx, &state, info, &blackboard, &groupDiskRequests, *checker, readState,
                 accelerationParams);

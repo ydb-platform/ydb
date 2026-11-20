@@ -197,7 +197,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         const ui32 found = t.Info->GetIdxInSubgroup(t.Info->GetVDiskId(
             t.Blackboard.GroupDiskRequests.GetsPending.front().OrderNumber), t.Id.Hash());
         t.Reply((found + 3) % 9, TBlobState::ESituation::Error);
-        UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::ERROR);
+        UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
+        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Error);
         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
     }
 
@@ -391,13 +392,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                             t.Reply(disk, t.Realm(disk) == 2 ? recoveryReply
                                 : disk / 3 < errorsPerNormalRealm ? TBlobState::ESituation::Error : TBlobState::ESituation::Absent);
                         }
-                        const EStrategyOutcome outcome = restore ? t.RunRestore() : t.Run();
-                        const bool failedModel = errorsPerNormalRealm != 0;
-                        UNIT_ASSERT_VALUES_EQUAL(ui32(outcome.Value), ui32(failedModel
-                            ? EStrategyOutcome::ERROR : EStrategyOutcome::DONE));
-                        if (!failedModel) {
-                            UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Absent);
-                        }
+                        UNIT_ASSERT((restore ? t.RunRestore() : t.Run()) == EStrategyOutcome::DONE);
+                        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == (errorsPerNormalRealm
+                            ? TBlobState::ESituation::Error : TBlobState::ESituation::Absent));
                         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
                     }
                 }
@@ -493,8 +490,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                 t.Reply(disk, TBlobState::ESituation::Error);
             }
         }
-        UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::ERROR);
-        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation != TBlobState::ESituation::Present);
+        UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
+        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Error);
         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
     }
 
@@ -604,12 +601,12 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                     current.Reply(disk, reply);
                     legacy.Reply(disk, reply);
                 }
-                const auto currentOutcome = current.Run(phantom);
+                UNIT_ASSERT(current.Run(phantom) == EStrategyOutcome::DONE);
                 const auto legacyOutcome = legacy.Run(phantom, true);
-                UNIT_ASSERT_VALUES_EQUAL_C(ui32(currentOutcome.Value), ui32(legacyOutcome.Value),
-                    "errors " << errors << " phantom " << phantom);
+                const auto expected = legacyOutcome == EStrategyOutcome::ERROR
+                    ? TBlobState::ESituation::Error : legacy.Blackboard[legacy.Id].WholeSituation;
                 UNIT_ASSERT_VALUES_EQUAL_C(ui32(current.Blackboard[current.Id].WholeSituation),
-                    ui32(legacy.Blackboard[legacy.Id].WholeSituation), "errors " << errors << " phantom " << phantom);
+                    ui32(expected), "errors " << errors << " phantom " << phantom);
                 UNIT_ASSERT_C(current.Blackboard[current.Id].LooksLikePhantom
                     == legacy.Blackboard[legacy.Id].LooksLikePhantom, "errors " << errors << " phantom " << phantom);
             }
@@ -635,10 +632,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                     UNIT_ASSERT(step <= 9);
                     const auto outcome = t.Run();
                     if (outcome != EStrategyOutcome::IN_PROGRESS) {
-                        UNIT_ASSERT_VALUES_EQUAL(outcome == EStrategyOutcome::ERROR, expected == TBlobStorageGroupInfo::EBS_DISINTEGRATED);
-                        if (outcome == EStrategyOutcome::DONE) {
-                            UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == TBlobState::ESituation::Absent);
-                        }
+                        UNIT_ASSERT(outcome == EStrategyOutcome::DONE);
+                        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == (expected == TBlobStorageGroupInfo::EBS_DISINTEGRATED
+                            ? TBlobState::ESituation::Error : TBlobState::ESituation::Absent));
                         break;
                     }
                     const ui32 disk = t.RequestedDisk();
@@ -817,7 +813,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
             const auto actual = current.RunRestore();
             const auto expected = legacy.RunRestore(false, true);
             UNIT_ASSERT_VALUES_EQUAL_C(ui32(current.Result(actual)), ui32(legacy.Result(expected)), "errors " << errors);
-            if (actual == EStrategyOutcome::ERROR) {
+            if (current.Result(actual) == EStrategyOutcome::ERROR) {
+                UNIT_ASSERT(actual == EStrategyOutcome::DONE);
                 UNIT_ASSERT(current.Blackboard.GroupDiskRequests.GetsPending.empty());
                 UNIT_ASSERT(current.Blackboard.GroupDiskRequests.PutsPending.empty());
             }

@@ -1,6 +1,6 @@
 #include "cli_cmds_standalone.h"
 
-#include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/driver_lib/run_config/config.h>
 #include <ydb/core/driver_lib/run/config_parser.h>
 #include <ydb/core/driver_lib/run/run.h>
 

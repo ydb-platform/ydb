@@ -1,6 +1,6 @@
 #pragma once
 
-#include "service_mask.h"
+#include <ydb/core/driver_lib/run/service_mask.h>
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/event_filter.h>

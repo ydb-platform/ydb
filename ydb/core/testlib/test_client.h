@@ -5,7 +5,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/domain.h>
-#include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/driver_lib/run_config/config.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>

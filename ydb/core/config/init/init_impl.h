@@ -8,7 +8,6 @@
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>

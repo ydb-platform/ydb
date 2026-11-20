@@ -28,6 +28,8 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/apps/version
     ydb/core/audit/audit_config
+    ydb/core/driver_lib/actor_system_config
+    ydb/core/driver_lib/run_config
     ydb/core/base
     ydb/core/blob_depot
     ydb/core/blobstorage/base
@@ -37,7 +39,6 @@ PEERDIR(
     ydb/core/client/minikql_compile
     ydb/core/client/server
     ydb/core/cms/console
-    ydb/core/driver_lib/run
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
@@ -45,8 +46,10 @@ PEERDIR(
     ydb/core/fq/libs/mock
     ydb/core/fq/libs/shared_resources
     ydb/core/grpc_services
+    ydb/core/graph/shard
     ydb/core/health_check
     ydb/core/http_proxy
+    ydb/core/kafka_proxy
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
@@ -55,10 +58,12 @@ PEERDIR(
     ydb/core/kqp/proxy_service
     ydb/core/kqp/script_executions/finalization
     ydb/core/metering
+    ydb/core/memory_controller
     ydb/core/mind
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
+    ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/path_aliasing
     ydb/core/persqueue
@@ -92,6 +97,7 @@ PEERDIR(
     ydb/core/tx/sequenceproxy
     ydb/core/tx/sequenceshard
     ydb/core/tx/time_cast
+    ydb/core/viewer
     ydb/library/aclib
     ydb/library/actors/core
     ydb/library/actors/interconnect
@@ -129,6 +135,8 @@ PEERDIR(
     ydb/services/scheme_secret
     ydb/services/tablet
     ydb/services/workload_manager/service
+    ydb/services/udf_store/compile_controller
+    ydb/services/view
     ydb/services/ydb
     ydb/services/ymq
     yql/essentials/minikql/comp_nodes/llvm16

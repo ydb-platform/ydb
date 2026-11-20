@@ -1,5 +1,5 @@
-#include "auto_config_initializer.h"
-#include "config_helpers.h"
+#include <ydb/core/driver_lib/actor_system_config/auto_config_initializer.h>
+#include <ydb/core/driver_lib/actor_system_config/config_helpers.h>
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

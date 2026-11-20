@@ -125,11 +125,11 @@ public:
         Runtime.PushMailboxEventsFront(Warden.Hint(), Warden.NodeId(), events);
     }
 
-    TMirror3dcGroupConfiguration GetProposal() {
+    TMirror3dcGroupConfiguration GetProposal(ui32 groupId = 42) {
         auto event = Runtime.GrabEdgeEventRethrow<TEvGroupState::TEvPropose>(Controller);
         UNIT_ASSERT_VALUES_EQUAL(event->Sender, Actor);
         const auto& proposal = *event->Get();
-        UNIT_ASSERT_VALUES_EQUAL(proposal.GroupId, Info.VDisks.front().Id.GroupID.GetRawId());
+        UNIT_ASSERT_VALUES_EQUAL(proposal.GroupId, groupId);
         UNIT_ASSERT_VALUES_EQUAL(proposal.Generation, Info.Generation);
         return proposal.Next;
     }
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         fixture.AssertNoRequests();
         fixture.ReplyRepair(repairs.front(), NKikimrProto::OK);
         fixture.ReplyRound(3);
-        fixture.GetProposal();
+        fixture.GetProposal(repairs.front()->Get()->Record.GetGroupId());
         NGroupSyncer::TEvRunMirror3dcRepair::TPtr next =
             fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden);
         for (const NGroupSyncer::TEvRunMirror3dcRepair::TPtr& repair : repairs) {

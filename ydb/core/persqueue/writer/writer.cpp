@@ -914,11 +914,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
 
         TString error;
         if (!BasicCheck(record, error)) {
-            // ERROR is a transient failure (UNAVAILABLE in the Topic API).
-            // Keep it distinct from BAD_REQUEST, including for queued writes.
-            const auto code = record.GetErrorCode() == NPersQueue::NErrorCode::ERROR
-                ? EErrorCode::Unavailable : EErrorCode::InternalError;
-            return WriteResult(code, error, std::move(record));
+            return WriteResult(EErrorCode::InternalError, error, std::move(record));
         }
 
         const auto& response = record.GetPartitionResponse();

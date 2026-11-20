@@ -119,6 +119,7 @@ struct TEvPartitionWriter {
             // Partitition restarted.
             PartitionDisconnected,
             OverloadError,
+            Unavailable,
         };
 
         struct TSuccess {

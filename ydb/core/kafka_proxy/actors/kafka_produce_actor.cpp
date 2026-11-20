@@ -855,6 +855,8 @@ EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrorCode value) {
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     switch (value) {
+        case EErrorCode::Unavailable:
+            return EKafkaErrors::REQUEST_TIMED_OUT;
         case EErrorCode::PartitionDisconnected:
         case EErrorCode::PartitionNotLocal:
             return EKafkaErrors::NOT_LEADER_OR_FOLLOWER;

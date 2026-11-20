@@ -95,11 +95,11 @@ private:
         if (params.contains("dry_run"))
             request->Record.SetDryRun(params.find("dry_run")->second == "true");
 
+        CreateCmsPipe(ctx);
         if (request->Record.GetDrainData()) {
             CreateTaskRequest = request.Release();
-            ConnectToCms(ctx);
         } else {
-            SendToCms(request.Release(), ctx);
+            NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         }
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
@@ -144,7 +144,8 @@ private:
     void ProcessListTasksRequest(const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleListTasksRequest> request = new TEvCms::TEvWalleListTasksRequest;
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateListTasks, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -192,7 +193,8 @@ private:
         TAutoPtr<TEvCms::TEvWalleCheckTaskRequest> request = new TEvCms::TEvWalleCheckTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateCheckTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -237,7 +239,8 @@ private:
         TAutoPtr<TEvCms::TEvWalleRemoveTaskRequest> request = new TEvCms::TEvWalleRemoveTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateRemoveTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -331,7 +334,7 @@ private:
         ReplyWithError(TString("HTTP/1.1 408 Request Timeout\r\n\r\nCMS request timeout"), ctx);
     }
 
-    void ConnectToCms(const TActorContext &ctx) {
+    void CreateCmsPipe(const TActorContext &ctx) {
         Y_ABORT_UNLESS(!CmsPipe);
 
         NTabletPipe::TClientConfig pipeConfig;
@@ -340,11 +343,6 @@ private:
             .MaxRetryTime = TDuration::Seconds(10),
         };
         CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
-    }
-
-    void SendToCms(IEventBase *ev, const TActorContext &ctx) {
-        ConnectToCms(ctx);
-        NTabletPipe::SendData(ctx, CmsPipe, ev);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {

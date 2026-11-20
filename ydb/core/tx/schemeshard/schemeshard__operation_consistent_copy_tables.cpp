@@ -56,7 +56,7 @@ static NKikimrSchemeOp::TModifyScheme CopyAnyTableTask(NKikimr::NSchemeShard::TP
     return scheme;
 }
 
-static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
+static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst, bool isBackupCopy) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -92,6 +92,13 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
             } else {
                 Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            if (!isBackupCopy) {
+                return {};
+            }
+            *operation->MutableHnswIndexDescription() =
+                std::get<NKikimrSchemeOp::THnswIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *operation->MutableVectorIndexKmeansTreeDescription() =
@@ -340,7 +347,7 @@ bool CreateConsistentCopyTables(
                 {"name", name},
             );
 
-            auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
+            auto scheme = CreateIndexTask(indexInfo, dstIndexPath, descr.GetIsBackup() && tx.GetInternal());
             if (!scheme) {
                 result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
                                        TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};

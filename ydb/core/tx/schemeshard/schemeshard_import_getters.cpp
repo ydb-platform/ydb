@@ -1164,13 +1164,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         IndexCheckedMaterializedIndexImplTable = 0;
         item.MaterializedIndexes.clear();
 
-        // Older backups may contain async index data inconsistent with the base table.
-        // Leave these indexes out of the materialized items so import builds them instead.
-        AsyncIndexes.clear();
+        // Async data may lag behind the table and HNSW has no supported payload format.
+        IndexesToRebuild.clear();
         if (item.Table) {
             for (const auto& index : item.Table->indexes()) {
-                if (index.has_global_async_index()) {
-                    AsyncIndexes.insert(index.name());
+                if (index.has_global_async_index() || index.has_global_hnsw_index()) {
+                    IndexesToRebuild.insert(index.name());
                 }
             }
         }
@@ -1204,7 +1203,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                     IndexImplTablePrefixes.reserve(item.Table->indexes_size());
 
                     for (const auto& index : item.Table->indexes()) {
-                        if (index.has_global_async_index()) {
+                        if (index.has_local_bloom_filter_index() || IndexesToRebuild.contains(index.name())) {
                             continue;
                         }
                         const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
@@ -1234,7 +1233,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
         while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
             const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
-            if (!AsyncIndexes.contains(prefix.substr(0, prefix.find('/')))) {
+            if (!IndexesToRebuild.contains(prefix.substr(0, prefix.find('/')))) {
                 break;
             }
             ++IndexCheckedMaterializedIndexImplTable;
@@ -1423,7 +1422,7 @@ private:
     ui64 IndexDownloadedChangefeed = 0;
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
-    THashSet<TString> AsyncIndexes;
+    THashSet<TString> IndexesToRebuild;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 

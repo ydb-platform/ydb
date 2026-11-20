@@ -255,6 +255,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                // SchemeCache maps this wire subtype to a private KindVectorIndexTable.
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -1605,6 +1607,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
+        const bool isBuildTable = NTableIndex::IsBuildImplTable(indexImplTablePathId.first);
         const auto* tableInfoPtr = Tables.FindPtr(indexImplTablePathId.second);
         if (!tableInfoPtr) {
             // The impl table info may be legitimately absent while the table itself is being dropped:
@@ -1613,7 +1616,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             // In both cases the child path element is marked as (planned to be) dropped. Any other
             // missing impl table indicates an inconsistency and must still trip the assertion below.
             const auto* childPathPtr = PathsById.FindPtr(indexImplTablePathId.second);
-            if (NTableIndex::IsBuildImplTable(indexImplTablePathId.first)
+            if (isBuildTable
                 || (childPathPtr && ((*childPathPtr)->PlannedToDrop() || (*childPathPtr)->Dropped()))) {
                 continue;
             }
@@ -1624,6 +1627,10 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         const auto& tableStats = tableInfo.GetStats().Aggregated;
         dataSize += tableStats.DataSize + tableStats.IndexSize;
 
+        // Build tables contribute to disk usage, but have no slot in the index settings.
+        if (isBuildTable) {
+            continue;
+        }
         auto* tableDescription = entry.AddIndexImplTableDescriptions();
         if (fillConfig) {
             FillPartitionConfig(tableInfo.PartitionConfig(), *tableDescription->MutablePartitionConfig());

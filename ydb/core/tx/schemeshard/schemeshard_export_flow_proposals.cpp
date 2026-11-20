@@ -90,14 +90,6 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
 }
 
 static TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(const NKikimrSchemeOp::TTableDescription& table, bool encrypted) {
-    for (const auto& index : table.GetTableIndexes()) {
-        // GetImplTables does not support HNSW, even when its description is complete.
-        if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-            return TConclusionStatus::Fail(TStringBuilder()
-                << "Exporting materialized data for HNSW index '" << index.GetName() << "' is not supported");
-        }
-    }
-
     TString error;
     if (!ValidateIndexImplTableDescriptions(table, error)) {
         return TConclusionStatus::Fail(error);
@@ -319,6 +311,7 @@ void FillEncryptionSettings(
     ui32 itemIdx,
     const NKikimrSchemeOp::TTableDescription& copiedTable)
 {
+    bool hasFrozenIndexes = false;
     if (exportSettings.has_encryption_settings()) {
         auto& encryptionSettings = *task.MutableEncryptionSettings();
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());
@@ -332,6 +325,7 @@ void FillEncryptionSettings(
                 *task.MutableIndexExportPrefixes() = mapping.GetIndexExportPrefixes();
             }
             if (mapping.HasIndexExportSnapshot()) {
+                hasFrozenIndexes = true;
                 // Older receivers derive prefixes from these existing fields.
                 // Keep their inputs consistent with the frozen index prefixes,
                 // even if changefeeds or indexes were added in the meantime.
@@ -356,18 +350,6 @@ void FillEncryptionSettings(
                         *saved.MutableVectorIndexKmeansTreeDescription() = *it->second;
                     }
                 }
-                // Only materialized indexes reserve prefixes. Other definitions belong
-                // to the same consistent copy as the table columns and rows.
-                const auto useCopiedIndex = [](const auto& index) {
-                    return index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync
-                        || TTableIndexInfo::IsLocalIndex(index.GetType());
-                };
-                EraseIf(indexes, useCopiedIndex);
-                for (const auto& index : copiedTable.GetTableIndexes()) {
-                    if (useCopiedIndex(index)) {
-                        *indexes.Add() = index;
-                    }
-                }
                 table.MutablePartitionConfig()->MutableByKeyFilterPrefixes()->CopyFrom(
                     copiedTable.GetPartitionConfig().GetByKeyFilterPrefixes());
                 table.MutableColumns()->CopyFrom(copiedTable.GetColumns());
@@ -376,6 +358,21 @@ void FillEncryptionSettings(
                 table.MutableTableIndexes()->Swap(&indexes);
                 table.MutableCdcStreams()->CopyFrom(snapshot.GetTable().GetTable().GetCdcStreams());
                 task.MutableChangefeedUnderlyingTopics()->CopyFrom(snapshot.GetChangefeedUnderlyingTopics());
+            }
+        }
+    }
+    if (exportInfo.IncludeIndexData && exportInfo.Items.at(itemIdx).ParentIdx == Max<ui32>() && task.GetTable().HasTable()) {
+        // HNSW is always definition-only. A frozen prefix plan also excludes async and local indexes.
+        const auto useCopiedIndex = [hasFrozenIndexes](const auto& index) {
+            const auto type = index.GetType();
+            return type == NKikimrSchemeOp::EIndexTypeGlobalHnsw || (hasFrozenIndexes
+                && (type == NKikimrSchemeOp::EIndexTypeGlobalAsync || TTableIndexInfo::IsLocalIndex(type)));
+        };
+        auto& indexes = *task.MutableTable()->MutableTable()->MutableTableIndexes();
+        EraseIf(indexes, useCopiedIndex);
+        for (const auto& index : copiedTable.GetTableIndexes()) {
+            if (useCopiedIndex(index)) {
+                *indexes.Add() = index;
             }
         }
     }

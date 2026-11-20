@@ -13222,6 +13222,16 @@ public:
         Write(NBackup::ChecksumKey(path), NBackup::ComputeChecksum(plain));
     }
 
+    void RemoveIndexListFromPlaintextMetadata() {
+        const TString path = "backup/metadata.json";
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(Read(path), &json));
+        json.EraseValue("indexes");
+        const TString content = NJson::WriteJson(json, false);
+        Write(path, content);
+        Write(NBackup::ChecksumKey(path), NBackup::ComputeChecksum(content));
+    }
+
 private:
     TString Settings() const {
         TStringBuilder settings;
@@ -13933,12 +13943,11 @@ void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool 
     }
 }
 
-void ExportGlobalIndexWithLocalBloom(bool isFs) {
-    TBackupStorage storage(isFs, "ChaCha20-Poly1305");
+void RestoreGlobalIndexWithLocalBloom(bool isFs, bool encrypted) {
+    TBackupStorage storage(isFs, encrypted ? "ChaCha20-Poly1305" : "");
     TTestBasicRuntime runtime;
     TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
-    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(isFs);
-    runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+    ConfigureIndexBackup(runtime, isFs);
     runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
     ui64 txId = 100;
 
@@ -13960,12 +13969,17 @@ void ExportGlobalIndexWithLocalBloom(bool isFs) {
             KeyColumnNames: ["key"]
             BloomFilterDescription { FalsePositiveProbability: 0.01 }
         }
-        IndexDescription {
-            Name: "z_global"
-            Type: EIndexTypeGlobal
-            KeyColumnNames: ["value"]
-        }
     )");
+    env.TestWaitNotification(runtime, txId);
+    const ui64 key = 17, subkey = 42;
+    const TString value = "customer";
+    UploadRow(runtime, "/MyRoot/Table", 0, {1, 2}, {3}, {TCell::Make(key), TCell::Make(subkey)},
+        {TCell(value.data(), value.size())});
+    Ydb::Table::TableIndex global;
+    global.set_name("z_global");
+    global.add_index_columns("value");
+    global.mutable_global_index();
+    TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", global);
     env.TestWaitNotification(runtime, txId);
     const auto description = DescribePath(runtime, "/MyRoot/Table");
     const auto& indexes = description.GetPathDescription().GetTable().GetTableIndexes();
@@ -13979,15 +13993,60 @@ void ExportGlobalIndexWithLocalBloom(bool isFs) {
     env.TestWaitNotification(runtime, txId);
     TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-    const auto metadata = NBackup::TMetadata::Deserialize(storage.ReadEncrypted("backup/metadata.json.enc").first);
+    const auto read = [&](const TString& path) {
+        return encrypted ? storage.ReadEncrypted(path + ".enc").first : storage.Read(path);
+    };
+    const auto metadata = NBackup::TMetadata::Deserialize(read("backup/metadata.json"));
     UNIT_ASSERT(metadata.GetIndexes());
     UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), 1);
     const auto& index = metadata.GetIndexes()->front();
     UNIT_ASSERT_VALUES_EQUAL(index.ImplTablePrefix, "z_global/indexImplTable");
-    UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, "001");
-    Ydb::Table::CreateTableRequest scheme;
-    UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-        storage.ReadEncrypted("backup/" + index.ExportPrefix + "/scheme.pb.enc").first, &scheme));
+    UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, encrypted ? "001" : "z_global/indexImplTable");
+
+    if (!encrypted && isFs) {
+        // Legacy plaintext backups discover implementation tables from scheme.pb.
+        storage.RemoveIndexListFromPlaintextMetadata();
+    }
+
+    using TSettings = Ydb::Import::ImportFromS3Settings;
+    const auto restore = [&](TSettings::IndexPopulationMode mode, bool named) {
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(named);
+        const TString path = TStringBuilder() << "/MyRoot/Restored" << static_cast<int>(mode) << (named ? "Named" : "Unnamed");
+        TVector<TString> builds;
+        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](const auto& ev) {
+            builds.push_back(ev->Get()->Record.GetSettings().index().name());
+        });
+        TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(mode, {path}));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const bool buildGlobal = mode == TSettings::INDEX_POPULATION_MODE_BUILD;
+        UNIT_ASSERT_VALUES_EQUAL(builds, buildGlobal ? TVector<TString>{"z_global"} : TVector<TString>{});
+        CheckRestoredRows(runtime, path, "", 1);
+        CheckRestoredRows(runtime, path, "/z_global/indexImplTable", 1);
+
+        const auto restored = DescribePath(runtime, path, TDescribeOptionsBuilder().SetReturnPartitionConfig(true));
+        const auto& table = restored.GetPathDescription().GetTable();
+        const auto& config = table.GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.ByKeyFilterPrefixesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        UNIT_ASSERT_DOUBLES_EQUAL(config.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.01, 1e-9);
+        const auto& restoredIndexes = table.GetTableIndexes();
+        const auto bloom = FindIf(restoredIndexes, [](const auto& idx) {
+            return idx.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(bloom != restoredIndexes.end(), named);
+        if (named) {
+            UNIT_ASSERT_VALUES_EQUAL(bloom->GetName(), "a_bloom");
+            UNIT_ASSERT_VALUES_EQUAL(bloom->KeyColumnNamesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(bloom->GetKeyColumnNames(0), "key");
+            UNIT_ASSERT_DOUBLES_EQUAL(bloom->GetBloomFilterDescription().GetFalsePositiveProbability(), 0.01, 1e-9);
+        }
+    };
+    for (const auto mode : {TSettings::INDEX_POPULATION_MODE_AUTO, TSettings::INDEX_POPULATION_MODE_IMPORT,
+            TSettings::INDEX_POPULATION_MODE_BUILD}) {
+        restore(mode, true);
+        restore(mode, false);
+    }
 }
 
 } // namespace
@@ -14050,8 +14109,8 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(RejectHnswIndex, IsFs, Prefixed) {
-        TBackupStorage storage(IsFs);
+    Y_UNIT_TEST_QUAD(ExportHnswDefinitionAndGlobalIndexData, IsFs, Encrypted) {
+        TBackupStorage storage(IsFs, Encrypted ? "AES-128-GCM" : "");
         TTestBasicRuntime runtime;
         TSchemeShard* schemeshard = nullptr;
         const auto factory = [&](const TActorId& tablet, TTabletStorageInfo* info) {
@@ -14062,7 +14121,17 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         ConfigureIndexBackup(runtime, IsFs);
         ui64 txId = 100;
 
-        CreateVectorIndexTable(runtime, env, txId, "hnsw_idx", Prefixed);
+        CreateVectorIndexTable(runtime, env, txId, "hnsw_idx", true);
+
+        const ui64 key = 42;
+        const TString embedding = "vector";
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(key)}, {TCell(embedding.data(), embedding.size())});
+        Ydb::Table::TableIndex global;
+        global.set_name("z_global");
+        global.add_index_columns("embedding");
+        global.mutable_global_index();
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", global);
+        env.TestWaitNotification(runtime, txId);
 
         // HNSW creation is currently disabled. Model an existing HNSW index
         // using the complete implementation-table layout shared with KMeans.
@@ -14072,37 +14141,75 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
             NKikimrSchemeOp::THnswIndexDescription hnsw;
             *hnsw.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
                 index.SpecializedIndexDescription).GetSettings();
+            hnsw.MutableSettings()->set_clusters(1);
+            hnsw.MutableSettings()->mutable_settings()->set_m(24);
             index.Type = NKikimrSchemeOp::EIndexTypeGlobalHnsw;
             index.SpecializedIndexDescription = std::move(hnsw);
             schemeshard->ClearDescribePathCaches(TPath::Resolve("/MyRoot/Table", schemeshard).Base(), true);
             return true;
         });
-        const auto description = DescribePath(runtime, "/MyRoot/Table");
-        const auto& table = description.GetPathDescription().GetTable();
-        UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).GetType(), NKikimrSchemeOp::EIndexTypeGlobalHnsw);
-        UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).GetState(), NKikimrSchemeOp::EIndexStateReady);
-        UNIT_ASSERT_VALUES_EQUAL(table.GetTableIndexes(0).IndexImplTableDescriptionsSize(), Prefixed ? 3 : 2);
-        TString error;
-        UNIT_ASSERT_C(ValidateIndexImplTableDescriptions(table, error), error);
+        const auto posting = DescribePrivatePath(runtime, "/MyRoot/Table/hnsw_idx/indexImplPostingTable");
+        UNIT_ASSERT_C(posting.GetPathDescription().GetSelf().GetPathSubType()
+            == NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable, posting.ShortDebugString());
 
-        AsyncExport(runtime, ++txId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}));
-        TAutoPtr<IEventHandle> handle;
-        const auto* response = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
-        const auto& entry = response->Record.GetResponse().GetEntry();
-        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetStatus(), Ydb::StatusIds::BAD_REQUEST, entry.GetIssues());
-        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()),
-            "Exporting materialized data for HNSW index 'hnsw_idx' is not supported");
-
-        TestMkDir(runtime, ++txId, "/MyRoot", "AfterRejectedExport");
+        TVector<TString> backedUpTables;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](const auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.HasBackup()) {
+                    backedUpTables.push_back(tx.GetBackup().GetTableName());
+                }
+            }
+        });
+        TestExport(runtime, ++txId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}));
         env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        Sort(backedUpTables);
+        UNIT_ASSERT_VALUES_EQUAL(backedUpTables, (TVector<TString>{"0", "indexImplTable"}));
+
+        const auto read = [&](const TString& path) {
+            return Encrypted ? storage.ReadEncrypted(path + ".enc").first : storage.Read(path);
+        };
+        Ydb::Table::CreateTableRequest scheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(read("backup/scheme.pb"), &scheme));
+        UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 2);
+        const auto hnsw = FindIf(scheme.indexes(), [](const auto& index) { return index.has_global_hnsw_index(); });
+        UNIT_ASSERT(hnsw != scheme.indexes().end());
+        UNIT_ASSERT_VALUES_EQUAL(hnsw->name(), "hnsw_idx");
+        UNIT_ASSERT_VALUES_EQUAL(hnsw->index_columns_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(hnsw->global_hnsw_index().vector_settings().settings().vector_dimension(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(hnsw->global_hnsw_index().vector_settings().settings().m(), 24);
+        UNIT_ASSERT(hnsw->global_hnsw_index().has_prefix_table_settings());
+
+        const auto metadata = NBackup::TMetadata::Deserialize(read("backup/metadata.json"));
+        UNIT_ASSERT(metadata.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), 1);
+        const auto& index = metadata.GetIndexes()->front();
+        UNIT_ASSERT_VALUES_EQUAL(index.ImplTablePrefix, "z_global/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, Encrypted ? "001" : "z_global/indexImplTable");
+        UNIT_ASSERT_STRING_CONTAINS(read("backup/" + index.ExportPrefix + "/data_00.csv"), "42");
+
+        if (!Encrypted && IsFs) {
+            // Older plaintext backups have no list of impl tables.
+            storage.RemoveIndexListFromPlaintextMetadata();
+        }
+        TVector<TString> builds;
+        auto buildObserver = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](const auto& ev) {
+            builds.push_back(ev->Get()->Record.GetSettings().index().name());
+        });
+        TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, {"/MyRoot/Restored"}));
+        env.TestWaitNotification(runtime, txId);
+        const auto result = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues()),
+            "HNSW index implementation is not available yet");
+        UNIT_ASSERT_VALUES_EQUAL(builds, (TVector<TString>{"hnsw_idx"}));
     }
 
     Y_UNIT_TEST_QUAD(VectorIndex, IsFs, Prefixed) {
         ExportImportComplexIndex(IsFs, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, Prefixed);
     }
 
-    Y_UNIT_TEST(VectorIndexBuildFinishesDuringEncryptedExport) {
+    Y_UNIT_TEST_FLAG(VectorIndexBuildFinishesDuringEncryptedExport, Prefixed) {
         TBackupStorage storage(true);
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
@@ -14123,14 +14230,18 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         const ui64 buildId = ++txId;
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> applyBuild(runtime, [&](const auto& ev) {
             for (const auto& tx : ev->Get()->Record.GetTransaction()) {
-                if (tx.HasApplyIndexBuild() && tx.GetApplyIndexBuild().GetBuildIndexId() == buildId) {
+                if (!Prefixed && tx.HasApplyIndexBuild() && tx.GetApplyIndexBuild().GetBuildIndexId() == buildId) {
                     return true;
                 }
             }
             return false;
         });
+        TBlockEvents<TEvDataShard::TEvPrefixKMeansRequest> prefixBuild(runtime, [](const auto&) { return Prefixed; });
         Ydb::Table::TableIndex index;
         index.set_name("vector_idx");
+        if (Prefixed) {
+            index.add_index_columns("prefix");
+        }
         index.add_index_columns("embedding");
         auto* kmeans = index.mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
         using TVectorSettings = Ydb::Table::VectorIndexSettings;
@@ -14138,14 +14249,24 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         kmeans->set_clusters(4);
         kmeans->set_levels(2);
         TestBuildIndex(runtime, buildId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", index);
-        runtime.WaitFor("vector index ready to publish detected settings", [&] { return !applyBuild.empty(); });
+        runtime.WaitFor("vector index ready to publish detected settings", [&] { return Prefixed ? !prefixBuild.empty() : !applyBuild.empty(); });
 
         const auto describeIndex = [&] (const TString& table) {
             return DescribePrivatePath(runtime, table + "/vector_idx");
         };
-        TestDescribeResult(describeIndex("/MyRoot/Table"), {
-            NLs::KMeansTreeDescription(TVectorSettings::DISTANCE_COSINE, TVectorSettings::VECTOR_TYPE_UNSPECIFIED, 0, 4, 2),
-        });
+        ui64 prefixMinPartitions = 0;
+        if (Prefixed) {
+            const auto partitionMinimum = [&](const char* table) {
+                return DescribePrivatePath(runtime, TString("/MyRoot/Table/vector_idx/") + table, true)
+                    .GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount();
+            };
+            prefixMinPartitions = partitionMinimum("indexImplPrefixTable");
+            UNIT_ASSERT_UNEQUAL(prefixMinPartitions, partitionMinimum("indexImplPostingTable0build"));
+        } else {
+            TestDescribeResult(describeIndex("/MyRoot/Table"), {
+                NLs::KMeansTreeDescription(TVectorSettings::DISTANCE_COSINE, TVectorSettings::VECTOR_TYPE_UNSPECIFIED, 0, 4, 2),
+            });
+        }
         const ui64 exportId = ++txId;
         using TMetadataUploaded = NSchemeShard::TEvPrivate::TEvExportUploadMetadataResult;
         TBlockEvents<TMetadataUploaded> metadataUploaded(runtime, [&](const auto& ev) {
@@ -14154,6 +14275,7 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         });
         TestExport(runtime, exportId, "/MyRoot", storage.ExportRequest({{"/MyRoot/Table", "backup"}}));
         runtime.WaitFor("export metadata frozen before table copy", [&] { return !metadataUploaded.empty(); });
+        prefixBuild.Stop().Unblock();
         applyBuild.Stop().Unblock();
         env.TestWaitNotification(runtime, buildId);
         const auto readySettings = NLs::KMeansTreeDescription(
@@ -14163,6 +14285,14 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         env.TestWaitNotification(runtime, exportId);
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
+        if (Prefixed) {
+            Ydb::Table::CreateTableRequest scheme;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(storage.ReadEncrypted("backup/scheme.pb.enc").first, &scheme));
+            UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), 1);
+            const auto& settings = scheme.indexes(0).global_vector_kmeans_tree_index().prefix_table_settings();
+            UNIT_ASSERT_VALUES_EQUAL(settings.partitioning_settings().min_partitions_count(), prefixMinPartitions);
+        }
+
         ui32 indexBuilds = 0;
         auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>([&](auto&) { ++indexBuilds; });
         TestImport(runtime, ++txId, "/MyRoot", storage.ImportRequest(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, {"/MyRoot/Restored"}));
@@ -14170,6 +14300,11 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 0);
         TestDescribeResult(describeIndex("/MyRoot/Restored"), {NLs::IndexState(EIndexStateReady), readySettings});
+        if (Prefixed) {
+            const auto restoredPrefix = DescribePrivatePath(runtime, "/MyRoot/Restored/vector_idx/indexImplPrefixTable", true);
+            UNIT_ASSERT_VALUES_EQUAL(restoredPrefix.GetPathDescription().GetTable()
+                .GetPartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount(), prefixMinPartitions);
+        }
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Restored/vector_idx/indexImplPostingTable"), 200);
     }
 
@@ -14480,7 +14615,7 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
             {.ImportScenario = EIndexImportScenario::NoIndexIVsInMapping});
     }
 
-    Y_UNIT_TEST_FLAG(ExportWithLocalBloomIndex, IsFs) {
-        ExportGlobalIndexWithLocalBloom(IsFs);
+    Y_UNIT_TEST_QUAD(RestoreWithLocalBloomIndex, IsFs, Encrypted) {
+        RestoreGlobalIndexWithLocalBloom(IsFs, Encrypted);
     }
 }

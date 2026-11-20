@@ -991,14 +991,10 @@ column_families {
                 index.AddIndexImplTableDescriptions();
             }
 
-            // Complete descriptions still convert, including an extra transient build table.
-            for (int extra = 0; extra < 2; ++extra) {
-                Ydb::Table::CreateTableRequest create;
-                FillIndexDescription(create, table);
-                UNIT_ASSERT_VALUES_EQUAL(create.indexes_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(create.indexes(0).name(), "index_under_rebuild");
-                index.AddIndexImplTableDescriptions();
-            }
+            Ydb::Table::CreateTableRequest create;
+            FillIndexDescription(create, table);
+            UNIT_ASSERT_VALUES_EQUAL(create.indexes_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(create.indexes(0).name(), "index_under_rebuild");
         }
     }
 

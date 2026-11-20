@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -87,6 +88,61 @@ static bool FillDefaultValues(
 }
 
 namespace {
+
+bool FillRowTableIndexesForRestore(
+    NKikimrSchemeOp::TIndexedTableCreationConfig& out, const Ydb::Table::CreateTableRequest& scheme,
+    bool buildIndexes, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    if (!AnyOf(scheme.indexes(), [](const auto& index) { return index.has_local_bloom_filter_index(); })) {
+        return buildIndexes || FillIndexDescription(out, scheme, enableCompactFulltext, status, error);
+    }
+
+    const bool named = AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject();
+    Ydb::Table::CreateTableRequest globalIndexes;
+    THashSet<ui32> namedPrefixes;
+    for (const auto& index : scheme.indexes()) {
+        if (!index.has_local_bloom_filter_index()) {
+            if (!buildIndexes) {
+                *globalIndexes.add_indexes() = index;
+            }
+            continue;
+        }
+
+        const ui32 length = index.index_columns_size();
+        if (length == 0 || index.index_columns_size() > scheme.primary_key_size() ||
+                !std::equal(index.index_columns().begin(), index.index_columns().end(), scheme.primary_key().begin())) {
+            error = TStringBuilder() << "Local bloom index '" << index.name() << "' must cover a non-empty prefix of the primary key";
+            return false;
+        }
+        if (!index.data_columns().empty()) {
+            error = TStringBuilder() << "Data columns are not supported for local bloom index '" << index.name() << "'";
+            return false;
+        }
+        const auto& bloom = index.local_bloom_filter_index();
+        const double fpp = bloom.has_false_positive_probability() ? bloom.false_positive_probability() : NTable::DefaultBloomFilterFpp;
+        if (!(fpp > 0.0 && fpp < 1.0)) {
+            error = TStringBuilder() << "Local bloom index '" << index.name() << "': false_positive_probability must be in range (0, 1)";
+            return false;
+        }
+
+        auto* prefix = out.MutableTableDescription()->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+        prefix->SetPrefixLength(length);
+        prefix->SetFalsePositiveProbability(fpp);
+        if (named) {
+            if (index.name().empty() || !namedPrefixes.insert(length).second) {
+                error = "Local bloom indexes must have a name and distinct primary-key prefixes";
+                return false;
+            }
+            auto* desc = out.AddIndexDescription();
+            desc->SetName(index.name());
+            desc->SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            desc->SetState(NKikimrSchemeOp::EIndexStateReady);
+            desc->MutableKeyColumnNames()->CopyFrom(index.index_columns());
+            desc->MutableBloomFilterDescription()->SetFalsePositiveProbability(fpp);
+        }
+    }
+    return buildIndexes || FillIndexDescription(out, globalIndexes, enableCompactFulltext, status, error);
+}
 
 // Returns true if the materialized impl tables of `indexDesc` from the backup can be restored into
 // the index as it would be created in this database. Returns false (and fills `error`) when they
@@ -204,7 +260,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
-        if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table,
+        if (!FillRowTableIndexesForRestore(indexedTable, *item.Table, NeedToBuildIndexes(importInfo, itemIdx),
                 ss->EnableCompactFulltextIndex, status, error)) {
             return nullptr;
         }
@@ -244,6 +300,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             std::vector<NKikimrSchemeOp::TIndexCreationConfig> compatible;
             compatible.reserve(indexedTable.IndexDescriptionSize());
             for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+                if (indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    // A named prefix filter belongs to the base table and has no materialized files.
+                    compatible.push_back(indexDesc);
+                    continue;
+                }
                 TString indexError;
                 bool ok = materializedIndexes.contains(indexDesc.GetName());
                 if (ok && !item.MaterializedIndexes.empty()) {

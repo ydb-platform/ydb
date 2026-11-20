@@ -8,6 +8,7 @@
 #include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/core/backup/common/omit_backup.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/datashard/export_data_format.h>
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
@@ -410,14 +411,15 @@ private:
                     if (childPath.IsDeleted() || !childPath.IsTableIndex()) {
                         continue;
                     }
-                    // An async index may lag behind the base table snapshot. Restore it by building
-                    // from the exported table data instead of exporting its impl table.
-                    if (childPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
+                    // Async indexes may lag behind the table. HNSW has no backup payload format.
+                    // Keep both definitions in scheme.pb so they can be rebuilt from table data.
+                    if (childPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)
+                            || childPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalHnsw)) {
                         continue;
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
                         auto implTablePath = childPath.Child(implTableName);
-                        if (implTablePath.IsDeleted()) {
+                        if (implTablePath.IsDeleted() || NTableIndex::IsBuildImplTable(implTableName)) {
                             continue;
                         }
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));

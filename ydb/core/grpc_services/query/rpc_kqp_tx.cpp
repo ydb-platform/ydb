@@ -120,7 +120,7 @@ private:
         }
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), 0, 0, Request->GetWilsonTraceId());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -228,7 +228,7 @@ private:
 
         Fill(ev->Record.MutableRequest());
 
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), 0, 0, Request->GetWilsonTraceId());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {

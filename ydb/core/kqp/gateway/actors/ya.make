@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing
     ydb/core/tx/tx_proxy
     ydb/core/kqp/common
     ydb/core/kqp/provider

@@ -47,6 +47,8 @@
 
 #include "kqp_full_text_source.h"
 
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -2023,6 +2025,7 @@ class TReadsState {
     const TIntrusivePtr<TKqpCounters> Counters;
     TActorId SelfId;
     const TString LogPrefix;
+    NWilson::TTraceId TraceId;
     ui64 NextReadId = 1;
 
 
@@ -2033,9 +2036,10 @@ class TReadsState {
 
 public:
 
-    explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix)
+    explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix, NWilson::TTraceId traceId)
         : Counters(counters)
         , LogPrefix(logPrefix)
+        , TraceId(std::move(traceId))
     {}
 
     ui64 GetNextReadId() {
@@ -2124,7 +2128,7 @@ public:
                     .Subscribe = needToCreatePipe,
                 }),
             IEventHandle::FlagTrackDelivery,
-            readId));
+            readId, nullptr, NWilson::TTraceId(TraceId)));
 
         AddRead(readId, readInfo);
     }
@@ -2551,6 +2555,7 @@ private:
     static constexpr size_t RowIdResolveBatchSize = 5000;
 
     // Read infrastructure.
+    NWilson::TSpan ReadSpan;
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
     TVector<TWordStatePtr> Words;                          // Tokenized query terms
@@ -2963,7 +2968,7 @@ private:
 
     void ResolveTablePartitioning(std::unique_ptr<NSchemeCache::TSchemeCacheRequest>&& request) {
         auto resolveRequest = std::make_unique<TEvTxProxySchemeCache::TEvResolveKeySet>(request.release());
-        this->Send(MakeSchemeCacheID(), resolveRequest.release());
+        this->Send(MakeSchemeCacheID(), resolveRequest.release(), 0, 0, ReadSpan.GetTraceId());
     }
 
     void CancelRead(ui64 readId, ui64 shardId) {
@@ -2983,7 +2988,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& ,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        const NWilson::TTraceId&,
+        const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(settings)
         , Arena(arena)
@@ -3004,7 +3009,8 @@ public:
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance(), PrefixCells))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
-        , ReadsState(Counters, LogPrefix)
+        , ReadSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "Full-text search")
+        , ReadsState(Counters, LogPrefix, ReadSpan.GetTraceId())
         , DocsReadingQueue(this->SelfId(), ReadsState)
     {
         Y_ABORT_UNLESS(Arena);
@@ -3140,13 +3146,23 @@ public:
             CancelRead(id, state.ShardId);
         }
         this->Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
-
+        if (ReadSpan) {
+            ReadSpan.Attribute("ydb.output_rows", static_cast<i64>(ProducedItemsCount));
+            if (IsFinished()) {
+                ReadSpan.EndOk();
+            } else {
+                ReadSpan.End();
+            }
+        }
         TBase::PassAway();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode,
         const NYql::TIssues& subIssues = {})
     {
+        if (ReadSpan) {
+            ReadSpan.EndError(message);
+        }
         NYql::TIssue issue(message);
         for (const auto& subIssue : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));

@@ -137,9 +137,6 @@ public:
         props.set_max_partition_write_speed(settings.MaxPartitionWriteSpeed_);
         props.set_max_partition_write_burst(settings.MaxPartitionWriteBurst_);
         props.set_client_write_disabled(settings.ClientWriteDisabled_);
-        if (settings.WriteEnabled_.has_value()) {
-            (*props.mutable_attributes())["_write_enabled"] = *settings.WriteEnabled_ ? "true" : "false";
-        }
         (*props.mutable_attributes())["_allow_unauthenticated_read"] = settings.AllowUnauthenticatedRead_ ? "true" : "false";
         (*props.mutable_attributes())["_allow_unauthenticated_write"] = settings.AllowUnauthenticatedWrite_ ? "true" : "false";
         if (settings.PartitionsPerTablet_) (*props.mutable_attributes())["_partitions_per_tablet"] = ToString(*settings.PartitionsPerTablet_);

@@ -1,5 +1,3 @@
-* Added PersQueue `WriteEnabled` topic settings backed by the `_write_enabled` system attribute, including DescribeTopic and SetSettings support.
-
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 
 * Added `TOperation::HasMetadata()` to check whether operation metadata is available.

@@ -145,6 +145,12 @@ TResult ProcessTopicAttributes(
     auto tabletConfig = config->MutablePQTabletConfig();
     auto partConfig = tabletConfig->MutablePartitionConfig();
 
+    const auto writeModeAttributes = attributes.count("_write_available")
+        + attributes.count("_write_unavailable") + attributes.count("_write_prohibited");
+    if (writeModeAttributes > 1) {
+        return {Ydb::StatusIds::BAD_REQUEST, "Write mode attributes are mutually exclusive"};
+    }
+
     for (const auto& [attrName, attrValue] : attributes) {
         if (attrName == "_ydb_replication_consumer") {
             // Applied after consumers have been created or altered.
@@ -180,15 +186,19 @@ TResult ProcessTopicAttributes(
                     return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute allow_unauthenticated_write is " << attrValue << ", which is not bool"};
                 }
             }
-        } else if (attrName == "_write_enabled") {
-            if (attrValue.empty()) {
-                tabletConfig->ClearWriteEnabled();
-            } else {
-                bool enabled;
-                if (!TryFromString<bool>(attrValue, enabled)) {
-                    return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute write_enabled is " << attrValue << ", which is not bool"};
-                }
-                tabletConfig->SetWriteEnabled(enabled);
+        } else if (attrName == "_write_available" || attrName == "_write_unavailable" || attrName == "_write_prohibited") {
+            const auto mode = attrName == "_write_unavailable" ? NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE
+                : attrName == "_write_prohibited" ? NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED
+                : NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE;
+            bool enabled = false;
+            if (!attrValue.empty() && !TryFromString<bool>(attrValue, enabled)) {
+                return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute " << attrName << " is " << attrValue << ", which is not bool"};
+            }
+            if (enabled) {
+                tabletConfig->SetWriteMode(mode);
+            } else if (tabletConfig->GetWriteMode() == mode) {
+                // Dropping an inactive flag must not lift a different restriction.
+                tabletConfig->ClearWriteMode();
             }
         } else if (attrName == "_abc_slug") {
             tabletConfig->SetAbcSlug(attrValue);

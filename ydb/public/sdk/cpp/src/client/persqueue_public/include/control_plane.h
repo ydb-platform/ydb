@@ -156,7 +156,6 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(bool, ClientWriteDisabled);
 
         // attributes
-        GETTER(std::optional<bool>, WriteEnabled);
         GETTER(bool, AllowUnauthenticatedWrite);
         GETTER(bool, AllowUnauthenticatedRead);
         GETTER(std::optional<ui32>, PartitionsPerTablet);
@@ -194,7 +193,6 @@ struct TDescribeTopicResult : public TStatus {
         std::vector<TReadRule> ReadRules_;
         std::optional<TRemoteMirrorRule> RemoteMirrorRule_;
         // attributes
-        std::optional<bool> WriteEnabled_;
         bool AllowUnauthenticatedRead_;
         bool AllowUnauthenticatedWrite_;
         std::optional<ui32> PartitionsPerTablet_;
@@ -309,8 +307,6 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_DEFAULT(ui64, MaxPartitionWriteBurst, 2_MB);
 
     FLUENT_SETTING_DEFAULT(bool, ClientWriteDisabled, false);
-    // Controls the _write_enabled system attribute; writes are enabled by default.
-    FLUENT_SETTING_OPTIONAL(bool, WriteEnabled);
     FLUENT_SETTING_DEFAULT(bool, AllowUnauthenticatedWrite, false);
     FLUENT_SETTING_DEFAULT(bool, AllowUnauthenticatedRead, false);
 
@@ -347,7 +343,6 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         MaxPartitionWriteSpeed_ = settings.MaxPartitionWriteSpeed();
         MaxPartitionWriteBurst_ = settings.MaxPartitionWriteBurst();
         ClientWriteDisabled_ = settings.ClientWriteDisabled();
-        WriteEnabled_ = settings.WriteEnabled();
         AllowUnauthenticatedRead_ = settings.AllowUnauthenticatedRead();
         AllowUnauthenticatedWrite_ = settings.AllowUnauthenticatedWrite();
         PartitionsPerTablet_ = settings.PartitionsPerTablet();

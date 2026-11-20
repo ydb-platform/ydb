@@ -51,8 +51,18 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
 
         const auto &config = pqDescr.GetPQTabletConfig();
-        if (config.HasWriteEnabled()) {
-            (*settings->mutable_attributes())["_write_enabled"] = config.GetWriteEnabled() ? "true" : "false";
+        if (config.HasWriteMode()) {
+            switch (config.GetWriteMode()) {
+                case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+                    (*settings->mutable_attributes())["_write_available"] = "true";
+                    break;
+                case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+                    (*settings->mutable_attributes())["_write_unavailable"] = "true";
+                    break;
+                case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+                    (*settings->mutable_attributes())["_write_prohibited"] = "true";
+                    break;
+            }
         }
         if (!config.GetRequireAuthWrite()) {
             (*settings->mutable_attributes())["_allow_unauthenticated_write"] = "true";

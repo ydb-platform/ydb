@@ -647,12 +647,14 @@ class TCdcChangeSenderMain
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
 
-        const bool keyRangeHeartbeats = !topicAutoPartitioning
+        const bool keyRangeHeartbeats = !entry.PQGroupInfo->Schema.empty()
             && Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
-        if (topicAutoPartitioning) {
+        if (keyRangeHeartbeats) {
+            SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
+        } else if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
             SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
-        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format || keyRangeHeartbeats) {
+        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
             SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
         } else {
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));

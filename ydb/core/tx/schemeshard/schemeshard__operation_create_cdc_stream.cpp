@@ -750,8 +750,14 @@ TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op
     params.TotalGroupCount = static_cast<ui32>(op.HasTopicPartitions() ? op.GetTopicPartitions() : tablePartitionCount);
     params.PartitionPerTablet = 2;
 
-    if (keyRangeHeartbeats || keyRangeImport
-            || !IsSupportedByReplication(op.GetStreamDescription(), "supports_topic_autopartitioning")) {
+    if (keyRangeHeartbeats) {
+        params.KeyRangeAutoPartitioning = true;
+        params.MinPartitionCount = params.TotalGroupCount;
+        params.MaxPartitionCount = static_cast<ui32>(std::max<ui64>(params.TotalGroupCount, maxPartitionCountLimit));
+        return params;
+    }
+
+    if (keyRangeImport || !IsSupportedByReplication(op.GetStreamDescription(), "supports_topic_autopartitioning")) {
         return params;
     }
 
@@ -811,9 +817,11 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (pqParams.ReplicationAutoPartitioning) {
+    if (pqParams.ReplicationAutoPartitioning || pqParams.KeyRangeAutoPartitioning) {
         auto * ps = pqConfig.MutablePartitionStrategy();
-        ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+        ps->SetPartitionStrategyType(pqParams.KeyRangeAutoPartitioning
+            ? ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED
+            : ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
         ps->SetMinPartitionCount(pqParams.MinPartitionCount);
         ps->SetMaxPartitionCount(pqParams.MaxPartitionCount);
         ps->SetScaleThresholdSeconds(30);
@@ -823,7 +831,9 @@ void DoCreatePqPart(
         ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
         ps->SetMinPartitionCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : 1);
         ps->SetScaleThresholdSeconds(30);
-    } else {
+    }
+
+    if (!pqParams.ReplicationAutoPartitioning && !op.GetTopicAutoPartitioning()) {
         for (const auto& tag : table->KeyColumnIds) {
             Y_ABORT_UNLESS(table->Columns.contains(tag));
             const auto& column = table->Columns.at(tag);

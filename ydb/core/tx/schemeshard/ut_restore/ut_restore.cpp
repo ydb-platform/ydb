@@ -8152,8 +8152,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 UNIT_ASSERT(!range.HasToBound());
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()),
-            static_cast<int>(NKikimrPQ::TPQTabletConfig::DISABLED));
+        const auto strategy = expectedMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange
+            ? NKikimrPQ::TPQTabletConfig::PAUSED : NKikimrPQ::TPQTabletConfig::DISABLED;
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()), static_cast<int>(strategy));
         UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetName(), "application");
         UNIT_ASSERT(config.GetConsumers(0).GetImportant());

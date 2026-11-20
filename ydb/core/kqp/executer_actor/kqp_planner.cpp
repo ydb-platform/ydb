@@ -369,7 +369,7 @@ ui32 TKqpPlanner::GetCurrentRetryDelay(ui32 requestId) {
     return requestData.CurrentDelay;
 }
 
-std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
+TKqpPlanner::TPlacementResult TKqpPlanner::AssignTasksToNodes() {
     for (const auto& task : TasksGraph.GetTasks()) {
         if (task.Meta.ExpectedNodeId) {
             TasksPerNode[*task.Meta.ExpectedNodeId].emplace_back(task.Id);
@@ -379,7 +379,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     }
 
     if (UnassignedTasks.empty()) {
-        return nullptr;
+        return {};
     }
 
     PrepareToProcess();
@@ -411,7 +411,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = localNodeId;
         }
 
-        return nullptr;
+        return {};
     }
 
     if (ResourcesSnapshot.empty()) {
@@ -429,7 +429,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
                 TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = localNodeId;
             }
 
-            return nullptr;
+            return {};
         }
 
         YDB_LOG_ERROR("Not enough resources to execute query locally and no information about other nodes",
@@ -439,7 +439,8 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             "Not enough resources to execute query locally and no information about other nodes (estimation: "
             + ToString(LocalRunMemoryEst) + ";" + GetEstimationsInfo() + ")");
 
-        return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
+        // With a known local-only cluster this decision used live local resources.
+        return {std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release()), ResourcesSnapshot.empty()};
     }
 
     std::vector<ui64> deepestTasks;
@@ -521,7 +522,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
-        return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
+        return {std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release()), true};
     }
 
     if (deepestTasks.size() <= placingOptions.MaxNonParallelTopStageExecutionLimit) {
@@ -551,7 +552,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
     }
 
-    return nullptr;
+    return {};
 }
 
 const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {

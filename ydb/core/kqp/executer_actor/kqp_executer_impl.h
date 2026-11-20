@@ -1571,7 +1571,7 @@ protected:
             .StreamingQuery = CheckpointCoordinatorId || StreamingQueryNodesManagerId ? StreamingQuery.get() : nullptr,
         });
 
-        auto err = Planner->AssignTasksToNodes();
+        auto err = Planner->AssignTasksToNodes().Error;
         if (!err) {
             err = Planner->PrepareExecution();
         }

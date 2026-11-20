@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
                     .EnableCheckpoints = false,
                     .EnableWatermarks = false,
                 });
-                UNIT_ASSERT(!planner.AssignTasksToNodes());
+                UNIT_ASSERT(!planner.AssignTasksToNodes().Error);
                 auto error = planner.PrepareExecution();
                 UNIT_ASSERT(error);
                 UNIT_ASSERT(error->Recipient == executer);

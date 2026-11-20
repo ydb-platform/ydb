@@ -188,12 +188,13 @@ namespace {
         return res;
     }
 
-    TEnvironmentSetup::TSettings MakeBridgedSettings() {
+    TEnvironmentSetup::TSettings MakeBridgedSettings(const TFeatureFlags& flags = {}) {
         return {
             .NodeCount = 16,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetBridgedLocation,
             .SetupHive = true,
+            .FeatureFlags = flags,
             .SelfManagementConfig = true,
             .NumPiles = 2,
             .AutomaticBootstrap = true,
@@ -531,6 +532,74 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         TFilterChain chain(env);
         const auto vanished = RunDecommission(env, chain, checker, groupId, {4, 12});
         UNIT_ASSERT_VALUES_EQUAL(vanished.size(), 2);
+    }
+
+    Y_UNIT_TEST(PatchReadsThroughDecommittingSource) {
+        TFeatureFlags flags;
+        flags.SetEnableVPatch(false); // the naive PATCH reads the source through its public group service
+        TEnvironmentSetup env(MakeBridgedSettings(flags));
+        TDataChecker checker(env);
+        const ui32 sourceGroup = PrepareBridgedCluster(env, checker);
+        const auto groups = env.GetGroups();
+        const ui32 targetGroup = groups.front() == sourceGroup ? groups.back() : groups.front();
+        const auto [_, originalId, data] = checker.GetWritten().front();
+
+        TFilterChain chain(env);
+        std::optional<TActorId> bridge;
+        CaptureBridgeProxyBehindAgent(chain, bridge);
+        TActorId backingReader;
+        ui32 backingReads = 0;
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (bridge && ev->GetRecipientRewrite() == *bridge && ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+                const auto& get = *ev->Get<TEvBlobStorage::TEvGet>();
+                if (get.GetHandleClass == NKikimrBlobStorage::AsyncRead && get.QuerySize == 1 &&
+                        get.Queries[0].Id == originalId) {
+                    backingReader = ev->Sender;
+                    ++backingReads;
+                }
+            }
+            return true;
+        });
+        RunDecommission(env, chain, checker, sourceGroup, {}, {.InProgress = [&] {
+            UNIT_ASSERT(bridge);
+            const ui32 nodeId = bridge->NodeId();
+            const auto edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            const auto get = GetBridgeRequestCounters(env, nodeId)->GetSubgroup("handleClass", "GetAsync")
+                ->GetSubgroup("sizeClass", "262144");
+            const auto completed = get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+            const auto bytes = get->GetCounter("bridgeRequestBytes", true);
+            const auto completedBefore = completed->Val();
+            const auto bytesBefore = bytes->Val();
+            const auto readsBeforePatch = backingReads;
+
+            const TLogoBlobID patchedId(originalId.TabletID(), 2, 1, 0, data.size(), 0);
+            using TDiff = TEvBlobStorage::TEvPatch::TDiff;
+            TArrayHolder<TDiff> diffs(new TDiff[1]);
+            diffs[0].Set(TString("X"), 0);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, targetGroup, new TEvBlobStorage::TEvPatch(sourceGroup, originalId, patchedId, 0,
+                    std::move(diffs), 1, env.Runtime->GetClock() + TDuration::Minutes(1)));
+            });
+            const auto patchResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPatchResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(patchResult->Get()->Status, NKikimrProto::OK, patchResult->Get()->ToString());
+            UNIT_ASSERT_GT(backingReads, readsBeforePatch);
+            UNIT_ASSERT_VALUES_EQUAL(completed->Val(), completedBefore);
+            UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), bytesBefore);
+
+            // An ordinary GET through the same agent and bridge contributes one sample.
+            const auto agent = backingReader;
+            const auto readsAfterPatch = backingReads;
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, sourceGroup, new TEvBlobStorage::TEvGet(originalId, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::AsyncRead));
+            });
+            const auto getResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            CheckGetResult(*getResult->Get(), data);
+            UNIT_ASSERT_VALUES_EQUAL(getResult->Sender, agent);
+            UNIT_ASSERT_VALUES_EQUAL(backingReads, readsAfterPatch + 1);
+            UNIT_ASSERT_VALUES_EQUAL(completed->Val(), completedBefore + 1);
+            UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), bytesBefore + data.size());
+        }});
     }
 
     // recommission is not supported in bridge mode: the group in progress keeps its VDisks in piles, and the decommitted

@@ -731,14 +731,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     Y_UNIT_TEST_TWIN(PatchCountsOnlyTheClientOperation, MovedPatch) {
         TFeatureFlags flags;
         flags.SetEnableVPatch(MovedPatch);
-        TEnvironmentSetup env({
-            .NodeCount = 9,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetUnbridgedLocation,
-            .FeatureFlags = flags,
-            .SelfManagementConfig = true,
-            .AutomaticBootstrap = true,
-        });
+        TEnvironmentSetup env(MakeUnbridgedSettings(/*setupHive=*/ false, 9, flags));
         TDataChecker checker(env);
         ConvertCluster(env, checker, 2);
         const auto& [sourceGroup, originalId, data] = checker.GetWritten().front();

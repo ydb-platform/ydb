@@ -64,12 +64,14 @@ namespace NBridgeTest {
     }
 
     // settings of the cluster to be converted into bridged one
-    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false, ui32 nodeCount = 9) {
+    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false, ui32 nodeCount = 9,
+            const TFeatureFlags& flags = {}) {
         return {
             .NodeCount = nodeCount, // 9 is one spare node to make disk reassignment possible
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetUnbridgedLocation,
             .SetupHive = setupHive,
+            .FeatureFlags = flags,
             .SelfManagementConfig = true,
             .AutomaticBootstrap = true,
         };

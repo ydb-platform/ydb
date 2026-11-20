@@ -500,6 +500,10 @@ namespace NKikimr::NBlobDepot {
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;
             TString GetQueryId() const;
+            bool ShouldSkipBridgeAccountingForSubrequests() const {
+                const auto& request = dynamic_cast<const TEvBlobStorage::TEvRequestCommon&>(*Event->GetBase());
+                return request.IsDSProxySubrequest || (ExecutionRelay && ExecutionRelay->BridgeProxyPoolCounters);
+            }
             virtual ui64 GetTabletId() const { return 0; }
             virtual void Initiate() = 0;
 
@@ -641,7 +645,7 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DS proxy interaction
 
-        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender,
+        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TQuery *query,
             TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

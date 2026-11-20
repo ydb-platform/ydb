@@ -28,6 +28,7 @@
 
 #include <util/string/hex.h>
 
+#include <algorithm>
 #include <tuple>
 #include <variant>
 
@@ -204,7 +205,7 @@ public:
             if (HasWorker(id) && !versions.empty()) {
                 auto request = MakeHolder<TEvService::TEvGetTxId>(versions);
                 id.Serialize(*request->Record.MutableWorker());
-                ops->Send(ActorId, request.Release());
+                ops->Send(ActorId, request.Release(), 0, GetWorkerActorId(id).LocalId());
             }
         }
 
@@ -217,8 +218,6 @@ public:
             ops->Send(ActorId, new TEvService::TEvGetTxId(versionsWithoutTxId));
         }
     }
-
-    void SetIndexBuildWorker(const TWorkerId& id) { IndexBuildWorkers.insert(id); }
 
     void Handle(const TActorContext& ctx, TEvService::TEvSourceOffsetReport::TPtr& ev) {
         if (!SupportsSourceOffsets) {
@@ -260,11 +259,15 @@ public:
     }
 
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
-        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
+        const NKikimrReplication::TRunWorkerCommand& command)
     {
+        const auto metricsLevel = command.GetMetricsLevel();
+        if (command.GetConsistencySettings().HasGlobal()) {
+            CommitIntervalMs = command.GetConsistencySettings().GetGlobal().GetCommitIntervalMilliSeconds();
+        }
         auto res = Workers.emplace(id, TWorkerInfo{
             ops->Register(actor, TMailboxType::HTSwap, poolId),
-            replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters
+            command.GetReplicationLocation(), metricsLevel, id.WorkerId(), AppData()->Counters
         });
 
         const auto& worker = res.first->second;
@@ -278,6 +281,9 @@ public:
 
         Y_ABORT_UNLESS(res.second);
 
+        if (command.GetLocalTableWriter().GetIndexBuild()) {
+            IndexBuildWorkers.insert(id);
+        }
         const auto actorId = worker.ActorId;
         ActorIdToWorkerId.emplace(actorId, id);
 
@@ -286,43 +292,16 @@ public:
     }
 
     void StopWorker(IActorOps* ops, const TWorkerId& id) {
-        auto it = Workers.find(id);
-        Y_ABORT_UNLESS(it != Workers.end());
-
-        ops->Send(it->second, new TEvents::TEvPoison());
+        ops->Send(GetWorkerActorId(id), new TEvents::TEvPoison());
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
-
-        ActorIdToWorkerId.erase(it->second);
-        PendingStatsValues.erase(id);
-        if (PendingStatsValues.empty()) {
-            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
-        }
-
-        IndexBuildWorkers.erase(id);
-        PendingIndexTxIds.erase(id);
-        DataEnded.erase(id);
-        Workers.erase(it);
+        RemoveWorker(ops, id);
     }
 
     template <typename... Args>
     void StopWorker(IActorOps* ops, const TActorId& id, Args&&... args) {
-        auto it = ActorIdToWorkerId.find(id);
-        Y_ABORT_UNLESS(it != ActorIdToWorkerId.end());
-
-        // actor already stopped
-        SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
-
-        IndexBuildWorkers.erase(it->second);
-        PendingIndexTxIds.erase(it->second);
-        DataEnded.erase(it->second);
-        Workers.erase(it->second);
-
-        PendingStatsValues.erase(it->second);
-        if (PendingStatsValues.empty()) {
-            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
-        }
-
-        ActorIdToWorkerId.erase(it);
+        const auto workerId = GetWorkerId(id);
+        SendWorkerStatus(ops, workerId, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
+        RemoveWorker(ops, workerId);
     }
 
     template <typename... Args>
@@ -409,7 +388,7 @@ public:
             for (const auto& version : ev->Get()->Record.GetVersions()) {
                 PendingIndexTxIds[id].insert(TRowVersion::FromProto(version));
             }
-            ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+            ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Sender.LocalId());
             return;
         }
 
@@ -418,7 +397,7 @@ public:
 
         for (const auto& v : ev->Get()->Record.GetVersions()) {
             const auto version = TRowVersion::FromProto(v);
-            if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+            if (auto it = TxIds.upper_bound(version); it != TxIds.end() && IntervalBegin(it->first) <= version) {
                 result[it->first] = it->second;
             } else {
                 versionsWithoutTxId.push_back(version);
@@ -438,19 +417,40 @@ public:
     void Handle(IActorOps* ops, TEvService::TEvTxIdResult::TPtr& ev) {
         if (ev->Get()->Record.HasWorker()) {
             const auto id = TWorkerId::Parse(ev->Get()->Record.GetWorker());
-            if (!HasWorker(id)) {
+            auto waiters = PendingIndexTxIds.find(id);
+            if (waiters == PendingIndexTxIds.end()) {
+                return;
+            }
+            const auto actorId = GetWorkerActorId(id);
+            if (ev->Cookie && ev->Cookie != actorId.LocalId()) {
                 return;
             }
 
-            auto& pending = PendingIndexTxIds[id];
-            for (const auto& assignment : ev->Get()->Record.GetVersionTxIds()) {
+            auto& pending = waiters->second;
+            auto& assignments = *ev->Get()->Record.MutableVersionTxIds();
+            const auto unused = std::remove_if(assignments.begin(), assignments.end(), [&](const auto& assignment) {
+                auto it = pending.lower_bound(TRowVersion::FromProto(assignment.GetBegin()));
+                return it == pending.end() || *it >= TRowVersion::FromProto(assignment.GetVersion());
+            });
+            assignments.erase(unused, assignments.end());
+            if (assignments.empty()) {
+                return;
+            }
+            for (const auto& assignment : assignments) {
                 const auto begin = TRowVersion::FromProto(assignment.GetBegin());
                 const auto end = TRowVersion::FromProto(assignment.GetVersion());
                 for (auto it = pending.lower_bound(begin); it != pending.end() && *it < end;) {
                     it = pending.erase(it);
                 }
             }
-            ops->Send(GetWorkerActorId(id), ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+            if (pending.empty()) {
+                PendingIndexTxIds.erase(waiters);
+            }
+            ops->Send(actorId, ev->ReleaseBase().Release(), ev->Flags);
+            return;
+        }
+
+        if (PendingTxId.empty()) {
             return;
         }
 
@@ -458,13 +458,13 @@ public:
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
             const auto version = TRowVersion::FromProto(kv.GetVersion());
+            auto it = PendingTxId.lower_bound(IntervalBegin(version));
+            if (it == PendingTxId.end() || it->first >= version) {
+                continue;
+            }
             TxIds.emplace(version, kv.GetTxId());
 
-            for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
-                if (it->first >= version) {
-                    break;
-                }
-
+            while (it != PendingTxId.end() && it->first < version) {
                 for (const auto& actorId : it->second) {
                     results[actorId].emplace(version, kv.GetTxId());
                 }
@@ -488,29 +488,17 @@ public:
         auto& record = ev->Get()->Record;
         const auto version = TRowVersion::FromProto(record.GetVersion());
 
-        if (const auto& prevVersion = worker.Heartbeat) {
-            if (version <= prevVersion) {
-                return;
-            }
-
-            auto it = WorkersByHeartbeat.find(prevVersion);
-            if (it != WorkersByHeartbeat.end()) {
-                it->second.erase(id);
-                if (it->second.empty()) {
-                    WorkersByHeartbeat.erase(it);
-                }
-            }
+        if (worker.Heartbeat && version <= worker.Heartbeat) {
+            return;
         }
 
+        if (!IndexBuildWorkers.contains(id)) {
+            EraseHeartbeat(id, worker.Heartbeat);
+            WorkersWithHeartbeat.insert(id);
+            WorkersByHeartbeat[version].insert(id);
+            PruneTxIds();
+        }
         worker.Heartbeat = version;
-        WorkersWithHeartbeat.insert(id);
-        WorkersByHeartbeat[version].insert(id);
-
-        if (Workers.size() - IndexBuildWorkers.size() == WorkersWithHeartbeat.size()) {
-            while (!TxIds.empty() && WorkersByHeartbeat.begin()->first < TxIds.begin()->first) {
-                TxIds.erase(TxIds.begin());
-            }
-        }
 
         id.Serialize(*record.MutableWorker());
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
@@ -537,12 +525,62 @@ public:
     }
 
 private:
-    static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
+    void EraseHeartbeat(const TWorkerId& id, const TRowVersion& version) {
+        auto it = WorkersByHeartbeat.find(version);
+        if (it != WorkersByHeartbeat.end()) {
+            it->second.erase(id);
+            if (it->second.empty()) {
+                WorkersByHeartbeat.erase(it);
+            }
+        }
+    }
+
+    void PruneTxIds() {
+        if (Workers.size() == IndexBuildWorkers.size()) {
+            TxIds.clear();
+        } else if (Workers.size() - IndexBuildWorkers.size() == WorkersWithHeartbeat.size()) {
+            TxIds.erase(TxIds.begin(), TxIds.upper_bound(WorkersByHeartbeat.begin()->first));
+        }
+    }
+
+    void RemoveWorker(IActorOps* ops, const TWorkerId& id) {
+        const auto worker = Workers.find(id);
+        Y_ABORT_UNLESS(worker != Workers.end());
+        EraseHeartbeat(id, worker->second.Heartbeat);
+        WorkersWithHeartbeat.erase(id);
+        for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+            it->second.erase(worker->second.ActorId);
+            if (it->second.empty()) {
+                it = PendingTxId.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        ActorIdToWorkerId.erase(worker->second.ActorId);
+        IndexBuildWorkers.erase(id);
+        PendingIndexTxIds.erase(id);
+        DataEnded.erase(id);
+        Workers.erase(worker);
+        PruneTxIds();
+        PendingStatsValues.erase(id);
+        if (PendingStatsValues.empty()) {
+            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
+        }
+    }
+
+    TRowVersion IntervalBegin(const TRowVersion& end) const {
+        Y_DEBUG_ABORT_UNLESS(CommitIntervalMs && end.Step >= CommitIntervalMs);
+        return TRowVersion(end.Step - CommitIntervalMs, 0);
+    }
+
+    void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) const {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 
         for (const auto& [version, txId] : result) {
             auto& item = *ev->Record.AddVersionTxIds();
             version.ToProto(item.MutableVersion());
+            IntervalBegin(version).ToProto(item.MutableBegin());
             item.SetTxId(txId);
         }
 
@@ -562,6 +600,7 @@ private:
     THashSet<TWorkerId> IndexBuildWorkers;
     THashMap<TWorkerId, TSet<TRowVersion>> PendingIndexTxIds;
     THashMap<TWorkerId, NKikimrReplication::TEvWorkerDataEnd> DataEnded;
+    ui64 CommitIntervalMs = 0;
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
     THashSet<TWorkerId> WorkersWithHeartbeat;
@@ -846,10 +885,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return;
         }
 
-        if (record.GetCommand().GetLocalTableWriter().GetIndexBuild()) {
-            session.SetIndexBuildWorker(id);
-        }
-
         if (session.HasWorker(id)) {
             return session.SendWorkerStatus(this, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
         }
@@ -889,9 +924,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                     cmd.HasLocalTableWriter() && AppData()->ReplicationConfig.GetEnableDataLossDetection()),
                 std::move(writerFn), cmd.GetTrackSourceOffsets(),
                 cmd.HasProcessedSourceOffset() ? TMaybe<ui64>(cmd.GetProcessedSourceOffset()) : Nothing()),
-            poolId,
-            cmd.GetReplicationLocation(),
-            cmd.GetMetricsLevel()
+            poolId, cmd
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }

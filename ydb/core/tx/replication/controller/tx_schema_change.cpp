@@ -605,7 +605,8 @@ class TController::TTxSchemaChangeReport: public TTxBase {
                 // commit remains an idempotent all-target operation.
                 barrier.Phase = ESchemaBarrierPhase::FlushingTarget;
                 barrier.TargetFlushTxIds.reserve(Self->AssignedTxIds.size());
-                for (const auto& [_, writeTxId] : Self->AssignedTxIds) {
+                for (const auto& [_, assignment] : Self->AssignedTxIds) {
+                    const auto writeTxId = assignment.WriteTxId;
                     barrier.TargetFlushTxIds.push_back(writeTxId);
                     flushTxIds.AddWriteTxIds(writeTxId);
                 }
@@ -1025,7 +1026,8 @@ public:
             barrier.TargetFlushTxIds.clear();
             barrier.NextTargetFlushTxId = 0;
             NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
-            for (const auto& [_, writeTxId] : Self->AssignedTxIds) {
+            for (const auto& [_, assignment] : Self->AssignedTxIds) {
+                const auto writeTxId = assignment.WriteTxId;
                 barrier.TargetFlushTxIds.push_back(writeTxId);
                 flushTxIds.AddWriteTxIds(writeTxId);
             }

@@ -378,7 +378,14 @@ private:
     THashMap<std::pair<ui64, ui64>, TActorId> IndexReadyActors;
     bool IndexBuildTxInFlight = false;
     TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
-    TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
+    struct TAssignedTxId {
+        ui64 WriteTxId;
+        ui64 FirstEndStep;
+    };
+    TMap<TRowVersion, TAssignedTxId> AssignedTxIds;
+    void SaveAssignment(NIceDb::TNiceDb& db, const TRowVersion& end, TAssignedTxId assignment);
+    ui64 ExtendLastAssignment(NIceDb::TNiceDb& db, const TRowVersion& end);
+    ui64 CoverEarlierInterval(NIceDb::TNiceDb& db, const TRowVersion& end, const TRowVersion& requested);
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;
 

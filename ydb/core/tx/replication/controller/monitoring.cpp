@@ -496,8 +496,8 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
     }
     {
         auto table = makeTable("Transactions (controller-wide)", {"Version", "Assigned write transaction ID", "Waiting nodes"});
-        for (const auto& [version, txId] : AssignedTxIds) {
-            table.Row(version, txId, 0);
+        for (const auto& [version, assignment] : AssignedTxIds) {
+            table.Row(version, assignment.WriteTxId, 0);
         }
         for (const auto& [version, nodes] : PendingTxId) {
             table.Row(version, "pending", nodes.size());

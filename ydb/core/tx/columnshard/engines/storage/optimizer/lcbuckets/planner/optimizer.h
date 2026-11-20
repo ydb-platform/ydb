@@ -52,12 +52,6 @@ private:
         return false;
     }
 
-    virtual TConclusion<bool> DoNeedCompaction() const override {
-        // a forced compaction has nothing to wait for here: the levels have no settled end state the way the tiling++
-        // last level has, so the request is answered at once, or waits only for the CASCADE rewrite
-        return false;
-    }
-
     virtual bool DoIsOverloaded() const override {
         for (auto&& i : Levels) {
             if (i->IsOverloaded()) {

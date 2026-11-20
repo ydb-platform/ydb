@@ -1223,8 +1223,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     }
 
     if (!record.HasOperationId()) {
-        // Not a request of the forced compaction protocol (an older schemeshard, a hand-made request): not served, like
-        // the other requests the shard has nothing to do for. FAILED would make the schemeshard retry it forever.
+        // not a forced compaction of this protocol (an older schemeshard): NOT_NEEDED, FAILED would be retried forever
         YDB_LOG_WARN("Forced compaction request without an operation id",
             {"tablet", TabletID()},
             {"pathId", pathId},
@@ -1254,24 +1253,9 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    const auto needCompaction = granule->GetOptimizerPlanner().NeedCompaction();
-    if (needCompaction.IsFail()) {
-        // The planner does not support forced compaction (neither tiling++ nor lc-buckets).
-        YDB_LOG_WARN("Forced compaction is not supported",
-            {"tablet", TabletID()},
-            {"pathId", pathId},
-            {"reason", needCompaction.GetErrorMessage()},
-            {"requestedFrom", ev->Sender});
-        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-        return;
-    }
-
     if (ForcedCompactionOperationId != record.GetOperationId()) {
-        // A new operation, not a retry of the one being served: the schemeshard repeats its request every few seconds
-        // until the shard answers, and a retry must neither move the rewrite threshold nor rebuild the rewrite queue.
-        // CASCADE: every portion is also rewritten to the current schema and the reply waits for that too. A plain
-        // operation turns off a rewrite left by a cancelled CASCADE (a cancel alone reaches no shard, the rewrite then
-        // runs to completion or is forgotten with a restart); otherwise it leaves the engine alone.
+        // a new operation, not a retry (the schemeshard repeats the request until answered; a retry must not touch the
+        // rewrite): CASCADE targets the current schema, a plain operation turns off the rewrite of a cancelled CASCADE
         ForcedCompactionOperationId = record.GetOperationId();
         if (record.GetCascade()) {
             engine.SetSchemeNeedActualization(true);
@@ -1281,11 +1265,10 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         ForcedCompactionActualizeSchema = record.GetCascade();
     }
 
-    // the latest request supersedes the held one: the waiter of a cancelled operation must not answer on behalf of
-    // the next (also when this request is answered at once)
+    // the latest request supersedes the held one: a cancelled operation's waiter must not answer for the next
     ForcedCompactionWaiter.reset();
 
-    if (!*needCompaction && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
+    if (!granule->GetOptimizerPlanner().NeedCompaction() && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
         // nothing to do: NOT_NEEDED at once; OK is for a request that waited for some work
         YDB_LOG_DEBUG("Forced compaction not needed",
             {"tablet", TabletID()},
@@ -1296,8 +1279,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    // The planner still has work (or the portions are not rewritten yet): hold the request and reply OK once the
-    // table settles. Background compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
+    // work left: hold the request, RecheckForcedCompactions() answers OK once it is done
     YDB_LOG_DEBUG("Forced compaction registered",
         {"tablet", TabletID()},
         {"pathId", pathId},
@@ -1320,14 +1302,9 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
     if (!granule) {
         // The table has gone away (e.g. dropped): fail the pending request.
         status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
-    } else {
-        const auto needCompaction = granule->GetOptimizerPlanner().NeedCompaction();
-        if (needCompaction.IsFail()) {
-            // the planner was switched to one without forced compaction support meanwhile
-            status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
-        } else if (!*needCompaction && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
-            status = NKikimrTxDataShard::TEvCompactTableResult::OK;
-        }
+    } else if (!granule->GetOptimizerPlanner().NeedCompaction() &&
+               (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
+        status = NKikimrTxDataShard::TEvCompactTableResult::OK;
     }
     if (!status) {
         return;
@@ -1344,7 +1321,6 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
 }
 
 void TColumnShard::FinishForcedCompactionActualization() {
-    // the CASCADE request is answered: no rewrite target any more, schema cleanup is allowed again
     if (ForcedCompactionActualizeSchema) {
         ForcedCompactionActualizeSchema = false;
         TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().SetSchemeNeedActualization(false);

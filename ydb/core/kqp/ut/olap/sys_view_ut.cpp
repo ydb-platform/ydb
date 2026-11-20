@@ -470,8 +470,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             helper.ExecuteSchemeQuery("ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(10));
-            // the rewrite materializes the added column (nulls, a chunk per page) in every portion; the delete flag stays
-            // as sparse as it was written
+            // the rewrite materializes the added column in every portion; the delete flag stays as sparse as written
             ui64 rawBytes2;
             ui64 bytes2;
             helper.GetVolumes(rawBytes2, bytes2, count2, false, { "new_column_ui64" });

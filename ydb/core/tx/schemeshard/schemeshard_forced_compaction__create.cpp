@@ -87,8 +87,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         }
 
         if (tablePath.Base()->IsColumnTable()) {
-            // Column tables have no index impl tables to cascade into; CASCADE instead makes the shards also rewrite
-            // every portion to the current schema (see TEvCompactTable::Cascade).
+            // no index impl tables to cascade into: CASCADE makes the shards rewrite the portions to the current schema
             // Only standalone column tables are supported. Tables that belong to a column store share
             // their shards, so forced compaction of a single such table is not supported (and enumerating
             // its owned shards below would fail).

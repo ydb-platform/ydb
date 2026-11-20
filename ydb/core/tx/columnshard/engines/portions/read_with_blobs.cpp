@@ -133,8 +133,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
                 {"column_id", i});
             continue;
         } else {
-            // a column the source was written without (added by ALTER): the rewrite materializes it with its default,
-            // page by page, so that the new portion carries every column of its schema
+            // a column added since the source was written: materialized with its default, page by page
             const auto& columnInfo = to->GetIndexInfo().GetColumnFeaturesVerified(i);
             const auto& loader = columnInfo.GetLoader();
             ui32 chunkIdx = 0;

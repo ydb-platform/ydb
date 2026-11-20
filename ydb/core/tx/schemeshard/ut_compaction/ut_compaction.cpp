@@ -3651,8 +3651,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         const auto state = [&](const ui64 compactionId) {
             return TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState();
         };
-        // an empty table has nothing to compact: the shard answers NOT_NEEDED at once and the operation is done as soon
-        // as the answer is let through
+        // an empty table has nothing to compact: NOT_NEEDED at once, done once the answer is let through
         const auto compactEmptyTable = [&](const TString& tablePath) {
             TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
             TestCompact(runtime, ++txId, "/MyRoot", tablePath);
@@ -3664,8 +3663,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL_C(state(txId), Ydb::Table::CompactState::STATE_DONE, tablePath);
         };
 
-        // Forced compaction is supported for standalone column tables whatever their compaction planner (what the shard
-        // waits for is its business, see TColumnShardTestReadWrite): on the node default (tiling++) and on lc-buckets.
+        // standalone column tables whatever the planner: the node default (tiling++) and lc-buckets
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             Schema {
@@ -3713,9 +3711,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1, expectedStatus);
         };
 
-        // Column tables have no index impl tables: CASCADE instead asks every shard to also rewrite its portions to the
-        // current schema (TEvCompactTable::Cascade). The request carries the flag and the operation id, so that the
-        // shard tells a timeout retry of the operation from a new one.
+        // Column tables have no index impl tables: CASCADE asks the shards to rewrite their portions to the current
+        // schema instead. The request carries the flag and the operation id (a retry vs a new operation).
         std::vector<NKikimrTxDataShard::TEvCompactTable> requests;
         auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTable>(
             [&](const TEvDataShard::TEvCompactTable::TPtr& ev) { requests.push_back(ev->Get()->Record); });
@@ -3727,8 +3724,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT(requests[0].GetCascade());
         UNIT_ASSERT_VALUES_EQUAL(requests[0].GetOperationId(), compactionId);
 
-        // A cancel tells the shards nothing (a rewrite in flight runs to completion or is forgotten with a restart): the
-        // shard's late answer completes nothing.
+        // a cancel tells the shards nothing: the shard's late answer completes nothing
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
         env.SimulateSleep(runtime, TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);

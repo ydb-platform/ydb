@@ -16083,8 +16083,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
         {
-            // For a column table CASCADE also rewrites every portion to the current schema; an empty table
-            // has nothing to rewrite, so it completes successfully too (see KqpOlapCompact.CascadeActualizesSchema).
+            // column table: CASCADE rewrites the portions to the current schema, an empty table has nothing to rewrite
             auto query = R"sql(
                 ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = true);
             )sql";

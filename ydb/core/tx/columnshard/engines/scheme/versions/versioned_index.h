@@ -120,8 +120,7 @@ public:
         return result ? result : defaultSchema;
     }
 
-    // SchemeNeedActualization: true makes every portion older than the current schema get rewritten (with the newest
-    // schema at the time of the rewrite), false stops that
+    // true: rewrite every portion older than the current schema (with the newest schema at the time), false: stop that
     void SetSchemeNeedActualization(const bool value) {
         if (value) {
             SchemeVersionForActualization = LastSchemaVersion;

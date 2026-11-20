@@ -50,9 +50,8 @@ void Compact(TTestHelper& helper, const bool cascade) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapCompact) {
-    // ALTER TABLE ... COMPACT WITH (CASCADE = true) on a column table also rewrites every portion to the current schema
-    // (as if SCHEME_NEED_ACTUALIZATION had been set), materializing the columns added since, and completes only once
-    // that is done.
+    // ALTER TABLE ... COMPACT WITH (CASCADE = true) on a column table also rewrites every portion to the current
+    // schema, materializing the columns added since, and completes only once that is done.
     Y_UNIT_TEST(CascadeActualizesSchema) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
@@ -101,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompact) {
         for (const ui64 version : versionsAfter) {
             UNIT_ASSERT_GT(version, oldVersion);
         }
-        // the rewrite does not only stamp the version: the added column is materialized (with its default) in every portion
+        // the added column is materialized in every portion
         UNIT_ASSERT_VALUES_EQUAL(CountPortionsWithColumn(testHelper, "Extra"), versionsAfter.size());
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTable`", "[[1000u]]");
     }

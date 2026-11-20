@@ -239,12 +239,10 @@ protected:
         return TConclusionStatus::Success();
     }
 
-    // Forced compaction (ALTER TABLE ... COMPACT): whether the planner still has to compact something before the
-    // request may be answered. Fail() means the planner does not support forced compaction at all. tiling++ answers
-    // by its intersections (true until every portion has settled into the regular last level); lc-buckets has nothing
-    // to wait for and always answers false: its request is done at once, or waits only for the CASCADE rewrite.
-    virtual TConclusion<bool> DoNeedCompaction() const {
-        return TConclusionStatus::Fail("forced compaction is not supported by this optimizer");
+    // Forced compaction (ALTER TABLE ... COMPACT): is there still something to compact before the request is answered?
+    // Only tiling++ has an end state to wait for (no intersections left); the other planners answer false.
+    virtual bool DoNeedCompaction() const {
+        return false;
     }
 
 public:
@@ -328,7 +326,7 @@ public:
         return DoCheckWriteData();
     }
 
-    TConclusion<bool> NeedCompaction() const {
+    bool NeedCompaction() const {
         return DoNeedCompaction();
     }
 

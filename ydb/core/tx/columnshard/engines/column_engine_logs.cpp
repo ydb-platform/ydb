@@ -311,9 +311,8 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
     if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
     }
-    // the refresh re-targets the scheme actualizer (or, SchemeNeedActualization set back to false, stops it) and makes the
-    // tiering actualizer pick up the new TieringNeedActualization; a schema change without either leaves the target set
-    // by ALTER TABLE ... COMPACT WITH (CASCADE = true) and its queue alone
+    // re-targets (or stops) the scheme actualizer and makes the tiering actualizer pick up its option; a schema change
+    // without either keeps the target of ALTER TABLE ... COMPACT WITH (CASCADE = true) and its queue
     if (isCriticalScheme || switchTieringActualization || (ActualizationStarted && vIndex.GetLastCriticalSchema() != criticalSchemaBefore)) {
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
@@ -876,8 +875,7 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
 }
 
 void TColumnEngineForLogs::SetSchemeNeedActualization(const bool value) {
-    // the CASCADE compaction and the SCHEME_NEED_ACTUALIZATION option are exclusive (the schemeshard refuses the
-    // combination): off is off, whatever the option of the current schema says
+    // off is off, whatever the SchemeNeedActualization option of the current schema says
     MutableVersionedIndex().SetSchemeNeedActualization(value);
     StartActualization({});
     for (auto&& i : GranulesStorage->GetTables()) {

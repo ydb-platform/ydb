@@ -43,8 +43,7 @@ class TVersionedIndex;
 
 class TPortionEvictionFeatures {
 private:
-    // the version stored in the portion: with schema collapsing (EnableCSSchemasCollapsing) it may be older than
-    // CurrentScheme, the lookup of a collapsed version gives the surviving successor
+    // the version stored in the portion: with schema collapsing CurrentScheme (the lookup of that version) may be newer
     YDB_READONLY(ui64, PortionSchemaVersion, 0);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);

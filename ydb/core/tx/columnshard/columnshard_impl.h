@@ -561,12 +561,9 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
-    // The in-flight forced-compaction request (ALTER TABLE ... COMPACT), at most one: the schemeshard refuses it for
-    // tables in a column store, so a shard that gets it hosts a single table, and it runs one forced compaction of a
-    // table at a time; a repeated request (timeout retry, schemeshard restart or move, the next operation after a
-    // cancel) supersedes the held one. Kept in memory only: on restart the schemeshard's persisted queue re-sends
-    // TEvCompactTable. A request with nothing to do is answered NOT_NEEDED at once; the waiter is answered OK once the
-    // planner has nothing left to compact and, for CASCADE, the rewrite is done.
+    // The held forced compaction request (ALTER TABLE ... COMPACT), at most one: the shard hosts a single standalone
+    // table and a repeated request supersedes the held one. In memory only, the schemeshard re-sends the request after
+    // a restart. Answered OK once nothing is left to compact and, for CASCADE, to rewrite.
     struct TForcedCompactionWaiter {
         TInternalPathId InternalPathId;
         TActorId Sender;
@@ -575,12 +572,9 @@ private:
     };
 
     std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
-    // The forced compaction operation the shard serves (TEvCompactTable::OperationId): a request with the same id is a
-    // retry and only refreshes the waiter, a request with another id applies its Cascade flag anew, a request without an
-    // id is answered NOT_NEEDED. Cascade of the operation is in effect until the request is answered: the portions are
-    // being rewritten to the current schema and the waiter also waits for that.
+    // the operation served (TEvCompactTable::OperationId): the same id again is a retry, another one a new operation
     std::optional<ui64> ForcedCompactionOperationId;
-    bool ForcedCompactionActualizeSchema = false;
+    bool ForcedCompactionActualizeSchema = false;   // its Cascade: the reply also waits for the rewrite
     void FinishForcedCompactionActualization();
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;

@@ -2566,15 +2566,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWriteOverload(table);
     }
 
-    // A column shard with one standalone table on the given compaction planner, and the requests of ALTER TABLE ... COMPACT
-    // (TEvCompactTable with the id of the schemeshard operation) sent by hand in the schemeshard's place, see
-    // TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr&).
+    // A shard with one standalone table on the given planner; the test sends the schemeshard's TEvCompactTable requests
+    // itself, see TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr&).
     class TForcedCompactionTest {
     public:
         using TResult = NKikimrTxDataShard::TEvCompactTableResult;
         using EBackground = NKikimr::NYDBTest::ICSController::EBackground;
 
-        // the first member: the observer and the controller below are registered with it and must be destroyed before it
+        // first: the observer and the controller below register with the runtime and must be destroyed before it
         TTestBasicRuntime Runtime;
 
     private:
@@ -2590,8 +2589,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     public:
         NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> Controller;
         TActorId Sender;
-        // the schema versions of the live portions when the shard sent its last reply (background compaction may go on
-        // rewriting portions after it)
+        // the live portions' schema versions at the shard's last reply (background compaction may go on afterwards)
         std::optional<std::set<ui64>> VersionsOnReply;
 
         explicit TForcedCompactionTest(const TString& planner)
@@ -2665,9 +2663,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, TableId));
         }
 
-        // Drives the background loop until the shard replies: each manual wakeup runs EnqueueBackgroundActivities (which
-        // starts compactions and rewrites and re-checks the held request), SimulateSleep lets the asynchronous work
-        // complete.
+        // drives the background loop (wakeup = EnqueueBackgroundActivities, sleep = async work) until the shard replies
         TResult::EStatus WaitResult() {
             TEvDataShard::TEvCompactTableResult::TPtr ev;
             for (ui32 i = 0; i < 120 && !ev; ++i) {
@@ -2690,9 +2686,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             for (ui32 i = 0; i < 120; ++i) {
                 bool settled = true;
                 for (const auto& [_, granule] : Engine().GetTables()) {
-                    const auto needCompaction = granule->GetOptimizerPlanner().NeedCompaction();
-                    UNIT_ASSERT_C(needCompaction.IsSuccess(), needCompaction.GetErrorMessage());
-                    settled &= !*needCompaction;
+                    settled &= !granule->GetOptimizerPlanner().NeedCompaction();
                 }
                 if (settled) {
                     return;
@@ -2706,8 +2700,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             RebootTablet(Runtime, TTestTxConfig::TxTablet0, Sender);
         }
 
-        // EnableCSSchemasCollapsing: drives the background loop until the shard has erased the schema version (its
-        // successor only added nullable columns, so the lookup of the version gives the successor from then on)
+        // EnableCSSchemasCollapsing: drives the background loop until the shard has erased the schema version
         void WaitSchemaVersionCollapsed(const ui64 version) {
             for (ui32 i = 0; i < 30; ++i) {
                 if (!Engine().GetVersionedIndex().GetSchemaByVersion().contains(version)) {
@@ -2804,19 +2797,15 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(ForcedCompactionCascadeRewritesPortionsToCurrentSchema) {
-        // The two planners with forced compaction support. A plain request is answered as soon as the planner has
-        // nothing left to do: tiling++ holds it until background compaction has settled every portion into the last
-        // level and answers OK then, lc-buckets has no such end state and answers NOT_NEEDED at once, intersections or
-        // not. A request without an operation id is not the schemeshard's: NOT_NEEDED at once whatever the state.
-        // Portions written with an older schema are left alone by a plain request and rewritten with the current
-        // schema by CASCADE, which is answered OK once no live portion is older; with nothing to rewrite CASCADE is
-        // NOT_NEEDED at once.
+        // A plain request is answered once the planner has nothing to do: tiling++ holds it until compaction has
+        // settled every portion into the last level (OK), the other planners answer NOT_NEEDED at once. No operation
+        // id: NOT_NEEDED whatever the state. Older portions are left alone by a plain request and rewritten by CASCADE
+        // (OK once no live portion is older, NOT_NEEDED when there was nothing to rewrite).
         using TResult = TForcedCompactionTest::TResult;
         using EBackground = TForcedCompactionTest::EBackground;
         for (const TString planner : { "tiling++", "lc-buckets" }) {
             TForcedCompactionTest t(planner);
-            // the overlapping batches stay as written (and with lc-buckets a background compaction would rewrite the
-            // portions it merges with the current schema on its own, so it stays off)
+            // the batches stay as written (a compaction would rewrite the merged portions with the current schema)
             t.DisableBackground(EBackground::Compaction);
             t.WriteOverlappingBatches(2);
 
@@ -2849,10 +2838,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(ForcedCompactionCascadeRewritesCollapsedVersion) {
-        // With EnableCSSchemasCollapsing the shard erases a schema version whose successor only added nullable columns:
-        // the lookup of that version gives the successor's schema from then on, so the portions written with it look
-        // current. The rewrite goes by the version stored in the portion and CASCADE still brings them to the current
-        // schema.
+        // With EnableCSSchemasCollapsing the shard erases a version whose successor only added nullable columns, and
+        // the lookup of that version gives the successor: its portions look current. The rewrite goes by the stored
+        // version.
         using TResult = TForcedCompactionTest::TResult;
         using EBackground = TForcedCompactionTest::EBackground;
         TForcedCompactionTest t("lc-buckets");
@@ -2874,12 +2862,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(ForcedCompactionCascadeRetryNewOperationRestart) {
-        // The schemeshard repeats its request every few seconds until the shard answers and tells the shards nothing
-        // when the operation is cancelled. A request with the id of the operation being served is such a retry: it
-        // changes nothing, neither the rewrite queue nor whether the request is held. A plain request of another
-        // operation turns the rewrite of a cancelled CASCADE off: the queue is dropped, the request is answered
-        // NOT_NEEDED at once and the superseded one gets no reply of its own. A restart forgets the operation and its
-        // rewrite; the retry that follows starts it anew.
+        // The schemeshard repeats its request until answered and tells the shards nothing on cancel. A request with the
+        // id being served is a retry: it changes nothing. A plain request of another operation turns the rewrite of a
+        // cancelled CASCADE off: NOT_NEEDED at once, the superseded request gets no reply. A restart forgets the
+        // operation and its rewrite; the retry that follows starts it anew.
         using TResult = TForcedCompactionTest::TResult;
         using EBackground = TForcedCompactionTest::EBackground;
         TForcedCompactionTest t("tiling++");
@@ -2919,9 +2905,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ForcedCompactionCascadeThresholdIsSchemaAtRequest) {
         // CASCADE queues the portions older than the schema current at the request and rewrites them with the newest
-        // schema at the time of the rewrite. A schema change meanwhile neither drops nor extends the queue: the portions
-        // at the threshold version are left alone (a new operation would queue them), the queued ones get the new
-        // schema, and the reply waits for the queue only. A retry after the schema change keeps the threshold.
+        // schema at the time of the rewrite. A schema change meanwhile neither drops nor extends the queue, and a retry
+        // keeps the threshold.
         using TResult = TForcedCompactionTest::TResult;
         using EBackground = TForcedCompactionTest::EBackground;
         TForcedCompactionTest t("tiling++");

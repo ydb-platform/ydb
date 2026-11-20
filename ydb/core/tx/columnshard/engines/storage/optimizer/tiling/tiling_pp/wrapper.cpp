@@ -247,7 +247,7 @@ protected:
         return Core.DoGetUsefulMetric();
     }
 
-    TConclusion<bool> DoNeedCompaction() const override {
+    bool DoNeedCompaction() const override {
         return !Core.HasNoIntersections();
     }
 

@@ -163,7 +163,7 @@ struct TTestSchema {
             return out;
         }
 
-        // tiling++: the planner with a settled end state a forced compaction waits for
+        // tiling++: the planner whose end state a forced compaction waits for
         TTableSpecials WithForcedCompaction(bool forced) const {
             return WithCompactionPlanner(forced ? std::optional<TString>("tiling++") : std::nullopt);
         }

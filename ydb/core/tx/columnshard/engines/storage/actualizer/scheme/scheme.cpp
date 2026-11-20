@@ -15,13 +15,11 @@ std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualization
     const TPortionInfo& portion) const {
     YDB_LOG_VERIFY(CriticalSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
-    // by the version stored in the portion, not by the schema it resolves to: with schema collapsing
-    // (EnableCSSchemasCollapsing) a portion written before a collapsed ADD COLUMN resolves to the surviving successor
-    // and would look current
+    // by the version stored in the portion: with schema collapsing a portion written before a collapsed ADD COLUMN
+    // resolves to the surviving successor and would look current
     if (portion.GetSchemaVersionVerified() < CriticalSchema->GetVersion()) {
         auto portionSchema = portion.GetSchema(VersionedIndex);
-        // rewritten with the newest schema, not with the critical one: a schema change meanwhile moves the portions
-        // still to be rewritten to the new schema, while the already rewritten ones are not rewritten again
+        // rewritten with the newest schema: a schema change meanwhile does not re-rewrite the finished portions
         const auto writeSchema = VersionedIndex.GetLastSchema();
         auto storagesWrite = writeSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
@@ -58,8 +56,7 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
 void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
     auto it = PortionsInfo.find(portionId);
     if (it == PortionsInfo.end()) {
-        // not queued: the rewrite of a portion handed to a task has been committed (the hand-off itself removes the
-        // portion from the queue through this method too, while it stays in flight)
+        // not queued: a portion handed to a task, removed from the granule now that its rewrite is committed
         PortionsInFlight.erase(portionId);
         TSchemeGlobalCounters::OnSkipPortionToRemove();
         return;

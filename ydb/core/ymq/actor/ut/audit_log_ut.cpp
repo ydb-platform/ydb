@@ -54,7 +54,7 @@ public:
         createUser->MutableCredentials()->SetOAuthToken(ticket);
         // An empty user name is rejected after authorization.
         Runtime_.Register(CreateActionActor(request, MakeHolder<TNoopReplyCallback>()));
-        return WaitForAuditLine(sourceAddress);
+        return WaitForErrorAuditLine(sourceAddress);
     }
 
     std::string RunCloud(TAuthActorData::ESqsRequestFormat format = TAuthActorData::Xml,
@@ -85,9 +85,9 @@ public:
             Runtime_.Register(new THttpProxyAuthRequestProxy(std::move(data), {}, EdgeActor_));
             auto response = Runtime_.GrabEdgeEvent<NHttpProxy::TEvYmqCloudAuthResponse>(EdgeActor_);
             UNIT_ASSERT(response->Get()->IsSuccess);
-            Ydb::Ymq::V1::CreateQueueRequest request;
+            Ydb::Ymq::V1::CreateQueueRequest grpcRequest;
             NRpcService::DoLocalRpc<NGRpcService::TEvYmqCreateQueueRequest>(
-                std::move(request), {}, Nothing(), Nothing(), Runtime_.GetActorSystem(0), {
+                std::move(grpcRequest), {}, Nothing(), Nothing(), Runtime_.GetActorSystem(0), {
                     {NYmq::V1::CLOUD_ID, response->Get()->CloudId},
                     {NYmq::V1::FOLDER_ID, response->Get()->FolderId},
                     {NYmq::V1::USER_SID, response->Get()->Sid},
@@ -98,7 +98,7 @@ public:
         } else {
             Runtime_.Register(new TCloudAuthRequestProxy(std::move(data), {}));
         }
-        return WaitForAuditLine(sourceAddress);
+        return WaitForErrorAuditLine(sourceAddress);
     }
 
 private:
@@ -151,7 +151,7 @@ private:
         }
     }
 
-    std::string WaitForAuditLine(const TString& sourceAddress) {
+    std::string WaitForErrorAuditLine(const TString& sourceAddress) {
         Runtime_.WaitFor("YMQ audit record", [&] {
             return AnyOf(AuditLines_, [](const auto& line) { return line.find("component=ymq") != std::string::npos; });
         }, TDuration::Seconds(10));

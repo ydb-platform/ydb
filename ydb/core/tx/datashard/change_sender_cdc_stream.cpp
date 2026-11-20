@@ -517,12 +517,23 @@ class TCdcChangeSenderMain
             return Become(&TThis::StatePendingRemove);
         }
 
+        if (entry.ListNodeEntry->Children.size() != 1) {
+            YDB_LOG_ERROR("CDC stream has no topic, dropping change records",
+                {"childrenCount", entry.ListNodeEntry->Children.size()});
+
+            if (AggregatedHeartbeats) {
+                RemoveRecords(AggregatedHeartbeats->Clear());
+            }
+            RemoveRecords();
+            KillSenders();
+            return Become(&TThis::StatePendingRemove);
+        }
+
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
         if (AggregatedHeartbeats) {
             AggregatedHeartbeats->SetAggregator(Stream.AggregatorTabletId);
         }
 
-        Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
         Y_ENSURE(topic.Kind == TNavigate::KindTopic);

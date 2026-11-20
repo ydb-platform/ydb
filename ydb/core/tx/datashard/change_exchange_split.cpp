@@ -300,7 +300,12 @@ class TCdcWorker
             return Ack();
         }
 
-        Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
+        if (entry.ListNodeEntry->Children.size() != 1) {
+            YDB_LOG_WARN("Auto-acknowledging split: CDC stream has no topic",
+                {"childrenCount", entry.ListNodeEntry->Children.size()});
+            return Ack();
+        }
+
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
         Y_ENSURE(topic.Kind == TNavigate::KindTopic);

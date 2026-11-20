@@ -4013,6 +4013,50 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitTxNotification(env.GetServer(), env.GetEdgeActor(), dropTxId);
     }
 
+    Y_UNIT_TEST(StreamWithoutTopic) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        auto hideTopic = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream && entry.ListNodeEntry) {
+                    auto listNode = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TListNodeEntry>();
+                    listNode->Kind = entry.ListNodeEntry->Kind;
+                    entry.ListNodeEntry = listNode;
+                }
+            }
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20);
+        )");
+
+        SetSplitMergePartCountLimit(&runtime, -1);
+        const auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+        WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", tabletIds.at(0), 2));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (3, 30);
+        )");
+    }
+
     Y_UNIT_TEST(RenameTable) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

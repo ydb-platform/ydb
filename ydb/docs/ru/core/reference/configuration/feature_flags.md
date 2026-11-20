@@ -91,5 +91,6 @@ feature_flags:
 | `enable_fs_backups`                                      | Включение операций [резервного копирования и восстановления на сетевую файловую систему](../../concepts/backup.md#nfs) |
 | `switch_to_config_v2`                                    | Переход с конфигурации V1 на [конфигурацию V2](../../devops/configuration-management/migration/migration-to-v2.md) |
 | `enable_streaming_queries`                               | Включение [потоковых запросов](../../concepts/streaming-query/streaming-query.md) |
+| `enable_user_attributes_in_topic_query`                  | [Пользовательские атрибуты сообщений](../../concepts/query_execution/topics.md#system-metadata) в запросах к топикам через `__ydb_user_attributes` |
 | `enable_stable_node_names`                               | Включение [стабильных имен динамических узлов](node_broker_config.md) |
 | `enable_alter_database_create_hive_first`                | Создание отдельного Hive для системных таблеток базы при создании базы данных |

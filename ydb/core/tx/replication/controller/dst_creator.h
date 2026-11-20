@@ -35,15 +35,11 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
     EReplicationMode mode = EReplicationMode::ReadOnly,
     EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
-<<<<<<< HEAD
     TReplication::EState desiredState = TReplication::EState::Ready);
-=======
-    TReplication::EState desiredState = TReplication::EState::Ready,
-    bool switchover = false);
+
 IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
     const TString& database, const TPathId& pathId,
     ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,
     TTopicMirrorSettings&& topicMirror);
->>>>>>> 14db6214eaf ([KIKIMR-27673] Manage topic mirroring through replication lifecycle (#59451))
 
 }

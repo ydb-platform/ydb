@@ -195,6 +195,8 @@ public:
                 case ETargetKind::Transfer:
                     TargetTablePaths.push_back(target->GetDstPath());
                     break;
+                case ETargetKind::Topic:
+                    break;
                 }
             }
         }

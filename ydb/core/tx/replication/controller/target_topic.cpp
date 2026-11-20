@@ -13,7 +13,7 @@ TString TTargetTopic::BuildStreamConsumerName() const {
     return GetStreamName();
 }
 
-TString TTargetTopic::BuildStreamPath() const {
+TString TTargetTopic::GetStreamPath() const {
     return GetSrcPath();
 }
 

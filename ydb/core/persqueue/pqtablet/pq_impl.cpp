@@ -1104,6 +1104,12 @@ void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
 
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
+    if (IsWriteProhibited()) {
+        LOG_I("Write prohibited, skipping labeled counters aggregation",
+            {"group", group});
+        return;
+    }
+
     if (CounterEventsInflight[group].RefCount() <= 1) {
         if (CounterEventsInflight[group].RefCount() == 0) {
             CounterEventsInflight[group] = new TEvTabletCounters::TInFlightCookie;

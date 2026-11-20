@@ -375,7 +375,7 @@ public:
                 return false;
             }
             if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-                start->Confirm(firstOffset);
+                start->Confirm(firstOffset + index);
             } else if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 for (const auto& message : data->GetMessages()) {
                     UNIT_ASSERT(index < payloads.size());

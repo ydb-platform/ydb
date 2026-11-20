@@ -806,11 +806,6 @@ message TDDiskTabletListResponse {
     }
     repeated TGroup Groups = 5;
 
-    message TMissingGroups {
-        optional uint32 Missing = 1;
-        optional uint32 Count = 2;
-    }
-
     message TTabletRevision {
         optional uint64 TabletId = 1;
         optional uint64 Revision = 2;
@@ -824,10 +819,9 @@ message TDDiskTabletListResponse {
         // Absent if any assigned DDisk has no valid, available monitoring sample.
         optional double DiskUsage = 8;
         optional string DiskId = 9; // NBS volume identifier; absent for older/unavailable reporters
-        repeated TMissingGroups UnavailableDDiskGroups = 10;
-        repeated TMissingGroups UnavailablePersistentBufferGroups = 11;
-        optional uint32 GroupsWithUnknownDDiskStatus = 12;
-        optional uint32 GroupsWithUnknownPersistentBufferStatus = 13;
+        reserved 10 to 13;
+        reserved "UnavailableDDiskGroups", "UnavailablePersistentBufferGroups",
+            "GroupsWithUnknownDDiskStatus", "GroupsWithUnknownPersistentBufferStatus";
     }
 
     reserved 2;
@@ -893,7 +887,7 @@ message TDDiskDiskListResponse {
         optional uint32 DDiskTabletCount = 8;
         optional uint32 PersistentBufferTabletCount = 9;
         optional string StoragePoolName = 10;
-        optional string DDiskPath = 11; // node-relative actor monitoring path
+        optional string DDiskPath = 11; // legacy field, omitted by CMS
         optional string PersistentBufferId = 12; // stable service actor ID
         optional NKikimrWhiteboard.TDDiskStateInfo.EComponentStatus DDiskStatus = 13;
         optional NKikimrWhiteboard.TDDiskStateInfo.EComponentStatus PersistentBufferStatus = 14;

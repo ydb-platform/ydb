@@ -419,12 +419,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         const auto disks = env.RequestDDiskDiskList();
         UNIT_ASSERT(disks.DisksSize() > 0);
         for (const auto& disk : disks.GetDisks()) {
-            // Pool and links must not depend on a live whiteboard space sample.
+            // Pool and actor identity are available without a live whiteboard space sample.
             UNIT_ASSERT(!disk.HasDDiskOccupancy());
             UNIT_ASSERT_VALUES_EQUAL(disk.GetStoragePoolName(), "pool-42");
             const auto& id = disk.GetDiskId();
-            UNIT_ASSERT_VALUES_EQUAL(disk.GetDDiskPath(), Sprintf("actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
-                id.GetPDiskId(), id.GetDDiskSlotId()));
+            UNIT_ASSERT(!disk.HasDDiskPath());
             UNIT_ASSERT_VALUES_EQUAL(disk.GetPersistentBufferId(), MakeBlobStoragePersistentBufferId(
                 id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId()).ToString());
         }
@@ -520,6 +519,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                     TFakeNodeWhiteboardService::Info[env.GetNodeId(i)]
                         .PDiskStateInfo.at(pdiskIds.at(env.GetNodeId(i))).SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
                 }
+                const auto nodeId = env.GetNodeId(1);
+                auto& sample = TFakeNodeWhiteboardService::Info.at(nodeId).DDiskStateInfo.emplace_back();
+                sample.SetPDiskId(pdiskIds.at(nodeId));
+                sample.SetDDiskSlotId(1);
+                sample.SetDDiskPath("legacy-viewer-path");
             }
             // Exercise the HTTP parameter mapping through the actual proxy and CMS.
             auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds,
@@ -614,11 +618,13 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 UNIT_ASSERT(group.GetMonitoredQuorum() ==
                     NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult::NoQuorum);
                 UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 4);
+                for (const auto& member : detail.GetSlots()) {
+                    UNIT_ASSERT(!member.HasDDiskPath());
+                }
                 const auto& slot = detail.GetSlots(0);
                 UNIT_ASSERT_VALUES_EQUAL(slot.GetNodeId(), env.GetNodeId(0));
                 UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskId(), pdiskIds.at(slot.GetNodeId()));
                 UNIT_ASSERT_VALUES_EQUAL(slot.GetDDiskSlotId(), 1);
-                UNIT_ASSERT(slot.GetDDiskPath().StartsWith("actors/ddisks/ddisk_p"));
                 UNIT_ASSERT(!slot.GetPersistentBufferId().empty());
                 UNIT_ASSERT(!slot.GetHasWhiteboardData());
                 UNIT_ASSERT(slot.GetDDiskStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
@@ -638,15 +644,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetTabletId(), 2002);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetDegrade(), 2);
-                const auto& tablet = response.GetTablets(0);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.UnavailableDDiskGroupsSize(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.UnavailablePersistentBufferGroupsSize(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskGroups(0).GetMissing(), swapRoles ? 1 : 2);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferGroups(0).GetMissing(), swapRoles ? 2 : 1);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskGroups(0).GetCount(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferGroups(0).GetCount(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.GetGroupsWithUnknownDDiskStatus(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(tablet.GetGroupsWithUnknownPersistentBufferStatus(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetTabletId(), 2001);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetDegrade(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetUnavailableDDiskCount(), 3);

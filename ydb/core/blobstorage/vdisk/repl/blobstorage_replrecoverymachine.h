@@ -188,8 +188,8 @@ namespace NKikimr {
                             }
                             restoreMask &= ~item.PartsMask;
 
-                            ErasureRestore((TErasureType::ECrcMode)id.CrcMode(), groupType, id.BlobSize(), nullptr,
-                                item.Parts, restoreMask);
+                            ErasureRestore(id, groupType, nullptr, item.Parts,
+                                           restoreMask);
                             item.PartsMask |= restoreMask;
                         }
 

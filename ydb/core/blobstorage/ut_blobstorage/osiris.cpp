@@ -36,7 +36,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
     char *buffer = temp.Detach();
     Encrypt(buffer, buffer, 0, temp.size(), id, *info);
     TDataPartSet parts;
-    info->Type.SplitData((TBlobStorageGroupType::ECrcMode)id.CrcMode(), temp, parts);
+    info->Type.SplitData(id, temp, parts);
 
     TString error;
 

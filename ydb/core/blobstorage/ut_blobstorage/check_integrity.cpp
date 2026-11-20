@@ -93,16 +93,14 @@ struct TCheckIntegrityEnvBlock42 : public TCheckIntegrityEnvBase {
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
         })
     {
-        auto crcMode = (TErasureType::ECrcMode)Id.CrcMode();
-
         TDataPartSet partSet;
-        Info->Type.SplitData(crcMode, Data, partSet);
+        Info->Type.SplitData(Id, Data, partSet);
         for (ui32 i = 0; i < partSet.Parts.size(); ++i) {
             Parts.push_back(partSet.Parts[i].OwnedString.ConvertToString());
         }
 
         TDataPartSet errorPartSet;
-        Info->Type.SplitData(crcMode, ErrorData, errorPartSet);
+        Info->Type.SplitData(Id, ErrorData, errorPartSet);
         for (ui32 i = 0; i < errorPartSet.Parts.size(); ++i) {
             ErrorParts.push_back(errorPartSet.Parts[i].OwnedString.ConvertToString());
         }

@@ -91,8 +91,8 @@ public:
 
                 if (restoreMask) {
                     // restore missing data parts
-                    ErasureRestore((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type, state.Id.BlobSize(),
-                        nullptr, parts, restoreMask, alignedBegin, true);
+                    ErasureRestore(state.Id, info.Type, nullptr, parts,
+                                   restoreMask, alignedBegin, true);
 
                     // put them back
                     for (ui32 i = 0; i < info.Type.DataParts(); ++i) {

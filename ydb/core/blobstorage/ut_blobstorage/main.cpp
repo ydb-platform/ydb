@@ -57,8 +57,8 @@ Y_UNIT_TEST_SUITE(DonorMode) {
             // prepare new blob
             TString data = TStringBuilder() << "Hello, world! Iteration number " << i << " is on the run.";
             TDataPartSet partSet;
-            info->Type.SplitData(TBlobStorageGroupType::CrcModeNone, data, partSet);
             TLogoBlobID blobId;
+            info->Type.SplitData(blobId, data, partSet);
             for (ui32 step = 1;; ++step) {
                 blobId = TLogoBlobID(1, 1 + i, step, 0, partSet.FullDataSize, 0, 1);
                 const auto& [vdiskActorId, vdiskId] = getBlobLocation(info, blobId);

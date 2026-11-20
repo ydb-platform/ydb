@@ -99,8 +99,6 @@ public:
         partIds.reserve(6);
         bool erasureError = false;
 
-        TErasureType::ECrcMode crcMode = (TErasureType::ECrcMode)id.CrcMode();
-
         auto checkCombination = [&]() {
             // iterate over combinations of part versions
             for (const auto& seen0 : seenParts[partIds[0]]) {
@@ -119,7 +117,8 @@ public:
                     restoreMask |= (1 << partIds[5]);
                 }
 
-                ErasureRestore(crcMode, TErasureType::Erasure4Plus2Block, id.BlobSize(), nullptr, data, restoreMask);
+                ErasureRestore(id, TErasureType::Erasure4Plus2Block, nullptr,
+                               data, restoreMask);
 
                 std::array<std::vector<ui32>, 4> diskIdxs{
                     seen0.DiskIdxs, seen1.DiskIdxs, seen2.DiskIdxs, seen3.DiskIdxs};

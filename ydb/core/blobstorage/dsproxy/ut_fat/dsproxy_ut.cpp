@@ -1426,7 +1426,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
                 TVDiskID vDiskId(0, 1, 0, vDiskIdx , 0);
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
-                type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
+                type.SplitData(blobId, encryptedTestData2, partSet);
 
                 TLogoBlobID logoblobid(1, 0, 0, 0, testData2.size(), 0, 1);
 
@@ -1455,7 +1455,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
             {
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
-                type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
+                type.SplitData(blobId, encryptedTestData2, partSet);
                 TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString.ConvertToString());
 
                 VERBOSE_COUT("Done");
@@ -1518,7 +1518,7 @@ class TTestBlobStorageProxyVPutVGetLimit : public TTestBlobStorageProxy {
                     encryptedTestData2.resize(testData2.size());
                     Encrypt(encryptedTestData2.Detach(), testData2.data(), 0, testData2.size(), blobId, *BsInfo);
 
-                    type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
+                    type.SplitData(blobId, encryptedTestData2, partSet);
 
                     TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                         new TEvBlobStorage::TEvVPut(id, partSet.Parts[partIdx].OwnedString, vDiskId, false,
@@ -1657,7 +1657,7 @@ private:
                 VERBOSE_COUT(" Sending TEvVPut to " << vDiskId->ToString() << " blob " << logoblobid.ToString());
 
                 NKikimr::TDataPartSet partSet;
-                BsInfo->Type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData, partSet);
+                BsInfo->Type.SplitData(blobId, encryptedTestData, partSet);
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                         new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[parametrs.PartId-1].OwnedString, *vDiskId,
@@ -1748,7 +1748,7 @@ class TTestBlobStorageProxyVGet : public TTestBlobStorageProxy {
                 }
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
-                type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
+                type.SplitData(blobId, encryptedTestData2, partSet);
                 TEST_RESPONSE(MessageVGetResult, OK, 1, partSet.Parts[0].OwnedString.ConvertToString());
 
                 isNoData = false;
@@ -1887,7 +1887,7 @@ class TTestBlobStorageProxyVBlockVPutVGet : public TTestBlobStorageProxy {
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 TLogoBlobID logoblobid(1, 1, 1, 0, testData.size(), 3, 1);
-                type.SplitData((TErasureType::ECrcMode)logoblobid.CrcMode(), testData, partSet);
+                type.SplitData(logoblobid, testData, partSet);
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> x(
                     new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
@@ -2631,7 +2631,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 TLogoBlobID from0(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), 0);
-                type.SplitData((TErasureType::ECrcMode)from0.CrcMode(), testData3, partSet);
+                type.SplitData(from0, testData3, partSet);
 
 
                 TVDiskID vDiskId(0, 1, 0, 0, 0);
@@ -2681,7 +2681,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 TLogoBlobID from(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), cookie, partIdx + 1);
-                type.SplitData((TErasureType::ECrcMode)from.CrcMode(), testData3, partSet);
+                type.SplitData(from, testData3, partSet);
 
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
@@ -3308,7 +3308,7 @@ class TTestBlobStorageProxyVPutVCollectVGetRace : public TTestBlobStorageProxy {
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
                 TLogoBlobID logoblobid(1, 1, 1, 0, testData.size(), 3, 1);
-                type.SplitData((TErasureType::ECrcMode)logoblobid.CrcMode(), testData, partSet);
+                type.SplitData(logoblobid, testData, partSet);
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> x(
                     new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,

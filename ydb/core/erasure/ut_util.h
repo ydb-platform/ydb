@@ -6,8 +6,10 @@
 #include <util/stream/null.h>
 #include <util/string/printf.h>
 #include <util/system/unaligned_mem.h>
+#include <ydb/core/base/logoblob.h>
+#include <ydb/core/erasure/erasure.h>
 
-IOutputStream& Ctest = Cnull;
+inline IOutputStream& Ctest = Cnull;
 
 #define VERBOSE_COUT(a) Ctest << a
 
@@ -68,4 +70,9 @@ inline TString GenerateRandomString(NPrivate::TMersenne64 &randGen, size_t dataS
         --dataSize;
     }
     return testString;
+}
+
+inline NKikimr::TLogoBlobID MakeCrcNoneStubBlobId(ui32 size) {
+    return NKikimr::TLogoBlobID::Make(1, 1, 1, 0, size, 0,
+                                        NKikimr::TErasureType::CrcModeNone);
 }

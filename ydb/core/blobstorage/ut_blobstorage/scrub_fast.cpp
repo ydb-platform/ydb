@@ -2,7 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-void Test() {
+void Test(TErasureType::ECrcMode crcMode) {
     SetRandomSeed(1);
     TEnvironmentSetup env{{
         .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
@@ -18,7 +18,7 @@ void Test() {
     memset(data.Detach(), 'X', data.size());
 
     for (ui32 step = 1; step < 100; ++step) {
-        TLogoBlobID id(1, 1, step, 0, data.size(), 0);
+        TLogoBlobID id = TLogoBlobID::Make(1, 1, step, 0, data.size(), 0, crcMode);
 
         { // write data to group
             TActorId sender = runtime->AllocateEdgeActor(1);
@@ -42,6 +42,7 @@ void Test() {
             UNIT_ASSERT_VALUES_EQUAL(r.Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(r.Buffer.ConvertToString(), data);
 
+            TVector<TRope> parts(info->Type.TotalPartCount());
             ui32 partsMask = 0;
             for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
                 const TVDiskID& vdiskId = info->GetVDiskId(i);
@@ -60,6 +61,8 @@ void Test() {
                             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(result.GetBlobID());
                             UNIT_ASSERT(id.PartId());
                             const ui32 partIdx = id.PartId() - 1;
+                            UNIT_ASSERT(partIdx < parts.size());
+                            parts[partIdx] = reply->Get()->GetBlobData(result);
                             const ui32 mask = 1 << partIdx;
                             UNIT_ASSERT(!(partsMask & mask));
                             partsMask |= mask;
@@ -70,9 +73,10 @@ void Test() {
                 });
             }
             UNIT_ASSERT_VALUES_EQUAL(partsMask, (1 << info->Type.TotalPartCount()) - 1);
+            return parts;
         };
 
-        checkReadable();
+        const auto expectedParts = checkReadable();
 
         ui32 mask = 0;
 
@@ -98,7 +102,7 @@ void Test() {
                 }
             }
 
-            checkReadable();
+            UNIT_ASSERT_EQUAL_C(checkReadable(), expectedParts, "Part data mismatch for " << id);
         }
 
         env.Sim(TDuration::Seconds(60));
@@ -139,7 +143,11 @@ void Test() {
 
 Y_UNIT_TEST_SUITE(ScrubFast) {
     Y_UNIT_TEST(SingleBlob) {
-        Test();
+        Test(TErasureType::CrcModeNone);
+    }
+
+    Y_UNIT_TEST(SingleBlobCrcModeWholePart) {
+        Test(TErasureType::CrcModeWholePart);
     }
 }
 

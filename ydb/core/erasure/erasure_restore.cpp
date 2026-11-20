@@ -1,6 +1,8 @@
 #include "erasure.h"
 #include <util/string/printf.h>
 
+#include <ydb/core/base/logoblob.h>
+
 #include <bit>
 
 namespace NKikimr {
@@ -494,12 +496,13 @@ namespace NKikimr {
         }
     }
 
-    void ErasureRestoreFallback(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
+    void ErasureRestoreFallback(const TLogoBlobID& id, TErasureType erasure, TRope *whole,
             std::span<TRope> parts, ui32 restoreMask, ui32 offset, bool isFragment) {
         Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
         Y_ABORT_UNLESS(!isFragment || !whole);
 
-        const ui32 partSize = erasure.PartSize(crcMode, fullSize);
+        const ui32 partSize = erasure.PartSize(
+            static_cast<TErasureType::ECrcMode>(id.CrcMode()), id.BlobSize());
 
         // ensure all the set parts have the same size
         ui32 commonSize = 0;
@@ -515,7 +518,7 @@ namespace NKikimr {
         ui32 inputMask = 0;
 
         TDataPartSet p;
-        p.FullDataSize = fullSize;
+        p.FullDataSize = id.BlobSize();
         p.IsFragment = isFragment;
         Y_ABORT_UNLESS(isFragment || !offset);
         for (ui32 i = 0; i < parts.size(); ++i) {
@@ -539,9 +542,9 @@ namespace NKikimr {
         const bool restoreParityParts = restoreMask >> erasure.DataParts();
         if (whole) {
             whole->Compact();
-            erasure.RestoreData(crcMode, p, *whole, restoreParts, true, restoreParityParts);
+            erasure.RestoreData(id, p, *whole, restoreParts, true, restoreParityParts);
         } else {
-            erasure.RestoreData(crcMode, p, restoreParts, false, restoreParityParts);
+            erasure.RestoreData(id, p, restoreParts, false, restoreParityParts);
         }
 
         for (ui32 i = 0; i < parts.size(); ++i) {
@@ -551,15 +554,17 @@ namespace NKikimr {
         }
     }
 
-    void ErasureRestore(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
-            std::span<TRope> parts, ui32 restoreMask, ui32 offset, bool isFragment) {
-        if (crcMode == TErasureType::CrcModeNone && erasure.GetErasure() == TErasureType::Erasure4Plus2Block) {
+    void ErasureRestore(const TLogoBlobID &id, TErasureType erasure,
+                        TRope *whole, std::span<TRope> parts, ui32 restoreMask,
+                        ui32 offset, bool isFragment) {
+        if (id.CrcMode() == TErasureType::CrcModeNone &&
+            erasure.GetErasure() == TErasureType::Erasure4Plus2Block) {
             Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
             Y_ABORT_UNLESS(!isFragment || !whole);
             Y_ABORT_UNLESS(offset % 32 == 0);
-            ErasureRestoreBlock42(fullSize, whole, parts, restoreMask);
+            ErasureRestoreBlock42(id.BlobSize(), whole, parts, restoreMask);
         } else {
-            ErasureRestoreFallback(crcMode, erasure, fullSize, whole, parts, restoreMask, offset, isFragment);
+            ErasureRestoreFallback(id, erasure, whole, parts, restoreMask, offset, isFragment);
         }
     }
 

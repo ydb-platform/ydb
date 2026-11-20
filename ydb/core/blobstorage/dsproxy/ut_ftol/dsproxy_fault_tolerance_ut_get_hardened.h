@@ -223,11 +223,11 @@ public:
 
     void GenerateBlob(TLogoBlobID *id, TDataPartSet *parts) {
         TString data = Data;
-        *id = TLogoBlobID(1, 1, Index++, 0, data.size(), 0);
+        *id = TLogoBlobID(1, 1, Index++, 0, data.size(), 0, 0, TBlobStorageGroupType::CrcModeNone);
         char *buffer = data.Detach();
         Encrypt(buffer, buffer, 0, data.size(), *id, *Info);
         *parts = {};
-        Info->Type.SplitData(TBlobStorageGroupType::CrcModeNone, data, *parts);
+        Info->Type.SplitData(*id, data, *parts);
     }
 
     void WriteParts() {

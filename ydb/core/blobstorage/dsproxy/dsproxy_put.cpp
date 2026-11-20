@@ -703,8 +703,7 @@ public:
                 }
             } else { // BlobsSplit < BlobsEncrypted -- then we split it
                 auto& blob = PutImpl.Blobs[BlobsSplit];
-                const auto crcMode = static_cast<TErasureType::ECrcMode>(blob.BlobId.CrcMode());
-                if (ErasureSplit(crcMode, Info->Type, blob.Buffer, PartSets[BlobsSplit],
+                if (ErasureSplit(blob.BlobId, Info->Type, blob.Buffer, PartSets[BlobsSplit],
                         &ErasureSplitContext, allocator)) {
                     ++BlobsSplit;
                     ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);

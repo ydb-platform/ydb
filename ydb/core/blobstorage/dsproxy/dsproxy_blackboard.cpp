@@ -67,7 +67,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
                 parts[i] = Parts[i].Data.Read(0, partSize);
                 if (++partsPresent >= info.Type.MinimalRestorablePartCount()) {
                     TRope whole;
-                    ErasureRestore((TErasureType::ECrcMode)Id.CrcMode(), info.Type, Id.BlobSize(), &whole, parts, 0, 0, false);
+                    ErasureRestore(Id, info.Type, &whole, parts, 0, 0, false);
                     Y_ABORT_UNLESS(whole.size() == Id.BlobSize());
                     Whole.Data.SetMonolith(std::move(whole));
                     Y_DEBUG_ABORT_UNLESS(Whole.Here() == fullBlobInterval);
@@ -538,7 +538,7 @@ void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, T
     outNWorst->resize(totalVDisks);
     for (ui32 orderNumber = 0; orderNumber < totalVDisks; ++orderNumber) {
         ui64 predictedDelayNs = groupQueues.GetPredictedDelayNsByOrderNumber(orderNumber, queueId);
-        (*outNWorst)[orderNumber] = { 
+        (*outNWorst)[orderNumber] = {
             static_cast<ui64>(predictedDelayNs * accelerationParams.PredictedDelayMultiplier),
             orderNumber
         };
@@ -622,7 +622,7 @@ void TBlackboard::MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerati
         // all disks cannot be slow
         return;
     }
-    
+
     TDiskDelayPredictions worstDisks;
     state.GetWorstPredictedDelaysNs(*Info, *GroupQueues,
             (isPut ? HandleClassToQueueId(PutHandleClass) : HandleClassToQueueId(GetHandleClass)),

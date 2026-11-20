@@ -478,14 +478,14 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
             }
 
             TRope outBuffer;
-            info->Type.RestoreData(TErasureType::CrcModeNone, ps, outBuffer, false, true, false);
+            info->Type.RestoreData(id, ps, outBuffer, false, true, false);
             UNIT_ASSERT(digest.contains(id));
             UNIT_ASSERT_VALUES_EQUAL(outBuffer.size(), id.BlobSize());
             TString s = outBuffer.ConvertToString();
             UNIT_ASSERT_VALUES_EQUAL(Crc32c(s.data(), s.size()), digest[id]);
 
             ps = {};
-            info->Type.SplitData(TErasureType::CrcModeNone, outBuffer, ps);
+            info->Type.SplitData(id, outBuffer, ps);
             for (ui32 i = 0; i < parts.size(); ++i) {
                 if (mask >> i & 1) {
                     auto& part = ps.Parts[i];

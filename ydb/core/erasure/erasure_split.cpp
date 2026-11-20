@@ -1,5 +1,7 @@
 #include "erasure.h"
 
+#include <ydb/core/base/logoblob.h>
+
 static const char ZeroData[4096] = {0};
 
 namespace NKikimr {
@@ -40,7 +42,7 @@ namespace NKikimr {
         // In case of RDMA all chunks must be allocated on the same allocator
         // but right now we have no safe and efficient mechanism to preallocate
         // zerro buffer on the rdma registered memory. So for rdma we will zero it
-        // just during this call. 
+        // just during this call.
         bool useZeroPage = allocator == GetDefaultRcBufAllocator();
 
         for (ui32 part = 0; part < 4; ++part) {
@@ -177,11 +179,11 @@ namespace NKikimr {
         return bytesProcessed;
     }
 
-    bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
+    bool ErasureSplit(const TLogoBlobID& id, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
             TErasureSplitContext *context, IRcBufAllocator* allocator) {
         Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
 
-        if (erasure.GetErasure() == TErasureType::Erasure4Plus2Block && crcMode == TErasureType::CrcModeNone) {
+        if (erasure.GetErasure() == TErasureType::Erasure4Plus2Block && id.CrcMode() == TErasureType::CrcModeNone) {
             ErasureSplitBlock42Prepare(whole, parts, allocator);
             if (context) {
                 Y_ABORT_UNLESS(context->MaxSizeAtOnce % 32 == 0);
@@ -196,7 +198,7 @@ namespace NKikimr {
         TDataPartSet p;
         TRope copy(whole);
         copy.Compact();
-        erasure.SplitData(crcMode, copy, p);
+        erasure.SplitData(id, copy, p);
         Y_ABORT_UNLESS(p.Parts.size() == parts.size());
         for (ui32 i = 0; i < parts.size(); ++i) {
             parts[i] = std::move(p.Parts[i].OwnedString);

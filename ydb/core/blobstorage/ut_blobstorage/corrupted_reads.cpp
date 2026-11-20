@@ -99,8 +99,7 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
                 const TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 const TString data = FastGenDataForLZ4(id.BlobSize(), id.Step());
                 std::vector<TRope> parts(info->Type.TotalPartCount());
-                ErasureSplit(static_cast<TBlobStorageGroupType::ECrcMode>(id.CrcMode()), info->Type, TRope(data), parts,
-                    nullptr, allocator);
+                ErasureSplit(id, info->Type, TRope(data), parts, nullptr, allocator);
                 UNIT_ASSERT(ev->HasBlob(item));
                 const TRope& readPartData = ev->GetBlobData(item);
                 const TRope& expectedPart = parts[id.PartId() - 1];

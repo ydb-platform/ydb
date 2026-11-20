@@ -185,35 +185,4 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
     return (missingParts.size() == 0);
 }
 
-ui64 TBlobStorageGroupType::PartSize(const TLogoBlobID &id) const {
-    // Y_ABORT_UNLESS(id.PartId()); // TODO(alexvru): uncomment when dsproxy is ready for KIKIMR-9881
-    if (GetErasure() == TBlobStorageGroupType::ErasureMirror3of4 && id.PartId() == 3) {
-        return 0;
-    } else {
-        return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
-    }
-}
-
-ui64 TBlobStorageGroupType::MaxPartSize(const TLogoBlobID &id) const {
-    Y_ABORT_UNLESS(!id.PartId());
-    return MaxPartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
-}
-
-ui64 TBlobStorageGroupType::MaxPartSize(TErasureType::ECrcMode crcMode, ui32 blobSize) const {
-    return TErasureType::PartSize(crcMode, blobSize);
-}
-
-bool TBlobStorageGroupType::PartFits(ui32 partId, ui32 idxInSubgroup) const {
-    switch (GetErasure()) {
-        case TBlobStorageGroupType::ErasureMirror3dc:
-            return idxInSubgroup % 3 == partId - 1;
-
-        case TBlobStorageGroupType::ErasureMirror3of4:
-            return idxInSubgroup >= 4 || partId == 3 || idxInSubgroup % 2 == partId - 1;
-
-        default:
-            return idxInSubgroup >= TotalPartCount() || idxInSubgroup == partId - 1;
-    }
-}
-
 }

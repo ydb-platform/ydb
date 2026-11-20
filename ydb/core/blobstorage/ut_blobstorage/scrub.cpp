@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
     using TLayout = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
 
     void Populate(TEnvironmentSetup& env, TVDiskID vdiskId, TActorId vdiskActorId, std::map<TLogoBlobID, TString>& data,
-            std::unique_ptr<TLayout>& layout) {
+            std::unique_ptr<TLayout>& layout, TErasureType::ECrcMode crcMode) {
         const TActorId& sender = env.Runtime->AllocateEdgeActor(vdiskActorId.NodeId());
 
         std::vector<TString> blobs;
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
         for (ui32 i = 1;; ++i) {
             const TString& data = blobs[RandomNumber(blobs.size())];
-            TLogoBlobID id(1, 1, i, 0, data.size(), 0);
+            TLogoBlobID id = TLogoBlobID::Make(1, 1, i, 0, data.size(), 0, crcMode);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
             env.Runtime->WrapInActorContext(sender, [&] {
                 SendToBSProxy(sender, vdiskId.GroupID, ev.release());
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
         env.Runtime->DestroyActor(edge);
     }
 
-    void ScrubTest(TBlobStorageGroupType erasure) {
+    void ScrubTest(TBlobStorageGroupType erasure, TErasureType::ECrcMode crcMode) {
         SetRandomSeed(1);
         TEnvironmentSetup env(false, erasure);
         auto& runtime = env.Runtime;
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
         std::map<TLogoBlobID, TString> data;
         std::unique_ptr<TLayout> layout;
-        Populate(env, vdiskId, vdiskActorId, data, layout);
+        Populate(env, vdiskId, vdiskActorId, data, layout, crcMode);
 
         env.SetScrubPeriodicity(TDuration::Seconds(60));
         env.Sim(TDuration::Seconds(60));
@@ -395,15 +395,27 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
     }
 
     Y_UNIT_TEST(mirror3of4) {
-        ScrubTest(TBlobStorageGroupType::ErasureMirror3of4);
+        ScrubTest(TBlobStorageGroupType::ErasureMirror3of4, TErasureType::CrcModeNone);
+    }
+
+    Y_UNIT_TEST(mirror3of4CrcModeWholePart) {
+        ScrubTest(TBlobStorageGroupType::ErasureMirror3of4, TErasureType::CrcModeWholePart);
     }
 
     Y_UNIT_TEST(mirror3dc) {
-        ScrubTest(TBlobStorageGroupType::ErasureMirror3dc);
+        ScrubTest(TBlobStorageGroupType::ErasureMirror3dc, TErasureType::CrcModeNone);
+    }
+
+    Y_UNIT_TEST(mirror3dcCrcModeWholePart) {
+        ScrubTest(TBlobStorageGroupType::ErasureMirror3dc, TErasureType::CrcModeWholePart);
     }
 
     Y_UNIT_TEST(block42) {
-        ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block);
+        ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block, TErasureType::CrcModeNone);
+    }
+
+    Y_UNIT_TEST(block42CrcModeWholePart) {
+        ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block, TErasureType::CrcModeWholePart);
     }
 }
 

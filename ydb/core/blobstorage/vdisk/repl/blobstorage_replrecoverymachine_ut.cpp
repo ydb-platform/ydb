@@ -13,7 +13,8 @@ namespace NKikimr {
         TMap<TLogoBlobID, TVector<TString>> GenerateData(ui32 numBlobs,
                                                         ui32 maxLen,
                                                         const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                                        const TVector<TVDiskID>& vdisks) {
+                                                        const TVector<TVDiskID>& vdisks,
+                                                        TErasureType::ECrcMode crcMode) {
             TMap<TLogoBlobID, TVector<TString>> rv;
             TReallyFastRng32 rng(1);
             ui32 step = 1;
@@ -26,7 +27,7 @@ namespace NKikimr {
                     data.push_back(rng());
                 }
 
-                TLogoBlobID id(1, 1, step, 0, len, 0);
+                TLogoBlobID id = TLogoBlobID::Make(1, 1, step, 0, len, 0, crcMode);
                 ++step;
 
                 TBlobStorageGroupInfo::TVDiskIds varray;
@@ -34,7 +35,7 @@ namespace NKikimr {
                 info->PickSubgroup(id.Hash(), &varray, &services);
 
                 TDataPartSet parts;
-                info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts);
+                info->Type.SplitData(id, data, parts);
 
                 TVector<TString> diskvec(vdisks.size());
 
@@ -83,7 +84,7 @@ namespace NKikimr {
             return replCtx;
         }
 
-        Y_UNIT_TEST(BasicFunctionality) {
+        void TestBasicFunctionality(TErasureType::ECrcMode crcMode) {
             TRopeArena arena(&TRopeArenaBackend::Allocate);
             TVector<TVDiskID> vdisks;
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
@@ -92,7 +93,7 @@ namespace NKikimr {
             info->WorkUnitsPlanned = Max<ui64>();
             TBlobIdQueuePtr unreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
             NRepl::TRecoveryMachine m(replCtx, info);
-            TMap<TLogoBlobID, TVector<TString>> data = GenerateData(10000, 1024, groupInfo, vdisks);
+            TMap<TLogoBlobID, TVector<TString>> data = GenerateData(10000, 1024, groupInfo, vdisks, crcMode);
             for (const auto& pair : data) {
                 const TLogoBlobID& id = pair.first;
 
@@ -180,6 +181,14 @@ namespace NKikimr {
 
                 UNIT_ASSERT_EQUAL(item.Data, buf);
             }
+        }
+
+        Y_UNIT_TEST(BasicFunctionality) {
+            TestBasicFunctionality(TErasureType::CrcModeNone);
+        }
+
+        Y_UNIT_TEST(BasicFunctionalityCrcModeWholePart) {
+            TestBasicFunctionality(TErasureType::CrcModeWholePart);
         }
     }
 

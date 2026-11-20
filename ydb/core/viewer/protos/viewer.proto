@@ -424,6 +424,15 @@ message TStorageUsage {
     optional uint64 Groups = 6;
 }
 
+message TBridgeDatabaseSyncInfo {
+    // Required group copies across the database's storage pools and piles.
+    map<string, uint64> GroupCountsBySyncStatus = 1; // SYNCED, SYNCING, PENDING, UNKNOWN
+    optional uint64 BytesRemaining = 2; // known blob bytes left to copy
+    optional bool BytesRemainingComplete = 3; // false when BytesRemaining is a lower bound
+    optional uint64 BytesPerSecond = 4; // total one-minute copy rate, when known
+    optional uint64 SecondsLeft = 5; // complete BytesRemaining / positive BytesPerSecond
+}
+
 message TTenant {
     string Name = 1;
     string Id = 2;
@@ -468,6 +477,7 @@ message TTenant {
     // DiskSpaceQuotaUsage is absent when the SchemeShard is too old to report it.
     optional NKikimrSubDomains.TDomainState DomainState = 58;
     optional NKikimrSubDomains.TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 59;
+    TBridgeDatabaseSyncInfo BridgeSync = 60; // present when the statistics for the database's bridge pools are available
 }
 
 message TTenants {
@@ -536,6 +546,7 @@ message TStorageGroupStateInfo {
 message TBridgeGroupLink {
     string GroupId = 1;
     string PileName = 2; // omitted when the pile name is unavailable
+    optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 3;
 }
 
 message TStorageGroupInfo {
@@ -582,6 +593,7 @@ message TStorageGroupInfo {
     optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 41;
     optional bool BridgeMode = 42; // belongs to a bridge group; omitted without BSC data
     repeated TBridgeGroupLink BridgeGroups = 43; // other physical parts of the same bridge group, excluding this group
+    optional uint64 BridgeSyncSecondsLeft = 44; // estimated from a complete remaining-byte estimate and a positive copy rate
 }
 
 message TStorageGroupGroup {

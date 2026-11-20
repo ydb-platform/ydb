@@ -154,7 +154,8 @@ void InitViewerCapabilitiesJsonHandler(TJsonHandlers& jsonHandlers) {
         .Method = "get",
         .Tag = "viewer",
         .Summary = "Viewer capabilities",
-        .Description = "Viewer capabilities",
+        .Description = "Viewer capabilities and settings. When database is specified, Settings.Database.BridgeModeEnabled "
+            "reports whether its storage uses Bridge mode. Omitted when the mode is mixed or unavailable.",
     });
     jsonHandlers.AddHandler("/viewer/capabilities", new THttpHandler<TViewerCapabilities>(yaml));
     jsonHandlers.Capabilities["/cms/api/json/ddisk/tablets"] = 1;
@@ -275,7 +276,7 @@ void InitViewerHiveStatsJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerTenantInfoJsonHandler(TJsonHandlers &handlers) {
-    handlers.AddHandler("/viewer/tenantinfo", new THttpHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 8);
+    handlers.AddHandler("/viewer/tenantinfo", new THttpHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 9);
 }
 
 void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
@@ -305,8 +306,8 @@ void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 18);
-    jsonHandlers.AddHandler("/storage/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 18);
+    jsonHandlers.AddHandler("/viewer/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 19);
+    jsonHandlers.AddHandler("/storage/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 19);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {

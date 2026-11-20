@@ -13,6 +13,8 @@ Warmup runs automatically by default. Administrators can [limit how long it runs
 3. The node compiles each selected query using its user identity, query type, syntax, and parameter types. It stores the resulting plan in its local cache.
 4. Once warmup finishes, the node appears in the list of available database [endpoints](../connect.md#endpoint) and starts serving client requests. Until then, a request sent directly to the node may return `UNAVAILABLE` with a message about cache warmup.
 
+To see which queries the node currently has in its cache, filter `.sys/compile_cache_queries` by its `NodeId`. The results also include queries compiled while serving clients. See the [example queries for this view](../../dev/system-views.md#compile-cache-queries-examples).
+
 ### Query selection {#query-selection}
 
 The node selects queries based on how often they were accessed on running nodes and how long they took to compile. Depending on the warmup limits, only a subset of the cached queries may be selected.
@@ -34,9 +36,3 @@ Warmup does not run on system nodes in the root domain. Serverless databases do 
 ## Configuration
 
 For settings, default values, and an example, see [Compilation cache warmup](../../reference/configuration/table_service_config.md#compile-cache-warmup) in the configuration reference.
-
-## Checking the result
-
-In the starting node's log, look for the `Warmup finished` entry from the `KQP_COMPILE_SERVICE` component at the `INFO` level. The `compiled` field counts queries prepared successfully, and `failed` counts errors recorded during preparation. The `message` field explains why warmup ended. For example, it starts with `Skipped:` if warmup was skipped and reads `Hard deadline exceeded` if the hard deadline expired.
-
-To see which queries the node currently has in its cache, filter the [`.sys/compile_cache_queries`](../../dev/system-views.md#compile-cache-queries) view by its `NodeId`.

@@ -37,6 +37,11 @@ message TPartitionMeta {
     optional NKikimrProto.TRowVersion LastEmittedHeartbeat = 9;
 }
 
+message TCdcReplicationTrim {
+    optional uint64 TxId = 1;
+    optional uint64 Offset = 2;
+}
+
 message TPartitionTxMeta {
     optional uint64 PlanStep = 1;
     optional uint64 TxId = 2;
@@ -389,6 +394,7 @@ message TPQTabletConfig {
     optional string ReplicationSourceConsumer = 50;
     // Present only on a topic backing a changefeed managed by replication.
     message TCdcReplication {
+        optional uint64 TrimTxId = 1;
     }
     optional TCdcReplication CdcReplication = 51;
 
@@ -813,6 +819,7 @@ message TStatusResponse {
         optional EScaleStatus ScaleStatus = 35;
         optional TPartitionScaleParticipants ScaleParticipatingPartitions = 36;
         optional string SplitBoundary = 37;
+        optional uint64 CdcReplicationTrimTxId = 38; // Committed by this partition.
     }
 
     message TConsumerResult {

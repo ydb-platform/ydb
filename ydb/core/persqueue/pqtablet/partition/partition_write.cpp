@@ -1421,7 +1421,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 defaultOffset = Max(curOffset, BlobEncoder.MirroredOffset);
+    ui64 defaultOffset = CdcReplicationTrimTxId ? curOffset : Max(curOffset, BlobEncoder.MirroredOffset);
     if (AppData(ctx)->PQConfig.HasMinOffset()) {
         defaultOffset = Max(defaultOffset, AppData(ctx)->PQConfig.GetMinOffset());
     }

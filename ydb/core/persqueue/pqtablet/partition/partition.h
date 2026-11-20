@@ -341,6 +341,9 @@ private:
     void UpdateAvailableSize(const TActorContext& ctx);
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
+    bool ShouldTrimCdcReplication(const NKikimrPQ::TPQTabletConfig& config) const;
+    void PrepareCdcReplicationTrim(TEvKeyValue::TEvRequest& request);
+    void CompleteCdcReplicationTrim();
     void CheckHeadConsistency() const;
     void CheckTimestampsOrderInZones(TStringBuf validateReason = {}) const;
     void HandlePendingRequests(const TActorContext& ctx);
@@ -526,6 +529,7 @@ private:
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
+    TString GetCdcReplicationTrimKey() const;
 
     void Initialize(const TActorContext& ctx);
     template <typename T>
@@ -1038,6 +1042,11 @@ private:
     TVector<THolder<TEvPQ::TEvSetClientInfo>> ChangeConfigActs;
     bool ChangingConfig = false;
     bool SendChangeConfigReply = true;
+
+    ui64 CdcReplicationTrimTxId = 0;
+    ui64 CdcReplicationTrimOffset = 0;
+    std::optional<ui64> PendingCdcReplicationTrimOffset;
+    bool CdcReplicationTrimPending = false;
     TMessageQueue Responses;
     ui64 CurrentBatchSize = 0;
 
@@ -1308,6 +1317,7 @@ private:
     void TryCorrectStartOffset(TMaybe<ui64> offset);
 
     ui64 GetStartOffset() const;
+    bool ShouldClampConsumerOffset(i64 offset) const;
     ui64 GetEndOffset() const;
     ui64 GetMirroredOffset() const;
     // EndOffset is the last persisted offset. Accepted writes can sit in NewHead
@@ -1460,6 +1470,11 @@ inline ui64 TPartition::GetStartOffset() const {
         return BlobEncoder.StartOffset;
     }
     return CompactionBlobEncoder.StartOffset;
+}
+
+inline bool TPartition::ShouldClampConsumerOffset(i64 offset) const {
+    return offset < static_cast<i64>(GetStartOffset())
+        && (!CdcReplicationTrimTxId || offset >= static_cast<i64>(CdcReplicationTrimOffset));
 }
 
 inline ui64 TPartition::GetEndOffset() const {

@@ -97,18 +97,32 @@ class WorkloadJsonIndex(WorkloadBase):
         """
         self.client.query(delete_sql, False)
 
-    def _select_rows(self, table_path, index_name=None):
+    def _select_rows(self, table_path, index_name=None, *, check_primary=False):
         predicate = json.get_random_predicate(explicit_index=index_name is not None)
         view = f"VIEW `{index_name}`" if index_name is not None else ""
-        select_sql = f"""
-            SELECT pk, json
-            FROM `{table_path}` {view}
-            WHERE {predicate}
-            LIMIT {self.limit};
-        """
-        res = self.client.query(select_sql, False)
-        n = len(res[0].rows)
-        logger.info(f"Selected {n} rows using predicate `{predicate}`")
+        order_by = "ORDER BY pk" if check_primary else ""
+
+        def select(view):
+            result = self.client.query(f"""
+                SELECT pk, json
+                FROM `{table_path}` {view}
+                WHERE {predicate}
+                {order_by}
+                LIMIT {self.limit};
+            """, False)
+            return result[0].rows
+
+        rows = select(view)
+        logger.info(f"Selected {len(rows)} rows using predicate `{predicate}`")
+        if check_primary:
+            explicit = [row["pk"] for row in rows]
+            primary = [row["pk"] for row in select("VIEW PRIMARY KEY")]
+            if explicit != primary:
+                raise AssertionError(
+                    f"JSON index mismatch seed={self.model_seed} table={table_path} "
+                    f"index={index_name} predicate={predicate}: "
+                    f"explicit={explicit}, primary={primary}"
+                )
 
     def _model_keys(self, string_pk):
         if string_pk:
@@ -262,8 +276,11 @@ class WorkloadJsonIndex(WorkloadBase):
         model_state = self._insert_and_check_model(
             table_path, index_name, json_document, False)
 
+        # Compare one forced-index query per batch against a primary-key scan.
         for query in range(self.query_count):
-            self._select_rows(table_path, index_name if query % 2 == 0 else None)
+            self._select_rows(
+                table_path, index_name if query % 2 == 0 else None, check_primary=query == 0,
+            )
 
         self._upsert_rows(
             table_path=table_path,

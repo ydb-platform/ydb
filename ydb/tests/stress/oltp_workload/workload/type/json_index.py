@@ -4,8 +4,6 @@ import time
 
 from itertools import cycle
 
-import ydb
-
 from ydb.tests.stress.common.common import WorkloadBase
 from ydb.tests.library.fixtures import json
 
@@ -101,25 +99,14 @@ class WorkloadJsonIndex(WorkloadBase):
 
     def _select_rows(self, table_path, index_name):
         predicate = json.get_random_predicate()
-
-        def select(view):
-            return self.client.query(f"""
-                SELECT pk, json
-                FROM `{table_path}` {view}
-                WHERE {predicate}
-                LIMIT {self.limit};
-            """, False)
-
-        try:
-            res = select(f"VIEW `{index_name}`")
-        except ydb.issues.GenericError as error:
-            if (
-                "JSON index cannot be used: full-range search cannot be performed using full-text search"
-                not in str(error)
-            ):
-                raise
-            res = select("VIEW PRIMARY KEY")
-
+        select_sql = f"""
+            SELECT pk, json
+            FROM `{table_path}`
+            VIEW `{index_name}`
+            WHERE {predicate}
+            LIMIT {self.limit};
+        """
+        res = self.client.query(select_sql, False)
         n = len(res[0].rows)
         logger.info(f"Selected {n} rows using predicate `{predicate}`")
         return n

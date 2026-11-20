@@ -716,6 +716,10 @@ private:
   friend class shared_ptr;
   template <class _Up>
   friend class weak_ptr;
+#if _LIBCPP_STD_VER >= 20 && _LIBCPP_HAS_ATOMIC_HEADER
+  template <class>
+  friend class __atomic_smart_ptr;
+#endif
 };
 
 #if _LIBCPP_STD_VER >= 17
@@ -1269,6 +1273,10 @@ public:
   friend class weak_ptr;
   template <class _Up>
   friend class shared_ptr;
+#if _LIBCPP_STD_VER >= 20 && _LIBCPP_HAS_ATOMIC_HEADER
+  template <class>
+  friend class __atomic_smart_ptr;
+#endif
 };
 
 #if _LIBCPP_STD_VER >= 17

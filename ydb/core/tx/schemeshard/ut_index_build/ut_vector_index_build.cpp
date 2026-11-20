@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexRejectsMismatchedDescription) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -488,7 +488,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
         WriteVectorTableRows(runtime, schemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
 
-        setFlag(false);
         const ui64 buildTx = ++txId;
         TestBuildVectorIndex(runtime, buildTx, schemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
         env.TestWaitNotification(runtime, buildTx);
@@ -517,7 +516,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -626,7 +625,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexPreservesDataColumns) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -693,7 +692,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexOverrideSettings) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -774,7 +773,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildPrefixedVectorIndex) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -867,7 +866,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexRejectVectorSettingsChange) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -952,7 +951,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST(RebuildNonExistentVectorIndex) {
         // Rebuilding an index that does not exist must be rejected at request creation time.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         ui64 tenantSchemeShard = 0;
@@ -990,14 +989,14 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT(event);
         UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
             "rebuild of a non-existent index must fail");
-        UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()), "REBUILD INDEX");
+        UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()), "no_such_index");
     }
 
     Y_UNIT_TEST(RebuildNonVectorIndex) {
         // REBUILD INDEX is only supported for vector indexes; rebuilding a
         // plain secondary index must be rejected on the schemeshard side too.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         ui64 tenantSchemeShard = 0;

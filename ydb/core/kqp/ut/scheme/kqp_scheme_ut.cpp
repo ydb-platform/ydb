@@ -6710,6 +6710,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(RebuildVectorIndexSameColumnsSql) {
         // Rebuild without changing the column set (columns omitted entirely) must still work.
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -6751,6 +6752,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(RebuildVectorIndexInvalidClustersAndLevelsSql) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

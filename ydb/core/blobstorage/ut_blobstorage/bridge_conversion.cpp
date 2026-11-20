@@ -254,6 +254,107 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         BatchedPutDuringConversion(3);
     }
 
+    Y_UNIT_TEST(RangeBodyReadDuringConversion) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+        const auto& [_, id, data] = checker.GetWritten().front();
+        const auto dsProxy = env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(MakeBlobStorageProxyID(groupId));
+        UNIT_ASSERT(dsProxy);
+
+        // Let the ordinary DSProxy finish the index scan, then hold the GET for the blob body across conversion.
+        std::unique_ptr<IEventHandle> held;
+        bool inlineViewConfigured = false;
+        bool routedThroughBridge = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == dsProxy) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
+                    const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                    inlineViewConfigured |= info && info->IsInlinePileView();
+                } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+                    const auto *get = ev->Get<TEvBlobStorage::TEvGet>();
+                    if (get->QuerySize == 1 && get->Queries[0].Id == id && get->IsInternal) {
+                        if (!inlineViewConfigured) {
+                            UNIT_ASSERT(!held);
+                            held = std::move(ev);
+                            return false;
+                        }
+                        routedThroughBridge |= get->ForceGroupGeneration.has_value();
+                    }
+                }
+            }
+            return true;
+        };
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvRange(id.TabletID(), id, id, false, TInstant::Max()));
+        });
+        WaitUntil(env, [&] { return bool(held); }, "range body GET", TDuration::MilliSeconds(10), 100);
+        const auto converted = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(converted.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            converted.GetErrorReason());
+        WaitUntil(env, [&] { return inlineViewConfigured; }, "inline pile configuration", TDuration::MilliSeconds(100));
+
+        const auto reads = GetBridgeRequestCounters(env, 1)->GetSubgroup("handleClass", "GetFast")
+            ->GetSubgroup("sizeClass", "256")->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+        const auto before = reads->Val();
+        env.Runtime->Send(held.release(), 1);
+        const auto range = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(range->Get()->Status, NKikimrProto::OK, range->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(range->Get()->Responses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(range->Get()->Responses.front().Buffer, data);
+        UNIT_ASSERT(routedThroughBridge);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), before);
+        env.Runtime->FilterFunction = {};
+
+        // A client can set IsInternal on its own GET and still owns a logical operation.
+        env.Runtime->WrapInActorContext(edge, [&] {
+            auto get = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            get->IsInternal = true;
+            SendToBSProxy(edge, groupId, get.release());
+        });
+        CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), data);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), before + 1);
+    }
+
+    Y_UNIT_TEST(BufferedPutAnsweredWhenPhysicalProxyStops) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker(env).Write(groupId); // start the physical proxy and establish its VDisk sessions
+        const TActorId proxy = env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(MakeBlobStorageProxyID(groupId));
+        UNIT_ASSERT(proxy);
+
+        bool stoppedBeforeFlush = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->Sender == proxy && ev->GetRecipientRewrite() == proxy &&
+                    ev->GetTypeName().Contains("TEvStopBatchingPutRequests")) {
+                stoppedBeforeFlush = true;
+                env.Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, proxy, {}, nullptr, 0), 1);
+                return false;
+            }
+            return true;
+        };
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
+        const TString data = "buffered put";
+        const TLogoBlobID id(100502, 1, 1, 0, data.size(), 0);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            auto put = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
+            put->ExecutionRelay = relay;
+            SendToBSProxy(edge, groupId, put.release());
+        });
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(5));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(stoppedBeforeFlush);
+        UNIT_ASSERT_C(res, "physical proxy stopped without answering the buffered PUT");
+        UNIT_ASSERT_VALUES_EQUAL(res->Sender, proxy);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::ERROR, res->Get()->ToString());
+        UNIT_ASSERT(res->Get()->ExecutionRelay == relay);
+    }
+
     // static node not reporting its bridge capability (being disconnected) may still run without BridgeConfig, so it
     // must block conversion
     // put started by DS proxy before conversion races with VDisks having new group generation and gets restarted
@@ -268,7 +369,10 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
         // hold VDisk writes of the put until the group is converted
         const ui64 tabletId = 100502;
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
         bool hold = true;
+        bool restarted = false;
         std::vector<std::unique_ptr<IEventHandle>> held;
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (hold && ev->GetTypeRewrite() == TEvBlobStorage::EvVPut &&
@@ -276,14 +380,23 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
                 held.push_back(std::move(ev));
                 return false;
             }
+            if (ev->Sender == edge && ev->GetTypeRewrite() == TEvBlobStorage::EvBunchOfEvents) {
+                const auto& bunch = ev->Get<TEvBlobStorage::TEvBunchOfEvents>()->Bunch;
+                UNIT_ASSERT_VALUES_EQUAL(bunch.size(), 1);
+                const auto *put = bunch.front()->Get<TEvBlobStorage::TEvPut>();
+                UNIT_ASSERT(put->RestartCounter);
+                UNIT_ASSERT(put->ExecutionRelay == relay);
+                restarted = true;
+            }
             return true;
         };
 
-        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         const TString data = "data of put restarted after conversion";
         const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
         env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            auto put = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
+            put->ExecutionRelay = relay;
+            SendToBSProxy(edge, groupId, put.release());
         });
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT(!held.empty());
@@ -300,6 +413,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
         auto putRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
         UNIT_ASSERT_VALUES_EQUAL_C(putRes->Get()->Status, NKikimrProto::OK, putRes->Get()->ToString());
+        UNIT_ASSERT(restarted);
+        UNIT_ASSERT(putRes->Get()->ExecutionRelay == relay);
 
         env.Runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));

@@ -523,20 +523,26 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyStreamingQueryAccess) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TControlPlaneProxyBindingRename) {
-    Y_UNIT_TEST(PgRenameValidatesBeforeMutatingAndPreservesIdempotentReplay) {
+Y_UNIT_TEST_SUITE(TControlPlaneProxyBindingUpdate) {
+    Y_UNIT_TEST(PgUpdatesValidateBeforeMutatingAndPreserveIdempotentReplay) {
         NConfig::TComputeConfig computeConfig;
         computeConfig.SetDefaultCompute(NConfig::EComputeType::YDB);
         computeConfig.MutableYdb()->SetEnable(true);
         computeConfig.MutableYdb()->MutableControlPlane()->SetEnable(true);
 
-        for (bool replay : {false, true}) {
+        const std::pair<const char*, bool> cases[] = {
+            {"new_name", false},
+            {"new_name", true},
+            {"old_name", false},
+            {"old_name", true},
+        };
+        for (const auto& [name, replay] : cases) {
             TTestBootstrap bootstrap({}, computeConfig);
             FederatedQuery::ModifyBindingRequest proto;
             proto.set_binding_id("binding-id");
             proto.set_previous_revision(5);
-            proto.set_idempotency_key("rename-request");
-            proto.mutable_content()->set_name("new_name");
+            proto.set_idempotency_key("modify-request");
+            proto.mutable_content()->set_name(name);
 
             const auto sender = bootstrap.Runtime->AllocateEdgeActor();
             auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyBindingRequest>(

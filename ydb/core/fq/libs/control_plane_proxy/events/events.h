@@ -388,7 +388,7 @@ struct TEvControlPlaneProxy {
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
         TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
         i64 OldBindingRevision = 0;
-        bool PgRenameValidated = false;
+        bool BindingUpdateValidated = false;
         bool PgRenameCleanupStarted = false;
     };
 

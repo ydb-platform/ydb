@@ -38,7 +38,7 @@ NActors::IActor* MakeCreateBindingActor(const TActorId& proxyActorId, TEvControl
 
 enum class EModifyBindingStage {
     Modify,
-    CreateNew,
+    CreateOrReplace,
     DropOld,
     DropNew,
 };

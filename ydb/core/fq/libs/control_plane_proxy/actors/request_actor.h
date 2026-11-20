@@ -45,14 +45,14 @@ protected:
     TPermissions Permissions;
     ui32 RetryCount = 0;
     bool ReplyWithResponseOnSuccess = true;
-    bool PgBindingRename = false;
+    bool UpdateComputeBindingFirst = false;
 
 public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
 
     TRequestActor(typename TRequestProxy::TPtr requestProxy, const TControlPlaneProxyConfig& config, const TActorId& serviceId,
         const TRequestCounters& counters, const std::function<void(const TDuration&, bool, bool)>& probe,
-        const TPermissions& availablePermissions, bool replyWithResponseOnSuccess = true, bool pgBindingRename = false)
+        const TPermissions& availablePermissions, bool replyWithResponseOnSuccess = true, bool updateComputeBindingFirst = false)
         : RequestProxy(requestProxy)
         , Config(config)
         , ServiceId(serviceId)
@@ -61,7 +61,7 @@ public:
         , Probe(probe)
         , Permissions(ExtractPermissions(RequestProxy, availablePermissions))
         , ReplyWithResponseOnSuccess(replyWithResponseOnSuccess)
-        , PgBindingRename(pgBindingRename)
+        , UpdateComputeBindingFirst(updateComputeBindingFirst)
     {
         Counters.IncInFly();
     }
@@ -129,12 +129,12 @@ public:
             return;
         }
         if constexpr (IsModifyBinding) {
-            if (PgBindingRename) {
+            if (UpdateComputeBindingFirst) {
                 if (response.AuditDetails.IdempotencyResult) {
                     ReplyWithResponseOnSuccess = true;
-                } else if (RequestProxy->Get()->PgRenameValidated ? !response.AuditDetails.After : !response.AuditDetails.Before) {
+                } else if (RequestProxy->Get()->BindingUpdateValidated ? !response.AuditDetails.After : !response.AuditDetails.Before) {
                     NYql::TIssues issues;
-                    issues.AddIssue(MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Couldn't determine binding rename result"));
+                    issues.AddIssue(MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Couldn't determine binding update result"));
                     ReplyWithError(issues);
                     return;
                 }
@@ -148,11 +148,14 @@ public:
         Counters.IncError();
         Probe(delta, false, isTimeout);
         if constexpr (IsModifyBinding) {
-            if (PgBindingRename && RequestProxy->Get()->PgRenameValidated && !issues.Empty() && AllOf(issues, [](const auto& issue) {
+            auto& binding = *RequestProxy->Get();
+            if (UpdateComputeBindingFirst && binding.BindingUpdateValidated
+                && binding.OldBindingContent->name() != binding.Request.content().name()
+                && !issues.Empty() && AllOf(issues, [](const auto& issue) {
                 return issue.GetCode() == TIssuesIds::BAD_REQUEST || issue.GetCode() == TIssuesIds::ACCESS_DENIED;
             })) {
-                RequestProxy->Get()->Response = std::make_unique<TResponseProxy>(issues, RequestProxy->Get()->SubjectType);
-                RequestProxy->Get()->ControlPlaneYDBOperationWasPerformed = true;
+                binding.Response = std::make_unique<TResponseProxy>(issues, binding.SubjectType);
+                binding.ControlPlaneYDBOperationWasPerformed = true;
                 Send(RequestProxy->Forward(ControlPlaneProxyActorId()));
                 PassAway();
                 return;
@@ -172,8 +175,8 @@ public:
                 RequestProxy->Cookie);
         } else {
             if constexpr (IsModifyBinding) {
-                if (PgBindingRename && !RequestProxy->Get()->PgRenameValidated) {
-                    RequestProxy->Get()->PgRenameValidated = true;
+                if (UpdateComputeBindingFirst && !RequestProxy->Get()->BindingUpdateValidated) {
+                    RequestProxy->Get()->BindingUpdateValidated = true;
                     Send(RequestProxy->Forward(ControlPlaneProxyActorId()));
                     PassAway();
                     return;
@@ -196,8 +199,8 @@ public:
                 RequestProxy->Get()->Token, RequestProxy->Get()->CloudId, Permissions, RequestProxy->Get()->Quotas,
                 RequestProxy->Get()->TenantInfo, RequestProxy->Get()->ComputeDatabase.GetOrElse({}));
             if constexpr (IsModifyBinding) {
-                if (PgBindingRename) {
-                    request->ValidateOnly = !RequestProxy->Get()->PgRenameValidated;
+                if (UpdateComputeBindingFirst) {
+                    request->ValidateOnly = !RequestProxy->Get()->BindingUpdateValidated;
                     request->ObservedRevision = RequestProxy->Get()->OldBindingRevision;
                 }
             }

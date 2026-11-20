@@ -735,14 +735,16 @@ IActor* MakeCreateBindingActor(const TActorId& proxyActorId, TEvControlPlaneProx
 
 IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
     TDuration requestTimeout, TCounters& counters, const ::NFq::TComputeConfig& computeConfig, EModifyBindingStage stage) {
-    auto queryFactoryMethod = [computeConfig, stage](
+    const bool sameName = request->Get()->OldBindingContent->name() == request->Get()->Request.content().name();
+    auto queryFactoryMethod = [computeConfig, stage, sameName](
                                   const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request) -> std::vector<TSchemaQueryTask> {
-        auto sourceName = request->Get()->ConnectionContent->name();
-        auto oldTableName = request->Get()->OldBindingContent->name();
+        const auto& sourceName = request->Get()->ConnectionContent->name();
+        const auto& oldTableName = request->Get()->OldBindingContent->name();
+        const auto& content = request->Get()->Request.content();
 
         switch (stage) {
-            case EModifyBindingStage::CreateNew:
-                return {TSchemaQueryTask{.SQL = MakeCreateExternalDataTableQuery(request->Get()->Request.content(), sourceName, false)}};
+            case EModifyBindingStage::CreateOrReplace:
+                return {TSchemaQueryTask{.SQL = MakeCreateExternalDataTableQuery(content, sourceName, sameName)}};
             case EModifyBindingStage::DropOld:
             case EModifyBindingStage::DropNew:
                 return {TSchemaQueryTask{
@@ -753,7 +755,7 @@ IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProx
         }
 
         bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
-        if (replaceSupported && oldTableName == request->Get()->Request.content().name()) {
+        if (replaceSupported && sameName) {
             // CREATE OR REPLACE
             return { TSchemaQueryTask{
                 .SQL = MakeCreateExternalDataTableQuery(request->Get()->Request.content(), sourceName, replaceSupported) } };
@@ -769,9 +771,13 @@ IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProx
             TSchemaQueryTask{ .SQL = createNewEntities } };
     };
 
-    auto errorMessageFactoryMethod = [](const EStatus status, const NYql::TIssues& issues) -> TString {
+    auto errorMessageFactoryMethod = [atomicReplace = stage == EModifyBindingStage::CreateOrReplace && sameName](
+                                         const EStatus status, const NYql::TIssues& issues) -> TString {
         Y_UNUSED(status);
         Y_UNUSED(issues);
+        if (atomicReplace) {
+            return "Couldn't atomically replace external data table in YDB";
+        }
         return "Couldn't modify external data table in YDB";
     };
 

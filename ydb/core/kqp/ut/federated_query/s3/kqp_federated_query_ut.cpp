@@ -257,6 +257,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         check(false);
         setFlag(true);
         check(true);
+        const auto replace = session.ExecuteQuery(R"(
+            CREATE OR REPLACE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (
+                DATA_SOURCE="/Root/source", LOCATION="replacement.json", FORMAT="json_each_row"
+            );)", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(!replace.IsSuccess(), replace.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(replace.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
         setFlag(false);
         check(false);
     }

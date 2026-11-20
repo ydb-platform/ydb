@@ -1,3 +1,5 @@
+. .github/scripts/tests/profile_ta.sh
+
 # Sourced by build_and_test_ya: reuse its params array, paths and analytics function.
 # Experiment: compile/link everything before the first test attempt.
 # Reuse the normal remote build cache and retain local outputs for the test phase.

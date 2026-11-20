@@ -598,25 +598,15 @@ runs:
             )
           fi
 
-          # Timestamp for filtering dmesg to this try only.
+          # Filter dmesg to this attempt.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
-          # Store the attempt start, not the upload time.
+          # Attempt start for reporting.
           ATTEMPT_STARTED_AT=$(date +%s)
           analytics end prepare_ya_make
           YA_MAKE_NAME="ya_make_try_${RETRY}"
           analytics start "ya_make_try_${RETRY}"
 
-          TA_PROFILE_PID=""
-          if [ "$RETRY" = 1 ]; then
-            TA_PROFILE_STOP="$TMP_DIR/ta-profile.stop"
-            rm -f "$TA_PROFILE_STOP"
-            mkdir -p "$CURRENT_PUBLIC_DIR/ta_profile"
-            sudo -n -E python3 .github/scripts/tests/profile_ta.py \
-              "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" "$CURRENT_PUBLIC_DIR/ta_profile" \
-              "$TMP_DIR/ta-profile-private" "$TA_PROFILE_STOP" \
-              > "$CURRENT_PUBLIC_DIR/ta_profile/collector.log" 2>&1 &
-            TA_PROFILE_PID=$!
-          fi
+          start_ta_profile
 
           set +e
           # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
@@ -629,18 +619,14 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
-          if [ -n "$TA_PROFILE_PID" ]; then
-            touch "$TA_PROFILE_STOP"
-            wait "$TA_PROFILE_PID" || echo "TA profiler failed; see ta_profile/collector.log"
-            sudo chown -R "$(id -u):$(id -g)" "$CURRENT_PUBLIC_DIR/ta_profile" "$TMP_DIR/ta-profile-private"
-          fi
+          stop_ta_profile
           if [ $RC -eq 0 ]; then
             analytics end "$YA_MAKE_NAME"
           else
             analytics end "$YA_MAKE_NAME" --rc "$RC" --error "ya make rc=${RC}"
           fi
           analytics start postprocess_try
-          # Optional sub-steps use || true so they don't abort the step.
+          # Optional sub-steps must not abort the step.
           # Remember if any failed so we don't write conclusion=success.
           POSTPROCESS_RC=0
           if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then

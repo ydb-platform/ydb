@@ -3263,13 +3263,6 @@ void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx
     }
 }
 
-void TCms::Handle(TEvCms::TEvGetInterfaceVersionRequest::TPtr &ev, const TActorContext &ctx)
-{
-    auto response = MakeHolder<TEvCms::TEvGetInterfaceVersionResponse>();
-    response->Record.SetVersion(CMS_INTERFACE_VERSION);
-    Reply(ev, std::move(response), ctx);
-}
-
 void TCms::Handle(TEvCms::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TAutoPtr<TEvCms::TEvGetConfigResponse> response

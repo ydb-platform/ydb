@@ -296,7 +296,6 @@ private:
             HFunc(TEvCms::TEvCompleteActionRequest, Handle);
             // public api end
             HFunc(TEvCms::TEvGetConfigRequest, Handle);
-            HFunc(TEvCms::TEvGetInterfaceVersionRequest, Handle);
             HFunc(TEvCms::TEvSetConfigRequest, Handle);
             HFunc(TEvCms::TEvResetMarkerRequest, Handle);
             HFunc(TEvCms::TEvSetMarkerRequest, Handle);
@@ -495,7 +494,6 @@ private:
     void Handle(TEvCms::TEvCompleteActionRequest::TPtr &ev, const TActorContext &ctx);
     // public api end
     void Handle(TEvCms::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvCms::TEvGetInterfaceVersionRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvResetMarkerRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvSetMarkerRequest::TPtr &ev, const TActorContext &ctx);

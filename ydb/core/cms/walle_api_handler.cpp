@@ -97,42 +97,11 @@ private:
 
         if (request->Record.GetDrainData()) {
             CreateTaskRequest = request.Release();
-            SendToCms(new TEvCms::TEvGetInterfaceVersionRequest, ctx);
-            Become(&TThis::StateCheckVersion, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
-            return;
+            ConnectToCms(ctx);
+        } else {
+            SendToCms(request.Release(), ctx);
         }
-
-        SendToCms(request.Release(), ctx);
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
-    }
-
-    STFUNC(StateCheckVersion) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvCms::TEvGetInterfaceVersionResponse, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            CFunc(TEvents::TSystem::Wakeup, Timeout);
-        default:
-            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckVersion ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"ev", ev->ToString()});
-        }
-    }
-
-    void Handle(TEvCms::TEvGetInterfaceVersionResponse::TPtr &ev, const TActorContext &ctx) {
-        // Ignore replies from a previous pipe connection.
-        if (ev->Cookie != CmsPipeCookie) {
-            return;
-        }
-
-        const auto &rec = ev->Get()->Record;
-        if (rec.GetVersion() < CMS_INTERFACE_WALLE_DRAIN_DATA) {
-            ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_data", ctx);
-            return;
-        }
-
-        NTabletPipe::SendData(ctx, CmsPipe, CreateTaskRequest.Release());
-        Become(&TThis::StateCreateTask);
     }
 
     STFUNC(StateCreateTask) {
@@ -362,7 +331,7 @@ private:
         ReplyWithError(TString("HTTP/1.1 408 Request Timeout\r\n\r\nCMS request timeout"), ctx);
     }
 
-    void SendToCms(IEventBase *ev, const TActorContext &ctx) {
+    void ConnectToCms(const TActorContext &ctx) {
         Y_ABORT_UNLESS(!CmsPipe);
 
         NTabletPipe::TClientConfig pipeConfig;
@@ -371,17 +340,33 @@ private:
             .MaxRetryTime = TDuration::Seconds(10),
         };
         CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
-        NTabletPipe::SendData(ctx, CmsPipe, ev, ++CmsPipeCookie);
+    }
+
+    void SendToCms(IEventBase *ev, const TActorContext &ctx) {
+        ConnectToCms(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, ev);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        if (msg->ClientId != CmsPipe || msg->Status == NKikimrProto::OK) {
+        if (msg->ClientId != CmsPipe) {
             return;
         }
 
-        HandlePipeDestroyed(ctx);
+        if (msg->Status != NKikimrProto::OK) {
+            HandlePipeDestroyed(ctx);
+            return;
+        }
+
+        if (CreateTaskRequest) {
+            NKikimrCms::TVersionInfo versionInfo;
+            if (!versionInfo.ParseFromString(msg->VersionInfo) || !versionInfo.GetSupportWalleDrainData()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_data", ctx);
+                return;
+            }
+            NTabletPipe::SendData(ctx, CmsPipe, CreateTaskRequest.Release());
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
@@ -404,7 +389,6 @@ private:
     NMon::TEvHttpInfo::TPtr RequestEvent;
     TAutoPtr<TEvCms::TEvWalleCreateTaskRequest> CreateTaskRequest;
     TActorId CmsPipe;
-    ui64 CmsPipeCookie = 0;
 };
 
 IActor *CreateWalleApiHandler(NMon::TEvHttpInfo::TPtr &event) {

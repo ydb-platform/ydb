@@ -3343,13 +3343,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
         const auto nodeId = env.GetNodeId(0);
 
-        ui32 versionResponses = 0;
         ui32 createRequests = 0;
         TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvCms::EvGetInterfaceVersionResponse) {
-                ++versionResponses;
-                // An interface version below the required minimum must be rejected.
-                ev->Get<TEvCms::TEvGetInterfaceVersionResponse>()->Record.SetVersion(0);
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                auto *msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeCmsID()) {
+                    // Older CMS tablets do not provide version information on connection.
+                    msg->VersionInfo.clear();
+                }
             } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
                 ++createRequests;
             }
@@ -3361,7 +3362,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
             UNIT_ASSERT_C(response.Contains("CMS does not support drain_data"), response);
         }
-        UNIT_ASSERT_VALUES_EQUAL(versionResponses, 2);
         UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
         env.CheckWalleListTasks(0);
         env.CheckListPermissions(WALLE_CMS_USER, 0);
@@ -3372,7 +3372,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
             Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
-        UNIT_ASSERT_VALUES_EQUAL(versionResponses, 2);
         UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
     }
 

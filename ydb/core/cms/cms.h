@@ -34,12 +34,6 @@
 
 namespace NKikimr::NCms {
 
-enum ECmsInterfaceVersion : ui32 {
-    CMS_INTERFACE_VERSION = 1,
-
-    CMS_INTERFACE_WALLE_DRAIN_DATA = 1,
-};
-
 struct TEvCms {
     enum EEv {
         EvClusterStateRequest = EventSpaceBegin(TKikimrEvents::ES_CMS),
@@ -106,8 +100,6 @@ struct TEvCms {
         EvDDiskTabletListResponse,
         EvDDiskDiskListRequest,
         EvDDiskDiskListResponse,
-        EvGetInterfaceVersionRequest,
-        EvGetInterfaceVersionResponse,
 
         EvEnd
     };
@@ -336,16 +328,6 @@ struct TEvCms {
     struct TEvDDiskDiskListResponse : public TEventPB<TEvDDiskDiskListResponse,
                                                         NKikimrCms::TDDiskDiskListResponse,
                                                         EvDDiskDiskListResponse> {
-    };
-
-    struct TEvGetInterfaceVersionRequest : public TEventPB<TEvGetInterfaceVersionRequest,
-                                                           NKikimrCms::TGetInterfaceVersionRequest,
-                                                           EvGetInterfaceVersionRequest> {
-    };
-
-    struct TEvGetInterfaceVersionResponse : public TEventPB<TEvGetInterfaceVersionResponse,
-                                                            NKikimrCms::TGetInterfaceVersionResponse,
-                                                            EvGetInterfaceVersionResponse> {
     };
 
     struct TEvGetConfigRequest : public TEventPB<TEvGetConfigRequest,

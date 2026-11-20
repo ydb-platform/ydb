@@ -104,7 +104,7 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, ui
     literalRequest.MaxAffectedShards = 0;
     literalRequest.TotalReadSizeLimitBytes = 0;
     literalRequest.MkqlMemoryLimit = 100_MB;
-    literalRequest.MaxTasksPerStage = phyQuery.GetMaxTasksPerStage();
+    literalRequest.MaxTasksPerStage = phyQuery.GetMaxTasksPerStage(); // unused for Literal
 
     auto& transaction = *phyQuery.AddTransactions();
     transaction.SetType(NKqpProto::TKqpPhyTx::TYPE_COMPUTE);

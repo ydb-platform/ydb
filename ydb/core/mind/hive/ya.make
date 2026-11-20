@@ -65,6 +65,8 @@ SRCS(
     tx__process_metrics.cpp
     tx__process_pending_operations.cpp
     tx__reassign_groups.cpp
+    tx__reassign_tablets.cpp
+    tx__reassign_tablets.h
     tx__reassign_groups_on_decommit.cpp
     tx__register_node.cpp
     tx__release_tablets.cpp

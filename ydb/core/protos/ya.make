@@ -114,6 +114,7 @@ SRCS(
     pqconfig.proto
     profiler.proto
     query_stats.proto
+    reassign_tablets.proto
     replication.proto
     resource_broker.proto
     s3_settings.proto

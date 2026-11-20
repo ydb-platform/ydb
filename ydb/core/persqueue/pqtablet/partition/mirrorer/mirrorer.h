@@ -72,7 +72,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
-            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);

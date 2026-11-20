@@ -387,13 +387,12 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 k Int32 NOT NULL,
                 n Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
                 v Bool DEFAULT (RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL),
-                PRIMARY KEY (k),
-                INDEX idx_n GLOBAL SYNC ON (n) COVER (v)
+                PRIMARY KEY (k)
             );
             COMMIT;
             INSERT INTO TestTable (k) VALUES (1);
             COMMIT;
-            SELECT k, n, v FROM TestTable VIEW idx_n ORDER BY k;
+            SELECT k, n, v FROM TestTable ORDER BY k;
         )").ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
@@ -402,8 +401,12 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"),
             "(RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL)");
 
+        // Inline CREATE metadata has index descriptions without loaded implementation tables.
+        fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_n GLOBAL SYNC ON (n) COVER (v);");
+        fixture.Check("SELECT k, n, v FROM TestTable VIEW idx_n ORDER BY k;", "[[1;[42u];#]]");
+
         // A separate compilation reloads the persisted metadata, rather than the CREATE cache.
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (2) RETURNING k, n, v;", "[[2;[42u];#]]");
         fixture.Check("SELECT k, n, v FROM TestTable ORDER BY k;", "[[1;[42u];#];[2;[42u];#]]");
         fixture.Check("SELECT k, n, v FROM TestTable VIEW idx_n ORDER BY k;", "[[1;[42u];#];[2;[42u];#]]");
     }

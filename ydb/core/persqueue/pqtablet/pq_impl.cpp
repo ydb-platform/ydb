@@ -5002,6 +5002,7 @@ void TPersQueue::DeleteWriteId(const TMaybe<TWriteId>& writeId)
     LOG_I("Delete WriteId",
         {"writeId", *writeId});
     TxWrites.erase(*writeId);
+    TxWritesChanged = true;
 }
 
 void TPersQueue::WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::EState state)

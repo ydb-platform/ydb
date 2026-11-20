@@ -111,16 +111,12 @@ private:
             HFunc(TEvCms::TEvGetInterfaceVersionResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            CFunc(TEvents::TSystem::Wakeup, CmsSupportTimeout);
+            CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckVersion ignored event",
                 {"type", ev->GetTypeRewrite()},
                 {"ev", ev->ToString()});
         }
-    }
-
-    void CmsSupportTimeout(const TActorContext &ctx) {
-        ReplyWithError("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS interface version request timed out", ctx);
     }
 
     void Handle(TEvCms::TEvGetInterfaceVersionResponse::TPtr &ev, const TActorContext &ctx) {
@@ -136,7 +132,7 @@ private:
         }
 
         NTabletPipe::SendData(ctx, CmsPipe, CreateTaskRequest.Release());
-        Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
+        Become(&TThis::StateCreateTask);
     }
 
     STFUNC(StateCreateTask) {

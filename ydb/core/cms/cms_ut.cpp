@@ -3403,8 +3403,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TAutoPtr<IEventHandle> handle;
         const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
         UNIT_ASSERT(response);
-        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 503"), response->Answer);
-        UNIT_ASSERT_C(response->Answer.Contains("CMS interface version request timed out"), response->Answer);
+        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 408"), response->Answer);
+        UNIT_ASSERT_C(response->Answer.Contains("CMS request timeout"), response->Answer);
         UNIT_ASSERT_VALUES_EQUAL(versionRequests, 1);
         UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
         env.CheckWalleListTasks(0);

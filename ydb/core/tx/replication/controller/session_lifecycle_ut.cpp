@@ -17,6 +17,7 @@
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/services/persqueue_v1/actors/read_session_actor.h>
 #include <ydb/services/scheme_secret/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -1122,8 +1123,11 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         s.Env.RunCall([&] {
             NYdb::NTable::TTableClient client(s.Env.GetDriver());
             auto session = client.CreateSession().GetValueSync().GetSession();
-            const auto alter = session.ExecuteSchemeQuery(
-                "ALTER ASYNC REPLICATION `/Root/replication` SET (TOKEN_SECRET_PATH = '/Root/source-token');").GetValueSync();
+            const auto alter = session.ExecuteSchemeQuery(R"(
+                GRANT 'ydb.database.connect' ON `/Root` TO `root@builtin`;
+                GRANT 'ydb.generic.read' ON `/Root/table` TO `root@builtin`;
+                ALTER ASYNC REPLICATION `/Root/replication` SET (TOKEN_SECRET_PATH = '/Root/source-token');
+            )").GetValueSync();
             UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
         });
         s.AlterState("StandBy");
@@ -1136,7 +1140,10 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         runtime.RegisterService(MakeReplicationServiceId(s.Edges[0].NodeId()),
             runtime.Register(CreateReplicationMockService(s.Edges[0])));
         s.Reboot();
-        s.Status(0, false);
+        // The real service has already persisted a source offset for the base worker.
+        auto status = MakeHolder<TEvService::TEvStatus>();
+        status->Record.SetSupportsSourceOffsets(true);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0], status.Release()));
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
         UNIT_ASSERT(run);
         UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(run->Get()->Record.GetWorker()), s.Worker);
@@ -1222,6 +1229,10 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         auto openReads = std::make_shared<std::atomic<ui32>>(0);
         auto reads = runtime.AddObserver<NGRpcService::TEvStreamTopicReadRequest>(
             [openReads](NGRpcService::TEvStreamTopicReadRequest::TPtr& ev) {
+                // The gRPC proxy forwards the same request to the topic read service.
+                if (ev->Recipient != NGRpcProxy::V1::GetPQReadServiceActorID()) {
+                    return;
+                }
                 ++*openReads;
                 ev->Get()->SetAuditLogHook([openReads](auto, const auto&) { --*openReads; });
             });
@@ -1268,8 +1279,10 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 NYdb::NTable::TTableClient client(s.Env.GetDriver());
                 auto session = client.CreateSession().GetValueSync().GetSession();
                 const auto tx = NYdb::NTable::TTxControl::BeginTx().CommitTx();
-                const auto write = session.ExecuteDataQuery(
-                    "UPSERT INTO `/Root/table` (key, value) VALUES (42u, 'recovered')", tx).GetValueSync();
+                const auto write = client.RetryOperationSync([&](NYdb::NTable::TSession retrySession) {
+                    return retrySession.ExecuteDataQuery(
+                        "UPSERT INTO `/Root/table` (key, value) VALUES (42u, 'recovered')", tx).GetValueSync();
+                });
                 UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
                 for (const auto deadline = TInstant::Now() + TDuration::Seconds(30); TInstant::Now() < deadline;) {
                     const auto row = session.ExecuteDataQuery(

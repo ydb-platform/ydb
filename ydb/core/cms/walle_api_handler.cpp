@@ -97,7 +97,7 @@ private:
 
         if (request->Record.GetDrainData()) {
             CreateTaskRequest = request.Release();
-            SendToCms(new TEvCms::TEvGetConfigRequest, ctx);
+            SendToCms(new TEvCms::TEvGetInterfaceVersionRequest, ctx);
             Become(&TThis::StateCheckCmsSupport, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
             return;
         }
@@ -108,10 +108,10 @@ private:
 
     STFUNC(StateCheckCmsSupport) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvCms::TEvGetConfigResponse, Handle);
+            HFunc(TEvCms::TEvGetInterfaceVersionResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            CFunc(TEvents::TSystem::Wakeup, Timeout);
+            CFunc(TEvents::TSystem::Wakeup, CmsSupportTimeout);
         default:
             YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckCmsSupport ignored event",
                 {"type", ev->GetTypeRewrite()},
@@ -119,18 +119,18 @@ private:
         }
     }
 
-    void Handle(TEvCms::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
+    void CmsSupportTimeout(const TActorContext &ctx) {
+        ReplyWithError("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS interface version request timed out", ctx);
+    }
+
+    void Handle(TEvCms::TEvGetInterfaceVersionResponse::TPtr &ev, const TActorContext &ctx) {
         // Ignore replies from a previous pipe connection.
         if (ev->Cookie != CmsPipeCookie) {
             return;
         }
 
         const auto &rec = ev->Get()->Record;
-        if (rec.GetStatus().GetCode() != TStatus::OK) {
-            ReplyWithError("HTTP/1.1 503 Service Unavailable\r\n\r\nCannot check CMS drain_data support", ctx);
-            return;
-        }
-        if (!rec.GetSupportsWalleDrainData()) {
+        if (rec.GetVersion() < CMS_INTERFACE_WALLE_DRAIN_DATA) {
             ReplyWithError("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support drain_data", ctx);
             return;
         }

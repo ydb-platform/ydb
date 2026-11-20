@@ -3,8 +3,7 @@
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
 
-#include <ydb/core/kqp/common/kqp_ru_calc.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
+#include <ydb/core/kqp/common/stats/ru_calc.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/datashard/read_table_scan.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>

@@ -512,6 +512,8 @@ void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shard
 
 ui64 CountLocalDbTableRows(
     TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec);
+// asserts IndexPortionsByLastKey has exactly the (PathId, PortionId) of IndexPortions; returns the number of portions
+ui64 AssertIndexMatchesPortions(TTestBasicRuntime& runtime, ui64 tabletId, const std::vector<NArrow::NTest::TTestColumn>& pk);
 void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec);
 void UpdateLocalDbTableRow(
     TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec);

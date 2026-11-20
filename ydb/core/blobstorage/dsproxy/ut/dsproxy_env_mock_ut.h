@@ -170,7 +170,6 @@ struct TDSProxyEnv {
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
                         .Event = ev->Get(),
-                        .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),

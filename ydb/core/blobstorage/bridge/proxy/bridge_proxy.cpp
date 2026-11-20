@@ -23,10 +23,6 @@ namespace NKikimr {
     };
 
     namespace {
-        // A physical retry can pass through a bridge again after reconversion. DSProxy carries the
-        // execution relay across retries, so the same reply observer remains responsible for it.
-        TEvBlobStorage::TExecutionRelay RollbackRelayTag;
-
         class TRollbackReplyActor : public TActor<TRollbackReplyActor> {
             const TActorId Client;
             const bool TrackDelivery;
@@ -53,8 +49,7 @@ namespace NKikimr {
                         TActivationContext::Send(ev->Forward(Client));
                     }
                 } else {
-                    const auto& result = dynamic_cast<const TEvBlobStorage::TEvResultCommon&>(*ev->GetBase());
-                    Counters.CountReply(RequestBytes, *ev->GetBase(), result.Status, TActivationContext::Monotonic() - StartTime);
+                    Counters.CountReply(RequestBytes, *ev->GetBase(), TActivationContext::Monotonic() - StartTime);
                     SetExecutionRelay(*ev->GetBase(), std::move(ClientRelay));
                     TActivationContext::Send(ev->Forward(Client));
                 }
@@ -1209,12 +1204,20 @@ namespace NKikimr {
             }
         }
 
+        static const TBridgeProxyPoolCounters* GetRoutingCounters(const TEvBlobStorage::TEvRequestCommon& request) {
+            if (request.BridgeProxyPoolCounters) {
+                return request.BridgeProxyPoolCounters.get();
+            }
+            // Physical DSProxy retries keep the relay when they come back through a reconverted bridge.
+            return request.ExecutionRelay ? request.ExecutionRelay->BridgeProxyPoolCounters.get() : nullptr;
+        }
+
         static bool TryRestart(TEvBlobStorage::TEvRequestCommon& request) {
             if (++request.RestartCounter >= MaxRestarts) {
                 return false;
             }
-            if (request.BridgeProxyPoolCounters) {
-                ++*request.BridgeProxyPoolCounters->RoutingRestarts;
+            if (const auto *counters = GetRoutingCounters(request)) {
+                ++*counters->RoutingRestarts;
             }
             return true;
         }
@@ -1265,10 +1268,11 @@ namespace NKikimr {
             if (common.BridgeProxyPoolCounters) {
                 const TDuration latency = TActivationContext::Monotonic() - common.BridgeProxyStartTime;
                 auto [counters, bytes] = RequestCounters.ForRequest(*common.BridgeProxyPoolCounters, request);
-                const auto& result = dynamic_cast<const TEvBlobStorage::TEvResultCommon&>(*response);
-                counters.CountReply(bytes, *response, result.Status, latency);
-                if (routingTimeout) {
-                    ++*common.BridgeProxyPoolCounters->RoutingTimeouts;
+                counters.CountReply(bytes, *response, latency);
+            }
+            if (routingTimeout) {
+                if (const auto *counters = GetRoutingCounters(common)) {
+                    ++*counters->RoutingTimeouts;
                 }
             }
             SetExecutionRelay(*response, std::exchange(common.ExecutionRelay, {}));
@@ -1350,8 +1354,7 @@ namespace NKikimr {
         }
 
         void MarkReceived(TEvBlobStorage::TEvRequestCommon& request) {
-            if (!request.ForceGroupGeneration && !request.IsPatchSubrequest && !request.BridgeProxyPoolCounters &&
-                    request.ExecutionRelay.get() != &RollbackRelayTag) {
+            if (!request.ForceGroupGeneration && !request.IsDSProxySubrequest && !GetRoutingCounters(request)) {
                 request.BridgeProxyStartTime = TActivationContext::Monotonic();
                 request.BridgeProxyPoolCounters = PoolCounters;
             }
@@ -1367,8 +1370,7 @@ namespace NKikimr {
             const auto observer = RegisterWithSameMailbox(new TRollbackReplyActor(ev.Sender,
                 ev.Flags & IEventHandle::FlagTrackDelivery, request.BridgeProxyStartTime, bytes, counters,
                 std::move(request.ExecutionRelay)));
-            request.ExecutionRelay = std::shared_ptr<TEvBlobStorage::TExecutionRelay>(
-                std::move(request.BridgeProxyPoolCounters), &RollbackRelayTag);
+            request.ExecutionRelay = std::make_shared<TEvBlobStorage::TExecutionRelay>(std::move(request.BridgeProxyPoolCounters));
             // The original nondelivery recipient handles a group service ID. The inner proxy is a concrete actor.
             // Track this hop so a missing inner proxy releases the observer even for an untracked client request.
             const ui32 flags = (ev.Flags & ~IEventHandle::FlagForwardOnNondelivery) | IEventHandle::FlagTrackDelivery;

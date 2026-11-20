@@ -218,6 +218,7 @@ public:
         , ParentSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), params.TypeSpecific.Name)
         , RestartCounter(params.Common.RestartCounter)
         , DataKind(DataKindOf(params.Common.Event))
+        , IsDSProxySubrequest(params.Common.Event && params.Common.Event->IsDSProxySubrequest)
         , CostModel(GroupQueues->CostModel)
         , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
@@ -294,7 +295,16 @@ public:
     static TLogoBlobID GetBlobId(TEvBlobStorage::TEvVPatchStart& ev);
     static TLogoBlobID GetBlobId(TEvBlobStorage::TEvVPatchDiff& ev);
 
-    void SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie = 0, NWilson::TTraceId traceId = {});
+    template<typename TEvent>
+    void SendToProxy(std::unique_ptr<TEvent> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        if constexpr (std::is_base_of_v<TEvBlobStorage::TEvRequestCommon, TEvent>) {
+            event->IsDSProxySubrequest = true;
+            event->ForceGroupGeneration = ForceGroupGeneration;
+            event->DataKind = DataKind;
+        }
+        Send(ProxyActorId, event.release(), 0, cookie, std::move(traceId));
+    }
+
     void SendResponseAndDie(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats, TActorId source, ui64 cookie);
     void SendResponseAndDie(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats = nullptr);
 
@@ -334,6 +344,7 @@ protected:
     // its own -- notably the parts a MustRestoreFirst read rewrites -- and every internal request it
     // spawns on the way there.
     const NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
+    const bool IsDSProxySubrequest;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
     THashMap<ui32, TActorId> NodeSubscriptions;

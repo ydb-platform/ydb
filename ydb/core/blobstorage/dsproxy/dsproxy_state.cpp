@@ -371,6 +371,12 @@ namespace NKikimr {
         InlinePileBridgeProxyId = {};
         ErrorDescription = "DsProxy got a Poison Pill";
         SetStateEstablishingSessionsTimeout();
+        // Batched puts have been counted on receipt and are still waiting for their request actor.
+        for (const auto& [handleClass, tactic, reduceInterpileTraffic] : PutBatchedBucketQueue) {
+            for (const auto& ev : BatchedPuts[handleClass][tactic][reduceInterpileTraffic].Queue) {
+                SendErrorResponse(ev);
+            }
+        }
 
         if (NumUnconnectedDisks != Max<ui32>()) {
             NodeMon->DecNumUnconnected(NumUnconnectedDisks);

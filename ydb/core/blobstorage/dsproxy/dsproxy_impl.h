@@ -372,6 +372,11 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         }
         EnsureMonitoring(full);
         IncMonEvent(ev->Get());
+        SendErrorResponse(ev);
+    }
+
+    template<typename TEvent>
+    void SendErrorResponse(const TAutoPtr<TEventHandle<TEvent>>& ev) {
         const NKikimrProto::EReplyStatus status = (!IsEjected || HasInvalidGroupId())
             ? NKikimrProto::ERROR
             : NKikimrProto::NO_GROUP;

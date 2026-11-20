@@ -32,7 +32,7 @@ namespace NKikimr {
             TCounterPtr ResponseBytes;
             THashMap<NKikimrProto::EReplyStatus, TCounterPtr> Completed;
 
-            void CountReply(ui64 bytes, const IEventBase& response, NKikimrProto::EReplyStatus status, TDuration latency) {
+            void CountReply(ui64 bytes, const IEventBase& response, TDuration latency) {
                 ResponseTime->Collect(latency.MicroSeconds() / 1000.0);
                 if (RequestBytes) {
                     *RequestBytes += bytes;
@@ -40,6 +40,7 @@ namespace NKikimr {
                 if (response.Type() == TEvBlobStorage::EvGetResult) {
                     *ResponseBytes += static_cast<const TEvBlobStorage::TEvGetResult&>(response).PayloadSizeBytes();
                 }
+                const auto status = dynamic_cast<const TEvBlobStorage::TEvResultCommon&>(response).Status;
                 auto& completed = Completed[status];
                 if (!completed) {
                     completed = Group->GetSubgroup("status", NKikimrProto::EReplyStatus_Name(status))

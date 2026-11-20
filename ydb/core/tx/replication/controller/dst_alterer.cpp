@@ -116,6 +116,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
                 NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
             break;
+        case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             tx.CopyFrom(TopicTx);
             tx.SetInternal(true);
@@ -312,6 +313,7 @@ public:
                 case TReplication::ETargetKind::Table:
                 case TReplication::ETargetKind::IndexTable:
                     return AllocateTxId();
+                case TReplication::ETargetKind::CdcTopic:
                 case TReplication::ETargetKind::Topic:
                 case TReplication::ETargetKind::Transfer:
                     return Success();

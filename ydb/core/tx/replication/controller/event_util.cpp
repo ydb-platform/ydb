@@ -73,6 +73,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
             dstPathId.ToProto(writerSettings.MutablePathId());
             break;
         }
+        case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             Y_ABORT("Topic targets are workerless");
         case TReplication::ETargetKind::Transfer: {

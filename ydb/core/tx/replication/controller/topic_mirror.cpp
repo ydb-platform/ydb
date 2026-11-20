@@ -85,6 +85,7 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
     description.SerializeTo(request);
 
     const auto& source = NYdb::TProtoAccessor::GetProto(description);
+    *request.mutable_consumers() = source.consumers();
     request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());
     request.set_partition_write_burst_messages(source.partition_write_burst_messages());
     request.set_partition_total_read_speed_messages_per_second(source.partition_total_read_speed_messages_per_second());

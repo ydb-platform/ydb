@@ -39,6 +39,7 @@ public:
         IndexTable,
         Transfer,
         Topic,
+        CdcTopic,
     };
 
     enum class EDstState: ui8 {
@@ -50,6 +51,7 @@ public:
         Paused,
         Attaching, // Deprecated.
         WaitingImport,
+        PreparingCdc,
         Error = Max<ui8>()
     };
 
@@ -162,6 +164,7 @@ public:
     const ITarget* FindBaseTableTarget(const ITarget& indexTarget) const;
     void RemoveTarget(ui64 id);
     TVector<ITarget*> GetTargets() const;
+    bool AreCdcChildrenPrepared(ui64 parentId) const;
     TVector<TString> GetTargetTablePaths() const;
 
     bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
@@ -214,6 +217,8 @@ private:
     std::optional<TDropOp> DropOp;
 
 }; // TReplication
+
+bool IsTopicTarget(TReplication::ETargetKind kind);
 
 // Whether the replication takes over its destination tables as they are: they already exist and
 // already hold the data, so the controller demotes them in place instead of creating anything.

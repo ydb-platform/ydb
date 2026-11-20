@@ -34,6 +34,7 @@ SRCS(
     controller.cpp
     dst_alterer.cpp
     dst_creator.cpp
+    dst_cdc_creator.cpp
     dst_remover.cpp
     event_util.cpp
     lag_provider.cpp
@@ -50,6 +51,7 @@ SRCS(
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp
+    target_cdc.cpp
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp

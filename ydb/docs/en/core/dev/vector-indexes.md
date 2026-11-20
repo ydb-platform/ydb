@@ -228,7 +228,7 @@ ALTER TABLE `my_table` REBUILD INDEX `my_index`
 WITH (autoupdate=true);
 ```
 
-Rebuilding still has the [consistency limitation during index construction](#build-consistency).
+Rebuilding still has the [consistency limitation during index construction](#build-consistency). If you plan to resume writes after rebuilding and keep the index consistent with the table, use `WITH (autoupdate=true)`, as shown above, when starting the rebuild in the [procedure below](#rebuild).
 
 ### Clusters are not recalculated during update
 

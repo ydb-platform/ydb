@@ -5,7 +5,6 @@ ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCs
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
-ydb/core/kqp/ut/rbo KqpRboYql.AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
@@ -16,7 +15,6 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+Enable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
-ydb/core/kqp/ut/scheme KqpScheme.AddAndAlterChangefeedYqlTopicSettings+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
@@ -37,10 +35,8 @@ ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_P
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/replication/controller/ut_schema_change unittest.[*/*] chunk
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.LocalRetentionGapBeforeSessionStartWithoutLaterMessageReportsDataLoss
-ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithoutLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithoutLaterMessageReportsDataLoss
-ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_truncate_table_simple unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
@@ -64,7 +60,6 @@ ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
-ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_commit_reread[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tests/stress/vector_workload/tests py3test.sole chunk

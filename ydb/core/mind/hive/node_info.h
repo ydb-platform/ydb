@@ -85,6 +85,8 @@ public:
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
     std::unordered_map<TTabletTypes::EType, std::unordered_set<TTabletInfo*>> TabletsRunningByType;
     std::unordered_map<TFullObjectId, std::unordered_set<TTabletInfo*>> TabletsOfObject;
+    // Number of alive tablets counted when balancing tablets between data centers, see THive::CheckDataCenterBalance
+    ui64 DataCenterBalanceTablets = 0;
     // Resource-draining tablets with a high UsageImpact. Expected to hold zero or one elements
     std::unordered_set<TTabletInfo*> HighImpactTablets;
     std::vector<TFullTabletId> FrozenTablets;

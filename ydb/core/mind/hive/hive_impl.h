@@ -1,6 +1,7 @@
 #pragma once
 #include <bitset>
 #include <deque>
+#include <span>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/reassign_tablets.h>
@@ -763,7 +764,8 @@ protected:
     struct TNotEnoughResources {};
     using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting, TNotEnoughResources>;
 
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
+    // When targetNodeIds is not empty (and sorted), only these nodes are considered
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0, std::span<const TNodeId> targetNodeIds = {});
 
     struct TSelectedNode {
         double Usage;
@@ -1186,6 +1188,18 @@ public:
         return CurrentConfig.GetLessSystemTabletsMoves();
     }
 
+    bool GetEnableDataCenterBalancer() const {
+        return CurrentConfig.GetEnableDataCenterBalancer();
+    }
+
+    double GetDataCenterImbalanceToBalance() const {
+        return CurrentConfig.GetDataCenterImbalanceToBalance();
+    }
+
+    ui64 GetMaxMovementsOnDataCenterBalancer() const {
+        return CurrentConfig.GetMaxMovementsOnDataCenterBalancer();
+    }
+
     ui64 GetMaxPingsInFlight() const {
         return CurrentConfig.GetMaxPingsInFlight();
     }
@@ -1315,6 +1329,22 @@ protected:
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
+
+    // Tablet counts per data center among the nodes of one segment. Only nodes which are alive, not down
+    // and have a known data center are considered.
+    template<std::forward_iterator TIter>
+    TDataCenterBalanceStats GetDataCenterBalanceStats(TIter begin, TIter end) const;
+    // Leaders not tied to particular data centers: without data center preferences and not sticking together in one
+    bool IsTabletCountedForDataCenterBalance(const TTabletInfo& tablet) const;
+    // If tablet counts in data centers of the segment need balancing, returns settings of the balancer
+    template<std::forward_iterator TIter>
+    std::optional<TBalancerSettings> CheckDataCenterBalance(const TSegmentId& segmentId, TIter begin, TIter end) const;
+    // Whether the data center balancer should move the tablet to the node
+    TMoveExpediency CheckDataCenterMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    // Whether moving the tablet to the node makes the data centers imbalance of the segment exceed the threshold
+    bool DoesMoveBreakDataCenterBalance(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    // Max data center imbalance over the segments, for counters
+    double GetMaxDataCenterImbalance() const;
     void RemoveNodeFromSegments(TNodeInfo* node);
     void RemoveNodeFromSegments(TNodeId nodeId);
     void UpdateNodeSegments(TNodeInfo* node);

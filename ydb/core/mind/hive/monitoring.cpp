@@ -994,6 +994,9 @@ public:
         UpdateConfig(db, "MaxWarmUpPeriod", configUpdates);
         UpdateConfig(db, "WarmUpEnabled", configUpdates);
         UpdateConfig(db, "ObjectImbalanceToBalance", configUpdates);
+        UpdateConfig(db, "EnableDataCenterBalancer", configUpdates);
+        UpdateConfig(db, "DataCenterImbalanceToBalance", configUpdates);
+        UpdateConfig(db, "MaxMovementsOnDataCenterBalancer", configUpdates);
         UpdateConfig(db, "ChannelBalanceStrategy", configUpdates);
         UpdateConfig(db, "MaxChannelHistorySize", configUpdates);
         UpdateConfig(db, "StorageInfoRefreshFrequency", configUpdates);
@@ -1446,6 +1449,9 @@ public:
         ShowConfig(out, "MaxWarmUpPeriod");
         ShowConfig(out, "WarmUpEnabled");
         ShowConfig(out, "ObjectImbalanceToBalance");
+        ShowConfig(out, "EnableDataCenterBalancer");
+        ShowConfig(out, "DataCenterImbalanceToBalance");
+        ShowConfig(out, "MaxMovementsOnDataCenterBalancer");
         ShowConfig(out, "ChannelBalanceStrategy");
         ShowConfig(out, "MaxChannelHistorySize");
         ShowConfig(out, "StorageInfoRefreshFrequency");
@@ -1853,6 +1859,7 @@ public:
             EBalancerType::Manual,
             EBalancerType::Storage,
             EBalancerType::ScatterNamed,
+            EBalancerType::ScatterDataCenter,
         }) {
             int balancer = static_cast<int>(type);
             out << "<tr id='balancer" << balancer << "'><td>" << EBalancerTypeName(type) << "</td><td></td><td></td><td></td><td></td><td></td></tr>";

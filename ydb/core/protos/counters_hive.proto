@@ -44,6 +44,7 @@ enum ESimpleCounters {
     COUNTER_SHRINK_HISTORY_TABLETS = 34 [(CounterOpts) = {Name: "ShrinkRemainingHistoryTablets"}];
     COUNTER_SHRINK_MOVE_DATA_INFLIGHT = 35 [(CounterOpts) = {Name: "ShrinkMoveDataInFlight"}];
     COUNTER_SHRINK_MOVE_DATA_QUEUED = 36 [(CounterOpts) = {Name: "ShrinkMoveDataQueued"}];
+    COUNTER_DATA_CENTER_IMBALANCE = 37 [(CounterOpts) = {Name: "DataCenterImbalance"}]; // Max over node segments of the data center imbalance, in percent.
 }
 
 enum ECumulativeCounters {

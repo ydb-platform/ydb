@@ -135,6 +135,9 @@ protected:
     bool IsNamedResourceBalancer() const {
         return !Settings.NamedResource.empty();
     }
+    bool IsDataCenterBalancer() const {
+        return Settings.Type == EBalancerType::ScatterDataCenter;
+    }
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -328,7 +331,13 @@ protected:
             CountTablet(tablet, &TTabletCounters::SkippedObjectFilter, ETabletCounter::SkippedObjectFilter);
             return false;
         }
-        if (IsNamedResourceBalancer()) {
+        if (IsDataCenterBalancer()) {
+            // only the tablets which are counted in data centers' balance, regardless of their metrics
+            if (!tablet->CountedForDataCenterBalance) {
+                CountTablet(tablet, &TTabletCounters::SkippedPolicy, ETabletCounter::SkippedPolicy);
+                return false;
+            }
+        } else if (IsNamedResourceBalancer()) {
             // only the tablets which a move would not interrupt
             const auto* value = tablet->GetResourceValues().NamedResources.Find(Settings.NamedResource);
             if (value == nullptr || !value->IsTransferable()) {
@@ -362,6 +371,13 @@ protected:
     }
 
     void BalanceTabletsByStrategy(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last) {
+        if (IsDataCenterBalancer()) {
+            // any tablet fixes the counts, the lightest ones are the cheapest to move
+            std::stable_sort(first, last, [](const TTabletInfo* a, const TTabletInfo* b) -> bool {
+                return a->GetWeight(EResourceToBalance::ComputeResources) < b->GetWeight(EResourceToBalance::ComputeResources);
+            });
+            return;
+        }
         if (IsNamedResourceBalancer()) {
             const TString& name = Settings.NamedResource;
             std::stable_sort(first, last, [&name](const TTabletInfo* a, const TTabletInfo* b) -> bool {
@@ -474,7 +490,7 @@ protected:
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet->ToString()});
             CountTablet(tablet, &TTabletCounters::TabletsExamined, ETabletCounter::TabletsExamined);
-            THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
+            THive::TBestNodeResult result = Hive->FindBestNode(*tablet, 0, Settings.TargetNodeIds);
             if (std::holds_alternative<THive::TNotEnoughResources>(result)) {
                 CountTablet(tablet, &TTabletCounters::RejectedNotEnoughResources, ETabletCounter::RejectedNotEnoughResources);
             } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)) {
@@ -486,7 +502,9 @@ protected:
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
                 THive::TMoveExpediency expediency; // not expedient
                 if (node != tablet->Node) {
-                    expediency = Hive->CheckTabletMoveExpediency(*tablet, *node);
+                    expediency = IsDataCenterBalancer()
+                        ? Hive->CheckDataCenterMoveExpediency(*tablet, *node)
+                        : Hive->CheckTabletMoveExpediency(*tablet, *node);
                     if (!expediency.Expedient) {
                         CountTablet(tablet, &TTabletCounters::RejectedNotExpedient, ETabletCounter::RejectedNotExpedient);
                     }
@@ -525,6 +543,10 @@ protected:
                     if (expediency.Reason == EHiveEventReason::ResourceStDevImproved || expediency.Reason == EHiveEventReason::NamedResourceImproved) {
                         details << " stdevBefore=" << Sprintf("%.3f", expediency.StDevBefore)
                             << " stdevAfter=" << Sprintf("%.3f", expediency.StDevAfter);
+                    }
+                    if (IsDataCenterBalancer()) {
+                        details << " sourceDataCenter=" << tablet->Node->GetDataCenter()
+                            << " targetDataCenter=" << node->GetDataCenter();
                     }
                     if (!expediency.NamedResource.empty()) {
                         details << " named=" << expediency.NamedResource

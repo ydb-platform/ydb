@@ -166,6 +166,8 @@ public:
     TNodeInfo* Node;
     TNodeId LastNodeId;
     TTabletCountersInfo Counters;
+    // The tablet is counted in TNodeInfo::DataCenterBalanceTablets of its node, see THive::IsTabletCountedForDataCenterBalance
+    bool CountedForDataCenterBalance = false;
     NKikimrHive::TTabletStatistics Statistics;
 
     TString GetLogPrefix() const;

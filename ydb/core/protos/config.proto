@@ -2972,6 +2972,9 @@ message THiveConfig {
     repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
 
     optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
+    optional bool EnableDataCenterBalancer = 99 [default = false, (ParamDescription) = "Move tablets between data centers so that each data center runs a share of the tablets proportional to its number of nodes. Tablets with data center preferences are not counted or moved."];
+    optional double DataCenterImbalanceToBalance = 100 [default = 0.05, (ParamDescription) = "Threshold for data center imbalance: the difference between the largest and smallest per-node tablet counts of data centers, relative to the largest one."];
+    optional uint64 MaxMovementsOnDataCenterBalancer = 101 [default = 10, (ParamDescription) = "Number of tablet movements per data center balancing iteration."];
 }
 
 message THealthCheckConfig {

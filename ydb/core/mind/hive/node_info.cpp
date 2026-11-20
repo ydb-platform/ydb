@@ -97,6 +97,9 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         if (tablet->HasCounter() && tablet->IsLeader()) {
             Hive.UpdateObjectCount(tablet->AsLeader(), *this, -1);
         }
+        if (std::exchange(tablet->CountedForDataCenterBalance, false)) {
+            --DataCenterBalanceTablets;
+        }
     }
     if (IsResourceDrainingState(newState)) {
         if (Tablets[newState].insert(tablet).second) {
@@ -126,6 +129,10 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         Hive.UpdateDomainTabletsAlive(tablet->GetLeader().ObjectDomain, +1, GetServicedDomain());
         if (tablet->HasCounter() && tablet->IsLeader()) {
             Hive.UpdateObjectCount(tablet->AsLeader(), *this, +1);
+        }
+        if (Hive.IsTabletCountedForDataCenterBalance(*tablet)) {
+            tablet->CountedForDataCenterBalance = true;
+            ++DataCenterBalanceTablets;
         }
     }
     return true;

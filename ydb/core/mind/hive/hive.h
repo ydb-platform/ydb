@@ -97,8 +97,9 @@ enum class EBalancerType {
     SpreadNeighbours,
     Storage,
     ScatterNamed, // balancing of a named resource, see TBalancerSettings::NamedResource
+    ScatterDataCenter, // balancing of tablet counts between data centers, see THive::CheckDataCenterBalance
 
-    Last = ScatterNamed,
+    Last = ScatterDataCenter,
 };
 
 constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType::Last) + 1;
@@ -396,6 +397,8 @@ struct TBalancerSettings {
     // When set, the balancer moves tablets to even out usage of this named resource
     // (FilterNodeIds are the source nodes), ResourceToBalance is ignored
     TString NamedResource;
+    // When not empty, tablets are moved only to these nodes (sorted, see FindBestNode)
+    std::vector<TNodeId> TargetNodeIds;
     // why this balancer was started, for the log: a short constant kind and the numbers behind the decision
     TString Trigger = "manual";
     TString TriggerDetails;

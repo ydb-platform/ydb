@@ -43,6 +43,7 @@ TString EBalancerTypeName(EBalancerType value) {
         case EBalancerType::Manual: return "Manual";
         case EBalancerType::Storage: return "Storage";
         case EBalancerType::ScatterNamed: return "Named";
+        case EBalancerType::ScatterDataCenter: return "DataCenter";
     }
 }
 

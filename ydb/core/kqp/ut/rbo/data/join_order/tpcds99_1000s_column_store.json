@@ -1,0 +1,50 @@
+{
+  "op_name":"HashShuffle",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"InnerJoin (BlockHash)",
+              "args":
+                [
+                  {
+                    "op_name":"InnerJoin (BlockHash)",
+                    "args":
+                      [
+                        {
+                          "op_name":"InnerJoin (BlockHash)",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"catalog_sales"
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"date_dim"
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"call_center"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"warehouse"
+                  }
+                ]
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"ship_mode"
+            }
+          ]
+      }
+    ]
+}

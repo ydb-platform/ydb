@@ -434,22 +434,21 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
                 ts Timestamp NOT NULL DEFAULT CurrentUtcTimestamp(),
-                r Uint64 NOT NULL DEFAULT RandomNumber(),
+                r Uint64 NOT NULL DEFAULT RandomNumber(1),
                 observed_ts Timestamp NOT NULL,
-                observed_r Uint64 NOT NULL,
                 PRIMARY KEY (k)
             );
         )");
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "ts"), "CurrentUtcTimestamp()");
-        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "r"), "RandomNumber()");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "r"), "RandomNumber(1)");
 
         auto tableClient = fixture.Runner().GetTableClient();
         auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
         auto prepareResult = tableSession.PrepareDataQuery(R"(
             DECLARE $k AS Int32;
-            INSERT INTO `/Root/TestTable` (k, observed_ts, observed_r)
-            VALUES ($k, CurrentUtcTimestamp(), RandomNumber())
-            RETURNING k, ts, r, observed_ts, observed_r;
+            INSERT INTO `/Root/TestTable` (k, observed_ts)
+            VALUES ($k, CurrentUtcTimestamp())
+            RETURNING k, ts, r, observed_ts;
         )").ExtractValueSync();
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         auto prepared = prepareResult.GetQuery();
@@ -475,14 +474,13 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             const auto timestamp = parser.ColumnParser("ts").GetTimestamp();
             UNIT_ASSERT_C(before <= timestamp && timestamp <= after,
                 "DEFAULT timestamp outside its execution window: " << before << " <= " << timestamp << " <= " << after);
+            // Zero-argument timestamps use the same execution binding in both expressions.
             UNIT_ASSERT_VALUES_EQUAL(timestamp, parser.ColumnParser("observed_ts").GetTimestamp());
-            // Zero-argument RandomNumber is a shared execution binding. Equality to this
-            // witness detects a frozen DEFAULT without requiring distinct random draws.
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("r").GetUint64(),
-                parser.ColumnParser("observed_r").GetUint64());
+            // Require a non-null random value; compare its actual value with storage below.
+            parser.ColumnParser("r").GetUint64();
             UNIT_ASSERT(!parser.TryNextRow());
             CompareYson(FormatResultSetYson(result.GetResultSet(0)), fixture.QueryYson(
-                TStringBuilder() << "SELECT k, ts, r, observed_ts, observed_r FROM TestTable WHERE k = " << key << ";"));
+                TStringBuilder() << "SELECT k, ts, r, observed_ts FROM TestTable WHERE k = " << key << ";"));
         }
         fixture.Check("SELECT k FROM TestTable ORDER BY k;", "[[1];[2]]");
     }

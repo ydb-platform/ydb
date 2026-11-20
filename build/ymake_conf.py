@@ -1560,8 +1560,7 @@ class GnuCompiler(Compiler):
             '-g',
         ]
 
-        if not self.build.is_release and self.target.is_linux:
-            # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
+        if self.target.is_linux:
             self.debug_info_flags.append('-gz=zstd')
         if self.tc.is_clang and self.tc.version_at_least(14):
             # DTCC-1231: Clang 14 has switched to DWARFv5 by default
@@ -1934,8 +1933,7 @@ class LD(Linker):
             self.ld_flags.append('--ld-path={}/esp-clang/bin/ld.lld'.format(self.tc.name_marker))
             if is_positive('NO_CXX_RTTI'):
                 self.ld_flags.append('-fno-rtti')
-        if not self.build.is_release and target.is_linux:
-            # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
+        if target.is_linux:
             self.ld_flags.extend(['-Wl,--compress-debug-sections=zstd'])
 
         if self.musl.value:

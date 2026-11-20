@@ -2,14 +2,21 @@
 
 A mark join answers `IN` or `EXISTS` for every left row. The left row stays. One extra column says `true`, `false`, or `null`.
 
-The right side is placed in a hash table. A hit in that table is `true`. The rest of this note is about a miss: the answer is then either `null` or `false`.
+Each join key is one of three kinds.
+
+- A mark key is marked as mark. It is a column of the `IN` test. A null there stays unknown.
+- A key marked as `null == null` treats two nulls as equal.
+- Every other key is a regular key. A null there does not match a null, and the answer is `false`.
+
+A key cannot be both a mark key and a `null == null` key. The join checks this and rejects the overlap.
+
+The right side is built into a hash table. The table key is the whole join key: regular keys, `null == null` keys, and mark keys. `true` comes only from a lookup in this table.
+
+The rest of this note is about the other two answers, `false` and `null`, for each left row.
 
 Spilling is supported. When memory runs low, the join writes its data to disk and finishes it later, the same way as the other hash joins.
 
-There are two kinds of keys.
-
-- A regular key puts rows in a group. In `t2.k = t1.k`, `k` is the regular key. If nulls are allowed to match, two nulls are one group. Otherwise a null regular key means `false`.
-- A mark key is a column of the `IN` test. A null there stays unknown. A mark key cannot treat null as equal to null.
+A regular key or a `null == null` key puts rows in a group. In `t2.k = t1.k`, `k` is that key. If it is marked `null == null`, two nulls are one group.
 
 There are at most 32 mark keys, and each one is a single column. The optimizer does not produce this join yet. The tests in `comp_nodes/ut/dq_hash_join_ut.cpp` call it directly.
 

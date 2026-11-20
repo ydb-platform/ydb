@@ -173,7 +173,8 @@ public:
 
     TString GetTxBody() const;
     bool RestoreReadSnapshot(const TString& txBody);
-    const TTableId* FindUnavailableRecoveredReadSnapshot(TDataShard& self, NTable::TDatabase& db) const;
+    bool CanAbortPreparedWrite() const;
+    const TTableId* FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const;
     bool TrySetTxBody(const TString& txBody);
     void SetTxBody(const TString& txBody);
     void ClearTxBody();

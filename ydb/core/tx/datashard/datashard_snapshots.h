@@ -162,6 +162,19 @@ public:
 
     TRowVersion GetLowWatermark() const;
 
+    // Old compaction may already have discarded evidence of writes. A
+    // snapshot below this boundary can still be readable but cannot be used
+    // to check for write conflicts.
+    TRowVersion GetSnapshotWriteSafetyBoundary() const {
+        return SnapshotWriteSafetyBoundary;
+    }
+
+    bool IsSnapshotWriteSafe(const TRowVersion& version) const {
+        return version >= SnapshotWriteSafetyBoundary;
+    }
+
+    void RaiseSnapshotWriteSafetyBoundary(NIceDb::TNiceDb& db, const TRowVersion& version);
+
     bool IsSnapshotRetentionEnabled() const;
 
     // Retention may allow reads below LowWatermark, but never resurrects removed
@@ -243,6 +256,7 @@ private:
     TRowVersion IncompleteEdge = TRowVersion::Min();
     TRowVersion CompleteEdge = TRowVersion::Min();
     TRowVersion LowWatermark = TRowVersion::Min();
+    TRowVersion SnapshotWriteSafetyBoundary = TRowVersion::Min();
     TRowVersion ImmediateWriteEdge = TRowVersion::Min();
     TRowVersion ImmediateWriteEdgeReplied = TRowVersion::Min();
     TRowVersion UnprotectedReadEdge = TRowVersion::Min();

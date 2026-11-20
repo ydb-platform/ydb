@@ -252,6 +252,13 @@ public:
         if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
             Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
 
+        // Missing metadata means this source could have compacted with a
+        // writer that drops the last erase of an absent key.
+        const auto writeSafetyBoundary = record.HasMvccSnapshotWriteSafetyBoundary()
+            ? TRowVersion::FromProto(record.GetMvccSnapshotWriteSafetyBoundary())
+            : Max(lowWatermark, minWriteVersion, completeEdge, incompleteEdge, immediateWriteEdge);
+        Self->GetSnapshotManager().RaiseSnapshotWriteSafetyBoundary(db, writeSafetyBoundary);
+
         // Would be true for the first snapshot we receive, e.g. during a merge
         const bool isFirstSnapshot = Self->ReceiveSnapshotsFrom.size() == Self->DstSplitDescription->SourceRangesSize();
 

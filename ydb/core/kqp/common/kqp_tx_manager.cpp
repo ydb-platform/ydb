@@ -691,6 +691,7 @@ public:
 
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
+        const bool snapshotWritesVote = HasSnapshot() && IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if (!ParticipatesInCommit(shardInfo)) {
@@ -704,7 +705,9 @@ public:
                 if (shardInfo.IsOlap) {
                     receivingColumnShardsSet.insert(shardId);
                 }
-                if (IsVolatile()) {
+                // SnapshotRW row writes can detect a conflict during execution.
+                // Other writers must wait for their decision even when they hold no read locks.
+                if (IsVolatile() || (snapshotWritesVote && !shardInfo.IsOlap)) {
                     SendingShards.insert(shardId);
                 }
             }

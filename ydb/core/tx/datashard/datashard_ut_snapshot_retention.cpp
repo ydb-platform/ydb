@@ -827,11 +827,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
         UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
     }
 
-    Y_UNIT_TEST_TWIN(TruncateInvalidatesRetainedPointBelowWatermark, Persistent) {
+    void TestTruncateInvalidatesRetainedPointBelowWatermark(bool persistent, bool legacyTruncate) {
         TSnapshotRetentionTest test;
         auto& runtime = test.GetRuntime();
         const auto initial = test.WriteVersion(1);
-        const auto snapshot = Persistent
+        const auto snapshot = persistent
             ? CreateVolatileSnapshot(test.Server, {"/Root/table-a"}, TDuration::Hours(1))
             : initial;
         runtime.SimulateSleep(TDuration::Seconds(1));
@@ -867,10 +867,37 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
         // persistent snapshot record used to cover the same version.
         const auto result = readSnapshot(2);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+
+        if (legacyTruncate) {
+            // Restore the available record left on disk by a legacy TRUNCATE.
+            auto patch = std::make_unique<TEvTablet::TEvLocalMKQL>();
+            patch->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(R"___((
+                (let key '('('Oid (Uint64 '%lu)) '('Tid (Uint64 '%lu)) '('Step (Uint64 '%lu)) '('TxId (Uint64 '%lu))))
+                (return (AsList
+                    (UpdateRow 'Snapshots key '('('Name (String 'legacy-snapshot))
+                        '('Flags (Uint64 '%lu)) '('TimeoutMs (Uint64 '%lu))))))
+            ))___", test.TableA.PathId.OwnerId, test.TableA.PathId.LocalPathId, snapshot.Step, snapshot.TxId,
+                ui64(TSnapshot::FlagUser | TSnapshot::FlagTimeout), TDuration::Hours(1).MilliSeconds()));
+            const auto patchSender = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(test.ShardA, patchSender, patch.release(), 0, GetPipeConfigWithRetries());
+            const auto patched = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(
+                patchSender, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL_C(patched->Get()->Record.GetStatus(), NKikimrProto::OK,
+                patched->Get()->Record.ShortDebugString());
+        }
+
         RebootTablet(runtime, test.ShardA, test.Sender);
         UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
         const auto restarted = readSnapshot(3);
         UNIT_ASSERT_VALUES_EQUAL(restarted->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST_TWIN(TruncateInvalidatesRetainedPointBelowWatermark, Persistent) {
+        TestTruncateInvalidatesRetainedPointBelowWatermark(Persistent, false);
+    }
+
+    Y_UNIT_TEST(LegacyTruncateInvalidatesPersistentSnapshotAfterRestart) {
+        TestTruncateInvalidatesRetainedPointBelowWatermark(true, true);
     }
 }
 
@@ -1027,6 +1054,95 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
         UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
     }
 
+    Y_UNIT_TEST(RetainedFinalSnapshotConflictAbortsBothShards) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(false);
+        const auto snapshot = PrepareFinalSnapshotHistory(test, true);
+        ExecSQL(test.Server, test.Sender, "UPSERT INTO `/Root/table-a` (key, value) VALUES (1, 10);");
+
+        const ui64 txId = 100;
+        const auto mode = NKikimrDataEvents::TEvWrite::MODE_PREPARE;
+        auto prepare = [&](ui64 shard, const TTableId& tableId) {
+            auto request = MakeFinalSnapshotUpdate(tableId, snapshot, txId, mode);
+            auto* locks = request->Record.MutableLocks();
+            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            for (ui64 participant : {test.ShardA, test.ShardB}) {
+                locks->AddSendingShards(participant);
+                locks->AddReceivingShards(participant);
+            }
+            return Write(runtime, test.Sender, shard, std::move(request));
+        };
+        const auto a = prepare(test.ShardA, test.TableA);
+        const auto b = prepare(test.ShardB, test.TableB);
+
+        auto checkVote = [&](const auto& event, ui64 source, ui64 destination, auto decision) {
+            const auto& record = event->Get()->Record;
+            if (record.GetTxId() != txId || record.GetTabletSource() != source ||
+                record.GetTabletDest() != destination || (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA))
+            {
+                return false;
+            }
+            NKikimrTx::TReadSetData data;
+            UNIT_ASSERT(data.ParseFromString(record.GetReadSet()));
+            UNIT_ASSERT_VALUES_EQUAL_C(ui32(data.GetDecision()), ui32(decision), record.ShortDebugString());
+            return true;
+        };
+        // Let B execute before it receives A's decision. B's updates must
+        // stay tentative even though it sees no local write conflict.
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedAbort(runtime, [&](const auto& ev) {
+            return checkVote(ev, test.ShardA, test.ShardB, NKikimrTx::TReadSetData::DECISION_ABORT);
+        });
+        bool peerVotedCommit = false;
+        auto observePeerVote = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](auto& ev) {
+            if (checkVote(ev, test.ShardB, test.ShardA, NKikimrTx::TReadSetData::DECISION_COMMIT)) {
+                peerVotedCommit = true;
+            }
+        });
+        bool peerReplied = false;
+        auto observePeerResult = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetOrigin() == test.ShardB && record.GetTxId() == txId) {
+                peerReplied = true;
+            }
+        });
+
+        SendProposeToCoordinator(runtime, test.Sender, {test.ShardA, test.ShardB}, {
+            .TxId = txId,
+            .Coordinator = a.GetDomainCoordinators(0),
+            .MinStep = Max(a.GetMinStep(), b.GetMinStep()),
+            .MaxStep = Min(a.GetMaxStep(), b.GetMaxStep()),
+        });
+        runtime.WaitFor("the conflicting shard aborts while the other votes to commit", [&] {
+            return !blockedAbort.empty() && peerVotedCommit;
+        });
+        UNIT_ASSERT(!peerReplied);
+        blockedAbort.Stop().Unblock();
+
+        THashSet<ui64> replies;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto reply = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(test.Sender, TDuration::Seconds(30));
+            const auto& result = reply->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxId(), txId);
+            UNIT_ASSERT(replies.insert(result.GetOrigin()).second);
+            if (result.GetOrigin() == test.ShardA) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN,
+                    result.ShortDebugString());
+                UNIT_ASSERT(!result.GetIssues().empty());
+                UNIT_ASSERT_C(result.GetIssues(0).message().Contains("Write conflict"), result.ShortDebugString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetOrigin(), test.ShardB);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED,
+                    result.ShortDebugString());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, TVector<ui64>{test.ShardA}, test.TableA),
+            "key = 1, value = 10\nkey = 2, value = 20\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, TVector<ui64>{test.ShardB}, test.TableB),
+            "key = 1, value = 1\nkey = 2, value = 20\n");
+    }
+
     Y_UNIT_TEST_TWIN(PreparedFinalSnapshotSurvivesRegistryReleaseAndRestart, Cancel) {
         TSnapshotRetentionTest test(false, 1, true, TDuration::Seconds(1), false);
         auto& runtime = test.GetRuntime();
@@ -1172,6 +1288,32 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionWrite) {
                 Removed ? "key = 1, value = 1\nkey = 2, value = 20\n"
                         : "key = 1, value = 3\nkey = 2, value = 20\n");
         }
+    }
+
+    Y_UNIT_TEST(SnapshotWriteWithoutVoteIsRejectedAtPrepare) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardWriteAlwaysVolatile(false);
+        const auto snapshot = PrepareFinalSnapshotHistory(test, true);
+        auto request = MakeWriteRequestOneKeyValue(100,
+            NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+            test.TableA, TShardedTableOptions::DefaultColumns(), 1, 0);
+        request->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+        request->Record.MutableMvccSnapshot()->SetStep(snapshot.Step);
+        request->Record.MutableMvccSnapshot()->SetTxId(snapshot.TxId);
+        auto* locks = request->Record.MutableLocks();
+        locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+        locks->AddSendingShards(test.ShardB);
+        locks->AddReceivingShards(test.ShardA);
+        locks->AddReceivingShards(test.ShardB);
+
+        const auto result = Write(runtime, test.Sender, test.ShardA, std::move(request),
+            NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+        UNIT_ASSERT(!result.GetIssues().empty());
+        UNIT_ASSERT_C(result.GetIssues(0).message().Contains("cannot vote"), result.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, TVector<ui64>{test.ShardA}, test.TableA),
+            "key = 1, value = 1\nkey = 2, value = 20\n");
     }
 
     Y_UNIT_TEST(RetainedSnapshotReadLockIsBrokenByNewerWrite) {
@@ -1772,6 +1914,73 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
+    Y_UNIT_TEST_TWIN(SnapshotWriteAfterCompactionAndUpgrade, Legacy) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = test.WriteVersion(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        const auto removed = test.WriteVersion(2);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(3);
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, removed));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        // Form the same on-disk row state as an old full compaction that
+        // discarded key 2's insert and erase. The retained snapshot stays
+        // readable, but there is no committed record left for that key.
+        ForceFullCompaction(runtime, test.ShardA, test.TableA);
+        if constexpr (Legacy) {
+            // A legacy tablet never wrote SysMvcc_SnapshotWriteSafetyGeneration.
+            auto patch = std::make_unique<TEvTablet::TEvLocalMKQL>();
+            patch->Record.MutableProgram()->MutableProgram()->SetText(
+                "((return (AsList (EraseRow 'Sys '('('Id (Uint64 '52)))))))");
+            const auto patchSender = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(test.ShardA, patchSender, patch.release(), 0, GetPipeConfigWithRetries());
+            const auto patched = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(
+                patchSender, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL_C(patched->Get()->Record.GetStatus(), NKikimrProto::OK,
+                patched->Get()->Record.ShortDebugString());
+        }
+        RebootTablet(runtime, test.ShardA, test.Sender);
+        if constexpr (Legacy) {
+            // A subsequent compatible reboot still has to honor the persisted boundary.
+            RebootTablet(runtime, test.ShardA, test.Sender);
+        }
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatIntReadResult(test.ReadSnapshot(test.ShardA, test.TableA, snapshot).get()), "1, 1\n");
+
+        auto upsert = [&](const TRowVersion& version, ui32 value, auto expectedStatus) {
+            auto request = MakeWriteRequestOneKeyValue(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                test.TableA, TShardedTableOptions::DefaultColumns(), 2, value);
+            request->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+            request->Record.MutableMvccSnapshot()->SetStep(version.Step);
+            request->Record.MutableMvccSnapshot()->SetTxId(version.TxId);
+            return Write(runtime, test.Sender, test.ShardA, std::move(request), expectedStatus);
+        };
+        const auto result = upsert(snapshot, 20,
+            Legacy ? NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED
+                   : NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        if constexpr (Legacy) {
+            UNIT_ASSERT(!result.GetIssues().empty());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("stale snapshot"), result.ShortDebugString());
+        }
+        const TVector<ui64> shards{test.ShardA};
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            Legacy ? "key = 1, value = 3\n" : "key = 1, value = 3\nkey = 2, value = 20\n");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        const auto fresh = AcquireReadSnapshot(runtime, "/Root");
+        upsert(fresh, 200, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(test.Server, shards, test.TableA),
+            "key = 1, value = 3\nkey = 2, value = 200\n");
+    }
+
     Y_UNIT_TEST_QUAD(KqpRetainedSnapshotInsertEraseConflictSurvivesCompaction, Compact, PreviouslyDeleted) {
         TSnapshotRetentionTest test;
         auto& runtime = test.GetRuntime();

@@ -1005,27 +1005,30 @@ public:
             // Writes such as UPDATE read at the snapshot. Validate history only
             // after classifying duplicate deliveries: already applied operations
             // do not read it again, even when their original snapshot is gone.
-            // Newly prepared writes have already validated and pinned their
-            // snapshot. Legacy prepares need a separate recovery check.
-            if (const auto& snapshot = writeOp->GetReadSnapshot();
-                op->IsImmediate() && snapshot && *snapshot < DataShard.GetSnapshotManager().GetLowWatermark())
-            {
-                for (size_t i = 0; i < writeTx->GetOperations().size(); ++i) {
-                    if (writeOp->DuplicateWriteOpIdxs.contains(i)) {
-                        continue;
-                    }
-                    const auto& tableId = writeTx->GetOperations()[i].GetTableId();
-                    if (!DataShard.GetSnapshotManager().IsSnapshotReadable(txc.DB, tableId, *snapshot)) {
-                        const TString snapshotError = TStringBuilder()
-                            << "Operation " << *op << " writes at stale snapshot " << *snapshot
-                            << " for table " << tableId << " at " << tabletId;
-                        // The batch is valid, but needs a new transaction snapshot.
-                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, snapshotError);
-                        guardLocks.WriteSeqNumUpdate.Clear();
-                        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD,
-                            "TExecuteWriteUnit::Execute: cannot write at snapshot",
-                            {"errorMessage", snapshotError});
-                        return EExecutionStatus::Executed;
+            // Prepared writes validate and pin their snapshot before voting.
+            const auto& snapshots = DataShard.GetSnapshotManager();
+            if (const auto& snapshot = writeOp->GetReadSnapshot(); op->IsImmediate() && snapshot) {
+                const bool canCheckWriteConflicts = writeTx->GetLockMode() != TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation ||
+                    snapshots.IsSnapshotWriteSafe(*snapshot);
+                if (!canCheckWriteConflicts || *snapshot < snapshots.GetLowWatermark()) {
+                    for (size_t i = 0; i < writeTx->GetOperations().size(); ++i) {
+                        if (writeOp->DuplicateWriteOpIdxs.contains(i)) {
+                            continue;
+                        }
+                        const auto& tableId = writeTx->GetOperations()[i].GetTableId();
+                        if (!canCheckWriteConflicts || !snapshots.IsSnapshotReadable(txc.DB, tableId, *snapshot)) {
+                            const TString snapshotError = TStringBuilder()
+                                << "Operation " << *op << " writes at stale snapshot " << *snapshot
+                                << " for table " << tableId << " at " << tabletId
+                                << (canCheckWriteConflicts ? "" : " with incomplete write history");
+                            // The batch is valid, but needs a new transaction snapshot.
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, snapshotError);
+                            guardLocks.WriteSeqNumUpdate.Clear();
+                            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD,
+                                "TExecuteWriteUnit::Execute: cannot write at snapshot",
+                                {"errorMessage", snapshotError});
+                            return EExecutionStatus::Executed;
+                        }
                     }
                 }
             }
@@ -1041,7 +1044,7 @@ public:
 
             const bool requireReadOnlyLocks = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
 
-            const auto* unavailableTable = writeOp->FindUnavailableRecoveredReadSnapshot(DataShard, txc.DB);
+            const auto* unavailableTable = writeOp->FindUnavailablePreparedReadSnapshot(DataShard, txc.DB);
             bool validated = false;
             TVector<NKikimrDataEvents::TLock> brokenLocks;
             if (!unavailableTable) {
@@ -1055,7 +1058,7 @@ public:
             if (!validated) {
                 if (unavailableTable) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, TStringBuilder()
-                        << "Operation " << *op << " recovered with stale snapshot " << *writeOp->GetReadSnapshot()
+                        << "Prepared operation " << *op << " writes at stale snapshot " << *writeOp->GetReadSnapshot()
                         << " for table " << *unavailableTable << " at " << tabletId);
                 } else {
                     YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",

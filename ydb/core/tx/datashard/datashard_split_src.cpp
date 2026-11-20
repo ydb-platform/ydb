@@ -498,6 +498,8 @@ public:
                 const auto lowWatermark = Max(SnapContext->LowWatermark, Self->GetSnapshotManager().GetLowWatermark());
                 snapshot->SetMvccLowWatermarkStep(lowWatermark.Step);
                 snapshot->SetMvccLowWatermarkTxId(lowWatermark.TxId);
+                Self->GetSnapshotManager().GetSnapshotWriteSafetyBoundary().ToProto(
+                    snapshot->MutableMvccSnapshotWriteSafetyBoundary());
                 snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
                 snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
                 snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);

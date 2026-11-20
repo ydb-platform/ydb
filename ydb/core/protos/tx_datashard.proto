@@ -536,6 +536,8 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccImmediateWriteEdgeTxId = 11;
     optional bool WithOpenTxs = 12;
     optional TMvccRemovedRowVersions RemovedRowVersions = 13;
+    // Old senders may have discarded conflict evidence below their MVCC edges.
+    optional NKikimrProto.TRowVersion MvccSnapshotWriteSafetyBoundary = 14;
 }
 
 message TSnapshotTransferInfo {
@@ -1018,6 +1020,8 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccImmediateWriteEdgeTxId = 18;
     optional bool MvccPerformedUnprotectedReads = 19;
     repeated TSplitSrcLockInfo Locks = 20;
+    // Old senders may have discarded conflict evidence below their MVCC edges.
+    optional NKikimrProto.TRowVersion MvccSnapshotWriteSafetyBoundary = 21;
 }
 
 message TEvSplitTransferSnapshotAck {

@@ -1333,6 +1333,10 @@ class TDataShard
             Sys_SubDomainTablesMetricsLevel = 48,
             Sys_DatabaseFreeze = 49,
 
+            SysMvcc_SnapshotWriteSafetyStep = 50,
+            SysMvcc_SnapshotWriteSafetyTxId = 51,
+            SysMvcc_SnapshotWriteSafetyGeneration = 52,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,

@@ -98,6 +98,11 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
                     DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);
 
+                const auto writeSafetyBoundary = rs.HasMvccSnapshotWriteSafetyBoundary()
+                    ? TRowVersion::FromProto(rs.GetMvccSnapshotWriteSafetyBoundary())
+                    : Max(lowWatermark, minVersion, completeEdge, incompleteEdge, immediateWriteEdge);
+                DataShard.GetSnapshotManager().RaiseSnapshotWriteSafetyBoundary(db, writeSafetyBoundary);
+
                 if (rs.HasRemovedRowVersions()) {
                     for (const auto& range : rs.GetRemovedRowVersions().GetRanges()) {
                         removedRowVersions.Add(TRowVersion::FromProto(range.GetLowerInclusive()),
@@ -112,6 +117,9 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 if (rs.GetWithOpenTxs()) {
                     hasOpenTxs = true;
                 }
+            } else {
+                DataShard.GetSnapshotManager().RaiseSnapshotWriteSafetyBoundary(
+                    db, TRowVersion(op->GetStep(), op->GetTxId()));
             }
 
             if (userTable->LocalTid != DataShard.GetLastLoanTableTid()) {

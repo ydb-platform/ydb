@@ -555,32 +555,38 @@ bool TWriteOperation::RestoreReadSnapshot(const TString& txBody) {
     return true;
 }
 
-const TTableId* TWriteOperation::FindUnavailableRecoveredReadSnapshot(TDataShard& self, NTable::TDatabase& db) const {
-    if (!ReadSnapshotNeedsRecoveryCheck || !ReadSnapshot || IsOutRSStored()) {
+bool TWriteOperation::CanAbortPreparedWrite() const {
+    if (IsOutRSStored()) {
+        return false;
+    }
+
+    const auto& locks = WriteTx->GetKqpLocks();
+    if (!locks || std::ranges::none_of(locks->GetReceivingShards(), [&](ui64 shard) { return shard != TabletId; })) {
+        return true;
+    }
+
+    // A receiver-only participant cannot stop peers that do not wait for its vote.
+    return locks->GetOp() == NKikimrDataEvents::TKqpLocks::Commit &&
+        std::ranges::find(locks->GetSendingShards(), TabletId) != locks->GetSendingShards().end();
+}
+
+const TTableId* TWriteOperation::FindUnavailablePreparedReadSnapshot(TDataShard& self, NTable::TDatabase& db) const {
+    if (IsImmediate() || !ReadSnapshot || !CanAbortPreparedWrite()) {
         return nullptr;
     }
 
     const auto& snapshots = self.GetSnapshotManager();
-    if (*ReadSnapshot >= snapshots.GetLowWatermark()) {
+    const bool canCheckWriteConflicts = WriteTx->GetLockMode() != TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation ||
+        snapshots.IsSnapshotWriteSafe(*ReadSnapshot);
+    const bool checkRemovedHistory = ReadSnapshotNeedsRecoveryCheck && *ReadSnapshot < snapshots.GetLowWatermark();
+    if (canCheckWriteConflicts && !checkRemovedHistory) {
         return nullptr;
     }
-
-    // A receiver-only participant in a legacy distributed transaction has no
-    // vote that could abort its peers. Reads such as UPDATE and INSERT make
-    // their shard a sender. A single writer may also abort locally.
-    if (const auto& locks = WriteTx->GetKqpLocks(); locks &&
-        std::ranges::any_of(locks->GetReceivingShards(), [&](ui64 shard) { return shard != TabletId; }) &&
-        (locks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit ||
-         std::ranges::find(locks->GetSendingShards(), TabletId) == locks->GetSendingShards().end()))
-    {
-        return nullptr;
-    }
-
     for (const auto& operation : WriteTx->GetOperations()) {
         const auto& tableId = operation.GetTableId();
         // The recovered operation itself pins the version. This check asks
         // whether history was already missing when that pin was recovered.
-        if (!snapshots.IsSnapshotReadable(db, tableId, *ReadSnapshot, /* locallyAcquired */ true)) {
+        if (!canCheckWriteConflicts || !snapshots.IsSnapshotReadable(db, tableId, *ReadSnapshot, /* locallyAcquired */ true)) {
             return &tableId;
         }
     }
@@ -798,25 +804,8 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
         plan.push_back(EExecutionUnitKind::LoadWriteDetails);
-
-        plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-
-        if (AppData()->FeatureFlags.GetEnableDataShardWriteAlwaysVolatile()) {
-            // Note: previous generation may have persisted InReadSets
-            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
-            plan.push_back(EExecutionUnitKind::LoadInRS);
-        } else {
-            plan.push_back(EExecutionUnitKind::BuildWriteOutRS);
-            plan.push_back(EExecutionUnitKind::StoreAndSendWriteOutRS);
-            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
-            plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-        }
-
-        plan.push_back(EExecutionUnitKind::BlockFailPoint);
-        plan.push_back(EExecutionUnitKind::ExecuteWrite);
-
-        plan.push_back(EExecutionUnitKind::CompleteWrite);
-        plan.push_back(EExecutionUnitKind::CompletedOperations);
+        // LoadWriteDetails selects the execution path using the write body
+        // and any read-set decisions already persisted for the operation.
     }
     RewriteExecutionPlan(plan);
 }

@@ -21,6 +21,7 @@ void TSnapshotManager::Reset() {
     IncompleteEdge = TRowVersion::Min();
     CompleteEdge = TRowVersion::Min();
     LowWatermark = TRowVersion::Min();
+    SnapshotWriteSafetyBoundary = TRowVersion::Min();
     ImmediateWriteEdge = TRowVersion::Min();
     ImmediateWriteEdgeReplied = TRowVersion::Min();
     UnprotectedReadEdge = TRowVersion::Min();
@@ -54,6 +55,7 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
     TRowVersion completeEdge = TRowVersion::Min();
     TRowVersion incompleteEdge = TRowVersion::Min();
     TRowVersion lowWatermark = TRowVersion::Min();
+    TRowVersion snapshotWriteSafetyBoundary = TRowVersion::Min();
     TRowVersion immediateWriteEdge = TRowVersion::Min();
     TRowVersion followerReadEdge = TRowVersion::Min();
 
@@ -61,6 +63,7 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
     ui64 keepSnapshotTimeout = 0;
     ui64 unprotectedReads = 0;
     ui64 followerReadEdgeRepeatable = 0;
+    ui64 snapshotWriteSafetyGeneration = 0;
 
     ready &= Self->SysGetUi64(db, Schema::Sys_MinWriteVersionStep, minWriteVersion.Step);
     ready &= Self->SysGetUi64(db, Schema::Sys_MinWriteVersionTxId, minWriteVersion.TxId);
@@ -74,6 +77,11 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
     ready &= Self->SysGetUi64(db, Schema::SysMvcc_IncompleteEdgeTxId, incompleteEdge.TxId);
     ready &= Self->SysGetUi64(db, Schema::SysMvcc_LowWatermarkStep, lowWatermark.Step);
     ready &= Self->SysGetUi64(db, Schema::SysMvcc_LowWatermarkTxId, lowWatermark.TxId);
+    ready &= Self->SysGetUi64(db, Schema::SysMvcc_SnapshotWriteSafetyStep, snapshotWriteSafetyBoundary.Step);
+    ready &= Self->SysGetUi64(db, Schema::SysMvcc_SnapshotWriteSafetyTxId, snapshotWriteSafetyBoundary.TxId);
+    if (!Self->IsFollower()) {
+        ready &= Self->SysGetUi64(db, Schema::SysMvcc_SnapshotWriteSafetyGeneration, snapshotWriteSafetyGeneration);
+    }
     ready &= Self->SysGetUi64(db, Schema::SysMvcc_ImmediateWriteEdgeStep, immediateWriteEdge.Step);
     ready &= Self->SysGetUi64(db, Schema::SysMvcc_ImmediateWriteEdgeTxId, immediateWriteEdge.TxId);
     ready &= Self->SysGetUi64(db, Schema::SysMvcc_FollowerReadEdgeStep, followerReadEdge.Step);
@@ -87,6 +95,7 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
         CompleteEdge = completeEdge;
         IncompleteEdge = incompleteEdge;
         LowWatermark = lowWatermark;
+        SnapshotWriteSafetyBoundary = snapshotWriteSafetyBoundary;
         ImmediateWriteEdge = immediateWriteEdge;
         if (ImmediateWriteEdge.Step <= Max(CompleteEdge.Step, IncompleteEdge.Step)) {
             ImmediateWriteEdgeReplied = immediateWriteEdge;
@@ -129,6 +138,20 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
                 ImmediateWriteEdgeReplied = ImmediateWriteEdge;
             }
 
+            const ui64 generation = Self->Generation();
+            if (!snapshotWriteSafetyGeneration || snapshotWriteSafetyGeneration + 1 < generation) {
+                // Before this generation, an old compactor may have removed
+                // the last committed version of an absent key. Even a retained
+                // read snapshot cannot prove there were no subsequent writes.
+                const auto lastPlanned = Self->Pipeline.GetLastPlannedTx();
+                RaiseSnapshotWriteSafetyBoundary(db, Max(LowWatermark, MinWriteVersion,
+                    CompleteEdge, IncompleteEdge, ImmediateWriteEdge, Self->LastCompleteTxVersion(),
+                    TRowVersion(lastPlanned.Step, lastPlanned.TxId)));
+            }
+            if (snapshotWriteSafetyGeneration != generation) {
+                Self->PersistSys(db, Schema::SysMvcc_SnapshotWriteSafetyGeneration, generation);
+            }
+
             // We had UnprotectedReads enabled by default for a long time, but
             // delayed persistently marking shard until the first snapshot read.
             // We assume unprotected reads unconditionally now, but make sure
@@ -159,6 +182,18 @@ bool TSnapshotManager::ReloadSnapshots(NIceDb::TNiceDb& db) {
         TString name = rowset.GetValue<Schema::Snapshots::Name>();
         ui64 flags = rowset.GetValue<Schema::Snapshots::Flags>();
         ui64 timeout_ms = rowset.GetValue<Schema::Snapshots::TimeoutMs>();
+
+        // Legacy TRUNCATE could remove history without discarding the snapshot.
+        // Hide such records immediately and let the leader's startup cleanup erase them.
+        if (!(flags & TSnapshot::FlagRemoved) && oid == Self->GetPathOwnerId()) {
+            if (const auto* table = Self->GetUserTables().FindPtr(tid)) {
+                const TRowVersion version(step, txId);
+                const auto& removed = db.GetDatabase().GetRemovedRowVersions((*table)->LocalTid);
+                if (removed.Contains(version, version.Next())) {
+                    flags |= TSnapshot::FlagRemoved;
+                }
+            }
+        }
 
         TSnapshotKey key(oid, tid, step, txId);
 
@@ -415,6 +450,15 @@ void TSnapshotManager::RemoveRowVersions(NTable::TDatabase& db, const TRowVersio
 bool TSnapshotManager::IsSnapshotRetentionEnabled() const {
     return AppData()->FeatureFlags.GetEnableSnapshotsLocking()
         && AppData()->FeatureFlags.GetEnableDataShardSnapshotLocking();
+}
+
+void TSnapshotManager::RaiseSnapshotWriteSafetyBoundary(NIceDb::TNiceDb& db, const TRowVersion& version) {
+    using Schema = TDataShard::Schema;
+    if (SnapshotWriteSafetyBoundary < version) {
+        Self->PersistSys(db, Schema::SysMvcc_SnapshotWriteSafetyStep, version.Step);
+        Self->PersistSys(db, Schema::SysMvcc_SnapshotWriteSafetyTxId, version.TxId);
+        SnapshotWriteSafetyBoundary = version;
+    }
 }
 
 TSnapshotRetentionPolicy TSnapshotManager::GetSnapshotRetentionPolicy() const {

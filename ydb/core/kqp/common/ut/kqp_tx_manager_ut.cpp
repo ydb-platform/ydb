@@ -321,6 +321,29 @@ Y_UNIT_TEST_SUITE(TxManagerPessimisticLock) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TxManagerSnapshotRW) {
+
+    Y_UNIT_TEST(SnapshotWritersParticipateInDecision) {
+        for (auto isolation : {NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW, NKqpProto::ISOLATION_LEVEL_SERIALIZABLE}) {
+            auto txManager = CreateKqpTransactionManager();
+            txManager->SetAllowVolatile(false);
+            txManager->SetHasSnapshot(true);
+            txManager->SetIsolationLevel(isolation);
+            txManager->AddShard(1, false, "/Root/A");
+            txManager->AddShard(2, false, "/Root/B");
+            txManager->AddAction(1, IKqpTransactionManager::EAction::WRITE);
+            txManager->AddAction(2, IKqpTransactionManager::EAction::WRITE | IKqpTransactionManager::EAction::READ);
+
+            txManager->StartPrepare();
+            const auto info = txManager->GetPrepareTransactionInfo();
+            UNIT_ASSERT(info.ReceivingShards.contains(1));
+            UNIT_ASSERT(info.ReceivingShards.contains(2));
+            UNIT_ASSERT_VALUES_EQUAL(info.SendingShards.contains(1), isolation == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW);
+            UNIT_ASSERT(info.SendingShards.contains(2));
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(SameBorders) {
 
     // TTableRange holds non-owning TConstArrayRef borders, so the cell vectors

@@ -8,6 +8,7 @@
 #include <util/system/thread.h>
 #include <util/generic/map.h>
 
+#include <grpc/grpc_server_disconnect.h>
 #include <grpcpp/resource_quota.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
 
@@ -280,6 +281,12 @@ void TGRpcServer::Start() {
 
     if (Options_.ExternalListener) {
         Options_.ExternalListener->Start();
+    }
+}
+
+void TGRpcServer::DisconnectClients() {
+    if (Server_) {
+        grpc_server_disconnect_clients(Server_->c_server());
     }
 }
 

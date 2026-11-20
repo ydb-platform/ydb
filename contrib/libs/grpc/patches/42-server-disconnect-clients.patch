@@ -1,0 +1,79 @@
+--- a/src/core/lib/surface/server.h
++++ b/src/core/lib/surface/server.h
+@@ -209,7 +209,7 @@
+
+   void StopListening();
+
+-  void CancelAllCalls() ABSL_LOCKS_EXCLUDED(mu_global_);
++  void DisconnectClients(grpc_error_handle error) ABSL_LOCKS_EXCLUDED(mu_global_);
+
+   void SendGoaways() ABSL_LOCKS_EXCLUDED(mu_global_, mu_call_);
+
+--- a/src/core/lib/surface/server.cc
++++ b/src/core/lib/surface/server.cc
+@@ -39,6 +39,7 @@
+
+ #include <grpc/byte_buffer.h>
+ #include <grpc/grpc.h>
++#include <grpc/grpc_server_disconnect.h>
+ #include <grpc/impl/channel_arg_names.h>
+ #include <grpc/impl/connectivity_state.h>
+ #include <grpc/slice.h>
+@@ -1140,14 +1141,13 @@
+   }
+ }
+
+-void Server::CancelAllCalls() {
++void Server::DisconnectClients(grpc_error_handle error) {
+   ChannelBroadcaster broadcaster;
+   {
+     MutexLock lock(&mu_global_);
+     broadcaster.FillChannelsLocked(GetChannelsLocked());
+   }
+-  broadcaster.BroadcastShutdown(
+-      /*send_goaway=*/false, GRPC_ERROR_CREATE("Cancelling all calls"));
++  broadcaster.BroadcastShutdown(/*send_goaway=*/false, std::move(error));
+ }
+
+ void Server::SendGoaways() {
+@@ -1957,7 +1957,16 @@
+   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
+   grpc_core::ExecCtx exec_ctx;
+   GRPC_API_TRACE("grpc_server_cancel_all_calls(server=%p)", 1, (server));
+-  grpc_core::Server::FromC(server)->CancelAllCalls();
++  grpc_core::Server::FromC(server)->DisconnectClients(
++      GRPC_ERROR_CREATE("Cancelling all calls"));
++}
++
++void grpc_server_disconnect_clients(grpc_server* server) {
++  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
++  grpc_core::ExecCtx exec_ctx;
++  GRPC_API_TRACE("grpc_server_disconnect_clients(server=%p)", 1, (server));
++  grpc_core::Server::FromC(server)->DisconnectClients(
++      GRPC_ERROR_CREATE("Disconnecting clients"));
+ }
+
+ void grpc_server_destroy(grpc_server* server) {
+--- /dev/null
++++ b/include/grpc/grpc_server_disconnect.h
+@@ -0,0 +1,20 @@
++#ifndef GRPC_GRPC_SERVER_DISCONNECT_H
++#define GRPC_GRPC_SERVER_DISCONNECT_H
++
++#include <grpc/impl/grpc_types.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/** YDB extension. Initiate a forced disconnect of all transports currently
++    attached to this server, including idle connections and active calls.
++    The server keeps accepting connections. Transports attached after the
++    snapshot are unaffected. */
++GRPCAPI void grpc_server_disconnect_clients(grpc_server* server);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* GRPC_GRPC_SERVER_DISCONNECT_H */

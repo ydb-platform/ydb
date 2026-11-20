@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     contrib/libs/grpc
     library/cpp/monlib/dynamic_counters/percentile
+    library/cpp/time_provider
 )
 
 END()

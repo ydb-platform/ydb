@@ -175,13 +175,17 @@ namespace {
             ui32 configVersion = 1'000'000;
             const auto configEdge = Ctx->Runtime->AllocateEdgeActor();
             auto setWriteMode = [&](NKikimrPQ::TPQTabletConfig::EWriteMode mode) {
-                auto config = MakePQTabletConfig({.partitions = 4}, {}, *Ctx->Runtime, ++configVersion);
-                config.SetWriteMode(mode);
-                SendPQTabletConfig(*Ctx->Runtime, Ctx->TabletId, configEdge, config,
-                    configVersion, configVersion);
+                auto observer = Ctx->Runtime->AddObserver<TEvPersQueue::TEvUpdateConfig>(
+                    [mode](TEvPersQueue::TEvUpdateConfig::TPtr& ev) {
+                        ev->Get()->MutableRecord()->MutableTabletConfig()->SetWriteMode(mode);
+                    });
+                PQTabletPrepare({.partitions = 1, .specVersion = ++configVersion}, {},
+                    *Ctx->Runtime, Ctx->TabletId, configEdge);
+                observer.Remove();
             };
             auto checkResponse = [&](EKafkaErrors expected) {
-                auto event = GrabProduceResponse();
+                auto event = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(event);
                 UNIT_ASSERT_VALUES_EQUAL(event->ErrorCode, expected);
                 auto response = std::dynamic_pointer_cast<TProduceResponseData>(event->Response);
                 UNIT_ASSERT(response);
@@ -200,7 +204,7 @@ namespace {
                     for (auto mode : {NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE,
                                       NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED}) {
                         setWriteMode(mode);
-                        SendProduceToPartitions({0}, {}, producerId, 0, 0, 0, 0, ECompressionType::NONE, count);
+                        SendProduceToPartitions({0}, {}, producerId, 0, 0, count);
                         const bool temporary = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
                         const auto rejected = checkResponse(EKafkaErrors::UNKNOWN_SERVER_ERROR);
                         UNIT_ASSERT(rejected.ErrorMessage);
@@ -209,7 +213,7 @@ namespace {
 
                         // Retry the same batch and sequence after reopening the topic.
                         setWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
-                        SendProduceToPartitions({0}, {}, producerId, 0, 0, 0, 0, ECompressionType::NONE, count);
+                        SendProduceToPartitions({0}, {}, producerId, 0, 0, count);
                         const auto written = checkResponse(EKafkaErrors::NONE_ERROR);
                         UNIT_ASSERT_VALUES_EQUAL(written.BaseOffset, endOffset);
                         endOffset += count;

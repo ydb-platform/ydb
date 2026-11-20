@@ -40,15 +40,7 @@ SRCS(
     topic_timestamp_ut.cpp
     topic_replication_ut.cpp
     topic_ut.cpp
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    write_enabled_ut.cpp
-=======
     write_mode_ut.cpp
->>>>>>> 8c7975308c1 (better)
-    write_sessions_quoter_ut.cpp
->>>>>>> 60fa900e6fb (LOGBROKER-10811 Add write enabled flag to pqconfig)
 )
 
 END()

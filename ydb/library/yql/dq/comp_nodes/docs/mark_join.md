@@ -40,6 +40,9 @@ The check is:
 #### Complexity
 Lookup: O(1). A hit is one hash lookup. A miss checks two booleans.
 
+#### Spilling
+Spilling works as usual. `BuildNotEmpty_` and `BuildHasNull_` are two booleans. They are not written to disk.
+
 
 ## One mark column and regular keys
 
@@ -76,10 +79,11 @@ Right side: `(1, 10)`, `(1, null)`, `(2, 20)`.
 
 If the mark column cannot be null on either side, the second index is not built. A miss is `false`. If only the right side can contain null, only `NullRows` is filled.
 
-`NullRows` and `OtherRows` are not spilled. When they are built and dropped is described in [Buckets and spilling](#buckets-and-spilling).
-
 #### Complexity
 Lookup: O(1). One lookup by the full key, and on a miss one lookup by the regular key. The second lookup stops at the first row with that key.
+
+#### Spilling
+Spilling works as usual, with one change. The bucket is chosen by the regular key. The hash table inside the bucket is built and looked up by the full key. `NullRows` and `OtherRows` are not spilled. They are built for the bucket that is in memory, and built again when a spilled bucket is read back.
 
 ## Several mark columns and regular keys
 
@@ -129,6 +133,9 @@ Right side. `k = 1`: `(10, null)` and `(20, 30)`. `k = 2`: `(5, 5)`.
 - Every mark column on the left is null: O(1).
 - Otherwise look up `k` in `NullRows`. If the left row has a null, look it up in `OtherRows` too. Each lookup returns only the rows with this `k`, and those rows are compared until one of them makes the answer `null`. A `false` answer has compared all of them: O(N). N is the number of rows with this `k` in the tables that were looked up.
 
+#### Spilling
+Spilling is the same as for one mark column and regular keys. The bucket is chosen by the regular key. The hash table inside the bucket is built and looked up by the full key. `NullRows` and `OtherRows` are not spilled. They are rebuilt when a spilled bucket is read back.
+
 ## Several mark columns, no regular keys
 
 ```sql
@@ -148,27 +155,12 @@ If the hash table and the flags answered neither `true` nor `false`, the copied 
 - The hash table or the flags answer: O(1).
 - Otherwise the cross-join comparison: O(S), where S is the number of copied right rows.
 
-## Buckets and spilling
-
-The rows are split into a fixed set of buckets. A bucket is either kept in memory or written to disk.
-
-Rows of one group stay in one bucket. Before a row is placed, the low bits of its hash are replaced with a hash of the regular key. The left row of the same group gets the same bits, so it lands in the same bucket. A group is never cut apart. One very large group cannot be spilled in pieces: the whole bucket goes to disk.
-
-While memory is low, some buckets are written to disk. The left rows of those buckets are written too, and they are not answered yet.
-
-The buckets that stay in memory are turned into hash tables, one bucket at a time. When a bucket's table is ready, the second index for that bucket is built from the same rows. These indexes stay until every in-memory left row has been answered. Then they are dropped. They are not written to disk.
-
-A spilled bucket is read back later, on its own. Its hash table and its second index are built again, its left rows are answered, and the index is dropped before the next spilled bucket.
-
-The second index has nothing of its own to spill. If memory runs out while that index is being built, the join stops.
-
-The case with several mark columns and no group has no second index and no group. Its hash buckets are the usual ones. Rows that must be compared later are copied into their own buckets. Those buckets are filled round-robin, not by the join key, and they do spill. After the left side is read, the saved right rows are loaded back in blocks that fit in memory, and each postponed left row is compared with the current block.
+#### Spilling
+The hash table spills as usual: its buckets are chosen by the full key. The copy is the change. It has its own buckets, filled round-robin, and those buckets spill too. The cross join reads them back in blocks that fit in memory.
 
 ## Not supported
 
-- A comparison other than equality, such as `> ANY`.
-- An extra join condition besides the keys.
+- Join filters.
 - Treating null as equal on a mark key.
 - Building the hash table from the left side.
-- A mark key that does not fit in one column.
 - More than 32 mark keys.

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_planner_strategy.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
@@ -126,7 +128,7 @@ private:
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
-    void LogMemoryStatistics(const TLogFunc& logFunc);
+    void LogMemoryStatistics(const TVector<IKqpPlannerStrategy::TNodeResources>& nodes, const TLogFunc& logFunc);
     void PrepareCheckpoints();
     void SendReadyState();
 

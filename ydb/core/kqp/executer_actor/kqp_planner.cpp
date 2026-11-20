@@ -160,17 +160,16 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
 
 // ResourcesSnapshot, ResourceEstimations
 
-void TKqpPlanner::LogMemoryStatistics(const TLogFunc& logFunc) {
+void TKqpPlanner::LogMemoryStatistics(const TVector<IKqpPlannerStrategy::TNodeResources>& nodes, const TLogFunc& logFunc) {
     uint64_t totalMemory = 0;
     uint32_t totalComputeActors = 0;
-    for (auto& node : ResourcesSnapshot) {
-        logFunc(TStringBuilder() << "[AvailableResources] node #" << node.GetNodeId()
-            << " memory: " << (node.GetTotalMemory() - node.GetUsedMemory())
-            << ", ca: " << node.GetAvailableComputeActors());
-        totalMemory += (node.GetTotalMemory() - node.GetUsedMemory());
-        totalComputeActors += node.GetAvailableComputeActors();
+    for (const auto& node : nodes) {
+        logFunc(TStringBuilder() << "[AvailableResources] node #" << node.NodeId
+            << " memory: " << node.AvailableMemory << ", ca: " << node.ExecutionUnits);
+        totalMemory += node.AvailableMemory;
+        totalComputeActors += node.ExecutionUnits;
     }
-    logFunc(TStringBuilder() << "Total nodes: " << ResourcesSnapshot.size() << ", total memory: " << totalMemory << ", total CA:" << totalComputeActors);
+    logFunc(TStringBuilder() << "Total nodes: " << nodes.size() << ", total memory: " << totalMemory << ", total CA:" << totalComputeActors);
 
     totalMemory = 0;
     for (const auto& task : ResourceEstimations) {
@@ -477,16 +476,11 @@ TKqpPlanner::TPlacementResult TKqpPlanner::AssignTasksToNodes() {
                                                                                                           {"msg", msg}); });
     }
 
-    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_DEBUG("Memory statistics before task planning",
-                                                                                                      {"txId", TxId},
-                                                                                                      {"ctx", *UserRequestContext},
-                                                                                                      {"msg", msg}); });
-
     ui64 selfNodeId = ExecuterId.NodeId();
     TString selfNodeDC;
 
-    TVector<const NKikimrKqp::TKqpNodeResources*> allNodes;
-    TVector<const NKikimrKqp::TKqpNodeResources*> executerDcNodes;
+    TVector<IKqpPlannerStrategy::TNodeResources> allNodes;
+    TVector<IKqpPlannerStrategy::TNodeResources> executerDcNodes;
     allNodes.reserve(ResourcesSnapshot.size());
 
     for (const auto& snapNode: ResourcesSnapshot) {
@@ -498,11 +492,21 @@ TKqpPlanner::TPlacementResult TKqpPlanner::AssignTasksToNodes() {
     }
 
     for (const auto& snapNode: ResourcesSnapshot) {
-        allNodes.push_back(&snapNode);
+        const bool local = snapNode.GetNodeId() == selfNodeId;
+        allNodes.push_back({
+            .NodeId = snapNode.GetNodeId(),
+            .ResourceManager = ActorIdFromProto(snapNode.GetResourceManagerActorId()),
+            .AvailableMemory = local ? localResources.Memory : snapNode.GetTotalMemory() - snapNode.GetUsedMemory(),
+            .ExecutionUnits = local ? localResources.ExecutionUnits : snapNode.GetAvailableComputeActors(),
+        });
         if (selfNodeDC == snapNode.GetKqpProxyNodeResources().GetDataCenterId()) {
-            executerDcNodes.push_back(&snapNode);
+            executerDcNodes.push_back(allNodes.back());
         }
     }
+
+    LogMemoryStatistics(allNodes, [TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) {
+        YDB_LOG_DEBUG("Memory statistics before task planning", {"txId", TxId}, {"ctx", *UserRequestContext}, {"msg", msg});
+    });
 
     TVector<IKqpPlannerStrategy::TResult> plan;
 
@@ -515,7 +519,7 @@ TKqpPlanner::TPlacementResult TKqpPlanner::AssignTasksToNodes() {
     }
 
     if (plan.empty()) {
-        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_ERROR("Memory statistics after failed task planning",
+        LogMemoryStatistics(allNodes, [TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_ERROR("Memory statistics after failed task planning",
                                                                                                           {"txId", TxId},
                                                                                                           {"ctx", *UserRequestContext},
                                                                                                           {"msg", msg}); });

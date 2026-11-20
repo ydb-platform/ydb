@@ -236,4 +236,89 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
     }
 }
 
+Y_UNIT_TEST_SUITE(KqpTaskPlacement) {
+    Y_UNIT_TEST_TWIN(StaleLocalCapacity, StaleMemory) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(1);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto executer = runtime.AllocateEdgeActor();
+        auto rm = GetKqpResourceManager(executer.NodeId());
+
+        runtime.RunCall([&] {
+            const auto live = rm->GetLocalResources();
+            UNIT_ASSERT_VALUES_EQUAL(live.ExecutionUnits, 1u);
+            TTaskResourceEstimation estimate;
+            rm->EstimateTaskResources(estimate, 2);
+            UNIT_ASSERT(estimate.TotalMemoryLimit > 0 && live.Memory >= 2 * estimate.TotalMemoryLimit);
+
+            // Two unpinned tasks and only one live local slot: the local fast path cannot succeed.
+            // The peer has room for one task. The other fits locally, but not according to gossip.
+            TVector<NKikimrKqp::TKqpNodeResources> snapshot(2);
+            auto& local = snapshot[0];
+            local.SetNodeId(executer.NodeId());
+            local.SetTotalMemory(live.Memory);
+            local.SetUsedMemory(StaleMemory ? live.Memory : 0);
+            local.SetAvailableComputeActors(StaleMemory ? 1 : 0);
+            const ui32 peerId = executer.NodeId() + 1;
+            auto& peer = snapshot[1];
+            peer.SetNodeId(peerId);
+            peer.SetTotalMemory(live.Memory);
+            peer.SetAvailableComputeActors(1);
+
+            NKqpProto::TKqpPhyTx txProto;
+            txProto.AddStages();
+            const IKqpGateway::TPhysicalTxData tx(std::make_shared<TKqpPhyTxHolder>(nullptr, &txProto, nullptr, nullptr), nullptr);
+            const TVector<IKqpGateway::TPhysicalTxData> transactions;
+            const NKikimrConfig::TTableServiceConfig::TAggregationConfig aggregation;
+            TKqpTasksGraph graph("/Root", transactions, nullptr, {}, aggregation, nullptr, {}, nullptr, false);
+            graph.GetMeta().UserRequestContext = MakeIntrusive<TUserRequestContext>();
+            const NYql::NDq::TStageId stageId(0, 0);
+            graph.AddStageInfo(TStageInfo(stageId, 0, 0, TStageInfoMeta(tx)));
+            auto& stage = graph.GetStageInfo(stageId);
+            graph.AddTask(stage);
+            graph.AddTask(stage);
+
+            NWilson::TSpan span;
+            TKqpPlanner planner({
+                .TasksGraph = graph,
+                .TxId = TxId,
+                .Executer = executer,
+                .Database = "/Root",
+                .UserToken = {},
+                .Deadline = {},
+                .StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
+                .StatsReportingSettings = {},
+                .RlPath = {},
+                .ExecuterSpan = span,
+                .ResourcesSnapshot = std::move(snapshot),
+                .ExecuterRetriesConfig = {},
+                .MkqlMemoryLimit = 0,
+                .AsyncIoFactory = nullptr,
+                .AllowSinglePartitionOpt = false,
+                .FederatedQuerySetup = std::nullopt,
+                .ResourceManager_ = rm,
+                .CaFactory_ = {},
+                .BlockTrackingMode = {},
+                .ArrayBufferMinFillPercentage = {},
+                .BufferPageAllocSize = {},
+                .EnableCheckpoints = false,
+                .EnableWatermarks = false,
+            });
+            auto placement = planner.AssignTasksToNodes();
+            if (placement.Error) {
+                UNIT_FAIL(placement.Error->Get<TEvKqp::TEvAbortExecution>()->GetIssues().ToString());
+            }
+            THashSet<ui64> nodes;
+            for (const auto& task : graph.GetTasks()) {
+                UNIT_ASSERT(task.Meta.ExpectedNodeId);
+                nodes.insert(*task.Meta.ExpectedNodeId);
+            }
+            UNIT_ASSERT(nodes.contains(executer.NodeId()));
+            UNIT_ASSERT(nodes.contains(peerId));
+        });
+    }
+}
+
 } // namespace NKikimr::NKqp

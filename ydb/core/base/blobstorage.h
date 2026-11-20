@@ -725,8 +725,8 @@ struct TEvBlobStorage {
         // restore a MustRestoreFirst read triggers -- is still accepted when the group is low on
         // space. It is never stored along with the blob.
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
-        // DSProxy-generated work may reach the logical bridge during conversion or a cross-group PATCH.
-        bool IsDSProxySubrequest = false;
+        // I/O generated on behalf of another proxy request must not start a new logical bridge sample.
+        bool IsProxySubrequest = false;
 
         TEvRequestCommon() = default;
 
@@ -737,7 +737,7 @@ struct TEvBlobStorage {
         // A clone keeps the admission hint, but starts its own restart counter and execution relay.
         TEvRequestCommon(TCloneEventPolicy, const TEvRequestCommon& origin)
             : DataKind(origin.DataKind)
-            , IsDSProxySubrequest(origin.IsDSProxySubrequest)
+            , IsProxySubrequest(origin.IsProxySubrequest)
         {}
 
         static TString GetRequestName(ui32 eventType) {

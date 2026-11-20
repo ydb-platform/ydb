@@ -1349,7 +1349,7 @@ namespace NKikimr {
         }
 
         void MarkReceived(TEvBlobStorage::TEvRequestCommon& request) {
-            if (!request.ForceGroupGeneration && !request.IsDSProxySubrequest && !GetRoutingCounters(request)) {
+            if (!request.ForceGroupGeneration && !request.IsProxySubrequest && !GetRoutingCounters(request)) {
                 request.BridgeProxyStartTime = TActivationContext::Monotonic();
                 request.BridgeProxyPoolCounters = PoolCounters;
             }

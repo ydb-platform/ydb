@@ -60,7 +60,7 @@ private:
         bool IgnoreBlock = false;
         bool AlreadyEncrypted = false;
         bool IsZeroEntry = false;
-        bool IsDSProxySubrequest = false;
+        bool IsProxySubrequest = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         TWriteSource WriteSource;
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
@@ -79,7 +79,7 @@ private:
             , IgnoreBlock(msg.IgnoreBlock)
             , AlreadyEncrypted(msg.AlreadyEncrypted)
             , IsZeroEntry(msg.IsZeroEntry)
-            , IsDSProxySubrequest(msg.IsDSProxySubrequest)
+            , IsProxySubrequest(msg.IsProxySubrequest)
             , ExtraBlockChecks(std::move(msg.ExtraBlockChecks))
             , WriteSource(msg.WriteSource)
             , DataKind(msg.DataKind)

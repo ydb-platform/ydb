@@ -167,7 +167,7 @@ namespace NKikimr {
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::SkeletonVMovedPatch,
                         });
-                put->IsDSProxySubrequest = true;
+                put->IsProxySubrequest = true;
                 put->Orbit = std::move(Orbit);
 
                 YDB_LOG_DEBUG_CTX(ctx, "Send Put ub TEvVMovedPatch",
@@ -212,7 +212,7 @@ namespace NKikimr {
 
                 std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0,
                         OriginalId.BlobSize(), Deadline, NKikimrBlobStorage::AsyncRead);
-                get->IsDSProxySubrequest = true;
+                get->IsProxySubrequest = true;
                 get->Orbit = std::move(Event->Get()->Orbit);
 
                 YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Send Get ub TEvVMovedPatch",

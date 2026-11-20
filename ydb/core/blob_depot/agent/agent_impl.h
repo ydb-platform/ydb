@@ -492,7 +492,8 @@ namespace NKikimr::NBlobDepot {
 
             void CheckQueryExecutionTime(TMonotonic now);
             bool CheckDeadline(TMonotonic now);
-            void SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const;
+            void SetResolveParameters(NKikimrBlobDepot::TEvResolve& resolve,
+                NKikimrBlobStorage::TDataKind::E dataKind) const;
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
@@ -566,7 +567,7 @@ namespace NKikimr::NBlobDepot {
                 , Request(*Event->Get<TEvent>())
             {
                 ExecutionRelay = std::move(Request.ExecutionRelay);
-                SkipBridgeAccountingForSubrequests = Request.IsDSProxySubrequest ||
+                SkipBridgeAccountingForSubrequests = Request.IsProxySubrequest ||
                     (ExecutionRelay && ExecutionRelay->BridgeProxyPoolCounters);
             }
 

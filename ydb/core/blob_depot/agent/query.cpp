@@ -262,9 +262,14 @@ namespace NKikimr::NBlobDepot {
         return true;
     }
 
-    void TBlobDepotAgent::TQuery::SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const {
+    void TBlobDepotAgent::TQuery::SetResolveParameters(NKikimrBlobDepot::TEvResolve& resolve,
+            NKikimrBlobStorage::TDataKind::E dataKind) const {
+        resolve.SetDataKind(dataKind);
         if (Deadline != TInstant::Max()) {
             resolve.SetDeadlineUs(Deadline.MicroSeconds());
+        }
+        if (SkipBridgeAccountingForSubrequests) {
+            resolve.SetSkipBridgeAccountingForSubrequests(true);
         }
     }
 

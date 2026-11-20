@@ -294,6 +294,7 @@ namespace NKikimr::NBlobDepot {
                 {"mustRestoreFirst", mustRestoreFirst});
             auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, Deadline, true);
             ev->Decommission = true;
+            ev->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
             SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), mustRestoreFirst);
             ++RangesInFlight;
         }
@@ -368,6 +369,7 @@ namespace NKikimr::NBlobDepot {
                     NKikimrBlobStorage::EGetHandleClass::FastRead, false /*mustRestoreFirst*/,
                     !mustRestoreFirst /*isIndexOnly*/);
                 ev->Decommission = true;
+                ev->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
                 SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), bytes);
             }
         }
@@ -432,13 +434,15 @@ namespace NKikimr::NBlobDepot {
                 // This is the restore the MustRestoreFirst read asked for, so it inherits the kind of
                 // the reader: the payload is user data, but a tablet reading its own log during boot
                 // cannot get up until this copy lands.
-                SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
-                        .BlobId = id,
-                        .Buffer = TRope(TRcBuf(buffer)),
-                        .Deadline = Deadline,
-                        .WriteSource = TWriteSource::BlobDepotPut,
-                        .DataKind = Ev->Get()->Record.GetDataKind(),
-                    }), (ui64)keep | (ui64)doNotKeep << 1);
+                auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                    .BlobId = id,
+                    .Buffer = TRope(TRcBuf(buffer)),
+                    .Deadline = Deadline,
+                    .WriteSource = TWriteSource::BlobDepotPut,
+                    .DataKind = Ev->Get()->Record.GetDataKind(),
+                });
+                ev->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
+                SendToBSProxy(SelfId(), channel.GroupId, ev.release(), (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
                 Y_ABORT_UNLESS(inserted);
                 const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;

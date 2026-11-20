@@ -57,8 +57,7 @@ namespace NKikimr::NBlobDepot {
                 range->SetReverse(Reverse);
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(Request.MustRestoreFirst);
-                resolve.SetDataKind(Request.DataKind);
-                SetResolveDeadline(resolve);
+                SetResolveParameters(resolve, Request.DataKind);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
             }

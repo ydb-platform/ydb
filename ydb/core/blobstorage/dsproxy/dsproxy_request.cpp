@@ -893,7 +893,7 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS(common);
                 if (common) {
                     common->DataKind = DataKind;
-                    common->IsDSProxySubrequest = IsDSProxySubrequest;
+                    common->IsProxySubrequest = IsProxySubrequest;
                 }
             }
             ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];

@@ -593,6 +593,76 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         }});
     }
 
+    Y_UNIT_TEST(PatchResolvesColdDecommittingSource) {
+        TFeatureFlags flags;
+        flags.SetEnableVPatch(false);
+        TEnvironmentSetup env(MakeBridgedSettings(flags));
+        TDataChecker checker(env);
+        const ui32 sourceGroup = PrepareBridgedCluster(env, checker);
+        const auto groups = env.GetGroups();
+        const ui32 targetGroup = groups.front() == sourceGroup ? groups.back() : groups.front();
+        const auto& originalId = std::get<1>(checker.GetWritten()[1]);
+        const auto& controlId = std::get<1>(checker.GetWritten()[2]);
+        SetupSchemeCacheStub(env);
+
+        TFilterChain chain(env);
+        std::optional<TActorId> bridge;
+        CaptureBridgeProxyBehindAgent(chain, bridge);
+        TLogoBlobID expectedLookup = originalId;
+        ui32 metadataReads = 0;
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (bridge && ev->Sender == *bridge && ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilateResult) {
+                // A page ending at the first blob finishes block and barrier assimilation. Leave both test keys
+                // beyond its cursor so that resolving them requires a physical index lookup.
+                auto& blobs = ev->Get<TEvBlobStorage::TEvAssimilateResult>()->Blobs;
+                if (!blobs.empty() && blobs.front().Id < originalId) {
+                    blobs.resize(1);
+                }
+            } else if (bridge && ev->GetRecipientRewrite() == *bridge && ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+                const auto& get = *ev->Get<TEvBlobStorage::TEvGet>();
+                if (get.QuerySize == 1 && get.Queries[0].Id == expectedLookup && get.Decommission && get.IsIndexOnly &&
+                        get.GetHandleClass == NKikimrBlobStorage::FastRead) {
+                    const auto *sender = env.Runtime->GetActor(ev->Sender);
+                    UNIT_ASSERT(sender && TypeName(*sender).EndsWith("::TResolveDecommitActor"));
+                    ++metadataReads;
+                }
+            }
+            return true;
+        });
+        auto& nextPage = chain.AddHold([&](IEventHandle& ev) {
+            return bridge && ev.GetRecipientRewrite() == *bridge && ev.GetTypeRewrite() == TEvBlobStorage::EvAssimilate &&
+                ev.Get<TEvBlobStorage::TEvAssimilate>()->SkipBlobsUpTo.has_value();
+        });
+        const auto response = DecommitGroup(env, sourceGroup);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        nextPage.WaitForHeld();
+
+        const auto edge = env.Runtime->AllocateEdgeActor(bridge->NodeId(), __FILE__, __LINE__);
+        const auto get = GetBridgeRequestCounters(env, bridge->NodeId())->GetSubgroup("handleClass", "GetFast")
+            ->GetSubgroup("sizeClass", "256");
+        const auto completed = get->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
+        const auto bytes = get->GetCounter("bridgeRequestBytes", true);
+        const auto completedBefore = completed->Val();
+        const auto bytesBefore = bytes->Val();
+
+        CheckCrossGroupPatch(env, edge, sourceGroup, targetGroup, originalId);
+        UNIT_ASSERT_GT(metadataReads, 0);
+        UNIT_ASSERT_VALUES_EQUAL(completed->Val(), completedBefore);
+        UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), bytesBefore);
+
+        expectedLookup = controlId;
+        const auto readsBefore = metadataReads;
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, sourceGroup, new TEvBlobStorage::TEvGet(controlId, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, false /*mustRestoreFirst*/, true /*isIndexOnly*/));
+        });
+        CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), {});
+        UNIT_ASSERT_VALUES_EQUAL(metadataReads, readsBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(completed->Val(), completedBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), bytesBefore + controlId.BlobSize());
+        nextPage.Release();
+    }
+
     // recommission is not supported in bridge mode: the group in progress keeps its VDisks in piles, and the decommitted
     // one would get them outside of any pile
     Y_UNIT_TEST(RecommissionRefused) {

@@ -255,6 +255,9 @@ message TEvResolve {
     // Wall clock time after which the requesting query no longer waits for the result; work done on its behalf in
     // decommission mode (reads of the decommitted group, copying blobs) is bounded by it. Unset means no deadline.
     optional uint64 DeadlineUs = 3;
+
+    // Set when the initiating query's backing reads and writes are excluded from logical bridge request counters.
+    optional bool SkipBridgeAccountingForSubrequests = 4;
 }
 
 message TEvResolveResult {

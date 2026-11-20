@@ -9,9 +9,8 @@ namespace NKikimr::NBlobDepot {
         auto executionRelay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
         auto& request = dynamic_cast<TEvBlobStorage::TEvRequestCommon&>(*event);
         request.ExecutionRelay = executionRelay;
-        // A backing read or write belongs to this query. The tablet issues its own bridge requests for shared
-        // decommission metadata lookups and reports those operations independently.
-        request.IsDSProxySubrequest = query->ShouldSkipBridgeAccountingForSubrequests();
+        // Direct backing requests inherit the query's bridge accounting, as do requests issued through a tablet resolve.
+        request.IsProxySubrequest = query->ShouldSkipBridgeAccountingForSubrequests();
 
         const ui64 id = NextOtherRequestId++;
         YDB_LOG_DEBUG("SendToProxy",

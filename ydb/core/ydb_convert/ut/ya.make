@@ -12,7 +12,9 @@ SRCS(
     column_table_index_entity_id_ut.cpp
     compression_ut.cpp
     dictionary_feature_flag_ut.cpp
+    kesus_description_ut.cpp
     table_description_ut.cpp
+    replication_description_ut.cpp
     ydb_convert_ut.cpp
 )
 
@@ -23,3 +25,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    permissions
+)

@@ -40,7 +40,7 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
                 {"issues", result.GetIssues().ToOneLineString()},
                 {"iteration", Backoff.GetIteration()});
 
-            if (IsRetryableError(result) && Backoff.HasMore()) {
+            if (IsRetryableError(result, Backoff)) {
                 Schedule(Backoff.Next(), new TEvents::TEvWakeup);
             } else {
                 Reply(false, result.GetIssues().ToOneLineString());

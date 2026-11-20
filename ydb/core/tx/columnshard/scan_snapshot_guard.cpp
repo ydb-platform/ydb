@@ -118,15 +118,17 @@ NOlap::TSnapshot BuildRegistryMinSnapshotForNewReads(const ui64 passedStep, cons
 class TRegistryScanSnapshotGuard: public IScanSnapshotGuard {
 private:
     const ui64 SchemeShardId;
+    const TInFlightReadsTracker& InFlightReadsTracker;
     const NOlap::IPathIdTranslator& PathIdTranslator;
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> Registry;
     const NOlap::TSnapshot MinSnapshotForNewReads;
 
 public:
     TRegistryScanSnapshotGuard(const ui64 passedStep, const ui64 schemeShardId, const NOlap::TSnapshot& lastCleanupSnapshot,
-        const NOlap::IPathIdTranslator& pathIdTranslator, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
-        const NKikimrConfig::TLongTxServiceConfig& longTxConfig)
+        const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator,
+        TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const NKikimrConfig::TLongTxServiceConfig& longTxConfig)
         : SchemeShardId(schemeShardId)
+        , InFlightReadsTracker(inFlightReadsTracker)
         , PathIdTranslator(pathIdTranslator)
         , Registry(std::move(registry))
         , MinSnapshotForNewReads(BuildRegistryMinSnapshotForNewReads(passedStep, lastCleanupSnapshot, Registry, longTxConfig))
@@ -153,7 +155,8 @@ public:
     }
 
     std::unique_ptr<NOlap::ISnapshotHolders> BuildSnapshotHolders() const override {
-        return std::make_unique<NOlap::TRegistrySnapshotHolders>(MinSnapshotForNewReads, Registry, SchemeShardId, PathIdTranslator);
+        return std::make_unique<NOlap::TRegistrySnapshotHolders>(
+            MinSnapshotForNewReads, Registry, SchemeShardId, PathIdTranslator, InFlightReadsTracker.GetActiveSnapshots(MinSnapshotForNewReads));
     }
 };
 
@@ -168,8 +171,8 @@ std::unique_ptr<IScanSnapshotGuard> CreateScanSnapshotGuard(ui64 passedStep, ui6
     if (const auto holder = AppDataVerified().SnapshotRegistryHolder) {
         auto registry = holder->Get();
         if (registry.get()) {
-            return CreateRegistryScanSnapshotGuard(
-                passedStep, schemeShardId, lastCleanupSnapshot, pathIdTranslator, std::move(registry), AppDataVerified().LongTxServiceConfig);
+            return CreateRegistryScanSnapshotGuard(passedStep, schemeShardId, lastCleanupSnapshot, inFlightReadsTracker, pathIdTranslator,
+                std::move(registry), AppDataVerified().LongTxServiceConfig);
         }
     }
 
@@ -188,10 +191,11 @@ std::unique_ptr<IScanSnapshotGuard> CreateRegistryNotReadySnapshotGuard() {
 }
 
 std::unique_ptr<IScanSnapshotGuard> CreateRegistryScanSnapshotGuard(ui64 passedStep, ui64 schemeShardId,
-    const NOlap::TSnapshot& lastCleanupSnapshot, const NOlap::IPathIdTranslator& pathIdTranslator,
-    TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const NKikimrConfig::TLongTxServiceConfig& longTxConfig) {
+    const NOlap::TSnapshot& lastCleanupSnapshot, const TInFlightReadsTracker& inFlightReadsTracker,
+    const NOlap::IPathIdTranslator& pathIdTranslator, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
+    const NKikimrConfig::TLongTxServiceConfig& longTxConfig) {
     return std::make_unique<TRegistryScanSnapshotGuard>(
-        passedStep, schemeShardId, lastCleanupSnapshot, pathIdTranslator, std::move(registry), longTxConfig);
+        passedStep, schemeShardId, lastCleanupSnapshot, inFlightReadsTracker, pathIdTranslator, std::move(registry), longTxConfig);
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -62,6 +62,16 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistColumnTable(db, pId, *tableInfo.GetPtr(), /* isAlter */ false);
     }
 
+    for (const auto& pId : ColumnTableAlters) {
+        const auto& tableInfo = ss->ColumnTables.GetVerified(pId);
+        Y_ABORT_UNLESS(tableInfo->AlterData);
+        ss->PersistColumnTableAlter(db, pId, *tableInfo->AlterData);
+    }
+
+    for (const auto& pId : ColumnTableAlterRemoves) {
+        ss->PersistColumnTableAlterRemove(db, pId);
+    }
+
     for (const auto& [shardIdx, pId, txId] : SharedShards) {
         ss->PersistAddSharedShard(db, shardIdx, pId);
         if (txId != InvalidTxId) {

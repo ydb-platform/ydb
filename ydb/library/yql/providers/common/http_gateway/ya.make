@@ -28,6 +28,7 @@ END()
 
 RECURSE(
     mock
+    ut_helpers
 )
 
 RECURSE_FOR_TESTS(

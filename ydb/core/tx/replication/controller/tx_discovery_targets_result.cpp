@@ -36,13 +36,25 @@ public:
             return true;
         }
 
-        if (Replication->GetState() != TReplication::EState::Ready) {
+        if (Replication->GetState() != TReplication::EState::Ready
+            && Replication->GetState() != TReplication::EState::Paused)
+        {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
                 {"rid", rid},
                 {"state", Replication->GetState()});
+            Replication.Reset();
             return true;
         }
 
+        if (!Replication->IsExpectedTargetDiscoverer(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore obsolete target discoverer",
+                {"rid", rid},
+                {"sender", Ev->Sender});
+            Replication.Reset();
+            return true;
+        }
+
+        Replication->FinishTargetDiscovery();
         NIceDb::TNiceDb db(txc.DB);
 
         if (Ev->Get()->IsSuccess()) {

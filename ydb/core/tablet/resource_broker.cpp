@@ -6,6 +6,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RESOURCE_BROKER
@@ -415,6 +416,8 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
         MissingTaskTypeCounter->Inc();
 
     Tasks.emplace(id, newTask);
+    const bool inserted = TasksByClient[client].insert(newTask->TaskId).second;
+    Y_DEBUG_ABORT_UNLESS(inserted);
     AssignTask(newTask, as);
 
     return true;
@@ -546,26 +549,23 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 
 bool TScheduler::RemoveTasks(const TActorId &client, const TActorSystem &as)
 {
-    bool res = false;
-
-    for (auto it = Tasks.begin(); it != Tasks.end(); ) {
-        if (it->first.first == client) {
-            auto id = it->first.second;
-            bool inFly = it->second->InFly;
-
-            ++it;
-
-            if (inFly)
-                FinishTask(id, client, true, as);
-            else
-                RemoveQueuedTask(id, client, as);
-
-            res = true;
-        } else
-            ++it;
+    auto clientIt = TasksByClient.find(client);
+    if (clientIt == TasksByClient.end()) {
+        return false;
     }
 
-    return res;
+    // EraseTask updates the index and removes the client entry after its last task.
+    const TVector<ui64> taskIds(clientIt->second.begin(), clientIt->second.end());
+    for (ui64 taskId : taskIds) {
+        const auto* task = FindTask(taskId, client);
+        Y_DEBUG_ABORT_UNLESS(task);
+        auto result = task->InFly
+            ? FinishTask(taskId, client, true, as)
+            : RemoveQueuedTask(taskId, client, as);
+        Y_DEBUG_ABORT_UNLESS(result.Success);
+    }
+
+    return true;
 }
 
 void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
@@ -590,6 +590,13 @@ void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
             {"realResourceUsage", queue->RealResourceUsage});
 
     Tasks.erase(std::make_pair(task->Client, task->TaskId));
+    auto clientIt = TasksByClient.find(task->Client);
+    Y_DEBUG_ABORT_UNLESS(clientIt != TasksByClient.end());
+    const auto erased = clientIt->second.erase(task->TaskId);
+    Y_DEBUG_ABORT_UNLESS(erased == 1);
+    if (clientIt->second.empty()) {
+        TasksByClient.erase(clientIt);
+    }
 }
 
 void TScheduler::ScheduleTasks(const TActorSystem &as,

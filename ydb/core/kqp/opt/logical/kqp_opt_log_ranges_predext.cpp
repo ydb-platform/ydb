@@ -43,6 +43,34 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     return true;
 }
 
+bool IsHybridRankTopInput(const TExprNode* node, const NYql::TParentsMap& parentsMap) {
+    const auto parents = parentsMap.find(node);
+    if (parents == parentsMap.end()) {
+        return false;
+    }
+
+    for (const auto* parent : parents->second) {
+        auto maybeTop = TMaybeNode<TCoTopBase>(parent);
+        if (!maybeTop || maybeTop.Cast().Input().Raw() != node) {
+            continue;
+        }
+
+        bool hasHybridRank = false;
+        VisitExpr(maybeTop.Cast().KeySelectorLambda().Body().Ptr(), [&](const TExprNode::TPtr& expr) {
+            if (expr->IsCallable("HybridRank")) {
+                hasHybridRank = true;
+                return false;
+            }
+            return true;
+        });
+        if (hasHybridRank) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 const TExprNode* GetSingleConsumerParent(const TExprNode* node, const NYql::TParentsMap& parentsMap) {
     auto it = parentsMap.find(node);
     if (it != parentsMap.end()) {
@@ -104,6 +132,23 @@ bool IsIdLambda(TExprBase body) {
 }
 
 } // anonymous namespace
+
+TPredicateExtractorSettings MakeKqpExtractorSettings(const TKqpOptimizeContext& kqpCtx) {
+    TPredicateExtractorSettings settings;
+    settings.MergeAdjacentPointRanges = true;
+    settings.HaveNextValueCallable = true;
+    settings.BuildLiteralRange = true;
+    settings.IsValidForRange = IsValidForRange;
+    settings.MaxRanges = kqpCtx.Config->GetExtractPredicateRangesLimit()
+        ? TMaybe<size_t>(kqpCtx.Config->GetExtractPredicateRangesLimit()) : Nothing();
+
+    if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
+        kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0)
+    {
+        settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
+    }
+    return settings;
+}
 
 TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
@@ -289,24 +334,7 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
     const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
 
     THashSet<TString> possibleKeys;
-    TPredicateExtractorSettings settings;
-    settings.MergeAdjacentPointRanges = true;
-    settings.HaveNextValueCallable = true;
-    settings.BuildLiteralRange = true;
-    settings.IsValidForRange = IsValidForRange;
-
-    if (kqpCtx.Config->GetExtractPredicateRangesLimit() != 0) {
-        settings.MaxRanges = kqpCtx.Config->GetExtractPredicateRangesLimit();
-    } else {
-        settings.MaxRanges = Nothing();
-    }
-
-    if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
-        kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0)
-    {
-        settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
-    }
-
+    auto settings = MakeKqpExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
     YQL_ENSURE(mainTableDesc.SchemeNode);
 
@@ -612,6 +640,10 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     }
 
     auto flatmap = node.Cast<TCoFlatMapBase>();
+
+    if (IsHybridRankTopInput(node.Raw(), parentsMap)) {
+        return node;
+    }
 
     if (!IsPredicateFlatMap(flatmap.Lambda().Body().Ref())) {
         return node;

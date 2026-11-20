@@ -3,6 +3,11 @@
 namespace NKikimr {
 
 class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor {
+    // cursors of the request as the caller has sent it; restarted request starts from them, as items merged since then
+    // have not been returned to the caller
+    const std::optional<ui64> OriginalSkipBlocksUpTo;
+    const std::optional<std::tuple<ui64, ui8>> OriginalSkipBarriersUpTo;
+    const std::optional<TLogoBlobID> OriginalSkipBlobsUpTo;
     std::optional<ui64> SkipBlocksUpTo;
     std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
     std::optional<TLogoBlobID> SkipBlobsUpTo;
@@ -277,6 +282,9 @@ public:
 
     TBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters& params)
         : TBlobStorageGroupRequestActor(params)
+        , OriginalSkipBlocksUpTo(params.Common.Event->SkipBlocksUpTo)
+        , OriginalSkipBarriersUpTo(params.Common.Event->SkipBarriersUpTo)
+        , OriginalSkipBlobsUpTo(params.Common.Event->SkipBlobsUpTo)
         , SkipBlocksUpTo(params.Common.Event->SkipBlocksUpTo)
         , SkipBarriersUpTo(params.Common.Event->SkipBarriersUpTo)
         , SkipBlobsUpTo(params.Common.Event->SkipBlobsUpTo)
@@ -454,8 +462,8 @@ public:
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartAssimilate;
-        auto ev = std::make_unique<TEvBlobStorage::TEvAssimilate>(SkipBlocksUpTo, SkipBarriersUpTo, SkipBlobsUpTo,
-            IgnoreDecommitState, Reverse);
+        auto ev = std::make_unique<TEvBlobStorage::TEvAssimilate>(OriginalSkipBlocksUpTo, OriginalSkipBarriersUpTo,
+            OriginalSkipBlobsUpTo, IgnoreDecommitState, Reverse);
         ev->RestartCounter = counter;
         return ev;
     }

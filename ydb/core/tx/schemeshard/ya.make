@@ -109,9 +109,13 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__index_shadow_data_repair.cpp
+    schemeshard__index_shadow_data_repair.h
     schemeshard__list_users.cpp
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
+    schemeshard__pipe_messages.cpp
+    schemeshard__pipe_messages.h
     schemeshard__login.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
@@ -139,6 +143,7 @@ SRCS(
     schemeshard__operation_alter_streaming_query.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
+    schemeshard__operation_repair_index_shadow_data.cpp
     schemeshard__operation_alter_user_attrs.cpp
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
@@ -295,6 +300,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_import_kesus_restorer.cpp
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
@@ -403,6 +409,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/aclib/protos/identity
+    ydb/library/backup/proto
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
@@ -410,6 +417,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto
+    yql/essentials/public/udf
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier

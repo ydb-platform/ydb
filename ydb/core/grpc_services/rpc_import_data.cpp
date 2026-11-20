@@ -124,7 +124,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpTable;
-        entry.Path = NKikimr::SplitPath(GetProtoRequest()->path());
+        entry.Path = NKikimr::SplitPath(Request->NormalizePath(GetProtoRequest()->path()));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolvePath);
@@ -430,6 +430,10 @@ public:
     using TRpcRequestActor<TImportDataRPC, TEvImportDataRequest, true>::TRpcRequestActor;
 
     void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+            return Reply(StatusIds::PRECONDITION_FAILED, TIssuesIds::DEFAULT_ERROR,
+                "Client data writes are disabled");
+        }
         switch (GetProtoRequest()->format_case()) {
         case Import::ImportDataRequest::kYdbDump:
             break;

@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/persqueue/events
+    ydb/library/persqueue/topic_parser
 #    ydb/core/persqueue/public
 )
 

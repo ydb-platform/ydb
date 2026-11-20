@@ -8,6 +8,8 @@
 #include <util/generic/set.h>
 
 namespace NKikimr {
+class IImmutableSnapshotRegistry;
+
 namespace NLongTxService {
 
 struct TLocalSnapshotInfo {
@@ -87,6 +89,7 @@ public:
 
     TView View() const;
     TView View(TInstant now) const;
+    TView ViewPromotedUpToStep(ui64 maxSnapshotStep) const;
 
 private:
     TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorBySnapshotAndSessionId> LocalSnapshots;
@@ -132,6 +135,7 @@ public:
     // Oldest collection time across all contributing nodes, including the local node (counted
     // as now since its snapshots are collected right now). With no remote nodes this is now.
     TInstant GetOldestCollectionTime() const;
+    TInstant GetOldestCollectionTime(TInstant now) const;
 
     // Per-node collection times, used to seed a peer's registry freshness during prefill.
     THashMap<ui32, TInstant> GetNodeIdToCollectionTime() const;
@@ -143,8 +147,25 @@ private:
     TRowVersion SnapshotBorder = TRowVersion::Max();
     bool Ready = false;
 };
-
 using TRemoteSnapshotsStoragePtr = TIntrusivePtr<TRemoteSnapshotsStorage>;
 
-}
-}
+// Renders a human-readable state of local/remote snapshot storages for the long tx
+// service mon page: summaries (border, collection times), local snapshots (promoted
+// and alive, i.e. those eligible for the registry), remote snapshots per node, the
+// calculated registry input for the next maintenance (promoted local snapshots plus
+// all remote snapshots strictly below the border, same filter as
+// IImmutableSnapshotRegistryBuilder::AddSnapshot) and the current registry (if
+// already built). Any zero `lastRegistryBuildTime` is displayed as "registry has
+// not been built"; the caller (TLongTxServiceActor) keeps it zero until the first
+// successful build and resets it to zero when snapshots locking is disabled and
+// the registry is cleared. `currentRegistry` may be nullptr.
+TString RenderSnapshotsMonPage(
+    const TLocalSnapshotsStorage& localSnapshots,
+    TDuration localPromotionTime,
+    const TRemoteSnapshotsStorage& remoteSnapshots,
+    TInstant now,
+    TInstant lastRegistryBuildTime,
+    const IImmutableSnapshotRegistry* currentRegistry);
+
+} // namespace NLongTxService
+} // namespace NKikimr

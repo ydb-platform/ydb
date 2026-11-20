@@ -9,6 +9,8 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSysView) {
@@ -239,6 +241,28 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("Rows")), 10 * 1000);
         }
+    }
+
+    Y_UNIT_TEST(StatsSysViewChunksLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable");
+        for (ui64 i = 0; i < 50; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(10));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            SELECT *
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+            LIMIT 1
+        )");
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
     }
 
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
@@ -501,7 +525,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
-//                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
+//                    YDB_LOG_INFO("",
+//                          {"json", i});
 //                }
             }
         }
@@ -534,7 +559,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5)("json", i);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
-//                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
+//                    YDB_LOG_INFO("",
+//                          {"json", i});
 //                }
             }
         }

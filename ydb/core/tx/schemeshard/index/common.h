@@ -10,8 +10,9 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-
 TPath GetBuildPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, const TString& tableName);
+
+TPath GetShardsPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo);
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose
     (TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TTxId txId, const TPath& path);

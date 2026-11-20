@@ -1,5 +1,7 @@
 #include "describer.h"
 
+#include <ydb/library/persqueue/topic_parser/counters.h>
+
 #include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
@@ -64,6 +66,7 @@ public:
 
         for (const auto& topic : topicPath) {
             auto normalizedPath = NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
+            NPersQueue::CountTopicPathWithDatabasePrefix(DatabasePath, topic, normalizedPath);
             PathToOriginalPath[normalizedPath] = topic;
             addEntry(normalizedPath);
         }

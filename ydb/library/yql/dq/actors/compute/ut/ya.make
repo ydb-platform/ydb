@@ -33,7 +33,7 @@ PEERDIR(
     ydb/library/yql/public/ydb_issue
     yql/essentials/minikql/computation
     yql/essentials/providers/common/comp_nodes
-    yql/essentials/public/udf/service/stub
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )
 

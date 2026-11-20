@@ -128,6 +128,16 @@ struct TSequenceDescription {
         bool NextUsed;
     };
     std::optional<TSetVal> SetVal;
+    // Name of the sequence: serial columns use `_serial_column_<column>` by default, while
+    // sequences provisioned for index columns have their own names.
+    std::string Name;
+    std::optional<int64_t> MinValue;
+    std::optional<int64_t> MaxValue;
+    std::optional<int64_t> StartValue;
+    std::optional<uint64_t> Cache;
+    std::optional<int64_t> Increment;
+    std::optional<bool> Cycle;
+    std::optional<TType> DataType;
 };
 
 struct TTableColumn {
@@ -339,6 +349,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float8E4M3 = 7, // E4M3FN; preserve values from main.
+        Float8E5M2 = 8,
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -369,6 +381,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float8E4M3 = 7, // E4M3FN; preserve values from main.
+        Float8E5M2 = 8,
     };
 
     TVectorIndexSettings Settings;

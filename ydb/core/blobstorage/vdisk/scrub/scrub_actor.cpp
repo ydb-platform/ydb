@@ -16,7 +16,7 @@ namespace NKikimr {
         , LogPrefix(VCtx->VDiskLogPrefix)
         , Counters(VCtx->VDiskCounters->GetSubgroup("subsystem", "scrub"))
         , MonGroup(Counters)
-        , DeepScrubbingSubgroups(VCtx->VDiskCounters->GetSubgroup("subsystem", "deepScrubbing"))
+        , DeepScrubbingSubgroups(VCtx->VDiskCounters, Info->Type.GetErasure())
         , Arena(&TScrubCoroImpl::AllocateRopeArenaChunk)
         , ScrubEntrypoint(std::move(scrubEntrypoint))
         , ScrubEntrypointLsn(scrubEntrypointLsn)
@@ -270,30 +270,22 @@ namespace NKikimr {
 
         TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();
 
-        NMonGroup::TDeepScrubbingGroup* counters = DeepScrubbingSubgroups.GetCounters(isHuge, erasure);
-        if (counters) {
-            ++counters->BlobsChecked();
-        }
+        auto& counters = DeepScrubbingSubgroups.GetCounters(isHuge);
+        ++counters.BlobsChecked();
 
         if (res->Get()->Status != NKikimrProto::OK) {
             YDB_LOG_WARN_CTX(GetActorContext(), VDISKP(LogPrefix, "TEvCheckIntegrity request failed"),
                 {"marker", "VDS97"},
                 {"blobId", blobId},
                 {"errorReason", res->Get()->ErrorReason});
-            if (counters) {
-                ++counters->CheckIntegrityErrors();
-            }
+            ++counters.CheckIntegrityErrors();
         } else {
-            if (counters) {
-                ++counters->CheckIntegritySuccesses();
-            }
+            ++counters.CheckIntegritySuccesses();
 
             switch (res->Get()->PlacementStatus) {
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN:
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_REPLICATION_IN_PROGRESS:
-                if (counters) {
-                    ++counters->UnknownPlacementStatus();
-                }
+                ++counters.UnknownPlacementStatus();
                 break;
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_LOST:
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE:
@@ -302,9 +294,7 @@ namespace NKikimr {
                     {"blobId", blobId},
                     {"erasure", TErasureType::ErasureSpeciesName(erasure)},
                     {"checkIntegrityResult", res->Get()->ToString()});
-                if (counters) {
-                    ++counters->PlacementIssues();
-                }
+                ++counters.PlacementIssues();
                 break;
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_OK:
             default:
@@ -313,9 +303,7 @@ namespace NKikimr {
 
             switch (res->Get()->DataStatus) {
             case TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN:
-                if (counters) {
-                    ++counters->UnknownDataStatus();
-                }
+                ++counters.UnknownDataStatus();
                 break;
             case TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR:
                 YDB_LOG_CRIT_CTX(GetActorContext(), VDISKP(LogPrefix, "TEvCheckIntegrity discovered data issue"),
@@ -323,9 +311,7 @@ namespace NKikimr {
                     {"blobId", blobId},
                     {"erasure", TErasureType::ErasureSpeciesName(erasure)},
                     {"checkIntegrityResult", res->Get()->ToString()});
-                if (counters) {
-                    ++counters->DataIssues();
-                }
+                ++counters.DataIssues();
                 break;
             case TEvBlobStorage::TEvCheckIntegrityResult::DS_OK:
             default:

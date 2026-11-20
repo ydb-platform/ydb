@@ -154,7 +154,7 @@ namespace NKikimr::NPDisk {
             bool CanHandleResult() const override { return true; }
 
             void IssueQuery() {
-                const size_t bytesToRead = PDisk->Format.RoundUpToSectorSize(Format.Length);
+                const size_t bytesToRead = Format.Length;
                 Buffer = TRcBuf::UninitializedPageAligned(bytesToRead);
                 PDisk->BlockDevice->PreadAsync(Buffer.GetDataMut(), Buffer.size(), Format.Offset, this, {}, nullptr);
             }

@@ -36,6 +36,75 @@ void AddConnectPermission(const TKikimrRunner& kikimr, const TString& subject) {
 }
 
 Y_UNIT_TEST_SUITE(KqpAcl) {
+    template <typename TRevoke>
+    void TestRevokeConnectPermission(TRevoke revoke) {
+        TKikimrRunner kikimr;
+        auto schemeClient = kikimr.GetSchemeClient();
+        const TString subject = "connect_user@builtin";
+        const TString otherSubject = "other_user@builtin";
+
+        NACLib::TDiffACL initialAcl;
+        initialAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, subject);
+        initialAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, otherSubject, NACLib::InheritNone);
+        kikimr.GetTestClient().TestModifyACL("/", "Root", initialAcl.SerializeAsString());
+
+        for (const auto& inheritanceTypes : {
+            TVector<ui32>{NACLib::InheritNone},
+            TVector<ui32>{NACLib::DefaultInheritanceType},
+            TVector<ui32>{NACLib::InheritNone, NACLib::DefaultInheritanceType},
+        }) {
+            NACLib::TDiffACL grant;
+            for (ui32 inheritance : inheritanceTypes) {
+                grant.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, subject, inheritance);
+            }
+            kikimr.GetTestClient().TestModifyACL("/", "Root", grant.SerializeAsString());
+
+            // Repeating the revoke must also succeed when CONNECT is already absent.
+            for (size_t attempt = 0; attempt < 2; ++attempt) {
+                revoke(kikimr, subject);
+                Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), "/Root");
+                auto description = schemeClient.DescribePath("/Root").GetValueSync();
+                AssertSuccessResult(description);
+
+                std::vector<std::string> permissions;
+                std::vector<std::string> otherPermissions;
+                for (const auto& entry : description.GetEntry().Permissions) {
+                    if (entry.Subject == subject) {
+                        permissions.insert(permissions.end(), entry.PermissionNames.begin(), entry.PermissionNames.end());
+                    } else if (entry.Subject == otherSubject) {
+                        otherPermissions.insert(otherPermissions.end(), entry.PermissionNames.begin(), entry.PermissionNames.end());
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(permissions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(permissions.front(), "ydb.granular.select_row");
+                UNIT_ASSERT_VALUES_EQUAL(otherPermissions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(otherPermissions.front(), "ydb.database.connect");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RevokeConnectPermissionSchemeService) {
+        TestRevokeConnectPermission([](TKikimrRunner& kikimr, const TString& subject) {
+            auto schemeClient = kikimr.GetSchemeClient();
+            AssertSuccessResult(schemeClient.ModifyPermissions("/Root",
+                NYdb::NScheme::TModifyPermissionsSettings().AddRevokePermissions(
+                    NYdb::NScheme::TPermissions(subject, {"ydb.database.connect"}))).GetValueSync());
+        });
+    }
+
+    Y_UNIT_TEST_TWIN(RevokeConnectPermissionSql, useQueryService) {
+        TestRevokeConnectPermission([](TKikimrRunner& kikimr, const TString& subject) {
+            const TString query = TStringBuilder() << "REVOKE CONNECT ON `/Root` FROM `" << subject << "`;";
+            if constexpr (useQueryService) {
+                auto client = kikimr.GetQueryClient();
+                AssertSuccessResult(client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync());
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                AssertSuccessResult(session.ExecuteSchemeQuery(query).GetValueSync());
+            }
+        });
+    }
+
     Y_UNIT_TEST(FailNavigate) {
         TKikimrRunner kikimr;
 

@@ -8,21 +8,27 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kesus/tablet/quoter_resource_tree.h>
+#include <ydb/core/kesus/tablet/semaphore_limits.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/backup/proto/proto.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
 
-#include <google/protobuf/text_format.h>
-
+#include <util/generic/hash_set.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
 #include <util/folder/path.h>
@@ -358,6 +364,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
     }
 
+    static bool IsKesus(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateCoordinationNode().FileName);
+    }
+
     static bool IsReplication(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
     }
@@ -420,6 +430,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableImport.AtomicLoad()->Get();
             case NKikimrSchemeOp::EPathTypeSysView:
                 return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
+            case NKikimrSchemeOp::EPathTypeKesus:
+                return AppData()->Icb->BackupControls.S3Controls.EnableKesusImport.AtomicLoad()->Get();
             case NKikimrSchemeOp::EPathTypePersQueueGroup:
             case NKikimrSchemeOp::EPathTypeTable:
                 return true;
@@ -477,7 +489,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
             if (!item.Metadata.HasEnablePermissions()) {
-                return StartCheckingMaterializedIndexes(); // permissions are optional if we don't know if they were created during export
+                return StartDownloadingAdditionalObjects(); // permissions are optional if we don't know if they were created during export
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "No permissions file found");
             }
@@ -616,21 +628,31 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         if (IsCreatedByQuery(SchemeKey)) {
             item.CreationQuery = content;
+        } else if (IsKesus(SchemeKey)) {
+            Ydb::Coordination::CreateNodeRequest request;
+            if (!NYdb::NBackup::ParseProto(content, request)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << SchemeKey << ": cannot parse coordination node scheme");
+            }
+            request.clear_path();
+            request.mutable_config()->clear_path();
+            item.Kesus.ConstructInPlace();
+            *item.Kesus->mutable_node() = std::move(request);
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
-            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+            if (!NYdb::NBackup::ParseProto(content, request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
         } else if (IsSysView(SchemeKey)) {
             Ydb::Table::DescribeSystemViewResult sysView;
-            if (!google::protobuf::TextFormat::ParseFromString(content, &sysView)) {
+            if (!NYdb::NBackup::ParseProto(content, sysView)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse system view description");
             }
             item.SysView = sysView;
         } else if (IsTable(SchemeKey)) {
             Ydb::Table::CreateTableRequest request;
-            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+            if (!NYdb::NBackup::ParseProto(content, request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
             }
             item.Table = request;
@@ -642,7 +664,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (NeedDownloadPermissions) {
                 StartDownloadingPermissions();
             } else {
-                StartCheckingMaterializedIndexes();
+                StartDownloadingAdditionalObjects();
             }
         };
 
@@ -678,17 +700,141 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
+        if (!NYdb::NBackup::ParseProto(content, permissions)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse permissions");
         }
         item.Permissions = std::move(permissions);
 
         auto nextStep = [this]() {
-            StartCheckingMaterializedIndexes();
+            StartDownloadingAdditionalObjects();
         };
 
         if (NeedValidateChecksums) {
             StartValidatingChecksum(PermissionsKey, content, nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    bool FailKesus(const TString& error, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::BAD_REQUEST) {
+        Reply(status, TStringBuilder() << (KesusObjectKey.empty() ? MetadataKey : KesusObjectKey) << ": " << error);
+        return false;
+    }
+
+    bool ValidateKesusMetadata() {
+        const auto& metadata = ImportInfo->Items.at(ItemIdx).Metadata;
+        if (!metadata.GetRateLimiterResources() || !metadata.GetSemaphores()) {
+            return FailKesus("Coordination node metadata must contain rate_limiter_resources and semaphores lists");
+        }
+        for (const auto& resource : *metadata.GetRateLimiterResources()) {
+            const TString& path = resource.ResourcePath;
+            if (path.empty() || path != NKesus::CanonizeQuoterResourcePath(path)) {
+                return FailKesus("Invalid or noncanonical resource path");
+            }
+        }
+        return true;
+    }
+
+    void DownloadNextKesusObject() {
+        const auto& item = ImportInfo->Items.at(ItemIdx);
+        const auto& resources = *item.Metadata.GetRateLimiterResources();
+        const auto& semaphores = *item.Metadata.GetSemaphores();
+        if (!DownloadingSemaphores && KesusObjectIdx == resources.size()) {
+            DownloadingSemaphores = true;
+            KesusObjectIdx = 0;
+        }
+        if (DownloadingSemaphores && KesusObjectIdx == semaphores.size()) {
+            return Reply();
+        }
+        const TString& prefix = DownloadingSemaphores
+            ? semaphores.at(KesusObjectIdx).ExportPrefix : resources.at(KesusObjectIdx).ExportPrefix;
+        KesusObjectKey = TStringBuilder() << GetItemSource(*ImportInfo, ItemIdx) << '/' << prefix << '/'
+            << (DownloadingSemaphores ? "create_semaphore.pb" : NYdb::NDump::NFiles::CreateRateLimiter().FileName);
+        ResetRetries();
+        Become(&TThis::StateDownloadKesusObjects);
+        DownloadKesusObject();
+    }
+
+    void HandleKesusObject(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (IsNoSuchKeyError(result)) {
+            FailKesus(DownloadingSemaphores ? "no semaphore file found" : "no rate limiter resource file found");
+            return;
+        }
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+        const auto length = result.GetResult().GetContentLength();
+        if (length <= 0) {
+            FailKesus("Coordination node file is empty");
+            return;
+        }
+        GetObject(KesusObjectKey, length);
+    }
+
+    void HandleKesusObject(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        if (!CheckResult(msg.Result, "GetObject")) {
+            return;
+        }
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, DownloadingSemaphores
+                ? NBackup::EBackupFileType::CoordinationNodeCreateSemaphore
+                : NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter, KesusObjectIdx)) {
+            return;
+        }
+        if (content.empty()) {
+            FailKesus("Coordination node file is empty");
+            return;
+        }
+
+        NKikimrSchemeOp::TImportKesus part;
+        const auto& metadata = ImportInfo->Items.at(ItemIdx).Metadata;
+        if (DownloadingSemaphores) {
+            auto& semaphore = *part.add_semaphores();
+            if (!NYdb::NBackup::ParseProto(content, semaphore)) {
+                FailKesus("cannot parse semaphore");
+                return;
+            }
+            if (semaphore.name() != metadata.GetSemaphores()->at(KesusObjectIdx).Name) {
+                FailKesus("Semaphore name differs from metadata");
+                return;
+            }
+            if (!semaphore.limit() || semaphore.name().size() > NKesus::MaxSemaphoreNameSize
+                || semaphore.data().size() > NKesus::MaxSemaphoreDataSize) {
+                FailKesus("Invalid semaphore limit, name length or data size");
+                return;
+            }
+            semaphore.clear_req_id();
+        } else {
+            Ydb::RateLimiter::CreateResourceRequest request;
+            if (!NYdb::NBackup::ParseProto(content, request) || !request.has_resource()) {
+                FailKesus("cannot parse rate limiter resource");
+                return;
+            }
+            auto& resource = *request.mutable_resource();
+            const auto& path = metadata.GetRateLimiterResources()->at(KesusObjectIdx).ResourcePath;
+            if (!resource.resource_path().empty() && resource.resource_path() != path) {
+                FailKesus("Resource path differs from metadata");
+                return;
+            }
+            resource.set_resource_path(path);
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!ValidateRateLimiterResourceProperties(resource, ImportInfo->CanRestoreRateLimiterMetering, status, error)) {
+                FailKesus(error, status);
+                return;
+            }
+            *part.add_resources() = std::move(resource);
+        }
+        auto nextStep = [this, part = std::move(part)]() {
+            ImportInfo->Items.at(ItemIdx).Kesus->MergeFrom(part);
+            ++KesusObjectIdx;
+            DownloadNextKesusObject();
+        };
+        if (NeedValidateChecksums) {
+            // Validate the original text, before applying metadata paths or dropping unknown fields.
+            StartValidatingChecksum(KesusObjectKey, content, std::move(nextStep));
         } else {
             nextStep();
         }
@@ -719,7 +865,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Table::CreateTableRequest request;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+        if (!NYdb::NBackup::ParseProto(content, request)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse index");
         }
 
@@ -728,13 +874,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
 
         auto nextStep = [this]() {
-            if (++IndexCheckedMaterializedIndexImplTable >= IndexImplTablePrefixes.size()) {
-                StartDownloadingChangefeeds();
-            } else {
-                Become(&TThis::StateCheckIndexes);
-                HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
-            }
+            ++IndexCheckedMaterializedIndexImplTable;
+            Become(&TThis::StateCheckIndexes);
+            DownloadMaterializedIndexes();
         };
 
         if (NeedValidateChecksums) {
@@ -770,7 +912,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Table::ChangefeedDescription changefeed;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &changefeed)) {
+        if (!NYdb::NBackup::ParseProto(content, changefeed)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse changefeed");
         }
 
@@ -813,13 +955,14 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Topic::DescribeTopicResult topic;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &topic)) {
+        if (!NYdb::NBackup::ParseProto(content, topic)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic");
         }
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
 
         auto nextStep = [this]() {
             if (++IndexDownloadedChangefeed >= ChangefeedsPrefixes.size()) {
+                DropOmittedChangefeeds();
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
@@ -837,6 +980,27 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     template <typename T>
     static void Resize(::google::protobuf::RepeatedPtrField<T>* repeatedField, ui64 size) {
         while (size--) repeatedField->Add();
+    }
+
+    // Backups made before export learned to skip them may still carry the
+    // changefeed that async replication installed on the source table.
+    void DropOmittedChangefeeds() {
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& changefeeds = *ImportInfo->Items.at(ItemIdx).Changefeeds.MutableChangefeeds();
+
+        for (int i = 0; i < changefeeds.size();) {
+            if (!::NKikimr::NBackup::IsChangefeedOmittedFromBackup(changefeeds.Get(i).GetChangefeed())) {
+                ++i;
+                continue;
+            }
+
+            LOG_I("Skip changefeed omitted from export"
+                << ": self# " << SelfId()
+                << ", importId# " << ImportInfo->Id
+                << ", itemIdx# " << ItemIdx
+                << ", changefeed# " << changefeeds.Get(i).GetChangefeed().name());
+            changefeeds.DeleteSubrange(i, 1);
+        }
     }
 
     void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
@@ -891,6 +1055,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
+    void DownloadKesusObject() {
+        Download(KesusObjectKey);
+    }
+
     static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
         switch (mode) {
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
@@ -911,6 +1079,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         IndexCheckedMaterializedIndexImplTable = 0;
         item.MaterializedIndexes.clear();
 
+        // Older backups may contain async index data inconsistent with the base table.
+        // Leave these indexes out of the materialized items so import builds them instead.
+        AsyncIndexes.clear();
+        if (item.Table) {
+            for (const auto& index : item.Table->indexes()) {
+                if (index.has_global_async_index()) {
+                    AsyncIndexes.insert(index.name());
+                }
+            }
+        }
+
         if (const auto& indexes = item.Metadata.GetIndexes()) {
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
@@ -924,6 +1103,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                     IndexImplTablePrefixes.reserve(item.Table->indexes_size());
 
                     for (const auto& index : item.Table->indexes()) {
+                        if (index.has_global_async_index()) {
+                            continue;
+                        }
                         const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
                         if (!indexType) {
                             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unsupported index"
@@ -948,8 +1130,15 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void DownloadMaterializedIndexes() {
-        if (!IndexImplTablePrefixes.empty()) {
-            Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
+        while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
+            const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
+            if (!AsyncIndexes.contains(prefix.substr(0, prefix.find('/')))) {
+                break;
+            }
+            ++IndexCheckedMaterializedIndexImplTable;
+        }
+        if (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
             HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
                 IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
         } else {
@@ -999,6 +1188,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         ResetRetries();
         DownloadPermissions();
         Become(&TThis::StateDownloadPermissions);
+    }
+
+    void StartDownloadingAdditionalObjects() {
+        if (auto& item = ImportInfo->Items.at(ItemIdx); item.Kesus) {
+            if (!ValidateKesusMetadata()) {
+                return;
+            }
+            DownloadNextKesusObject();
+        } else {
+            StartCheckingMaterializedIndexes();
+        }
     }
 
     void StartCheckingMaterializedIndexes() {
@@ -1065,6 +1265,16 @@ public:
         }
     }
 
+    STATEFN(StateDownloadKesusObjects) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleKesusObject);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleKesusObject);
+
+            sFunc(TEvents::TEvWakeup, DownloadKesusObject);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
     STATEFN(StateCheckIndexes) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleIndex);
@@ -1105,12 +1315,16 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
+    TString KesusObjectKey;
+    ui32 KesusObjectIdx = 0;
+    bool DownloadingSemaphores = false;
     ui32 SchemePropertiesIdx = 0;
 
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
+    THashSet<TString> AsyncIndexes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 

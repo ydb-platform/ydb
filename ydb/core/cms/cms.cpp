@@ -631,7 +631,7 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
         return false;
     }
 
-    if (State->Config.SentinelConfig.EvictVDisksStatus.Empty()) {
+    if (State->Config.SentinelConfig.EvictVDisksStatus == EEvictVDisksStatus::Disabled) {
         error.Code = TStatus::ERROR;
         error.Reason = "Evict vdisks is disabled in Sentinel (self heal)";
         return false;
@@ -2620,6 +2620,20 @@ void TCms::Handle(TEvCms::TEvSetMarkerRequest::TPtr &ev, const TActorContext &ct
 void TCms::Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx)
 {
     Execute(CreateTxGetLogTail(ev), ctx);
+}
+
+void TCms::Handle(NStorage::TEvNodeConfigGetSelfHealState::TPtr &ev, const TActorContext &ctx)
+{
+    if (State->Sentinel) {
+        ctx.Send(ev->Forward(State->Sentinel));
+    } else if (!State->Config.SentinelConfig.Enable) {
+        auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        response->Record.SetErrorReason("Sentinel is disabled");
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+    } else {
+        YDB_LOG_DEBUG("Sentinel is not ready for State Storage selfheal state refresh");
+    }
 }
 
 void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx)

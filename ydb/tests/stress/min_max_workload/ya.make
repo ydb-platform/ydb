@@ -5,6 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/tests/stress/common
     ydb/tests/stress/min_max_workload/workload
 )
 

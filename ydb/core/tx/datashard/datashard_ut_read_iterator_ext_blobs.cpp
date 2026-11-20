@@ -75,7 +75,9 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         TActorId Sender;
         TTestActorRuntime* Runtime;
 
-        TNode(bool useExternalBlobs, int externalBlobColumns = 1) : ServerSettings(Pm.GetPort(2134)) {
+        TNode(bool useExternalBlobs, int externalBlobColumns = 1, const NLocalDb::TCompactionPolicy* policy = nullptr)
+            : ServerSettings(Pm.GetPort(2134))
+        {
             TServerSettings::TControls controls;
             controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1); // sets to "true"
 
@@ -113,9 +115,7 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
                 columns.push_back({"data" + ToString(i), "String", false, false});
             }
 
-            auto opts = TShardedTableOptions()
-                .Columns(columns)
-                .Families({fam});
+            auto opts = TShardedTableOptions().Columns(columns).Families({ fam }).Policy(policy);
 
             CreateShardedTable(Server, Sender, "/Root", "table-1", opts);
 
@@ -761,7 +761,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
     }
 
     Y_UNIT_TEST(NotExtBlobs) {
-        TNode node(false);
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        // This test checks the transition from a memtable to one explicitly compacted part
+        policy->InMemForceSizeToSnapshot = Max<ui64>();
+        TNode node(false, 1, policy.Get());
 
         auto server = node.Server;
         auto& runtime = *node.Runtime;

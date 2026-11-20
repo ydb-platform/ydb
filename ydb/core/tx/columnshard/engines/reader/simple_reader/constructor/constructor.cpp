@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
     const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
-    auto& indexInfo = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), Snapshot)->GetIndexInfo();
+    auto& indexInfo = read.GetTableMetadataAccessor()->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), Snapshot)->GetIndexInfo();
     NCommon::TIndexColumnResolver columnResolver(indexInfo);
     return TBase::ParseProgram(context, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }
@@ -29,17 +29,17 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
     } else {
         schemas = &defaultSchemas;
     }
-    if (read.TableMetadataAccessor->NeedStalenessChecker()) {
-        auto pathId = read.TableMetadataAccessor->GetPathIdVerified();
+    if (read.GetTableMetadataAccessor()->NeedStalenessChecker()) {
+        auto pathId = read.GetTableMetadataAccessor()->GetPathIdVerified();
         if (!self->MayStartScanAt(read.GetSnapshot(), pathId.GetSchemeShardLocalPathId())) {
             return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
                                                             << self->GetMinSnapshotForNewReads() << ". now: " << TInstant::Now());
         }
     }
 
-    auto readMetadata = std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(*schemas), read);
+    auto readMetadata = std::make_shared<TReadMetadata>(read.GetTableMetadataAccessor()->GetVersionedIndexCopyVerified(*schemas), read);
 
-    auto initResult = readMetadata->Init(self, read, EReaderClass::Simple);
+    auto initResult = readMetadata->Init(self, read, GetReaderClass());
     if (!initResult) {
         return initResult;
     }
@@ -47,35 +47,19 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
 }
 
 std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const {
-    switch (Sorting) {
-        case ERequestSorting::ASC:
-        case ERequestSorting::DESC:
-            switch (impl) {
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
-                case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
-                    return std::make_shared<TSimpleScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
-                    return std::make_shared<TDeprecatedSimpleScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
-                    AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
-            }
-            Y_ABORT("unreachable");
-        case ERequestSorting::NONE:
-            switch (impl) {
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
-                case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
-                    return std::make_shared<TNotSortedSimpleScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
-                    return std::make_shared<TDeprecatedNotSortedSimpleScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
-                    AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
-            }
-            Y_ABORT("unreachable");
+    switch (impl) {
+        case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
+        case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
+        case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
+            return std::make_shared<TSourceIndexScanCursor>();
+        case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
+        case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
+            return std::make_shared<TSourceIdScanCursor>();
+        case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
+            break;
     }
+    // The cursor came off the wire. A shape this reader cannot read fails the query.
+    return nullptr;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

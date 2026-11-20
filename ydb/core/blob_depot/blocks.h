@@ -32,6 +32,7 @@ namespace NKikimr::NBlobDepot {
 
     private:
         class TTxUpdateBlock;
+        class TTxQueryBlocks;
         class TBlockProcessorActor;
 
     public:

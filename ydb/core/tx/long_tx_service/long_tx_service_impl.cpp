@@ -38,6 +38,8 @@ void TLongTxServiceActor::Bootstrap() {
             "long_tx_service", "Long Tx Service");
         mon->RegisterActorPage(longTxMonPage, "locks", "Locks",
             false, TActivationContext::ActorSystem(), SelfId());
+        mon->RegisterActorPage(longTxMonPage, "snapshots", "Snapshots",
+            false, TActivationContext::ActorSystem(), SelfId());
     }
 
     YDB_LOG_NOTICE("Started,",
@@ -1836,6 +1838,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
         LocalSnapshotsStorage->Clear();
         RemoteSnapshotsStorage->Clear();
         AppData()->SnapshotRegistryHolder->Set(nullptr);
+        LastRegistryBuildTime = {};
         if (SnapshotsExchangeActorId) {
             Send(SnapshotsExchangeActorId, new TEvents::TEvPoison());
             SnapshotsExchangeActorId = {};
@@ -1896,6 +1899,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     }
 
     AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
+    LastRegistryBuildTime = TInstant::MilliSeconds(now);
     YDB_LOG_DEBUG("Updated immutable snapshots registry",
         {"logPrefix", LogPrefix},
         {"localCount", localSnapshotsCount},
@@ -1913,6 +1917,8 @@ void TLongTxServiceActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
     TString res;
     if (page == "locks") {
         res = RenderLocksMonPage();
+    } else if (page == "snapshots") {
+        res = RenderSnapshotsMonPage();
     } else {
         res = "Unknown page: " + page;
     }
@@ -1988,6 +1994,18 @@ TString TLongTxServiceActor::RenderLocksMonPage() {
         }
     }
     return str.Str();
+}
+
+TString TLongTxServiceActor::RenderSnapshotsMonPage() {
+    const auto localPromotionTime = TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds());
+    const auto& currentRegistry = AppData()->SnapshotRegistryHolder->Get();
+    return NLongTxService::RenderSnapshotsMonPage(
+        *LocalSnapshotsStorage,
+        localPromotionTime,
+        *RemoteSnapshotsStorage,
+        AppData()->TimeProvider->Now(),
+        LastRegistryBuildTime,
+        currentRegistry.get());
 }
 
 } // namespace NLongTxService

@@ -14,18 +14,17 @@ private:
     const NCommon::TReplaceKeyAdapter Start;
     const NCommon::TReplaceKeyAdapter Finish;
 
-    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NReader::NCommon::TExecutionResult> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
-        return false;
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual bool NeedPortionData() const override {
         return false;
     }
 
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
-        return false;
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
@@ -45,9 +44,9 @@ private:
         }
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<NReader::NCommon::IDataSource>& /*sourcePtr*/,
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingColumns(
         const NReader::NCommon::TFetchingScriptCursor& /*step*/, const NReader::NCommon::TColumnsSetIds& /*columns*/) override {
-        return false;
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
@@ -163,7 +162,8 @@ public:
     TSourceData(const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false, sourceIdx)
+        : TBase(EType::SimpleSysInfo, sourceIdx, context, /*isConflicting*/ false, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false,
+              sourceIdx)
         , TabletId(tabletId)
         , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted())
@@ -177,7 +177,6 @@ private:
 
 public:
     virtual NColumnShard::TInternalPathId GetPathId() const override {
-        AFL_VERIFY(false);
         return NColumnShard::TInternalPathId::FromRawValue(0);
     }
 

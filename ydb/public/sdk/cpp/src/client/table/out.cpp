@@ -54,6 +54,10 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TVectorIndexSettings::EVectorType, stream, va
         switch (value) {
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Float:
             return "float";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::Float8E4M3:
+            return "float8_e4m3";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::Float8E5M2:
+            return "float8_e5m2";
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8:
             return "uint8";
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Int8:

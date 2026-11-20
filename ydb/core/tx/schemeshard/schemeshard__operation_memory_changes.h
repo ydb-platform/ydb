@@ -4,6 +4,7 @@
 #include "schemeshard_info_types.h"
 #include "schemeshard_path_element.h"
 
+#include <ydb/core/tx/schemeshard/olap/store/store.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 
 #include <util/generic/ptr.h>
@@ -37,6 +38,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TColumnTableState = std::pair<TPathId, TColumnTableInfo::TPtr>;
     TStack<TColumnTableState> ColumnTables;
 
+    using TOlapStoreState = std::pair<TPathId, TOlapStoreInfo::TPtr>;
+    TStack<TOlapStoreState> OlapStores;
+
     using TSequenceState = std::pair<TPathId, TSequenceInfo::TPtr>;
     TStack<TSequenceState> Sequences;
 
@@ -52,6 +56,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     using TTxState = std::pair<TOperationId, THolder<TTxState>>;
     TStack<TTxState> TxStates;
+
+    using TReplicationSourceCleanupState = std::pair<TOperationId, NKikimrReplication::ESourceCleanupPolicy>;
+    TStack<TReplicationSourceCleanupState> ReplicationSourceCleanups;
 
     using TExternalTableState = std::pair<TPathId, TExternalTableInfo::TPtr>;
     TStack<TExternalTableState> ExternalTables;
@@ -101,6 +108,7 @@ public:
     ~TMemoryChanges() = default;
 
     void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
+    void GrabReplicationSourceCleanup(TSchemeShard* ss, const TOperationId& op);
 
     void GrabNewPath(TSchemeShard* ss, const TPathId& pathId);
     void GrabPath(TSchemeShard* ss, const TPathId& pathId);
@@ -110,6 +118,8 @@ public:
 
     void GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabColumnTable(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabOlapStore(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewShard(TSchemeShard* ss, const TShardIdx& shardId);
     void GrabShard(TSchemeShard* ss, const TShardIdx& shardId);

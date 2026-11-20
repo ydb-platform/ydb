@@ -4,6 +4,7 @@
 
 #include "configs_config.h"
 #include "console.h"
+#include "validators/registry.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/util/config_index.h>
@@ -11,6 +12,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/cache/cache.h>
+
+#include <unordered_map>
 
 namespace NKikimr::NConsole {
 
@@ -176,6 +180,10 @@ private:
     using TBase = TActorBootstrapped<TConfigsProvider>;
 
     void ClearState();
+    void ClearNodeConfigCache();
+
+    using TValidatorStates = TVector<std::pair<IConfigValidator::TPtr, ui64>>;
+    static TValidatorStates GetValidatorStates(const TValidatorsRegistry::TPtr& registry);
 
     void ApplyConfigModifications(const TConfigModifications &modifications,
                                   const TActorContext &ctx);
@@ -264,11 +272,19 @@ private:
         TDynamicCounterPtr Counters;
         TCounterPtr ScheduledConfigUpdates;
         TCounterPtr InflightConfigUpdates;
+        TCounterPtr NodeConfigCacheHits;
+        TCounterPtr NodeConfigCacheMisses;
+        TCounterPtr NodeConfigCacheBytes;
+        TCounterPtr NodeConfigCacheEntries;
 
         explicit TCounters(TDynamicCounterPtr counters)
             : Counters(counters)
             , ScheduledConfigUpdates(counters->GetCounter("ScheduledConfigUpdates", false))
             , InflightConfigUpdates(counters->GetCounter("InflightConfigUpdates", false))
+            , NodeConfigCacheHits(counters->GetCounter("NodeConfigCacheHits", true))
+            , NodeConfigCacheMisses(counters->GetCounter("NodeConfigCacheMisses", true))
+            , NodeConfigCacheBytes(counters->GetCounter("NodeConfigCacheBytes", false))
+            , NodeConfigCacheEntries(counters->GetCounter("NodeConfigCacheEntries", false))
         {
         }
 
@@ -305,13 +321,32 @@ private:
     TConfigIndex ConfigIndex;
     TSubscriptionIndex SubscriptionIndex;
 
+    struct TCachedNodeConfig {
+        TIntrusivePtr<TEventSerializedData> Data;
+        size_t Size;
+    };
+
+    struct TNodeConfigSizeProvider {
+        size_t operator()(const TCachedNodeConfig& entry) const {
+            return entry.Size;
+        }
+    };
+
+    // Bounds cache-owned keys/payloads; in-flight replies may retain shared payloads.
+    static constexpr size_t MAX_NODE_CONFIG_CACHE_BYTES = 64 * 1024 * 1024;
+    static constexpr size_t MAX_NODE_CONFIG_CACHE_ENTRIES = 128;
+    TLRUCache<TString, TCachedNodeConfig, TNoopDelete, TNodeConfigSizeProvider> NodeConfigCache{MAX_NODE_CONFIG_CACHE_BYTES};
+    TValidatorsRegistry::TPtr NodeConfigCacheRegistry;
+    TValidatorStates NodeConfigCacheValidatorStates;
+
     enum class EUpdate {
         All,
         Yaml,
     };
 
     TInMemorySubscriptionIndex InMemoryIndex;
-    THashMap<TActorId, EUpdate> ScheduledUpdates;
+    // Repeated begin()/erase() must not scan buckets when draining the queue.
+    std::unordered_map<TActorId, EUpdate> ScheduledUpdates;
     THashSet<TActorId> InflightUpdates;
     static constexpr ui32 MAX_INFLIGHT_UPDATES = 50;
 

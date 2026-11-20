@@ -162,6 +162,10 @@ NThreading::TFuture<void> TTerminal::Run() {
                 auto latencyTransaction = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTimeTransaction);
 
                 if (result.IsSuccess()) {
+                    if (!SuccessfulTransactionReported) {
+                        LOG_IMPL(Log, TLOG_NOTICE, "WM_TPCC_OK");
+                        SuccessfulTransactionReported = true;
+                    }
                     Stats->AddOK(static_cast<ETransactionType>(txIndex), latencyTransaction, latencyFull, latencyPure);
                     LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction finished in "
                         << execCount << " execution(s): " << result.GetStatus());

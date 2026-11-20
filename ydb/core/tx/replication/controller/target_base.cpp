@@ -14,6 +14,15 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
+namespace {
+
+bool ShouldWaitForAttachment(const TReplication* replication) {
+    return !replication->GetConfig().GetInitialScan()
+        && replication->GetDesiredState() == TReplication::EState::Paused;
+}
+
+} // anonymous namespace
+
 TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath)
     : Kind(kind)
     , SrcPath(srcPath)
@@ -102,6 +111,14 @@ const TPathId& TTargetBase::GetDstPathId() const {
     return DstPathId;
 }
 
+bool TTargetBase::IsExpectedDstCreator(const TActorId& actorId) const {
+    return DstCreator && DstCreator == actorId;
+}
+
+bool TTargetBase::IsExpectedDstAlterer(const TActorId& actorId) const {
+    return DstAlterer && DstAlterer == actorId;
+}
+
 void TTargetBase::SetDstPathId(const TPathId& value) {
     DstPathId = value;
 }
@@ -140,12 +157,21 @@ void TTargetBase::SetIssue(const TString& value) {
 }
 
 void TTargetBase::AddWorker(ui64 id) {
-    Workers.emplace(id, TWorker{});
-    TLagProvider::AddPendingLag(id);
+    if (Workers.try_emplace(id).second) {
+        TLagProvider::AddPendingLag(id);
+        Replication->UpdateLag(GetId(), GetLag());
+    }
 }
 
 void TTargetBase::RemoveWorker(ui64 id) {
-    Workers.erase(id);
+    const auto it = Workers.find(id);
+    if (it == Workers.end()) {
+        return;
+    }
+
+    TLagProvider::RemoveLag(it->second, id);
+    Workers.erase(it);
+    Replication->UpdateLag(GetId(), GetLag());
 }
 
 const NKikimrReplication::TReplicationLocationConfig& TTargetBase::GetLocation() const {
@@ -184,8 +210,18 @@ void TTargetBase::UpdateLag(ui64 workerId, TDuration lag) {
     }
 
     if (TLagProvider::UpdateLag(it->second, workerId, lag)) {
-        Replication->UpdateLag(GetId(), TLagProvider::GetLag().value());
+        Replication->UpdateLag(GetId(), GetLag());
     }
+}
+
+void TTargetBase::InvalidateLag(ui64 workerId) {
+    const auto it = Workers.find(workerId);
+    if (it == Workers.end()) {
+        return;
+    }
+
+    TLagProvider::InvalidateLag(it->second, workerId);
+    Replication->UpdateLag(GetId(), GetLag());
 }
 
 const std::optional<TDuration> TTargetBase::GetLag() const {
@@ -200,19 +236,29 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         }
         break;
     case EDstState::Ready:
-        if (!WorkerRegistar) {
+        if (WorkerRegistar && WorkerRegistarProxy != Replication->GetYdbProxy()) {
+            // Registration also captures connection settings for the workers.
+            // Restart this read-only actor so both its proxy and settings refresh.
+            Reset(WorkerRegistar);
+        }
+        if (Replication->GetState() == TReplication::EState::Ready && !WorkerRegistar) {
             WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
+            WorkerRegistarProxy = Replication->GetYdbProxy();
         }
         break;
-    case EDstState::Alter:
+    case EDstState::Alter: {
+        const bool needsCreator = !DstCreator && !DstPathId;
+        const bool canAttach = !ShouldWaitForAttachment(Replication)
+            && Replication->GetDesiredState() != TReplication::EState::Done;
         if (Workers) {
             RemoveWorkers(ctx);
-        } else if (!DstCreator && !DstPathId) {
+        } else if (needsCreator && canAttach) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        } else if (!DstAlterer) {
+        } else if (!DstCreator && !DstAlterer) {
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
+    }
     case EDstState::Done:
         break;
     case EDstState::Removing:
@@ -223,9 +269,16 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         }
         break;
     case EDstState::Paused:
+    case EDstState::WaitingImport:
         break;
     case EDstState::Error:
+    case EDstState::Attaching: // Deprecated.
         break;
+    }
+
+    if (DstCreator && Replication->GetYdbProxy()) {
+        // A config-only ALTER can replace the proxy while the creator is running.
+        ctx.Send(DstCreator, new TEvPrivate::TEvUpdateYdbProxy(Replication->GetYdbProxy()));
     }
 }
 

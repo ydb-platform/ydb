@@ -51,6 +51,18 @@ void ConvertConnectionParams(
     }
 }
 
+void ConvertAvailabilityPeriod(
+    const NKikimrReplication::TAvailabilityPeriod& from,
+    Ydb::Replication::AvailabilityPeriod& to)
+{
+    to.Clear();
+    if (from.HasDuration()) {
+        to.mutable_duration()->CopyFrom(from.GetDuration());
+    } else if (from.HasUnlimited()) {
+        to.mutable_unlimited();
+    }
+}
+
 void ConvertRowConsistencySettings(
     const NKikimrReplication::TConsistencySettings::TRowConsistency&,
     Ydb::Replication::ConsistencyLevelRow&)
@@ -187,7 +199,15 @@ void FillReplicationDescription(
 {
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertConsistencySettings(inDesc.GetConsistencySettings(), out);
+    if (inDesc.HasAvailabilityPeriod()) {
+        ConvertAvailabilityPeriod(inDesc.GetAvailabilityPeriod(), *out.mutable_availability_period());
+    } else {
+        out.clear_availability_period();
+    }
     ConvertState(inDesc.GetState(), out);
+    if (inDesc.HasTransactions()) {
+        out.mutable_transactions()->CopyFrom(inDesc.GetTransactions());
+    }
 
     for (const auto& target : inDesc.GetTargets()) {
         ConvertItem(target, *out.add_items());
@@ -209,6 +229,11 @@ bool FillReplicationDescription(
     ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
     ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
     ConvertConsistencySettings(config.GetConsistencySettings(), out);
+    if (config.HasAvailabilityPeriod()) {
+        ConvertAvailabilityPeriod(config.GetAvailabilityPeriod(), *out.mutable_availability_period());
+    } else {
+        out.clear_availability_period();
+    }
     ConvertState(inDesc.GetState(), out);
 
     for (const auto& target : config.GetSpecific().GetTargets()) {

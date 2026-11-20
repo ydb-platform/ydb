@@ -974,12 +974,18 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
+    THashSet<TInternalPathId> pathIdsToCleanup;
     for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
-        pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
+        for (const TInternalPathId pathId : pathIds) {
+            if (OperationsManager->HasWriteOperations(pathId)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "CleanupTableMetadataDeferredByWriteOperations")("path_id", pathId);
+                continue;
+            }
+            pathIdsToCleanup.insert(pathId);
+        }
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsToCleanup, DataLocksManager);
     if (!changes) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup"},
@@ -1737,16 +1743,30 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
     };
 
     for (const auto& [portion, columns] : ev->Get()->GetRequests()) {
+        const NOlap::TPortionAddress& address = portion.GetPortionAddress();
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-        auto portionInfo = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()
-                               .GetGranuleVerified(portion.GetPortionAddress().GetPathId())
-                               .GetPortionVerifiedPtr(portion.GetPortionAddress().GetPortionId(), false);
+        const auto granule = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetGranuleOptional(address.GetPathId());
+        const auto portionInfo = granule ? granule->GetPortionOptional(address.GetPortionId(), false) : nullptr;
+        if (!portionInfo) {
+            // The request may outlive the scan that made it, and cleanup may have dropped the portion by now.
+            YDB_LOG_WARN("",
+                {"event", "column_data_for_missing_portion"},
+                {"portion", address.DebugString()},
+                {"consumer", portion.GetConsumer()});
+            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, TString> errorAddresses;
+            for (const ui32 columnId : columns) {
+                errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(SelfId(), address, columnId),
+                    TStringBuilder() << "portion " << address.DebugString() << " not found");
+            }
+            ev->Get()->GetCallback()->OnReceiveData(SelfId(), {}, {}, std::move(errorAddresses));
+            continue;
+        }
         NOlap::NDataFetcher::TRequestInput rInput({ portionInfo }, actualIndexInfo, portion.GetConsumer(), "", nullptr, TabletID());
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
 
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(std::move(rInput),
             std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
-            std::make_shared<TExecutor>(ev->Get()->GetCallback(), portion.GetPortionAddress(), SelfId(),
+            std::make_shared<TExecutor>(ev->Get()->GetCallback(), address, SelfId(),
                 std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns)), env,
             NConveyorComposite::ESpecialTaskCategory::Deduplication);
     }

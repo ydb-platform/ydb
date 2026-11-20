@@ -4,6 +4,8 @@
 
 #include <util/generic/algorithm.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
@@ -45,7 +47,9 @@ void TMessageEnricherActor::Bootstrap() {
 }
 
 void TMessageEnricherActor::PassAway() {
-    LOG_D("PassAway");
+    YDB_LOG_DEBUG("PassAway",
+        {"logPrefix", NPQ_LOG_PREFIX});
+
     for (size_t i = 0; i < PendingResponses.size(); ++i) {
         if (!PendingResponses[i].Sent) {
             const TReadResult& reply = Replies[i];
@@ -85,30 +89,36 @@ void TMessageEnricherActor::SendPartialReply(size_t replyIndex) {
 }
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvResponse");
+    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
+        YDB_LOG_WARN("Fetch messages",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"failed", ev->Get()->Record.DebugString()});
         return PassAway();
     }
 
     auto& response = ev->Get()->Record;
-    if (!response.GetPartitionResponse().HasCmdReadResult()) {
+    size_t& entryIndex = NextEntryIdx;
+
+    // Empty / missing read result: advance past the current requested offset and continue.
+    // Do not re-issue the same fetch — that would loop forever.
+    if (!response.GetPartitionResponse().HasCmdReadResult()
+            || response.GetPartitionResponse().GetCmdReadResult().GetResult().empty()) {
+        if (entryIndex < SortedEntries.size()) {
+            ++entryIndex;
+        }
+        if (RepliesSent == PendingResponses.size()) {
+            return PassAway();
+        }
         ProcessQueue();
         return;
     }
 
     auto& results = response.GetPartitionResponse().GetCmdReadResult().GetResult();
-    size_t& entryIndex = NextEntryIdx;
     int resultIndex = 0;
     const int resultsSize = results.size();
-
-    if (resultsSize <= 0) {
-        ++entryIndex;
-        ProcessQueue();
-        return;
-    }
-
     const ui64 maxReturnedOffset = results[resultsSize - 1].GetOffset();
 
     // Two-pointer: both SortedEntries and results are sorted by offset
@@ -179,7 +189,8 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+        {"logPrefix", NPQ_LOG_PREFIX});
     PassAway();
 }
 
@@ -189,7 +200,9 @@ STFUNC(TMessageEnricherActor::StateWork) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            YDB_LOG_ERROR("Unexpected",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"event", EventStr("StateWork", ev)});
     }
 }
 

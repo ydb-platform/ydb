@@ -6,6 +6,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
+#include <util/datetime/base.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NSQS {
@@ -21,7 +22,9 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
     Ydb::Topic::CreateTopicRequest request;
     request.set_path(topicPath);
 
-    request.mutable_retention_period()->set_seconds(params.PartitionLifetimeSeconds);
+    // Topic retention is fixed. Queue retention lives on the consumer availability period
+    // and is what SetQueueAttributes changes.
+    request.mutable_retention_period()->set_seconds(TDuration::Minutes(1).Seconds());
     request.set_partition_write_speed_bytes_per_second(1048576);
     request.set_partition_write_burst_bytes(1048576);
 
@@ -44,6 +47,7 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
 
     auto* consumer = request.add_consumers();
     consumer->set_name(ConsumerName);
+    consumer->mutable_availability_period()->set_seconds(params.MessageRetentionPeriod);
     auto* consumerType = consumer->mutable_shared_consumer_type();
     consumerType->set_keep_messages_order(isFifo);
     if (params.DefaultDelayMessageTimeMs) {

@@ -1728,6 +1728,7 @@ struct Schema : NIceDb::Schema {
         struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<13, NScheme::NTypeIds::Utf8> {};
         struct SanitizedToken : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct CanRestoreRateLimiterMetering : Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1744,7 +1745,8 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             PeerName,
-            SanitizedToken
+            SanitizedToken,
+            CanRestoreRateLimiterMetering
         >;
     };
 
@@ -1764,6 +1766,8 @@ struct Schema : NIceDb::Schema {
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
         struct Topic : Column<20, NScheme::NTypeIds::String> {};
         struct SysView : Column<22, NScheme::NTypeIds::String> {};
+        struct ReplicationConfig : Column<23, NScheme::NTypeIds::String> {};
+        struct Kesus : Column<24, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1798,7 +1802,9 @@ struct Schema : NIceDb::Schema {
             SrcPath,
             Topic,
             ParentIndex,
-            SysView
+            SysView,
+            ReplicationConfig,
+            Kesus
         >;
     };
 
@@ -2658,6 +2664,9 @@ struct Schema : NIceDb::Schema {
         struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
         struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
 
+        struct DomainOwnerId :          Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainLocalId :          Column<17, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2674,7 +2683,9 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             IsCancelled,
-            CancellationReason
+            CancellationReason,
+            DomainOwnerId,
+            DomainLocalId
         >;
     };
 

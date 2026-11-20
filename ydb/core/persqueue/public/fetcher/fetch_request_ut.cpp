@@ -1,6 +1,8 @@
 #include "fetch_request_actor.h"
 
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -10,11 +12,63 @@
 
 namespace NKikimr::NPQ {
 using namespace ::NPersQueue;
-//using namespace NYdb::NTopic;
+using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
+
+namespace {
+
+void EnableFetchLogs(TTopicSdkTestSetup& setup) {
+    setup.GetServer().EnableLogs(
+        {NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_FETCH_REQUEST},
+        NActors::NLog::PRI_DEBUG);
+}
+
+TFetchRequestSettings MakeSettings(
+    TVector<TPartitionFetchRequest> partitions,
+    ui64 maxWaitTimeMs = 1000,
+    ui64 totalMaxBytes = 1_MB)
+{
+    return TFetchRequestSettings{
+        .Database = {},
+        .Consumer = CLIENTID_WITHOUT_CONSUMER,
+        .Partitions = std::move(partitions),
+        .MaxWaitTimeMs = maxWaitTimeMs,
+        .TotalMaxBytes = totalMaxBytes,
+    };
+}
+
+TActorId RegisterFetchActor(TTestActorRuntime& runtime, const TFetchRequestSettings& settings, const TActorId& edgeId) {
+    auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
+    runtime.EnableScheduleForActor(fetchId);
+    return fetchId;
+}
+
+THolder<TEvPQ::TEvFetchResponse> Fetch(
+    TTestActorRuntime& runtime,
+    const TFetchRequestSettings& settings,
+    TDuration timeout = TDuration::Seconds(30))
+{
+    auto edgeId = runtime.AllocateEdgeActor();
+    RegisterFetchActor(runtime, settings, edgeId);
+    runtime.DispatchEvents();
+    auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>(timeout);
+    UNIT_ASSERT_C(ev, "Timed out waiting for TEvFetchResponse");
+    return ev;
+}
+
+void AssertErrorCode(const NKikimrClient::TPersQueueFetchResponse::TPartResult& result,
+                     ::NPersQueue::NErrorCode::EErrorCode expected)
+{
+    UNIT_ASSERT_VALUES_EQUAL(
+        ::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+        ::NPersQueue::NErrorCode::EErrorCode_Name(expected));
+}
+
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TFetchRequestTests) {
     void StartSchemeCache(TTestActorRuntime& runtime) {
@@ -40,8 +94,6 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
         driver.Stop(true);
     }
-
-
 
     Y_UNIT_TEST(HappyWay) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
@@ -324,6 +376,124 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::UNAUTHORIZED, ev->Message);
         }
     }
+
+    // ---- P0: request validation ----
+
+    Y_UNIT_TEST(EmptyTopicInRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        auto ev = Fetch(runtime, MakeSettings({{"", 0, 0, 10000}}));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "Empty topic");
+    }
+
+    Y_UNIT_TEST(ZeroMaxBytes) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        auto ev = Fetch(runtime, MakeSettings({{"/Root/topic1", 0, 0, 0}}));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "No maxBytes");
+    }
+
+    Y_UNIT_TEST(DuplicatePartition) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 0, 0, 10000},
+            {"/Root/topic1", 0, 1, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "multiple times");
+    }
+
+    Y_UNIT_TEST(UnknownPartition) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+
+        auto ev = Fetch(runtime, MakeSettings({{"/Root/topic1", 42, 0, 10000}}));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+    }
+
+    Y_UNIT_TEST(UnknownPartitionsThenValidTopicReturnsBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->CreateTopic("topic2", "dc1", 2);
+
+        // Request order does not determine the order of metadata processing:
+        // the actor stores topics in a hash map.
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 42, 0, 10000},
+            {"/Root/topic1", 43, 0, 10000},
+            {"/Root/topic2", 0, 0, 10000},
+            {"/Root/topic2", 1, 0, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "/Root/topic1");
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 0);
+    }
+
+    // Isolate a possible process abort if the double-PassAway regression returns (#58064).
+    SIMPLE_UNIT_FORKED_TEST(UnknownPartitionsInTwoTopicsReturnsBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->CreateTopic("topic2", "dc1", 2);
+
+        // Both topics are invalid, regardless of their hash-map iteration order.
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 42, 0, 10000},
+            {"/Root/topic2", 42, 0, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 0);
+    }
+
+    // ---- P1: runtime errors ----
+
+    Y_UNIT_TEST(ReadyPartitionIsNotBlockedByEmptyPartitionPastMaxWait) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->Write("/Root/topic1", "ready", 0);
+
+        auto ev = Fetch(
+            runtime,
+            MakeSettings({
+                {"/Root/topic1", 0, 0, 1_KB},
+                {"/Root/topic1", 1, 0, 1_KB},
+            }, /*maxWaitTimeMs=*/200, /*totalMaxBytes=*/100),
+            TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 2);
+        AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.GetPartResult(0).GetReadResult().GetMaxOffset(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.GetPartResult(0).GetReadResult().ResultSize(), 1);
+        AssertErrorCode(ev->Response.GetPartResult(1), ::NPersQueue::NErrorCode::READ_NOT_DONE);
+    }
 };
 
-}
+} // namespace NKikimr::NPQ

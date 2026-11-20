@@ -885,7 +885,176 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
     }
 };
 
+Y_UNIT_TEST_SUITE(TResourceBrokerScheduler) {
+
+    Y_UNIT_TEST(TestRemoveTasksIsolation) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+        const auto& actorSystem = *runtime.GetActorSystem(0);
+        auto client1 = runtime.AllocateEdgeActor();
+        auto client2 = runtime.AllocateEdgeActor();
+        auto unknownClient = runtime.AllocateEdgeActor();
+
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        TScheduler scheduler(counters);
+        scheduler.UpdateTime(Now());
+        scheduler.Configure(MakeTestConfig(), actorSystem);
+
+        // Task IDs are local to each client, for both running and queued tasks.
+        for (const auto& client : {client1, client2}) {
+            UNIT_ASSERT(scheduler.SubmitTask({1, "running", {100, 100}, "compaction0", 0, nullptr}, client, actorSystem));
+        }
+        scheduler.ScheduleTasks(actorSystem, [](const TTask&) {});
+        for (const auto& client : {client1, client2}) {
+            UNIT_ASSERT(scheduler.SubmitTask({2, "queued", {500, 500}, "compaction1", 0, nullptr}, client, actorSystem));
+        }
+        CheckCounters(counters, "queue", "total", 200, 200, 0, 2, 2);
+
+        UNIT_ASSERT(!scheduler.RemoveTasks(unknownClient, actorSystem));
+        CheckCounters(counters, "queue", "total", 200, 200, 0, 2, 2);
+
+        UNIT_ASSERT(scheduler.RemoveTasks(client1, actorSystem));
+        UNIT_ASSERT(!scheduler.FindTask(1, client1));
+        UNIT_ASSERT(!scheduler.FindTask(2, client1));
+        UNIT_ASSERT(scheduler.FindTask(1, client2));
+        UNIT_ASSERT(scheduler.FindTask(1, client2)->InFly);
+        UNIT_ASSERT(scheduler.FindTask(2, client2));
+        UNIT_ASSERT(!scheduler.FindTask(2, client2)->InFly);
+        CheckCounters(counters, "queue", "total", 100, 100, 1, 1, 1);
+        CheckCounters(counters, "task", "compaction0", 100, 100, 1, 0, 1);
+        CheckCounters(counters, "task", "compaction1", 0, 0, 0, 1, 0);
+
+        UNIT_ASSERT(!scheduler.RemoveTasks(client1, actorSystem));
+        CheckCounters(counters, "queue", "total", 100, 100, 1, 1, 1);
+        UNIT_ASSERT(scheduler.RemoveTasks(client2, actorSystem));
+        CheckCounters(counters, "queue", "total", 0, 0, 2, 0, 0);
+        UNIT_ASSERT(!scheduler.RemoveTasks(client2, actorSystem));
+    }
+
+    Y_UNIT_TEST(TestRemoveTasksAfterIdReuse) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+        const auto& actorSystem = *runtime.GetActorSystem(0);
+        auto client = runtime.AllocateEdgeActor();
+
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        TScheduler scheduler(counters);
+        scheduler.UpdateTime(Now());
+        scheduler.Configure(MakeTestConfig(), actorSystem);
+        const TEvResourceBroker::TTask task{1, "task", {100, 100}, "compaction0", 0, nullptr};
+
+        // Both normal completion and queued removal must remove the last client entry.
+        UNIT_ASSERT(scheduler.SubmitTask(task, client, actorSystem));
+        scheduler.ScheduleTasks(actorSystem, [](const TTask&) {});
+        UNIT_ASSERT(scheduler.FinishTask(1, client, false, actorSystem).Success);
+        UNIT_ASSERT(!scheduler.RemoveTasks(client, actorSystem));
+        UNIT_ASSERT(scheduler.SubmitTask(task, client, actorSystem));
+        UNIT_ASSERT(scheduler.RemoveQueuedTask(1, client, actorSystem).Success);
+        UNIT_ASSERT(!scheduler.RemoveTasks(client, actorSystem));
+        CheckCounters(counters, "queue", "total", 0, 0, 1, 0, 0);
+
+        UNIT_ASSERT(scheduler.SubmitTask(task, client, actorSystem));
+        UNIT_ASSERT(!scheduler.SubmitTask(task, client, actorSystem));
+        UNIT_ASSERT(scheduler.SubmitTask({0, "automatic", {100, 100}, "compaction0", 0, nullptr}, client, actorSystem));
+        ui64 generatedId = 0;
+        scheduler.ScheduleTasks(actorSystem, [&](const TTask& allocated) {
+            if (allocated.TaskId != task.TaskId) {
+                generatedId = allocated.TaskId;
+            }
+        });
+        UNIT_ASSERT(generatedId);
+        UNIT_ASSERT(scheduler.FindTask(generatedId, client));
+        CheckCounters(counters, "queue", "total", 200, 200, 1, 0, 2);
+
+        UNIT_ASSERT(scheduler.RemoveTasks(client, actorSystem));
+        UNIT_ASSERT(!scheduler.FindTask(task.TaskId, client));
+        UNIT_ASSERT(!scheduler.FindTask(generatedId, client));
+        CheckCounters(counters, "queue", "total", 0, 0, 3, 0, 0);
+        UNIT_ASSERT(!scheduler.RemoveTasks(client, actorSystem));
+
+        // Reuse the same client and task ID after bulk cleanup, too.
+        UNIT_ASSERT(scheduler.SubmitTask(task, client, actorSystem));
+        UNIT_ASSERT(scheduler.RemoveTasks(client, actorSystem));
+        UNIT_ASSERT(!scheduler.RemoveTasks(client, actorSystem));
+        CheckCounters(counters, "queue", "total", 0, 0, 3, 0, 0);
+    }
+
+    Y_UNIT_TEST(TestRemoveTasksAfterQueueChanges) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+        const auto& actorSystem = *runtime.GetActorSystem(0);
+        auto client1 = runtime.AllocateEdgeActor();
+        auto client2 = runtime.AllocateEdgeActor();
+
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        TScheduler scheduler(counters);
+        scheduler.UpdateTime(Now());
+        auto config = MakeTestConfig();
+        scheduler.Configure(config, actorSystem);
+
+        for (const auto& client : {client1, client2}) {
+            UNIT_ASSERT(scheduler.SubmitTask({1, "task", {100, 100}, "compaction0", 0, nullptr}, client, actorSystem));
+        }
+        scheduler.ScheduleTasks(actorSystem, [](const TTask&) {});
+        UNIT_ASSERT(scheduler.UpdateTask(1, client1, {200, 200}, 0, "scan", true, actorSystem));
+        UNIT_ASSERT(scheduler.UpdateTask(1, client2, {100, 100}, 0, "compaction1", false, actorSystem));
+
+        for (auto& task : *config.MutableTasks()) {
+            if (task.GetName() == "scan") {
+                task.SetQueueName("queue_compaction1");
+            }
+        }
+        scheduler.Configure(config, actorSystem);
+        CheckCounters(counters, "queue", "total", 100, 100, 0, 1, 1);
+
+        UNIT_ASSERT(scheduler.RemoveTasks(client1, actorSystem));
+        UNIT_ASSERT(!scheduler.FindTask(1, client1));
+        UNIT_ASSERT(scheduler.FindTask(1, client2));
+        UNIT_ASSERT(scheduler.FindTask(1, client2)->InFly);
+        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1);
+        UNIT_ASSERT(!scheduler.RemoveTasks(client1, actorSystem));
+        UNIT_ASSERT(scheduler.RemoveTasks(client2, actorSystem));
+        CheckCounters(counters, "queue", "total", 0, 0, 1, 0, 0);
+    }
+};
+
 Y_UNIT_TEST_SUITE(TResourceBrokerInstant) {
+
+    Y_UNIT_TEST(TestNotifyActorDiedAfterRollbackAndMerge) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+        auto client = runtime.AllocateEdgeActor();
+        auto otherClient = runtime.AllocateEdgeActor();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        NResourceBroker::TResourceBroker broker(MakeTestConfig(), counters, runtime.GetActorSystem(0));
+
+        UNIT_ASSERT(broker.SubmitTaskInstant({1, "other", {100, 100}, "compaction0", 0, nullptr}, otherClient));
+        UNIT_ASSERT(broker.SubmitTaskInstant({1, "recipient", {100, 100}, "compaction0", 0, nullptr}, client));
+        UNIT_ASSERT(broker.SubmitTaskInstant({2, "donor", {100, 100}, "compaction0", 0, nullptr}, client));
+
+        // A fresh ID reaches queued-task rollback when resources cannot be allocated.
+        UNIT_ASSERT(!broker.SubmitTaskInstant({3, "rollback", {500, 500}, "compaction0", 0, nullptr}, client));
+        CheckCounters(counters, "queue", "total", 300, 300, 0, 0, 3);
+        UNIT_ASSERT(broker.MergeTasksInstant(1, 2, client));
+        CheckCounters(counters, "queue", "total", 300, 300, 1, 0, 2);
+
+        broker.NotifyActorDied(TEvResourceBroker::TEvNotifyActorDied(), client);
+        CheckCounters(counters, "queue", "total", 100, 100, 2, 0, 1);
+        broker.NotifyActorDied(TEvResourceBroker::TEvNotifyActorDied(), client);
+        CheckCounters(counters, "queue", "total", 100, 100, 2, 0, 1);
+
+        // Reusing the rolled-back ID must work after the client has been cleaned up.
+        UNIT_ASSERT(broker.SubmitTaskInstant({3, "reused", {100, 100}, "compaction0", 0, nullptr}, client));
+        UNIT_ASSERT(broker.FinishTaskInstant({3, false}, client));
+        broker.NotifyActorDied(TEvResourceBroker::TEvNotifyActorDied(), client);
+        CheckCounters(counters, "queue", "total", 100, 100, 3, 0, 1);
+        UNIT_ASSERT(broker.FinishTaskInstant({1, false}, otherClient));
+        CheckCounters(counters, "queue", "total", 0, 0, 4, 0, 0);
+    }
 
     Y_UNIT_TEST(Test) {
         TTestBasicRuntime runtime;

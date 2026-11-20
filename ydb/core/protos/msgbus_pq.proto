@@ -513,6 +513,8 @@ message TPersQueuePartitionResponse {
         optional uint64 WriteTimestampEstimateMS = 8;
         optional bool ClientHasAnyCommits = 9;
         optional string CommittedMetadata = 10;
+        // Earliest offset retained by the partition.
+        optional uint64 StartOffset = 11;
     }
 
     message TCmdGetOwnershipResult {

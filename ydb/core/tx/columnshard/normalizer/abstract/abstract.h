@@ -75,6 +75,8 @@ enum class ENormalizerSequentialId: ui32 {
     RestoreV0ChunksMeta,
     CopyBlobIdsToV2,
     RestoreAppearanceSnapshot,
+    CleanOrphanedOperations,
+    CleanStaleBackupTransactions,
 
     MAX
 };

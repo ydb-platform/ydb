@@ -79,7 +79,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     TVector<TReplicaGroup> ReplicaGroups;
 
     TMap<TActorId, TEvStateStorage::TBoardInfoEntry> Info;
-    THashMap<TActorId, THashSet<ui32>> InfoReplicas;
+    THashMap<TActorId, THashSet<ui64>> InfoReplicas;
 
     const TDuration& GetCurrentDelay(TReplica& replica) {
         if (replica.CurrentDelay == TDuration::Zero()) {
@@ -108,6 +108,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     };
 
     TVector<TStats> Stats;
+    bool CollectingReplies = false;
 
     bool CheckConfigVersion(const TActorId &sender, const auto *msg) {
         ui64 msgGeneration = msg->Record.GetClusterStateGeneration();
@@ -190,10 +191,17 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         return false;
     }
 
-    void CheckCompletion() {
+    void CheckCompletion(bool collectionTimedOut = false) {
         if (CurrentStateFunc() != &TThis::StateSubscribe) {
             if ((!Subscriber && AnyGroupStatsHasInfo()) ||
                     (Subscriber && AllStatsHasAndHasNoInfo())) {
+                if (Mode == EBoardLookupMode::SecondWithAllReplies && !AllStatsReplied() && !collectionTimedOut) {
+                    if (!CollectingReplies) {
+                        CollectingReplies = true;
+                        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+                    }
+                    return;
+                }
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfo>(
                     TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
                 reply->InfoEntries = std::move(Info);
@@ -206,7 +214,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             }
 
             if (!Subscriber) {
-                if (AllStatsReplied()) {
+                if (AllStatsReplied() || collectionTimedOut) {
                     return NotAvailable();
                 }
             } else {
@@ -221,6 +229,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
     }
 
+    void FinishCollectingReplies() {
+        CheckCompletion(true);
+    }
+
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
         auto *msg = ev->Get();
 
@@ -232,13 +244,14 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ClusterStateGuid = msg->ClusterStateGuid;
         ReplicaGroups.clear();
         Stats.clear();
-        Stats.resize(msg->ReplicaGroups.size());
-        ReplicaGroups.resize(msg->ReplicaGroups.size());
-        for (ui32 replicaGroupIdx : xrange(msg->ReplicaGroups.size())) {
-            const auto &msgReplicaGroups = msg->ReplicaGroups[replicaGroupIdx];
+        Stats.reserve(msg->ReplicaGroups.size());
+        ReplicaGroups.reserve(msg->ReplicaGroups.size());
+        for (const auto &msgReplicaGroups : msg->ReplicaGroups) {
             if (msgReplicaGroups.WriteOnly || msgReplicaGroups.State == ERingGroupState::DISCONNECTED)
                 continue;
-            auto &replicaGroups = ReplicaGroups[replicaGroupIdx];
+            const ui32 replicaGroupIdx = ReplicaGroups.size();
+            auto &replicaGroups = ReplicaGroups.emplace_back();
+            Stats.emplace_back();
             replicaGroups.Replicas.resize(msgReplicaGroups.Replicas.size());
             for (auto idx : xrange(msgReplicaGroups.Replicas.size())) {
                 const TActorId &msgReplica = msgReplicaGroups.Replicas[idx];
@@ -255,6 +268,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 replicaGroups.WaitForReplicasToSuccess = 1;
                 break;
             case EBoardLookupMode::Second:
+            case EBoardLookupMode::SecondWithAllReplies:
             case EBoardLookupMode::SecondNonEmptyDoubleTime:
                 replicaGroups.WaitForReplicasToSuccess = Min<ui32>(2, msgReplicaGroups.Replicas.size());
                 break;
@@ -271,6 +285,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 {"groupIdx", replicaGroupIdx},
                 {"group", replicaGroups.ToString()},
                 {"path", Path});
+        }
+        if (ReplicaGroups.empty()) {
+            YDB_LOG_ERROR("Lookup without readable statestorage board replicas");
+            return NotAvailable();
         }
         Become(&TThis::StateLookup);
     }
@@ -294,14 +312,14 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         const TActorId oid = ActorIdFromProto(info.GetOwner());
 
         auto& replicas = InfoReplicas[oid];
+        const ui64 replicaId = EncodeCookie(groupIdx, idx, 0);
         if (info.GetDropped()) {
-            replicas.erase(idx);
+            replicas.erase(replicaId);
             replica.Infos.erase(oid);
         } else {
-            replicas.insert(idx);
+            replicas.insert(replicaId);
             replica.Infos.insert(oid);
         }
-
         if (CurrentStateFunc() == &TThis::StateSubscribe) {
             std::optional<TEvStateStorage::TBoardInfoEntry> update;
             if (info.GetDropped()) {
@@ -388,7 +406,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                     }
                 }
 
-                InfoReplicas[oid].insert(idx);
+                InfoReplicas[oid].insert(EncodeCookie(groupIdx, idx, 0));
                 replica.Infos.insert(oid);
             }
 
@@ -565,7 +583,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             if (infoReplicasIt == InfoReplicas.end()) {
                 continue;
             }
-            infoReplicasIt->second.erase(replicaIdx);
+            infoReplicasIt->second.erase(EncodeCookie(groupIdx, replicaIdx, 0));
             if (infoReplicasIt->second.empty()) {
                 if (isStateSubscribe) {
                     auto& update = updates[infoId];
@@ -615,6 +633,7 @@ public:
 
     STATEFN(StateLookup) {
         switch (ev->GetTypeRewrite()) {
+            cFunc(TEvents::TEvWakeup::EventType, FinishCollectingReplies);
             hFunc(TEvStateStorage::TEvReplicaBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvReplicaBoardInfoUpdate, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);

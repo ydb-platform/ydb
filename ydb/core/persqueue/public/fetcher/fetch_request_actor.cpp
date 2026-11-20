@@ -216,13 +216,15 @@ public:
 
     void OnMetadataReceived(const TActorContext& ctx) {
         for (auto& [name, info]: TopicInfo) {
-            ProcessTopicMetadata(name, info, ctx);
+            if (!ProcessTopicMetadata(name, info, ctx)) {
+                return;
+            }
         }
 
         Become(&TPQFetchRequestActor::StateWork);
     }
 
-    void ProcessTopicMetadata(const TString& name, TTopicInfo& topicInfo, const TActorContext& ctx) {
+    [[nodiscard]] bool ProcessTopicMetadata(const TString& name, TTopicInfo& topicInfo, const TActorContext& ctx) {
         const auto& pqDescr = topicInfo.PQInfo->Description;
 
         for (const auto& partition : pqDescr.GetPartitions()) {
@@ -255,10 +257,12 @@ public:
 
         if (!topicInfo.PartitionsToRequest.empty() && topicInfo.PartitionsToRequest.size() != topicInfo.PartitionToTablet.size()) {
             auto reason = TStringBuilder() << "no one of requested partitions in topic " << name << ", Marker# PQ12";
-            return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, reason), ctx);
+            SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, reason), ctx);
+            return false;
         }
 
         AFL_ENSURE(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
+        return true;
     }
 
     void ProceedFetchRequest(const TActorContext& ctx) {

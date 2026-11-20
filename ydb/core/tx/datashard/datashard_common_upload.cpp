@@ -6,6 +6,28 @@
 
 namespace NKikimr::NDataShard {
 
+TString CheckUploadKeySizeLimit(TConstArrayRef<TCell> keys) {
+    ui64 keyBytes = 0;
+    for (const auto& key : keys) {
+        keyBytes += key.Size();
+    }
+    if (keyBytes > NLimits::MaxWriteKeySize) {
+        return TStringBuilder() << "Row key size of " << keyBytes
+            << " bytes is larger than the allowed threshold " << NLimits::MaxWriteKeySize;
+    }
+    return {};
+}
+
+TString CheckUploadValueSizeLimit(TConstArrayRef<TCell> values) {
+    for (const auto& value : values) {
+        if (value.Size() > NLimits::MaxWriteValueSize) {
+            return TStringBuilder() << "Row cell size of " << value.Size()
+                << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize;
+        }
+    }
+    return {};
+}
+
 template <typename TEvRequest, typename TEvResponse>
 TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges)
     : Ev(ev)
@@ -124,21 +146,17 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             return true;
         }
 
-        key.clear();
-        size_t ki = 0;
-        ui64 keyBytes = 0;
-        for (const auto& kt : tableInfo.KeyColumnTypes) {
-            const TCell& c = keyCells.GetCells()[ki];
-            keyBytes += c.Size();
-            key.emplace_back(TRawTypeValue(c.AsRef(), kt.GetTypeId()));
-            ++ki;
+        if (auto error = CheckUploadKeySizeLimit(keyCells.GetCells())) {
+            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
+            return true;
         }
 
-        if (keyBytes > NLimits::MaxWriteKeySize) {
-            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                     Sprintf("Row key size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
-                             keyBytes, NLimits::MaxWriteKeySize));
-            return true;
+        key.clear();
+        size_t ki = 0;
+        for (const auto& kt : tableInfo.KeyColumnTypes) {
+            const TCell& c = keyCells.GetCells()[ki];
+            key.emplace_back(TRawTypeValue(c.AsRef(), kt.GetTypeId()));
+            ++ki;
         }
 
         if (upsertIfExists) {
@@ -158,16 +176,14 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
         }
 
+        if (auto error = CheckUploadValueSizeLimit(valueCells.GetCells())) {
+            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
+            return true;
+        }
+
         value.clear();
         size_t vi = 0;
         for (const auto& vt : valueCols) {
-            if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) {
-                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                         Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
-                                 valueCells.GetBuffer().size(), NLimits::MaxWriteValueSize));
-                return true;
-            }
-
             value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second.GetTypeId())));
             ++vi;
         }

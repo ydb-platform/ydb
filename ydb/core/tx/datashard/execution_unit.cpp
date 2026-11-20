@@ -2,6 +2,8 @@
 #include "execution_unit_ctors.h"
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -169,6 +171,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
+    const bool readOnlyAdmission = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
 
      // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
     auto incOverloaded = [this, writeOp]() {
@@ -193,8 +196,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Tablet " << DataShard.TabletID() << " rejecting tx due to split");
+        YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to split",
+            {"tabletId", DataShard.TabletID()});
 
         incOverloaded();
         op->Abort();
@@ -204,7 +207,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
     // Check if shard state is not appropriate for tx execution
     if (DataShard.GetState() != TShardState::Ready &&
         DataShard.GetState() != TShardState::Readonly &&
-        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly()))
+        !(DataShard.GetState() == TShardState::Frozen && readOnlyAdmission))
     {
         TString err = TStringBuilder()
             << "Wrong shard state: " << (TShardState)DataShard.GetState()
@@ -216,7 +219,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
         incOverloaded();
         op->Abort();
@@ -234,14 +237,14 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
         incOverloaded();
         op->Abort();
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+    if (!readOnlyAdmission && DataShard.CheckChangesQueueOverflow()) {
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
 
@@ -254,8 +257,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                     ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                     "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow");
+        YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to changes queue overflow",
+            {"tabletId", DataShard.TabletID()});
 
         incOverloaded();
         DataShard.IncCounter(COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS);
@@ -263,7 +266,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
+    if (DataShard.IsReplicated() && !(readOnlyAdmission || op->IsCommitWritesTx())) {
         TString err = TStringBuilder()
             << "Can't execute write tx at replicated table:"
             << " tablet id: " << DataShard.TabletID();
@@ -275,7 +278,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_NOTICE_CTX(ctx, err);
 
         // no incOverloaded here as it's treated as BAD_REQUEST, not OVERLOAD
         op->Abort();
@@ -286,6 +289,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 }
 
 bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
+    const bool readOnlyAdmission = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
+
     if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||
         DataShard.GetState() == TShardState::SplitSrcMakeSnapshot ||
         DataShard.GetState() == TShardState::SplitSrcSendingSnapshot ||
@@ -296,7 +301,7 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
 
     if (DataShard.GetState() != TShardState::Ready &&
         DataShard.GetState() != TShardState::Readonly &&
-        !(DataShard.GetState() == TShardState::Frozen && op->IsReadOnly()))
+        !(DataShard.GetState() == TShardState::Frozen && readOnlyAdmission))
     {
         return true;
     }
@@ -305,11 +310,11 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+    if (!readOnlyAdmission && DataShard.CheckChangesQueueOverflow()) {
         return true;
     }
 
-    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
+    if (DataShard.IsReplicated() && !(readOnlyAdmission || op->IsCommitWritesTx())) {
         return true;
     }
 

@@ -189,7 +189,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     if (settings.LogStream) {
         auto* logStream = settings.LogStream;
-        auto mutex = std::make_shared<TMutex>();
+        auto mutex = settings.LogStreamMutex ? settings.LogStreamMutex : std::make_shared<TMutex>();
         auto makeBackend = [logStream, mutex]() {
             return new TSynchronizedStreamLogBackend(logStream, mutex);
         };

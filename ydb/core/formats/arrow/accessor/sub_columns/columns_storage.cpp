@@ -62,8 +62,8 @@ void TColumnsData::TIterator::InitArrays() {
             FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
             ChunkAddress = std::nullopt;
         }
-        const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
-        ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
+        ChunkAddress = GlobalChunkedArray->GetChunk(ChunkAddress, CurrentIndex);
+        const ui32 localIndex = ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
         CurrentArrayData = ChunkAddress->GetArray().get();
         // Dictionary columns materialize (decode) to a dense array, so they are
         // read exactly like a plain Array here.

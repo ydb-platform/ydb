@@ -32,6 +32,8 @@
 
 #include <util/string/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -350,8 +352,11 @@ private:
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvGetExportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvExport::TEvGetExportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
         *resp.mutable_operation() = TExportConv::ToOperation(record.GetEntry());
@@ -361,8 +366,11 @@ private:
     void Handle(NSchemeShard::TEvImport::TEvGetImportResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvGetImportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvImport::TEvGetImportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
         *resp.mutable_operation() = TImportConv::ToOperation(record.GetEntry());
@@ -372,8 +380,11 @@ private:
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvGetResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvGetResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             ReplyGetOperationResponse(true, ctx, record.GetStatus());
@@ -388,8 +399,11 @@ private:
     void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvGetResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvGetResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             ReplyGetOperationResponse(true, ctx, record.GetStatus());
@@ -404,8 +418,11 @@ private:
     void Handle(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSetColumnConstraint::TEvGetResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvGetResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             ReplyGetOperationResponse(true, ctx, record.GetStatus());
@@ -439,8 +456,11 @@ private:
     void Handle(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvGetIncrementalBackupResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvGetIncrementalBackupResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
         *resp.mutable_operation() = TIncrementalBackupConv::ToOperation(record.GetIncrementalBackup());
@@ -450,8 +470,11 @@ private:
     void Handle(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvGetBackupCollectionRestoreResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvGetBackupCollectionRestoreResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
         *resp.mutable_operation() = TBackupCollectionRestoreConv::ToOperation(record.GetBackupCollectionRestore());
@@ -461,8 +484,11 @@ private:
     void Handle(NSchemeShard::TEvBackup::TEvGetFullBackupResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvGetFullBackupResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvGetFullBackupResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
         *resp.mutable_operation() = TFullBackupConv::ToOperation(record.GetFullBackup());

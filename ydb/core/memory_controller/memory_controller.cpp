@@ -53,6 +53,14 @@ ui64 SafeDiff(ui64 a, ui64 b) {
     return a - Min(a, b);
 }
 
+ui64 GetMemoryMapsCountOrZero() {
+    try {
+        return GetMemoryMapsCount();
+    } catch (const yexception&) {
+        return 0;
+    }
+}
+
 class TMemoryConsumer : public IMemoryConsumer {
 public:
     TMemoryConsumer(EMemoryConsumerKind kind, TActorId actorId)
@@ -251,7 +259,7 @@ private:
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
         Counters->GetCounter("Stats/MemTotal")->Set(processMemoryInfo.MemTotal.value_or(0));
         Counters->GetCounter("Stats/MemAvailable")->Set(processMemoryInfo.MemAvailable.value_or(0));
-        Counters->GetCounter("Stats/MemMapsCount")->Set(GetMemoryMapsCount());
+        Counters->GetCounter("Stats/MemMapsCount")->Set(GetMemoryMapsCountOrZero());
         Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
         Counters->GetCounter("Stats/AllocatorCachesMemory")->Set(processMemoryInfo.AllocatorCachesMemory);
         Counters->GetCounter("Stats/HardLimit")->Set(hardLimitBytes);

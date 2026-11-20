@@ -1418,32 +1418,6 @@ private:
             {"itemIdx", ItemIdx},
         );
 
-        if (importInfo->RecoveryError && !importInfo->IsFinished() && importInfo->State != EState::Cancellation) {
-            NIceDb::TNiceDb db(txc.DB);
-            // A proposal may have committed before its reply was persisted.
-            // Reconcile those transactions before requesting their cancellation.
-            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-                auto& item = importInfo->Items[itemIdx];
-                if (item.WaitTxId != InvalidTxId) {
-                    continue;
-                }
-
-                TTxId txId = InvalidTxId;
-                if (item.State == EState::Transferring && item.DstPathId) {
-                    txId = GetActiveRestoreTxId(*importInfo, itemIdx);
-                } else if (item.State == EState::BuildIndexes) {
-                    txId = GetActiveBuildIndexId(*importInfo, itemIdx);
-                }
-                if (txId != InvalidTxId) {
-                    item.WaitTxId = txId;
-                    Self->TxIdToImport[txId] = {importInfo->Id, itemIdx};
-                    PersistImportItemState(db, *importInfo, itemIdx);
-                }
-            }
-            CancelAndPersist(db, importInfo, -1, importInfo->RecoveryError, "invalid persisted import metadata");
-            return;
-        }
-
         switch (importInfo->State) {
             case EState::DownloadExportMetadata: {
                 GetSchemaMapping(importInfo, ctx);
@@ -1748,7 +1722,6 @@ private:
             childItem.State = EState::Waiting;
             childItem.ParentIdx = msg.ItemIdx;
             childItem.Table = std::move(scheme);
-            childItem.ExportItemIV = indexMetadata.IV;
 
             Self->PersistNewImportItem(db, *importInfo, childIdx);
             Self->PersistImportItemScheme(db, *importInfo, childIdx);

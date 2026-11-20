@@ -216,12 +216,10 @@ protected:
         return true;
     }
 
-    bool MaybeDecrypt(const TString& content, TString& result, NBackup::EBackupFileType fileType,
-            ui32 shardNumber = 0, const TMaybe<NBackup::TEncryptionIV>& itemIV = Nothing()) {
-        const auto& baseIV = itemIV ? itemIV : IV;
-        if (Key && baseIV) {
+    bool MaybeDecrypt(const TString& content, TString& result, NBackup::EBackupFileType fileType, ui32 shardNumber = 0) {
+        if (Key && IV) {
             try {
-                NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(*baseIV, fileType, 0 /* backupItemNumber: already combined */, shardNumber);
+                NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, shardNumber);
                 auto buffer = NBackup::TEncryptedFileDeserializer::DecryptFullFile(*Key, expectedIV, TBuffer(content.data(), content.size()));
                 result.assign(buffer.Data(), buffer.Size());
                 return true;
@@ -899,31 +897,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         TString content;
-        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
-        auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
-        if (Key && !indexImplTablePrefix.IV) {
-            try {
-                // Older uploaders omit per-index IVs. Authenticate the header, then
-                // require the recovered item IV to belong to this backup.
-                auto [buffer, fileIV] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
-                    *Key, TBuffer(msg.Body.data(), msg.Body.size()));
-                Y_ENSURE(IV && IV->Size() == NBackup::TEncryptionIV::SIZE
-                    && fileIV.Size() == NBackup::TEncryptionIV::SIZE, "Invalid index encryption IV size");
-                auto indexIV = NBackup::TEncryptionIV::Combine(fileIV,
-                    NBackup::EBackupFileType::TableSchema, 0, 0);
-                for (size_t i = 0; i < NBackup::TEncryptionIV::SIZE; ++i) {
-                    if (i < NBackup::TEncryptionIV::BACKUP_ITEM_OFFSET
-                        || i >= NBackup::TEncryptionIV::BACKUP_ITEM_OFFSET + NBackup::TEncryptionIV::BACKUP_ITEM_SIZE) {
-                        Y_ENSURE(indexIV.IV[i] == IV->IV[i], "Index encryption IV does not belong to this backup");
-                    }
-                }
-                indexImplTablePrefix.IV = std::move(indexIV);
-                content.assign(buffer.Data(), buffer.Size());
-            } catch (const std::exception& ex) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << CurrentRequestKey << ": " << ex.what());
-            }
-        } else if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema,
-                0, indexImplTablePrefix.IV)) {
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema, IndexCheckedMaterializedIndexImplTable)) {
             return;
         }
 
@@ -941,6 +915,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": cannot parse index");
         }
 
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        const auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
         item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
 
         auto nextStep = [this]() {
@@ -1195,7 +1171,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
                         for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
                             const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
-                            IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix, Nothing()});
+                            IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
                         }
                     }
                 }
@@ -1208,6 +1184,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void DownloadMaterializedIndexes() {
+        // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
         while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
             const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
             if (!AsyncIndexes.contains(prefix.substr(0, prefix.find('/')))) {

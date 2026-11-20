@@ -75,8 +75,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     return propose;
 }
 
-static bool GetDescription(TSchemeShard* ss, const TPathId& pathId,
-        NKikimrSchemeOp::TPathDescription& description, TString& error) {
+static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId) {
     NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
@@ -85,83 +84,36 @@ static bool GetDescription(TSchemeShard* ss, const TPathId& pathId,
     opts.SetShowPrivateTable(true);
 
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
-    const auto& record = desc->GetRecord();
-    if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
-        error = TStringBuilder() << "Cannot describe backup table: " << pathId
-            << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
-            << ", reason: " << record.GetReason();
-        return false;
-    }
-    description.CopyFrom(record.GetPathDescription());
-    return true;
+    auto record = desc->GetRecord();
+
+    return record.GetPathDescription();
 }
 
-static const NKikimrSchemeOp::TBackupTask* FindTableSchemeSnapshot(TSchemeShard* ss, const TPath& path) {
-    if (!path.IsResolved() || path.IsDeleted()) {
-        return nullptr;
-    }
-
-    const TPathId pathId = path.Base()->PathId;
-    if (path->IsColumnTable() && ss->ColumnTables.contains(pathId)) {
-        return &ss->ColumnTables.at(pathId).GetPtr()->BackupSettings;
-    }
-    if (path->IsTable() && ss->Tables.contains(pathId)) {
-        return &ss->Tables.at(pathId)->BackupSettings;
-    }
-    return nullptr;
-}
-
-static bool MakeLegacyTableSchemeSnapshot(TSchemeShard* ss, const TPath& sourcePath,
-        const TPath& copiedPath, bool includeIndexData, NKikimrSchemeOp::TBackupTask& snapshot, TString& error) {
-    if (!MakeTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(),
-            sourcePath.Base()->PathId, snapshot, error)) {
-        return false;
-    }
-    if (includeIndexData && copiedPath.IsResolved() && !copiedPath.IsDeleted() && copiedPath->IsTable()) {
-        NKikimrSchemeOp::TPathDescription copiedDescription;
-        if (!GetDescription(ss, copiedPath.Base()->PathId, copiedDescription, error)) {
-            return false;
-        }
-        // An old copy may contain a Ready replacement whose build was already
-        // forgotten. Its intended public name cannot be recovered safely.
-        for (const auto& index : copiedDescription.GetTable().GetTableIndexes()) {
-            if (GetRebuildIndexBuildId(index.GetName())) {
-                error = TStringBuilder() << "Legacy consistent copy contains a temporary rebuild index: "
-                    << index.GetName();
-                return false;
-            }
-        }
-        // A live index may have finished, disappeared, or been replaced since the
-        // legacy copy was made. Its definition must match the copied implementation.
-        snapshot.MutableTable()->MutableTable()->MutableTableIndexes()
-            ->CopyFrom(copiedDescription.GetTable().GetTableIndexes());
-    }
-    return true;
-}
-
-TMaybe<TString> ComputeIndexItemSuffix(
-    const NKikimrSchemeOp::TBackupTask* snapshot,
-    const NKikimrSchemeOp::TPathDescription& sourceDescription,
-    const TString& indexImplTablePath,
-    bool encrypted,
-    bool exportChangefeeds,
-    TString& error)
+static TString ComputeIndexItemSuffix(
+    TSchemeShard* ss,
+    const TExportInfo& exportInfo,
+    const TExportInfo::TItem& item,
+    bool encrypted)
 {
-    error.clear();
     if (!encrypted) {
-        return indexImplTablePath;
+        return item.SourcePathName;
     }
-    const auto& parentDescription = snapshot && snapshot->HasTable() ? snapshot->GetTable() : sourceDescription;
 
-    int idx = 0;
+    static constexpr int INVALID_IDX = 999;
+    int idx = INVALID_IDX;
     bool found = false;
 
+    Y_ABORT_UNLESS(item.ParentIdx < exportInfo.Items.size());
+    const auto& parentItem = exportInfo.Items[item.ParentIdx];
+
+    auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
     TStringBuf indexName;
     TStringBuf implTableName;
-    if (parentDescription.HasTable() && TStringBuf(indexImplTablePath).TrySplit('/', indexName, implTableName)) {
+    if (parentPath.IsResolved() && TStringBuf(item.SourcePathName).TrySplit('/', indexName, implTableName)) {
+        const auto parentDescription = GetDescription(ss, parentPath.Base()->PathId);
         // Reserve all feed slots, including omitted feeds, just as the uploader
         // does when assigning index prefixes in the table metadata.
-        idx = exportChangefeeds
+        idx = AppData()->FeatureFlags.GetEnableChangefeedsExport()
             ? parentDescription.GetTable().CdcStreamsSize() + 1 : 1;
 
         for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
@@ -192,59 +144,17 @@ TMaybe<TString> ComputeIndexItemSuffix(
         }
     }
 
-    if (!found) {
-        error = TStringBuilder() << "Index implementation table is missing from the table scheme: " << indexImplTablePath;
-        return Nothing();
-    }
-
     std::stringstream ss2;
-    ss2 << std::setfill('0') << std::setw(3) << std::right << idx;
+    ss2 << std::setfill('0') << std::setw(3) << std::right << (found ? idx : INVALID_IDX);
     return ss2.str();
 }
 
-static TMaybe<TString> ComputeIndexItemSuffix(
-    TSchemeShard* ss,
-    const TExportInfo& exportInfo,
-    const TExportInfo::TItem& item,
-    bool encrypted,
-    TString& error)
-{
-    if (!encrypted) {
-        return item.SourcePathName;
-    }
-
-    Y_ABORT_UNLESS(item.ParentIdx < exportInfo.Items.size());
-    const auto& parentItem = exportInfo.Items[item.ParentIdx];
-
-    const auto copiedParentPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, item.ParentIdx), ss);
-    const auto* snapshot = FindTableSchemeSnapshot(ss, copiedParentPath);
-    NKikimrSchemeOp::TPathDescription sourceDescription;
-
-    if (!snapshot || !snapshot->HasTable()) {
-        // Copies created before scheme capture was introduced use the live source.
-        const auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
-        if (!parentPath.IsResolved() || parentPath.IsDeleted()) {
-            error = "Source table is not available and the table scheme snapshot is missing";
-            return Nothing();
-        }
-
-        NKikimrSchemeOp::TBackupTask legacySnapshot;
-        if (!MakeLegacyTableSchemeSnapshot(ss, parentPath, copiedParentPath, exportInfo.IncludeIndexData, legacySnapshot, error)) {
-            return Nothing();
-        }
-        sourceDescription.CopyFrom(legacySnapshot.GetTable());
-    }
-
-    return ComputeIndexItemSuffix(snapshot, sourceDescription, item.SourcePathName, encrypted, AppData()->FeatureFlags.GetEnableChangefeedsExport(), error);
-}
-
 template <typename TSettings>
-TMaybe<TString> ComputeIndexItemPath(
+TString ComputeIndexItemPath(
     TSchemeShard* ss,
     const TExportInfo::TItem& item,
     ui32 itemIdx, const TExportInfo& exportInfo,
-    const TSettings& exportSettings,
-    TString& error)
+    const TSettings& exportSettings)
 {
     TString itemPath;
     if (item.ParentIdx == Max<ui32>()) {
@@ -256,21 +166,31 @@ TMaybe<TString> ComputeIndexItemPath(
         if (!itemPath.empty() && itemPath.back() != '/') {
             itemPath += '/';
         }
-
-        const auto suffix = ComputeIndexItemSuffix(ss, exportInfo, item, exportSettings.has_encryption_settings(), error);
-        if (!suffix) {
-            return Nothing();
-        }
-
-        itemPath += *suffix;
+        itemPath += ComputeIndexItemSuffix(ss, exportInfo, item,
+            exportSettings.has_encryption_settings());
     }
     return itemPath;
 }
 
-TMaybe<TString> ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx, TString& error) {
+TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
     Ydb::Export::ExportToS3Settings settings;
     Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
-    return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings, error);
+    return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings);
+}
+
+static const NKikimrSchemeOp::TBackupTask* FindTableSchemeSnapshot(TSchemeShard* ss, const TPath& path) {
+    if (!path.IsResolved() || path.IsDeleted()) {
+        return nullptr;
+    }
+
+    const TPathId pathId = path.Base()->PathId;
+    if (path->IsColumnTable() && ss->ColumnTables.contains(pathId)) {
+        return &ss->ColumnTables.at(pathId).GetPtr()->BackupSettings;
+    }
+    if (path->IsTable() && ss->Tables.contains(pathId)) {
+        return &ss->Tables.at(pathId)->BackupSettings;
+    }
+    return nullptr;
 }
 
 static bool FillSetValForSequences(
@@ -308,46 +228,21 @@ static bool FillSetValForSequences(
     return true;
 }
 
-static void FillPartitioning(NKikimrSchemeOp::TTableDescription& desc,
-        const NKikimrSchemeOp::TTableDescription& copiedTable) {
-    *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
-    *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
-}
-
 static bool FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc,
         const TPathId& exportItemPathId, TString& error) {
-    NKikimrSchemeOp::TPathDescription copiedPath;
-    if (!GetDescription(ss, exportItemPathId, copiedPath, error)) {
-        return false;
-    }
+    const auto copiedPath = GetDescription(ss, exportItemPathId);
     if (!copiedPath.HasTable()) {
         error = "Consistent copy does not contain a row table description";
         return false;
     }
     const auto& copiedTable = copiedPath.GetTable();
-    FillPartitioning(desc, copiedTable);
-
-    for (auto& index : *desc.MutableTableIndexes()) {
-        for (const auto& copiedIndex : copiedTable.GetTableIndexes()) {
-            if (copiedIndex.GetName() != index.GetName()) {
-                continue;
-            }
-            if (copiedIndex.IndexImplTableDescriptionsSize() != index.IndexImplTableDescriptionsSize()) {
-                error = TStringBuilder() << "Index implementation table count does not match the consistent copy"
-                    << ": index: " << index.GetName();
-                return false;
-            }
-            for (size_t i = 0; i < index.IndexImplTableDescriptionsSize(); ++i) {
-                FillPartitioning(*index.MutableIndexImplTableDescriptions(i), copiedIndex.GetIndexImplTableDescriptions(i));
-            }
-            break;
-        }
-    }
+    *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
+    *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
     return true;
 }
 
 static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task,
-        const TPath& sourcePath, const TPath& exportItemPath, bool allowMissingSource, bool includeIndexData, TString& error) {
+        const TPath& sourcePath, const TPath& exportItemPath, bool allowMissingSource, TString& error) {
     error.clear();
     const auto* snapshot = FindTableSchemeSnapshot(ss, exportItemPath);
     NKikimrSchemeOp::TBackupTask legacySnapshot;
@@ -366,7 +261,7 @@ static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask&
                 {"exportItemPath", exportItemPath.PathString()},
             );
         }
-        if (!MakeLegacyTableSchemeSnapshot(ss, sourcePath, exportItemPath, includeIndexData, legacySnapshot, error)) {
+        if (!MakeTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(), sourcePath.Base()->PathId, legacySnapshot, error)) {
             return false;
         }
         snapshot = &legacySnapshot;
@@ -411,25 +306,8 @@ void FillEncryptionSettings(
     if (exportSettings.has_encryption_settings()) {
         auto& encryptionSettings = *task.MutableEncryptionSettings();
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());
-        const auto& item = exportInfo.Items.at(itemIdx);
-        if (item.ParentIdx == Max<ui32>()) {
-            Y_ABORT_UNLESS(itemIdx < exportInfo.ExportMetadata.SchemaMappingSize());
-            encryptionSettings.SetIV(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
-            for (ui32 childIdx = 0; childIdx < exportInfo.Items.size(); ++childIdx) {
-                const auto& child = exportInfo.Items[childIdx];
-                if (child.ParentIdx == itemIdx) {
-                    (*encryptionSettings.MutableIndexIVs())[child.SourcePathName] = NBackup::TEncryptionIV::Combine(
-                        NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetIV()),
-                        NBackup::EBackupFileType::Metadata, childIdx + 1, 0).GetBinaryString();
-                }
-            }
-        } else {
-            // Roots and implementation tables share one item-number namespace.
-            // Reusing a parent's IV would reuse nonces for scheme and data files.
-            encryptionSettings.SetIV(NBackup::TEncryptionIV::Combine(
-                NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetIV()),
-                NBackup::EBackupFileType::Metadata, itemIdx + 1, 0).GetBinaryString());
-        }
+        Y_ABORT_UNLESS(itemIdx < exportInfo.ExportMetadata.SchemaMappingSize());
+        encryptionSettings.SetIV(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
         *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
     }
 }
@@ -459,7 +337,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         task.SetTableName(ToString(itemIdx));
 
         if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss),
-                exportPath.Child(ToString(itemIdx)), exportInfo.Kind == TExportInfo::EKind::YT, exportInfo.IncludeIndexData, error)) {
+                exportPath.Child(ToString(itemIdx)), exportInfo.Kind == TExportInfo::EKind::YT, error)) {
             return nullptr;
         }
     } else {
@@ -479,7 +357,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         task.SetTableName(childName);
 
         if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss),
-                parentPath.Child(childName), exportInfo.Kind == TExportInfo::EKind::YT, false, error)) {
+                parentPath.Child(childName), exportInfo.Kind == TExportInfo::EKind::YT, error)) {
             return nullptr;
         }
     }
@@ -520,11 +398,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
 
-            const auto itemPath = ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings, error);
-            if (!itemPath) {
-                return nullptr;
-            }
-            backupSettings.SetObjectKeyPattern(*itemPath);
+            backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
 
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:
@@ -575,11 +449,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
-            const auto itemPath = ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings, error);
-            if (!itemPath) {
-                return nullptr;
-            }
-            backupSettings.SetPath(*itemPath);
+            backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
 
             // TODO: Parquet format support for FS will be added after public API approval
 

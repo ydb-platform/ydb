@@ -5437,19 +5437,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
-                        try {
-                            item.Metadata = ::NKikimr::NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
-                        } catch (const std::exception& ex) {
-                            importInfo->RecoveryError = TStringBuilder()
-                                << "Cannot restore persisted import metadata for item "
-                                << itemIdx << ": " << ex.what();
-
-                            YDB_LOG_ERROR_CTX(ctx, "Cannot restore import metadata",
-                                {"importId", importId},
-                                {"itemIdx", itemIdx},
-                                {"error", importInfo->RecoveryError},
-                            );
-                        }
+                        item.Metadata = ::NKikimr::NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {

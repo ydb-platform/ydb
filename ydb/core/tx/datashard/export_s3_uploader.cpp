@@ -1212,17 +1212,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
                     exportPrefix = implTablePrefix;
                 }
 
-                TMaybe<NBackup::TEncryptionIV> indexIV;
-                if (encrypted) {
-                    const auto& indexIVs = Task.GetEncryptionSettings().GetIndexIVs();
-                    if (const auto it = indexIVs.find(implTablePrefix); it != indexIVs.end()) {
-                        indexIV = NBackup::TEncryptionIV::FromBinaryString(it->second);
-                    }
-                }
                 metadata.AddIndex(TIndexMetadata{
                     .ExportPrefix = exportPrefix,
                     .ImplTablePrefix = implTablePrefix,
-                    .IV = std::move(indexIV),
                 });
             }
         }

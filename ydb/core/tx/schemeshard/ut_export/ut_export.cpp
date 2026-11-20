@@ -6386,11 +6386,6 @@ state: STATE_ENABLED
         AsyncIndexExport(Env(), Runtime(), S3Mock(), S3Port(), true, false);
     }
 
-    Y_UNIT_TEST(IndexMaterializationMixedEncrypted) {
-        EnvOptions().EnableIndexMaterialization(true);
-        AsyncIndexExport(Env(), Runtime(), S3Mock(), S3Port(), true, true);
-    }
-
     Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {
         EnvOptions().EnableIndexMaterialization(true);
         IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(

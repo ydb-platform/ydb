@@ -4099,7 +4099,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     EState State = EState::Invalid;
     TString Issue;
-    TString RecoveryError; // volatile diagnostic from loading persisted state
     TVector<TItem> Items;
     int WaitingSchemeObjects = 0;
 

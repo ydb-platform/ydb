@@ -578,7 +578,7 @@ void SetupMetadataProvider(TTestActorRuntime& runtime, ui32 nodeIdx) {
     runtime.RegisterService(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIdx)), metadataServiceId, nodeIdx);
 }
 
-std::shared_ptr<NKqp::TKqpProxySharedResources> SetupKqpResourceManager(TTestActorRuntime& runtime,
+void SetupKqpResourceManager(TTestActorRuntime& runtime,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     ui32 nodeIdx
 ) {
@@ -592,12 +592,11 @@ std::shared_ptr<NKqp::TKqpProxySharedResources> SetupKqpResourceManager(TTestAct
     const ui32 userPoolId = runtime.GetAppData(nodeIdx).UserPoolId;
     TActorId kqpRmServiceId = runtime.Register(kqpRmService, nodeIdx, userPoolId);
     runtime.RegisterService(NKqp::MakeKqpRmServiceID(nodeId), kqpRmServiceId, nodeIdx);
-    return kqpProxySharedResources;
 }
 
 void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TTableServiceConfig tableServiceConfig;
-    auto kqpProxySharedResources = SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
+    SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
 
     // Used by KqpComputeSchedulerService
     {
@@ -618,7 +617,7 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
         tliConfig,
         {}, // kqp settings
         nullptr, // query replay factory
-        std::move(kqpProxySharedResources),
+        nullptr, // kqp proxy shared resources
         federatedQuerySetupFactory,
         nullptr // S3 actors factory
     );

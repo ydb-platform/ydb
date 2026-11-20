@@ -814,30 +814,23 @@ private:
         }
     }
 
-    void UploadCompletion(const TExportInfo::TPtr& exportInfo, ui32 itemIdx, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void UploadCompletion(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
         const bool operationMarker = itemIdx == Max<ui32>();
-        auto& uploader = operationMarker ? exportInfo->ExportMetadataUploader : exportInfo->Items.at(itemIdx).SchemeUploader;
+        auto& uploader = operationMarker
+            ? exportInfo.ExportMetadataUploader
+            : exportInfo.Items.at(itemIdx).SchemeUploader;
+
         if (uploader) {
             return;
         }
 
         Ydb::Export::ExportToS3Settings settings;
-        Y_ABORT_UNLESS(settings.ParseFromString(exportInfo->Settings));
+        Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
+        const TString prefix = operationMarker
+            ? GetExportCompletionPrefix(settings)
+            : ExportItemDestinationPrefix(Self, exportInfo, itemIdx);
 
-        TString error;
-        const auto prefix = operationMarker ? TMaybe<TString>(GetExportCompletionPrefix(settings)) : ExportItemDestinationPrefix(Self, *exportInfo, itemIdx, error);
-        if (!prefix) {
-            auto& item = exportInfo->Items.at(itemIdx);
-            Self->TxIdToExport.erase(item.WaitTxId);
-            item.WaitTxId = InvalidTxId;
-            item.State = EState::Cancelled;
-            item.Issue = error;
-            Self->PersistExportItemState(db, *exportInfo, itemIdx);
-            CancelAndPersistExport(exportInfo, itemIdx, "cannot determine completion marker destination", db);
-            return;
-        }
-
-        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo->Id, itemIdx, settings, *prefix));
+        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo.Id, itemIdx, settings, prefix));
         Self->RunningExportSchemeUploaders.emplace(uploader);
         // Bootstrap waits for this event: no S3 request is issued before commit.
         Send(uploader, new TEvents::TEvWakeup());
@@ -857,7 +850,7 @@ private:
         }
 
         if (exportInfo->Kind == TExportInfo::EKind::S3) {
-            UploadCompletion(exportInfo, Max<ui32>(), db, ctx);
+            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
         } else {
             CompleteTransfer(exportInfo, db);
         }
@@ -949,61 +942,6 @@ private:
         }
 
         return itemPath.Base()->PathId;
-    }
-
-    void RefreshIndexItems(TExportInfo& exportInfo, NIceDb::TNiceDb& db) {
-        if (!exportInfo.IncludeIndexData) {
-            return;
-        }
-
-        // Builds can finish between export creation and the consistent copy.
-        // Materialize exactly the indexes present in that copy.
-        for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
-            if (exportInfo.Items[itemIdx].ParentIdx != Max<ui32>()) {
-                db.Table<Schema::ExportItems>().Key(exportInfo.Id, itemIdx).Delete();
-            }
-        }
-        EraseIf(exportInfo.Items, [](const auto& item) { return item.ParentIdx != Max<ui32>(); });
-
-        TVector<TExportInfo::TItem> indexItems;
-        for (ui32 parentIdx : xrange(exportInfo.Items.size())) {
-            if (exportInfo.Items[parentIdx].SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
-                continue;
-            }
-
-            const auto parentPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, parentIdx), Self);
-            if (!parentPath.IsResolved() || parentPath.IsDeleted()) {
-                continue;
-            }
-
-            for (const auto& [indexName, indexPathId] : parentPath.Base()->GetChildren()) {
-                const auto indexPath = parentPath.Child(indexName);
-                if (indexPath.IsDeleted() || !indexPath.IsTableIndex() || indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
-                    continue;
-                }
-
-                for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
-                    const auto implPath = indexPath.Child(implName);
-                    if (implPath.IsDeleted() || !implPath->IsTable()) {
-                        continue;
-                    }
-
-                    TPathId sourcePathId = implPathId;
-                    const auto& description = Self->Tables.at(implPathId)->BackupSettings.GetTable();
-                    if (description.HasSelf() && description.GetSelf().GetSchemeshardId() && description.GetSelf().GetPathId()) {
-                        sourcePathId = TPathId(description.GetSelf().GetSchemeshardId(), description.GetSelf().GetPathId());
-                    }
-
-                    indexItems.emplace_back(TStringBuilder() << indexName << '/' << implName, sourcePathId, NKikimrSchemeOp::EPathTypeTableIndex, parentIdx);
-                }
-            }
-        }
-
-        for (auto& item : indexItems) {
-            exportInfo.Items.push_back(std::move(item));
-        }
-
-        Self->PersistCreateExport(db, exportInfo);
     }
 
     TTxId GetActiveCopyingTxId(const TExportInfo& exportInfo) {
@@ -1200,7 +1138,7 @@ private:
         case EState::Transferring: {
             const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
             if (exportInfo->Kind == TExportInfo::EKind::S3 && allItemsDone) {
-                UploadCompletion(exportInfo, Max<ui32>(), db, ctx);
+                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
                 break;
             }
             TDeque<ui32> pendingTables;
@@ -1481,9 +1419,6 @@ private:
                     if (exportInfo->State == EState::CopyTables && isMultipleMods) {
                         bool sourcePathMissing = false;
                         for (const auto& item : exportInfo->Items) {
-                            if (!IsPathTypeTable(item)) {
-                                continue;
-                            }
                             if (!Self->PathsById.contains(item.SourcePathId)) {
                                 exportInfo->DependencyTxIds.clear();
                                 sourcePathMissing = true;
@@ -1806,7 +1741,6 @@ private:
                 Resume(exportInfo, txc, ctx);
                 return;
             }
-            RefreshIndexItems(*exportInfo, db);
             TDeque<ui32> tables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items[itemIdx];
@@ -1849,7 +1783,7 @@ private:
             if (needsCompletionMarker) {
                 // Keep the durable backup tx id until the marker is acknowledged.
                 // Recovery can recheck BackupHistory and safely repeat the PUT.
-                UploadCompletion(exportInfo, itemIdx, db, ctx);
+                UploadCompletion(*exportInfo, itemIdx, ctx);
                 return;
             }
 

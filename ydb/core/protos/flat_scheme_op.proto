@@ -1620,8 +1620,6 @@ message TBackupTask {
         oneof Key {
             Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 3;
         }
-        // Implementation table path relative to this table -> its backup item IV.
-        map<string, bytes> IndexIVs = 4;
     }
 
     optional TEncryptionSettings EncryptionSettings = 19;

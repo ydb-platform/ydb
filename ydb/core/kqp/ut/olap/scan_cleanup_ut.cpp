@@ -87,6 +87,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         longTxConfig.SetPrefillTimeoutSeconds(1);
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.GetAppData(0).LongTxServiceConfig = longTxConfig;
 
         kikimr.RunCall([&] {
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -192,6 +193,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         // Safe reacquisition may choose a newer version after the delayed reply.
         const NOlap::TSnapshot readSnapshot(acquiredSnapshot->Step, acquiredSnapshot->TxId);
+        UNIT_ASSERT(csController->DelayedSnapshot < readSnapshot);
         const TString expected = readSnapshot < *csController->ReplacementSnapshot ? R"([[1u;["old"]]])" : R"([[1u;["new"]]])";
         CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
         const auto rollback = kikimr.RunCall([&] { return tx->Rollback().ExtractValueSync(); });

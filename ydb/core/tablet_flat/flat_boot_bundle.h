@@ -59,7 +59,7 @@ namespace NBoot {
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(std::move(msg.Pages));
+                Loader->Save(std::move(msg.Pages), std::move(msg.SharedMeta));
 
                 TryFinalize();
 
@@ -85,7 +85,7 @@ namespace NBoot {
             } else {
                 // StageParseMeta constructs both NPageCollection::TPageCollection and TPrivatePageCache::TPageCollection
                 Components[load->Cookie].LargeGlobId = load->LargeGlobId;
-                Components[load->Cookie].RawMeta = load->PlainData();
+                Components[load->Cookie].SetMeta(load->PlainData());
             }
 
             TryLoad();

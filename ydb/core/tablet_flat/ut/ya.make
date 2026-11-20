@@ -25,6 +25,7 @@ SRCS(
     flat_test_db.h
     flat_test_db.cpp
     flat_test_db_helpers.h
+    shared_cache_memory_ut.cpp
     shared_cache_btree_walk_ut.cpp
     shared_cache_s3fifo_ut.cpp
     shared_cache_tiered_ut.cpp
@@ -37,6 +38,7 @@ SRCS(
     ut_memtable.cpp
     ut_memtable_memory.cpp
     ut_sausage.cpp
+    ut_sausage_meta_cache.cpp
     ut_stat.cpp
     ut_comp_gen.cpp
     ut_compaction.cpp

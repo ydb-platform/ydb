@@ -1,15 +1,27 @@
 #include <shared_cache_counters.h>
+#include <shared_cache_memory.h>
+#include <shared_sausagecache_state.h>
+#include <flat_page_blobs.h>
+#include <flat_page_other.h>
+#include <flat_sausage_packet.h>
+#include <flat_sausage_record.h>
 #include <shared_cache_events.h>
 #include <shared_sausagecache.h>
+#include <flat_bio_actor.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/protos/bootstrap.pb.h>
+
+#include <array>
+#include <thread>
 
 namespace NKikimr::NSharedCache {
 using namespace NActors;
@@ -47,9 +59,11 @@ static TPageLocation _P(ui32 id, EPage type = EPage::Undef) {
 }
 
 struct TPageCollectionMock : public IPageCollection {
-    TPageCollectionMock(ui64 id, ui32 totalPages)
+    TPageCollectionMock(ui64 id, ui32 totalPages, i64 memoryUsage = 0, TSharedData metadataBuffer = {})
         : Id(1, 1, id)
         , TotalPages(totalPages)
+        , MemoryUsage(memoryUsage)
+        , MetadataBuffer(std::move(metadataBuffer))
     {}
 
     const TLogoBlobID& Label() const noexcept override {
@@ -93,6 +107,18 @@ struct TPageCollectionMock : public IPageCollection {
         return TPageLocation::FromPageIndex(pageId, 10, EPage::Undef, pageId + 1);
     }
 
+    i64 GetMetadataMemoryUsage() const noexcept override {
+        return MemoryUsage;
+    }
+
+    const TSharedData* GetMetadataBuffer() const noexcept override {
+        return MetadataBuffer ? &MetadataBuffer : nullptr;
+    }
+
+    TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+        return {};
+    }
+
     bool SkipBTreeIndexV1Shadow() const noexcept override {
         return SkipV1Shadow;
     }
@@ -103,6 +129,8 @@ struct TPageCollectionMock : public IPageCollection {
 private:
     TLogoBlobID Id;
     ui32 TotalPages;
+    const i64 MemoryUsage;
+    const TSharedData MetadataBuffer;
 };
 
 struct TExecutorMock : public TActorBootstrapped<TExecutorMock> {
@@ -127,6 +155,14 @@ private:
     }
 
     std::deque<NSharedCache::TEvResult::TPtr>& Results;
+};
+
+struct TRecordingMemoryConsumer : public NMemory::IMemoryConsumer {
+    void SetReport(NMemory::TConsumerReport report) override {
+        Report = report;
+    }
+
+    NMemory::TConsumerReport Report;
 };
 
 struct TSharedPageCacheMock {
@@ -169,6 +205,13 @@ struct TSharedPageCacheMock {
         TWaitForFirstEvent<TKikimrEvents::TEvWakeup> waiter(Runtime);
         waiter.Wait();
 
+        return *this;
+    }
+
+    TSharedPageCacheMock& SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
+        Send(Sender1, new NMemory::TEvConsumerRegistered(std::move(consumer)));
+        TWaitForFirstEvent<NMemory::TEvConsumerRegistered> waiter(Runtime);
+        waiter.Wait();
         return *this;
     }
 
@@ -388,6 +431,143 @@ struct TSharedPageCacheMock {
     TIntrusiveConstPtr<TPageCollectionMock> Collection2 = new TPageCollectionMock(2, 100);
 };
 
+Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
+    TCollection& InitCollection(TCollections & collections, TIntrusiveConstPtr<IPageCollection> descriptor) {
+        auto& collection = collections[descriptor->Label()];
+        collection.Id = descriptor->Label();
+        collection.SetPageCollection(std::move(descriptor));
+        return collection;
+    }
+
+    Y_UNIT_TEST(MetaLookupReusesRegisteredCoreWithoutAddingOwner) {
+        TSharedPageCacheMock sharedCache;
+        TRecord record(0);
+        auto raw = record.Finish();
+        const TLargeGlobId id(0, TLogoBlobID(1, 1, 10, 1, raw.size(), 0), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> registered = new NPageCollection::TPageCollection(id, raw);
+        const auto owner = sharedCache.Runtime.AllocateEdgeActor();
+        const auto reader = sharedCache.Runtime.AllocateEdgeActor();
+        sharedCache.Send(owner, new TEvAttach(registered, ECacheMode::Regular));
+        TWaitForFirstEvent<TEvAttach> attached(sharedCache.Runtime);
+        attached.Wait();
+        const i64 bytes = sharedCache.Counters->MetadataBytes->Val();
+
+        auto duplicate = TSharedData::Copy(raw.data(), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> candidate =
+            new NPageCollection::TPageCollection(id, duplicate);
+        sharedCache.Send(reader, new TEvRequest(EPriority::Fast, candidate, {}, 77, true), 99);
+        auto response = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 99);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Cookie, 77);
+        UNIT_ASSERT(response->Get()->PageCollection.Get() == candidate.Get());
+        UNIT_ASSERT(response->Get()->SharedMeta.Get() == registered->GetSharedMeta().Get());
+        UNIT_ASSERT(response->Get()->Pages.empty());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), bytes);
+        sharedCache.Unregister(owner);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 0);
+        UNIT_ASSERT(response->Get()->SharedMeta->Raw.data() == raw.data());
+    }
+
+    Y_UNIT_TEST(MetaLookupMissDoesNotRegisterCollection) {
+        TSharedPageCacheMock sharedCache;
+        TRecord record(0);
+        auto raw = record.Finish();
+        const TLargeGlobId id(0, TLogoBlobID(1, 1, 10, 1, raw.size(), 0), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> candidate = new NPageCollection::TPageCollection(id, raw);
+        const auto reader = sharedCache.Runtime.AllocateEdgeActor();
+        sharedCache.Send(reader, new TEvRequest(EPriority::Fast, candidate, {}, 0, true));
+        auto response = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(response->Get()->PageCollection.Get() == candidate.Get());
+        UNIT_ASSERT(response->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 0);
+    }
+
+    Y_UNIT_TEST(MetaLookupChecksStorageGroup) {
+        TSharedPageCacheMock sharedCache;
+        TRecord record(0);
+        auto raw = record.Finish();
+        const TLargeGlobId id(0, TLogoBlobID(1, 1, 10, 1, raw.size(), 0), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> registered = new NPageCollection::TPageCollection(id, raw);
+        const auto owner = sharedCache.Runtime.AllocateEdgeActor();
+        const auto reader = sharedCache.Runtime.AllocateEdgeActor();
+        sharedCache.Send(owner, new TEvAttach(registered, ECacheMode::Regular));
+        TWaitForFirstEvent<TEvAttach> attached(sharedCache.Runtime);
+        attached.Wait();
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> candidate =
+            new NPageCollection::TPageCollection(TLargeGlobId(1, id.Lead, id.Bytes), raw);
+        sharedCache.Send(reader, new TEvRequest(EPriority::Fast, candidate, {}, 0, true));
+        auto response = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(response->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->SharedMeta->Group, 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+    }
+
+    Y_UNIT_TEST(RequestOutlivesCollectionTeardown) {
+        TCollections collections;
+        TRequest request;
+        auto& collection = InitCollection(collections, new TPageCollectionMock(1, 1, 100));
+        request.PageCollection = collection.PageCollection;
+        collection.AddRequest(request);
+        collection.SetPageCollection(new TPageCollectionMock(1, 1, 200));
+        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 300);
+        const auto id = collection.Id;
+        collections.erase(id);
+        UNIT_ASSERT(!request.CollectionOwner);
+        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 100);
+        request.ReleaseCollection();
+        request.PageCollection.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TBlockIO_Actor) {
+    Y_UNIT_TEST(PoisonRepliesToActiveRead) {
+        for (bool globs : { false, true }) {
+            TTestBasicRuntime runtime;
+            runtime.Initialize(TAppPrepare().Unwrap());
+            const auto sender = runtime.AllocateEdgeActor();
+            const auto proxy = runtime.AllocateEdgeActor();
+            runtime.RegisterService(MakeBlobStorageProxyID(1), proxy);
+
+            TRecord record(1);
+            record.Push(TLogoBlobID(1, 1, 1, 1, 10, 0));
+            record.Push(ui32(globs ? EPage::Globs : EPage::DataPage), TString(10, 'x'));
+            auto raw = record.Finish();
+            const TLargeGlobId id(1, TLogoBlobID(1, 1, 2, 1, raw.size(), 0), raw.size());
+            auto collection = MakeIntrusiveConst<NPageCollection::TPageCollection>(id, std::move(raw));
+            TMetadataAccounting accounting;
+            accounting.AccountMetadata(*collection);
+            const ui64 metadataBytes = collection->GetMetadataMemoryUsage();
+            const ui64 eventCookie = 42;
+            const ui64 requestCookie = 10;
+            const auto bioActor = runtime.Register(new NBlockIO::TBlockIO({}, eventCookie));
+            runtime.Send(new IEventHandle(
+                bioActor, sender, new NBlockIO::TEvFetch(EPriority::Fast, collection, { collection->GetLocation(0) },
+                                      requestCookie, accounting.Share())));
+            auto read = runtime.GrabEdgeEvent<TEvBlobStorage::TEvGet>(proxy, TDuration::Seconds(5));
+            UNIT_ASSERT_VALUES_EQUAL(read->Sender, bioActor);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                accounting.GetMemoryUsage(), metadataBytes + (globs ? 10 + TSharedData::OverheadSize : 0));
+            runtime.Send(new IEventHandle(bioActor, sender, new TEvents::TEvPoison()));
+            auto result = runtime.GrabEdgeEvent<NBlockIO::TEvData>(sender, TDuration::Seconds(5));
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result->Cookie, eventCookie);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Cookie, requestCookie);
+            UNIT_ASSERT(result->Get()->PageCollection == collection);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Pages.size(), 1);
+            UNIT_ASSERT(!result->Get()->Pages[0].Data);
+            UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), metadataBytes);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
     Y_UNIT_TEST(Request_Basics) {
@@ -433,9 +613,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 4);
 
-        auto data = new NBlockIO::TEvData(NKikimrProto::ERROR, sharedCache.Collection1, 30);
-        data->Pages = {TLoadedPageData(_P(1).Offset, TSharedData{}), TLoadedPageData(_P(2).Offset, TSharedData{}), TLoadedPageData(_P(3).Offset, TSharedData{})};
-        sharedCache.Send(sharedCache.BlockIoSender, data, NO_QUEUE_COOKIE);
+        sharedCache.Fail(sharedCache.Collection1, { _P(1), _P(2), _P(3) });
         sharedCache.CheckResults({
             TFetch{1, sharedCache.Collection1, {}},
             TFetch{3, sharedCache.Collection1, {}}
@@ -543,9 +721,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 4);
 
-        auto data = new NBlockIO::TEvData(NKikimrProto::ERROR, sharedCache.Collection1, 10);
-        data->Pages = {TLoadedPageData(_P(1).Offset, TSharedData{})};
-        sharedCache.Send(sharedCache.BlockIoSender, data, ASYNC_QUEUE_COOKIE);
+        sharedCache.Fail(sharedCache.Collection1, { _P(1) }, ASYNC_QUEUE_COOKIE);
         sharedCache.CheckResults({
             TFetch{1, sharedCache.Collection1, {}},
             TFetch{2, sharedCache.Collection1, {}},
@@ -1016,6 +1192,342 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 0);
+    }
+
+    Y_UNIT_TEST(Metadata_AttachmentLifetime) {
+        TSharedPageCacheMock sharedCache;
+        const i64 usage = 104;
+        sharedCache.Collection1 = new TPageCollectionMock(1, 100, usage);
+        const auto& counters = *sharedCache.Counters;
+        const auto check = [&](i64 attached, i64 detached, ui64 detachedCollections) {
+            UNIT_ASSERT_VALUES_EQUAL(counters.CollectionMetadataBytes->Val(), attached + detached);
+            UNIT_ASSERT_VALUES_EQUAL(counters.DetachedCollectionMetadataBytes->Val(), detached);
+            UNIT_ASSERT_VALUES_EQUAL(counters.DetachedPageCollections->Val(), detachedCollections);
+        };
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(1) } } });
+        sharedCache.Provide(sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(1) } } });
+        check(usage, 0, 0);
+
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1);
+        check(usage, 0, 0);
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        check(usage, 0, 0);
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        check(usage, 0, 0);
+        sharedCache.Detach(sharedCache.Sender2, sharedCache.Collection1);
+        check(0, usage, 1);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1);
+        check(usage, 0, 0);
+        sharedCache.Unregister(sharedCache.Sender1);
+        check(0, usage, 1);
+        sharedCache.Unregister(sharedCache.Sender1);
+        check(0, usage, 1);
+
+        sharedCache.SetLimit(0).Wakeup();
+        check(0, 0, 0);
+    }
+
+    Y_UNIT_TEST(Metadata_DescriptorReplacementDuringRead) {
+        TSharedPageCacheMock sharedCache;
+        const i64 original = 104;
+        const i64 replacement = 192;
+        sharedCache.Collection1 = new TPageCollectionMock(1, 100, original);
+        const TIntrusiveConstPtr<TPageCollectionMock> reloaded = new TPageCollectionMock(1, 100, replacement);
+        const auto& counters = *sharedCache.Counters;
+        auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+        sharedCache.SetMemoryConsumer(consumer);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, original + PAGE_TOTAL_SIZE);
+        sharedCache.Attach(sharedCache.Sender2, reloaded);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, original + replacement + PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(counters.MetadataBytes->Val(), original + replacement);
+        UNIT_ASSERT_VALUES_EQUAL(counters.PageCollections->Val(), 1);
+        // Only the collection entry's current descriptor is included in this reference view
+        UNIT_ASSERT_VALUES_EQUAL(counters.CollectionMetadataBytes->Val(), replacement);
+        sharedCache.Provide(sharedCache.Collection1, { _P(1) });
+        sharedCache.Runtime.WaitFor("metadata read result", [&] {
+            return !sharedCache.Results.empty();
+        }, TDuration::Seconds(5));
+        UNIT_ASSERT(sharedCache.Results.front()->Get()->PageCollection.Get() == sharedCache.Collection1.Get());
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, original + replacement + PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(counters.MetadataBytes->Val(), original + replacement);
+        sharedCache.Unregister(sharedCache.Sender1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.CollectionMetadataBytes->Val(), replacement);
+        sharedCache.Unregister(sharedCache.Sender2);
+        UNIT_ASSERT_VALUES_EQUAL(counters.DetachedCollectionMetadataBytes->Val(), replacement);
+        sharedCache.SetLimit(0).Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(counters.CollectionMetadataBytes->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.DetachedCollectionMetadataBytes->Val(), 0);
+    }
+
+    Y_UNIT_TEST(Metadata_PreloadRetainsReplacedDescriptorUntilCompletion) {
+        for (bool fail : { false, true }) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetMemoryLimit(4096);
+            TSharedPageCacheMock sharedCache(config);
+            sharedCache.Collection1 = new TPageCollectionMock(1, 1, 104);
+            const TIntrusiveConstPtr<TPageCollectionMock> replacement = new TPageCollectionMock(1, 1, 192);
+
+            sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+            sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(0) } } });
+            sharedCache.Attach(sharedCache.Sender2, replacement, ECacheMode::TryKeepInMemory);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+            sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+            sharedCache.Detach(sharedCache.Sender2, replacement);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+
+            if (fail) {
+                sharedCache.Fail(sharedCache.Collection1, { _P(0) }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+            } else {
+                sharedCache.Provide(sharedCache.Collection1, { _P(0) }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+            }
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+            sharedCache.SetLimit(0).Wakeup();
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(Metadata_CancelledRequestsRetainFetchesUntilLastError) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(4096);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 2, 104);
+        const TIntrusiveConstPtr<TPageCollectionMock> replacement = new TPageCollectionMock(1, 2, 192);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(0) });
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { _P(0) } },
+            TFetch{ 10, sharedCache.Collection1, { _P(1) } },
+        });
+        sharedCache.Attach(sharedCache.Sender2, replacement);
+        sharedCache.Unregister(sharedCache.Sender1);
+        sharedCache.CheckResults({
+                                     TFetch{ 1, sharedCache.Collection1, {} },
+                                     TFetch{ 2, sharedCache.Collection1, {} },
+                                 }, NKikimrProto::RACE);
+        sharedCache.Unregister(sharedCache.Sender2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+
+        sharedCache.Fail(sharedCache.Collection1, { _P(0) });
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+        sharedCache.Fail(sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+    }
+
+    Y_UNIT_TEST(Metadata_QueuedFetchCanUseRetiredDescriptor) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(4096);
+        config.SetAsyncQueueInFlyLimit(0);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 2, 104);
+        const TIntrusiveConstPtr<TPageCollectionMock> replacement = new TPageCollectionMock(1, 2, 192);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(0), _P(1) }, EPriority::Bkgr);
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(0) } } });
+        sharedCache.Attach(sharedCache.Sender2, replacement);
+        sharedCache.Provide(sharedCache.Collection1, { _P(0) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+        sharedCache.Provide(sharedCache.Collection1, { _P(1) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(0), _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+    }
+
+    Y_UNIT_TEST(Metadata_GlobsReadCountsAllocationsByIdentity) {
+        for (bool shared : { false, true }) {
+            TSharedPageCacheMock sharedCache;
+            auto raw = TSharedData::Copy("0123456789", 10);
+            const i64 metadataBytes = 100 + raw.GetAllocationSize();
+            sharedCache.Collection1 = new TPageCollectionMock(1, 1, metadataBytes, raw);
+            auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+            sharedCache.SetMemoryConsumer(consumer);
+            const auto location = _P(0, EPage::Globs);
+            sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { location });
+            sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { location } } });
+            for (const auto& [sender, pages] : sharedCache.TakeFetchActors(sharedCache.Collection1, { location })) {
+                auto data = new NBlockIO::TEvData(NKikimrProto::OK, sharedCache.Collection1, pages.size() * 10);
+                data->Pages.emplace_back(location.Offset, shared ? raw : TSharedData::Copy(raw.data(), raw.size()));
+                sharedCache.Send(sender, data, NO_QUEUE_COOKIE);
+            }
+            sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(0) } } });
+            const i64 extraAllocation = shared ? 0 : raw.GetAllocationSize();
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), metadataBytes + extraAllocation);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, metadataBytes + extraAllocation + sizeof(TPage));
+        }
+    }
+
+    Y_UNIT_TEST(Metadata_GlobsBodyIsChargedOnce) {
+        for (bool bodyFirst : { false, true }) {
+            TSharedPageCacheMock sharedCache;
+            auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+            sharedCache.SetMemoryConsumer(consumer);
+            NTable::NPage::TExtBlobsWriter writer;
+            writer.Put(TGlobId(TLogoBlobID(1, 1, 1, 1, 100, 1), 1));
+            auto raw = writer.Make();
+            TIntrusiveConstPtr<IPageCollection> metadata =
+                new NTable::NPage::TExtBlobs(raw, TLogoBlobID(1, 1, 2, 1, raw.size(), 3));
+            const i64 metadataBytes = metadata->GetMetadataMemoryUsage();
+            const auto attachMetadata = [&] {
+                sharedCache.Send(sharedCache.Sender2, new TEvAttach(metadata, ECacheMode::Regular));
+                TWaitForFirstEvent<TEvAttach> waiter(sharedCache.Runtime);
+                waiter.Wait();
+            };
+            const auto provideBody = [&] {
+                auto saved = MakeHolder<TEvSaveCompactedPages>(sharedCache.Collection1);
+                auto page = MakeIntrusive<TPage>(_P(1).Offset, raw.size(), EPage::Globs, ui32{ 0 }, nullptr);
+                page->ProvideBody(raw);
+                saved->Pages.push_back(std::move(page));
+                sharedCache.Send(sharedCache.Sender1, saved.Release());
+                TWaitForFirstEvent<TEvSaveCompactedPages> waiter(sharedCache.Runtime);
+                waiter.Wait();
+            };
+            if (bodyFirst) {
+                provideBody();
+                attachMetadata();
+            } else {
+                attachMetadata();
+                provideBody();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, metadataBytes + sizeof(TPage));
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), metadataBytes);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
+            sharedCache.SetLimit(metadataBytes).Wakeup();
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, metadataBytes);
+            sharedCache.Send(sharedCache.Sender2, new TEvDetach(metadata->Label()));
+            TWaitForFirstEvent<TEvDetach> waiter(sharedCache.Runtime);
+            waiter.Wait();
+            // Detached descriptors and caller-held Raw remain physical owners
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, metadataBytes);
+            metadata.Reset();
+            raw = {};
+            sharedCache.Wakeup();
+            UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 0);
+        }
+    }
+
+    Y_UNIT_TEST(Metadata_ExpiryUpdatesConsumption) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetActivePagesReservationPercent(0);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 100, 300);
+        sharedCache.Collection2 = new TPageCollectionMock(2, 100, 200);
+        auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+        sharedCache.SetMemoryConsumer(consumer);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(1) } } });
+        sharedCache.Provide(sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(1) } } });
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, { _P(1) });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection2, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->DetachedPageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CollectionMetadataBytes->Val(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 500 + PAGE_TOTAL_SIZE);
+        sharedCache.Provide(sharedCache.Collection2, { _P(1) });
+        sharedCache.CheckResults({ TFetch{ 2, sharedCache.Collection2, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 500 + PAGE_TOTAL_SIZE);
+    }
+
+    Y_UNIT_TEST(Metadata_ExpiryPreservesOtherCollections) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetActivePagesReservationPercent(0);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 100, 200);
+        sharedCache.Collection2 = new TPageCollectionMock(2, 0, 200);
+        TIntrusiveConstPtr<TPageCollectionMock> other = new TPageCollectionMock(3, 100, 50);
+        auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+        sharedCache.SetMemoryConsumer(consumer);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(1) } } });
+        sharedCache.Provide(sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(1) } } });
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.Request(sharedCache.Sender1, other, { _P(1) });
+        sharedCache.CheckFetches({ TFetch{ 10, other, { _P(1) } } });
+        sharedCache.Provide(other, { _P(1) });
+        sharedCache.CheckResults({ TFetch{ 2, other, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 250 + 2 * PAGE_TOTAL_SIZE);
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection2, ECacheMode::TryKeepInMemory);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->DetachedPageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 450);
+    }
+
+    Y_UNIT_TEST(Metadata_RespectsExistingPageReservation) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetActivePagesReservationPercent(100);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 100, 100);
+        sharedCache.Collection2 = new TPageCollectionMock(2, 100, 80);
+        auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+        sharedCache.SetMemoryConsumer(consumer);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(1), _P(2) });
+        sharedCache.CheckFetches({ TFetch{ 20, sharedCache.Collection1, { _P(1), _P(2) } } });
+        sharedCache.Provide(sharedCache.Collection1, { _P(1), _P(2) });
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(1), _P(2) } } });
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, { _P(1) });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection2, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 180 + 3 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
+    }
+
+    Y_UNIT_TEST(Metadata_PinnedExcessTerminatesGC) {
+        TSharedPageCacheMock sharedCache;
+        sharedCache.Collection1 = new TPageCollectionMock(1, 100, DefaultMemoryLimit + 100);
+        auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+        sharedCache.SetMemoryConsumer(consumer);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, DefaultMemoryLimit + 100);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
+        sharedCache.Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, DefaultMemoryLimit + 100);
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, DefaultMemoryLimit + 100);
+        sharedCache.Collection1.Reset();
+        sharedCache.Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
+    }
+
+    Y_UNIT_TEST(Metadata_SaveBeforeAttach) {
+        TSharedPageCacheMock sharedCache;
+        const i64 usage = 104;
+        sharedCache.Collection1 = new TPageCollectionMock(1, 100, usage);
+        auto saved = MakeHolder<TEvSaveCompactedPages>(sharedCache.Collection1);
+        auto page = MakeIntrusive<TPage>(_P(1).Offset, size_t{ 10 }, EPage::Undef, ui32{ 2 }, nullptr);
+        page->ProvideBody(TSharedData::Copy("0123456789", 10));
+        saved->Pages.push_back(std::move(page));
+        sharedCache.Send(sharedCache.Sender1, saved.Release());
+        TWaitForFirstEvent<TEvSaveCompactedPages> waiter(sharedCache.Runtime);
+        waiter.Wait();
+        const auto& counters = *sharedCache.Counters;
+        UNIT_ASSERT_VALUES_EQUAL(counters.PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.DetachedPageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.CollectionMetadataBytes->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.DetachedCollectionMetadataBytes->Val(), 0);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1);
+        UNIT_ASSERT_VALUES_EQUAL(counters.DetachedPageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.CollectionMetadataBytes->Val(), usage);
     }
 
     Y_UNIT_TEST(Detach_Cached) {
@@ -1842,6 +2354,36 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
     }
 
+    Y_UNIT_TEST(Metadata_QueuedWalkCompletedByFastRequest) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetAsyncQueueInFlyLimit(0);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 1, 104);
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, { _P(0) }, EPriority::Bkgr);
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection2, { _P(0) } } });
+        TEvAttach::TBtreeSeed seed;
+        seed.IndexCollectionId = sharedCache.Collection1->Label();
+        seed.DataCollectionId = sharedCache.Collection1->Label();
+        seed.Root = _P(0, EPage::BTreeIndexV2);
+        seed.LevelCount = 1;
+        seed.QueueDataPages = false;
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { seed });
+        sharedCache.CheckFetches({});
+        // Complete the walk through a foreground fetch while its own request is still queued
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { seed.Root });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { seed.Root } } });
+        sharedCache.Provide(sharedCache.Collection1, { seed.Root });
+        sharedCache.CheckResults({ TFetch{ 2, sharedCache.Collection1, { _P(0) } } });
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.SetLimit(PAGE_TOTAL_SIZE).Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CollectionMetadataBytes->Val(), 0);
+        // Queue cleanup must not dereference the expired collection or reload its root
+        sharedCache.Provide(sharedCache.Collection2, { _P(0) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection2, { _P(0) } } });
+        sharedCache.CheckFetches({});
+    }
+
     Y_UNIT_TEST(InMemory_ModeChangeWaitsForOldRegularIndexFetch) {
         TSharedPageCacheMock sharedCache;
         auto collection = MakeIntrusive<TPageCollectionMock>(1ul, 2u);
@@ -1876,7 +2418,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             auto config = TSharedPageCacheMock::DefaultConfig();
             config.SetAsyncQueueInFlyLimit(0);
             TSharedPageCacheMock sharedCache(config);
-            sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 1u);
+            sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 1u, i64{ 104 });
 
             // Keep the walk root queued with no fetch in flight for its collection.
             sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, { _P(0) }, EPriority::Bkgr);

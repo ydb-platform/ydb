@@ -35,11 +35,6 @@ TMeta::TMeta(TSharedData raw, ui32 group)
     SkippedPages_ = (Extra[0].Type == ui32(NTable::NPage::EPage::Skip) ? Extra[0].Crc32 : 0);
 }
 
-TMeta::~TMeta()
-{
-
-}
-
 size_t TMeta::BackingSize() const noexcept
 {
     return Steps ? Steps.back() : 0;

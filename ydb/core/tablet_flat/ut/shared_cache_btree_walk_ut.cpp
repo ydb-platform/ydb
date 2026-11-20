@@ -53,6 +53,19 @@ namespace {
             return 0;
         }
 
+        i64 GetMetadataMemoryUsage() const noexcept override {
+            // Fixture backing stores are outside this wrapper's modeled footprint
+            return sizeof(TPageCollectionStub);
+        }
+
+        const TSharedData* GetMetadataBuffer() const noexcept override {
+            return nullptr;
+        }
+
+        TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+            return {};
+        }
+
         TPageLocation GetLocation(ui32) const override {
             return {};
         }

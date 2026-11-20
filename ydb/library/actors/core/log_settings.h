@@ -1,11 +1,21 @@
 #pragma once
 
 #include "log_iface.h"
+
+#include <map>
+#include <memory>
+
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
+
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
 
 namespace NActors {
+    namespace NStructuredLog {
+        class ILogSink;
+    }
+
     namespace NLog {
         inline const char* PriorityToString(EPrio priority) {
             switch (priority) {
@@ -173,6 +183,15 @@ namespace NActors {
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
             void SetEnableStructuredLogInJson(bool value);
+
+            // In TLogSinkMap the key is a textual description of the sink.
+            // Typically, the key looks like "key=value key=value ... " and describes the sink’s type and parameters.
+            using TLogSinkMap = std::map<TString, std::shared_ptr<NStructuredLog::ILogSink>>;
+            using TLogSinkMapSPtr = TTrueAtomicSharedPtr<TLogSinkMap>;
+
+            TLogSinkMapSPtr Sinks;
+
+            ~TSettings();
 
         private:
             int SetLevelImpl(

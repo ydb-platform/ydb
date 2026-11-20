@@ -270,6 +270,13 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
             bool isTabletStorageInfoVersionObsolete, ui32 actualGeneration) {
+        SendErrorResponse(status, errorReason, isTabletStorageInfoVersionObsolete, actualGeneration);
+        OnDestroy(false);
+        DoDestroy();
+    }
+
+    void TBlobDepotAgent::TQuery::SendErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
+            bool isTabletStorageInfoVersionObsolete, ui32 actualGeneration) {
         YDB_LOG_INFO("Query ends with error",
             {"marker", "BDA14"},
             {"agentId", Agent.LogId},
@@ -311,9 +318,6 @@ namespace NKikimr::NBlobDepot {
         if (Span) {
             Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
         }
-
-        OnDestroy(false);
-        DoDestroy();
     }
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {

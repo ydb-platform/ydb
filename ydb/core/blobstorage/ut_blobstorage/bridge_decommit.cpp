@@ -1010,7 +1010,39 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
             TInstant::Max(), NKikimrBlobStorage::FastRead)), proxy.NodeId());
         replies.WaitForHeld();
 
-        // The controller's actual DESTROY update reaches NodeWarden while the read is still in flight.
+        // The agent has resolved this key and is waiting for its backing read when the group is removed.
+        const auto agentEdge = env.Runtime->AllocateEdgeActor(proxy.NodeId(), __FILE__, __LINE__);
+        const auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
+        constexpr ui64 agentCookie = 42;
+        bool agentReadInFlight = false;
+        ui32 agentReplies = 0;
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Sender == *agent &&
+                    ev->GetRecipientRewrite() == proxy) {
+                const auto& get = *ev->Get<TEvBlobStorage::TEvGet>();
+                agentReadInFlight |= get.QuerySize == 1 && get.Queries[0].Id == id;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev->GetRecipientRewrite() == agentEdge) {
+                const auto& result = *ev->Get<TEvBlobStorage::TEvGetResult>();
+                UNIT_ASSERT_VALUES_EQUAL(ev->Sender, *agent);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, agentCookie);
+                UNIT_ASSERT_VALUES_EQUAL(result.Status, NKikimrProto::ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(result.ResponseSz, 1);
+                UNIT_ASSERT_VALUES_EQUAL(result.Responses[0].Id, id);
+                UNIT_ASSERT_STRING_CONTAINS(result.ErrorReason, "agent destroyed");
+                UNIT_ASSERT(result.ExecutionRelay == relay);
+                ++agentReplies;
+                return false;
+            }
+            return true;
+        });
+        env.Runtime->WrapInActorContext(agentEdge, [&] {
+            auto get = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            get->ExecutionRelay = relay;
+            SendToBSProxy(agentEdge, groupId, get.release(), agentCookie);
+        });
+        WaitUntil(env, [&] { return agentReadInFlight; }, "agent issued backing read", TDuration::MilliSeconds(10), 100);
+
+        // The controller's actual DESTROY update reaches NodeWarden while both reads are still in flight.
         const auto pool = ReadStoragePool(env, 1);
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand()->MutableDeleteStoragePool();
@@ -1036,6 +1068,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         replies.Release();
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT(!env.Runtime->GetActor(proxy));
+        UNIT_ASSERT_VALUES_EQUAL(agentReplies, 1);
     }
 
     // BlobDepot retries notification of decommission finish with a delay when BS_CONTROLLER fails to process it

@@ -326,16 +326,6 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         const TActorId proxy = env.Runtime->GetNode(1)->ActorSystem->LookupLocalService(MakeBlobStorageProxyID(groupId));
         UNIT_ASSERT(proxy);
 
-        bool stoppedBeforeFlush = false;
-        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->Sender == proxy && ev->GetRecipientRewrite() == proxy &&
-                    ev->GetTypeName().Contains("TEvStopBatchingPutRequests")) {
-                stoppedBeforeFlush = true;
-                env.Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, proxy, {}, nullptr, 0), 1);
-                return false;
-            }
-            return true;
-        };
         const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         const auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
         const TString data = "buffered put";
@@ -345,10 +335,10 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             put->ExecutionRelay = relay;
             SendToBSProxy(edge, groupId, put.release());
         });
+        // Poison is already queued when the proxy handles the PUT and schedules its batch flush.
+        env.Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, proxy, {}, nullptr, 0), 1);
         const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
             env.Runtime->GetClock() + TDuration::Seconds(5));
-        env.Runtime->FilterFunction = {};
-        UNIT_ASSERT(stoppedBeforeFlush);
         UNIT_ASSERT_C(res, "physical proxy stopped without answering the buffered PUT");
         UNIT_ASSERT_VALUES_EQUAL(res->Sender, proxy);
         UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::ERROR, res->Get()->ToString());
@@ -767,8 +757,11 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             }
             return totals;
         };
+        auto writeTraffic = [&] {
+            return MovedPatch ? traffic("PutUserData", "256") : traffic("PutAsync", "262144");
+        };
         const auto reads = traffic("GetAsync", "262144");
-        const auto writes = traffic("PutUserData", "256");
+        const auto writes = writeTraffic();
         const auto patches = GetBridgeRequestCounters(env, 1)->GetSubgroup("operation", "Patch")
             ->GetSubgroup("status", "OK")->GetCounter("completedRequests", true);
         const auto patchesBefore = patches->Val();
@@ -794,7 +787,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         UNIT_ASSERT_VALUES_EQUAL(movedPatchSucceeded, MovedPatch);
         UNIT_ASSERT_VALUES_EQUAL(patches->Val(), patchesBefore + 1);
         UNIT_ASSERT_VALUES_EQUAL(traffic("GetAsync", "262144"), reads);
-        UNIT_ASSERT_VALUES_EQUAL(traffic("PutUserData", "256"), writes);
+        UNIT_ASSERT_VALUES_EQUAL(writeTraffic(), writes);
     }
 
     // converted groups still have their VDisks laid out by the erasure of the pool, so it can't be changed

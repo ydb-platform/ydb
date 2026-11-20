@@ -1212,21 +1212,19 @@ namespace NKikimr {
             return request.ExecutionRelay ? request.ExecutionRelay->BridgeProxyPoolCounters.get() : nullptr;
         }
 
-        static bool TryRestart(TEvBlobStorage::TEvRequestCommon& request) {
-            if (++request.RestartCounter >= MaxRestarts) {
-                return false;
-            }
-            if (const auto *counters = GetRoutingCounters(request)) {
-                ++*counters->RoutingRestarts;
-            }
-            return true;
-        }
-
-        // Keep the original sender and cookie when the request is routed again.
-        std::tuple<std::unique_ptr<IEventHandle>, TEvBlobStorage::TEvRequestCommon*> MakeRestartHandle(TRequest& request) {
-            auto& ev = request.OriginalRequest;
+        // A restart either keeps the original sender and cookie or returns a terminal error when its budget is spent.
+        std::pair<std::unique_ptr<IEventHandle>, TEvBlobStorage::TEvRequestCommon*> TryMakeRestartHandle(
+                TRequest& request, const char *exhaustedReason = "too many restarts of the request racing with cluster state") {
+            auto ev = std::move(request.OriginalRequest);
             auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
             Y_ABORT_UNLESS(common);
+            if (++common->RestartCounter >= MaxRestarts) {
+                ReplyWithError(*ev, request.Sender, request.Cookie, exhaustedReason);
+                return {};
+            }
+            if (const auto *counters = GetRoutingCounters(*common)) {
+                ++*counters->RoutingRestarts;
+            }
             return {std::make_unique<IEventHandle>(SelfId(), request.Sender, ev.release(), 0, request.Cookie), common};
         }
 
@@ -1253,10 +1251,7 @@ namespace NKikimr {
                     (RequestId, request->RequestId), (GroupId, GroupId));
                 ForgetSubrequests(*request);
                 FinishRequest(*request);
-                auto [handle, common] = MakeRestartHandle(*request);
-                if (!TryRestart(*common)) {
-                    ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
-                } else {
+                if (auto handle = TryMakeRestartHandle(*request).first) {
                     Redispatch(std::move(handle), request->RoutingBudget);
                 }
             }
@@ -1943,6 +1938,57 @@ namespace NKikimr {
             return res;
         }
 
+        // The next attempt is either sent to the current group service, queued for configuration, or returned
+        // for immediate dispatch after the caller finishes processing this result.
+        std::unique_ptr<IEventHandle> RestartAfterGroupRace(TRequest& request, const TRequestInFlight& item,
+                ui32 racingGeneration) {
+            auto [handle, common] = TryMakeRestartHandle(request,
+                "too many restarts of the request racing with group configuration");
+            if (!handle) {
+                return {};
+            }
+            // when the group has no part in this pile anymore, our configuration is newer than the one the
+            // request was executed with
+            const auto *groupPile = FindPart(item.Pile->BridgePileId);
+            const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
+
+            if (Passthrough) {
+                // the group is an ordinary one now (our bridged info is not updated anymore), the inner proxy
+                // has its new info and serves the restarted request
+                ForwardToOrdinaryProxy(*handle, *common);
+            } else if (myGeneration < racingGeneration) {
+                QueuePending(PendingForNextGeneration, std::move(handle), request.RoutingBudget);
+            } else if (racingGeneration < myGeneration) {
+                // when the group is decommitted, its service id points to the BlobDepot agent, which would take
+                // restarted request for its client's one; restart it right here then
+                if (!IsBehindAgent()) {
+                    // The service can change to a BlobDepot agent or an ejected proxy before this retry arrives.
+                    const auto observer = ObserveForwardedReply(*handle, *common, /*trackDelivery=*/ true);
+                    handle.reset(CreateEventForBSProxy(observer.value_or(handle->Sender), GroupId, handle->ReleaseBase().Release(),
+                        handle->Cookie, std::move(handle->TraceId)));
+                }
+                if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
+                    // static group configuration is updated a bit differently, so we can't expect for instant update;
+                    // here we introduce a backoff timer
+                    constexpr ui32 maxCounter = 20;
+                    constexpr double maxFactor = 6.0 / maxCounter;
+                    auto timeout = TDuration::MicroSeconds(pow(10, Min(common->RestartCounter - 1, maxCounter) * maxFactor));
+                    TActivationContext::Schedule(timeout, handle.release());
+                } else {
+                    // our generation is higher than the recipient's; we have to route this message through node warden
+                    // to ensure proxy's configuration gets in place
+                    TActivationContext::Send(handle.release());
+                }
+            } else {
+                // we can retry this message (obviously, we HAD request executed at incorrect generation, but
+                // now generation is correct)
+                Y_DEBUG_ABORT_UNLESS(NBridge::GetGroupPile(request.Info->Group->GetBridgeGroupState(),
+                    item.Pile->BridgePileId)->GetGroupGeneration() < myGeneration);
+                return std::move(handle);
+            }
+            return {};
+        }
+
         template<typename TEvent>
         void HandleProxyResult(TAutoPtr<TEventHandle<TEvent>>& ev) {
             const auto it = RequestsInFlight.find(ev->Cookie);
@@ -1985,50 +2031,7 @@ namespace NKikimr {
                 }
 
                 if (msg->Status == NKikimrProto::RACE) {
-                    // route repeated request through node warden to ensure group info propagation before request gets restarted
-                    auto [handle, common] = MakeRestartHandle(*request);
-
-                    // when the group has no part in this pile anymore, our configuration is newer than the one the
-                    // request was executed with
-                    const auto *groupPile = FindPart(pile.BridgePileId);
-                    const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
-
-                    if (!TryRestart(*common)) {
-                        ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
-                    } else if (Passthrough) {
-                        // the group is an ordinary one now (our bridged info is not updated anymore), the inner proxy
-                        // has its new info and serves the restarted request
-                        ForwardToOrdinaryProxy(*handle, *common);
-                    } else if (myGeneration < msg->RacingGeneration) {
-                        QueuePending(PendingForNextGeneration, std::move(handle), request->RoutingBudget);
-                    } else if (msg->RacingGeneration < myGeneration) {
-                        // when the group is decommitted, its service id points to the BlobDepot agent, which would take
-                        // restarted request for its client's one; restart it right here then
-                        if (!IsBehindAgent()) {
-                            // The service can change to a BlobDepot agent or an ejected proxy before this retry arrives.
-                            const auto observer = ObserveForwardedReply(*handle, *common, /*trackDelivery=*/ true);
-                            handle.reset(CreateEventForBSProxy(observer.value_or(handle->Sender), GroupId, handle->ReleaseBase().Release(),
-                                handle->Cookie, std::move(handle->TraceId)));
-                        }
-                        if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
-                            // static group configuration is updated a bit differently, so we can't expect for instant update;
-                            // here we introduce a backoff timer
-                            constexpr ui32 maxCounter = 20;
-                            constexpr double maxFactor = 6.0 / maxCounter;
-                            auto timeout = TDuration::MicroSeconds(pow(10, Min(common->RestartCounter - 1, maxCounter) * maxFactor));
-                            TActivationContext::Schedule(timeout, handle.release());
-                        } else {
-                            // our generation is higher than the recipient's; we have to route this message through node warden
-                            // to ensure proxy's configuration gets in place
-                            TActivationContext::Send(handle.release());
-                        }
-                    } else {
-                        // we can retry this message (obviously, we HAD request executed at incorrect generation, but
-                        // now generation is correct)
-                        Y_DEBUG_ABORT_UNLESS(NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
-                            pile.BridgePileId)->GetGroupGeneration() < myGeneration);
-                        redispatch = std::move(handle);
-                    }
+                    redispatch = RestartAfterGroupRace(*request, item, msg->RacingGeneration);
                     FinishRequest(*request);
                 } else {
                     std::unique_ptr<TEvent> ptr(ev->Release().Release());
@@ -2067,12 +2070,7 @@ namespace NKikimr {
                     } else if (request->RestartNeeded) {
                         STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "request restarted as its restoration source is out of"
                             " data quorum", (RequestId, request->RequestId), (GroupId, GroupId));
-                        auto [handle, common] = MakeRestartHandle(*request);
-                        if (!TryRestart(*common)) {
-                            ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
-                        } else {
-                            redispatch = std::move(handle);
-                        }
+                        redispatch = TryMakeRestartHandle(*request).first;
                         FinishRequest(*request);
                     }
                 }

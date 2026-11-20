@@ -323,6 +323,11 @@ namespace NKikimr::NBlobDepot {
 
         void PassAway() override {
             ClearPendingEventQueue("BlobDepot agent destroyed");
+            // Destruction releases outstanding subrequests. Normal PUT error cleanup can also issue
+            // new tablet requests, so shutdown only needs to send each client's terminal reply.
+            for (auto& query : ExecutingQueries) {
+                query.SendErrorResponse(NKikimrProto::ERROR, "BlobDepot agent destroyed");
+            }
             if (AgentCounters) {
                 GetServiceCounters(AppData()->Counters, "blob_depot_agent")->RemoveSubgroup("group", ::ToString(VirtualGroupId));
             }
@@ -489,6 +494,8 @@ namespace NKikimr::NBlobDepot {
             void SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const;
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
+                bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
+            void SendErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;

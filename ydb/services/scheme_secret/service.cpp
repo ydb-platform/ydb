@@ -323,7 +323,7 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(
 
         if (secretIt != VersionedSecrets.end() &&
             (LocalCacheHasActualVersion(secretIt->second, secretDescription.GetVersion()) &&
-            LocalCacheHasActualObject(secretIt->second, request->ResultSet.front().Self->Info.GetPathId())))
+            LocalCacheHasActualObject(secretIt->second, entry.TableId.PathId.LocalPathId)))
         {
             // some secret version is in cache
             ++respIt->second.FilledSecretsCnt;

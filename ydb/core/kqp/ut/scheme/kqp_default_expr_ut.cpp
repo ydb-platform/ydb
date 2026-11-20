@@ -3,6 +3,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -40,12 +41,13 @@ public:
         bool indexStreamWrite = true,
         bool generatedStored = false,
         bool compileTimeDefaults = true)
-        : TTestFixture(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored, compileTimeDefaults))
+        : TTestFixture(TKikimrSettings(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored, compileTimeDefaults))
+              .SetWithSampleTables(false))
     {
     }
 
-    explicit TTestFixture(const NKikimrConfig::TAppConfig& appConfig)
-        : Kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false))
+    explicit TTestFixture(const TKikimrSettings& settings)
+        : Kikimr(settings)
         , Db(Kikimr.GetQueryClient())
         , Session(Db.GetSession().GetValueSync().GetSession())
     {
@@ -669,6 +671,50 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         }
     }
 
+    Y_UNIT_TEST(CurrentActorIdDefaultExecutesWithCommonDqTransform) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        appConfig.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(false);
+        appConfig.MutableFeatureFlags()->SetEnableStreamingQueries(false);
+
+        // Proxy bootstrap needs a driver, PQ gateway and credentials even though
+        // this test uses only a local table. Keep their owners alive past the runner.
+        NYdb::TDriverConfig driverConfig;
+        driverConfig.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        auto driver = MakeSharedYdbDriverWithStop(std::make_unique<NYdb::TDriver>(driverConfig));
+        auto credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
+        const auto& queryConfig = appConfig.GetQueryServiceConfig();
+        auto setupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
+            nullptr, nullptr, credentialsFactory, nullptr,
+            queryConfig.GetS3(), queryConfig.GetGeneric(), queryConfig.GetYt(), nullptr,
+            queryConfig.GetSolomon(), nullptr, NYql::NDq::TS3ReadActorFactoryConfig{},
+            NYql::CreateCommonDqTaskTransformFactory(), NYql::TPqGatewayConfig{},
+            MakePqGatewayFactory(driver, credentialsFactory), nullptr, driver);
+        TTestFixture fixture(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false)
+            .SetFederatedQuerySetupFactory(setupFactory));
+        fixture.Exec(DefaultExprDDL("v String NOT NULL DEFAULT Yql::CurrentActorId()"));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "Yql::CurrentActorId()");
+
+        auto db = fixture.Runner().GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            "INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("k").GetInt32(), 1);
+        const TString actorId(parser.ColumnParser("v").GetString());
+        // Parse validates [NodeId:LocalId:Hint] only; the printable form cannot
+        // reconstruct actor identity and is not compared with another callable.
+        NActors::TActorId parsedShape;
+        UNIT_ASSERT_C(parsedShape.Parse(actorId.data(), actorId.size()), actorId);
+        UNIT_ASSERT(!parser.TryNextRow());
+        CompareYson(FormatResultSetYson(result.GetResultSet(0)),
+            fixture.QueryYson("SELECT k, v FROM TestTable;"));
+    }
+
     Y_UNIT_TEST_TWIN(AddCoercedDefaultPreservesMetadata, Enabled) {
         TTestFixture fixture(/* featureFlagEnabled */ Enabled);
         fixture.Exec(DefaultExprDDL("v Int64"));
@@ -911,7 +957,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     Y_UNIT_TEST(OptionalDefaultAfterSetNotNull) {
         auto appConfig = DefaultExprAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
-        TTestFixture fixture(appConfig);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
         const TString expression = R"(CAST("invalid" || CAST(RandomNumber(1) AS String) AS Uint64))";
         fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression));
         const auto before = fixture.ColumnDesc("/Root/TestTable", "v");

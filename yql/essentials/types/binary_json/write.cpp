@@ -12,6 +12,8 @@
 #include <yql/essentials/utils/parse_double.h>
 
 #include <cmath>
+#include <cstring>
+#include <string>
 
 namespace NKikimr::NBinaryJson {
 
@@ -656,8 +658,24 @@ void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBi
 std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, bool allowInf) {
     std::variant<TBinaryJson, TString> res;
     TBinaryJsonCallbacks callbacks(/* throwException */ false, allowInf);
-    const simdjson::padded_string paddedJson(json);
-    simdjson::ondemand::parser parser;
+    // Documents are usually converted one value at a time, so allocating a parser and a padded
+    // copy for each one costs more than parsing a small document. Reuse both within a thread.
+    // Larger documents get their own parser and buffer, so a thread never keeps a large one.
+    constexpr size_t MaxReusedJsonSize = 64 << 10;
+    thread_local simdjson::ondemand::parser reusedParser;
+    thread_local std::string reusedBuffer;
+    simdjson::ondemand::parser localParser;
+    std::string localBuffer;
+    const bool reuse = json.size() <= MaxReusedJsonSize;
+    auto& parser = reuse ? reusedParser : localParser;
+    auto& buffer = reuse ? reusedBuffer : localBuffer;
+    if (buffer.size() < json.size() + simdjson::SIMDJSON_PADDING) {
+        buffer.resize(json.size() + simdjson::SIMDJSON_PADDING);
+    }
+    std::memcpy(buffer.data(), json.data(), json.size());
+    // A reused buffer holds bytes of earlier documents past the end: zero the padding.
+    std::memset(buffer.data() + json.size(), 0, simdjson::SIMDJSON_PADDING);
+    const simdjson::padded_string_view paddedJson(buffer.data(), json.size(), buffer.size());
     try {
         auto doc = parser.iterate(paddedJson);
         if (auto status = doc.error(); status != simdjson::SUCCESS) {

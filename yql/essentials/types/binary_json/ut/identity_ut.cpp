@@ -18,6 +18,7 @@ public:
     UNIT_TEST(TestReadToJsonDom);
     UNIT_TEST(TestSerializeToJson);
     UNIT_TEST(TestSerializeDomToBinaryJson);
+    UNIT_TEST(TestSerializeAfterLongerDocuments);
     UNIT_TEST_SUITE_END();
 
     const TVector<TString> TestCases = {
@@ -54,6 +55,33 @@ public:
             const auto jsonAfterBinaryJson = NBinaryJson::SerializeToJson(binaryJson);
 
             UNIT_ASSERT_VALUES_EQUAL(json, jsonAfterBinaryJson);
+        }
+    }
+
+    // The parser and its input buffer are reused within a thread: a document must not be
+    // affected by the longer documents converted before it.
+    void TestSerializeAfterLongerDocuments() {
+        TString medium = "[";
+        while (medium.size() < 10000) {
+            medium += "\"first\",\"second\",1.5,";
+        }
+        medium += "true]";
+        TString large = "[" + medium;
+        while (large.size() < 100000) {
+            large += "," + medium;
+        }
+        large += "]";
+
+        for (const TString& previous : {medium, large}) {
+            for (const TStringBuf json : TestCases) {
+                UNIT_ASSERT(std::holds_alternative<TBinaryJson>(NBinaryJson::SerializeToBinaryJson(previous)));
+                const auto binaryJson = std::get<TBinaryJson>(NBinaryJson::SerializeToBinaryJson(json));
+                UNIT_ASSERT_VALUES_EQUAL(json, NBinaryJson::SerializeToJson(binaryJson));
+            }
+            for (const TStringBuf truncated : {TStringBuf("[1,"), TStringBuf("{\"a\":"), TStringBuf("\"abc"), TStringBuf("tru")}) {
+                UNIT_ASSERT(std::holds_alternative<TBinaryJson>(NBinaryJson::SerializeToBinaryJson(previous)));
+                UNIT_ASSERT(std::holds_alternative<TString>(NBinaryJson::SerializeToBinaryJson(truncated)));
+            }
         }
     }
 

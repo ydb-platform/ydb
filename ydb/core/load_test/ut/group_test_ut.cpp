@@ -108,6 +108,69 @@ Y_UNIT_TEST_SUITE(GroupWriteTest) {
         UNIT_ASSERT(GetOutputValue(html, "TotalBytesRead").front() == 0U);
     }
 
+    void TestWholePartCrcMode(TErasureType::ECrcMode crcMode) {
+        bool sawRead = false;
+        TTetsEnv env;
+        env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvPut::EventType && ev->Sender == env.GroupWriteActorId) {
+                const auto& id = ev->Get<TEvBlobStorage::TEvPut>()->Id;
+                if (id.Step() != Max<ui32>()) {
+                    UNIT_ASSERT(id.CrcMode() == crcMode);
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvGetResult::EventType &&
+                    ev->GetRecipientRewrite() == env.GroupWriteActorId) {
+                const auto& result = *ev->Get<TEvBlobStorage::TEvGetResult>();
+                UNIT_ASSERT_VALUES_EQUAL(result.Status, NKikimrProto::OK);
+                const auto& response = result.Responses[0];
+                UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::OK);
+                UNIT_ASSERT(response.Id.CrcMode() == crcMode);
+                sawRead = true;
+            }
+            return true;
+        };
+
+        TString conf(R"(DurationSeconds: 2
+            Tablets: {
+                Tablets: { TabletId: 1 Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 1000000 Max: 3000000 }
+                WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightWriteRequests: 1
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                ReadSizes: { Weight: 1.0 Min: 1000000 Max: 2000000 }
+                ReadIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightReadRequests: 1
+                PutHandleClass: TabletLog
+                GetHandleClass: FastRead)");
+
+        switch(crcMode) {
+            case TErasureType::CrcModeNone:
+                conf += R"(
+                CrcMode: CrcModeNone
+            })";
+                break;
+            case TErasureType::CrcModeWholePart:
+                conf += R"(
+                CrcMode: CrcModeWholePart
+            })";
+                break;
+            default:
+                UNIT_ASSERT(false);
+        }
+
+        const auto html = env.RunSingleLoadTest(conf);
+        UNIT_ASSERT(sawRead);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetOutputValue(html, "BadPutResults").front(), 0U);
+    }
+
+    Y_UNIT_TEST(WholePartCrcModeNone) {
+        TestWholePartCrcMode(TErasureType::CrcModeNone);
+    }
+
+    Y_UNIT_TEST(WholePartCrcModeWholePart) {
+        TestWholePartCrcMode(TErasureType::CrcModeWholePart);
+    }
+
     Y_UNIT_TEST(SimpleRdma) {
         TTetsEnv env;
 

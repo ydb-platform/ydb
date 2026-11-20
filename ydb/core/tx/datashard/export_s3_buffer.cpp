@@ -295,10 +295,8 @@ bool TS3Buffer::IsFilled() const {
 }
 
 ui64 TS3Buffer::GetMemoryBytes() const {
-    // The rows a format holds before encoding them (Parquet: the pending row group) count
-    // too: the part is sent once the encoded output reaches MinBytes and, with the pending
-    // rows, MaxBytes, so a scan holds about a part, and a part is about MaxBytes, not a
-    // row group more.
+    // The rows a format holds unencoded (Parquet: the pending row group) count too, so a
+    // part is sent at about MaxBytes with them, and the scan holds about a part.
     return Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0)
         + DataFormat->GetReadyOutputBytes() + DataFormat->GetPendingInputBytes();
 }
@@ -308,9 +306,8 @@ TString TS3Buffer::GetError() const {
 }
 
 TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
-    // Rows and BytesRead count the rows collected for the part. A format that keeps rows
-    // pending across parts (Parquet) writes the rows pending now into the next part, which
-    // may thus hold more than RowsLimit rows; the totals over the parts are exact.
+    // Per-part stats. Rows a format keeps pending (Parquet) are counted in the part they
+    // were read for but written into the next one; the totals over the parts are exact.
     Rows = 0;
     BytesRead = 0;
 
@@ -479,8 +476,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
             auto settings = maybeSettings.value_or(TParquetExportSettings{});
             settings
                 .WithColumns(Columns)
-                // A row group is cut by the export batch too: a scan holds about a part
-                // of pending rows, and a reader decodes about a part per row group.
+                // Row groups are cut by the batch too, so a scan holds about a part of pending rows.
                 .WithRowGroupBytes(maxBytes);
 
             switch (CodecFromTask(Task)) {

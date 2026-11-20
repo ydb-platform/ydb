@@ -13,8 +13,9 @@ namespace NKikimr::NTabletFlatExecutor {
 
         virtual void Prepare(const NTable::TRowScheme&) { }
 
-        // Called once per nonempty key, with its newest reconstructed committed
-        // row, or nullptr for a key containing only locks/uncommitted deltas.
+        // Called at most once per key. Regular compaction calls this at key
+        // start with a null row. Tier-aware compaction passes the newest
+        // reconstructed committed row, or nullptr for a lock/delta-only key.
         // Returns an index into TCompactCfg::Outputs. Arguments are borrowed.
         virtual ui32 RouteKey(TCellsRef key,
             const NTable::TRowState* row, ui32 sourceTier) = 0;

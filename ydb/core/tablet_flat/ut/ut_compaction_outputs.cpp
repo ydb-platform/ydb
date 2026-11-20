@@ -115,7 +115,8 @@ namespace {
         {
         }
 
-        ui32 RouteKey(TArrayRef<const TCell> key, const TRowState*, ui32) override {
+        ui32 RouteKey(TArrayRef<const TCell> key, const TRowState* row, ui32) override {
+            UNIT_ASSERT_C(!row, "Key-only routing must not wait for a committed row");
             ++Calls;
             return key[0].AsValue<ui32>() % 2;
         }

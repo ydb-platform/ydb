@@ -482,6 +482,7 @@ namespace NTabletFlatExecutor {
             , Mask(mask)
             , Owner(owner)
             , Conf(std::move(conf))
+            , TierAware(Conf->Params->Mode == NTable::TCompactionParams::EMode::TierAware)
             , Outputs(Mask, *Conf, std::move(router))
         {
         }
@@ -516,7 +517,7 @@ namespace NTabletFlatExecutor {
             Scheme = std::move(scheme);
             Driver = driver;
 
-            if (Conf->Params->Context) {
+            if (TierAware && Conf->Params->Context) {
                 for (const auto& part : Conf->Params->Context->Inputs) {
                     SourceTiers.emplace(part.Label(), part.TierId);
                 }
@@ -583,12 +584,16 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Y_ENSURE(!PendingKeyActive && !Outputs.HasActiveKey() && BufferedDeltas.empty() && DeltasOrder.empty(),
-                "Previous compaction key is not finished");
-            PendingKey = TOwnedCellVec(key);
-            PendingKeyActive = true;
-            CurrentSourceTier.reset();
-            FallbackSourceTier.reset();
+            if (TierAware) {
+                Y_ENSURE(!PendingKeyActive && !Outputs.HasActiveKey() && BufferedDeltas.empty() && DeltasOrder.empty(),
+                    "Previous compaction key is not finished");
+                PendingKey = TOwnedCellVec(key);
+                PendingKeyActive = true;
+                CurrentSourceTier.reset();
+                FallbackSourceTier.reset();
+            } else {
+                Outputs.BeginKey(key, nullptr, Conf->Params->TierId);
+            }
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl
@@ -603,7 +608,7 @@ namespace NTabletFlatExecutor {
 
         void SetSource(const NTable::TVersionScanSource& source) override
         {
-            if (Conf->IsFulltextCompact) {
+            if (!TierAware) {
                 return;
             }
             Y_ENSURE(PendingKeyActive, "Compaction source outside a key");
@@ -648,7 +653,7 @@ namespace NTabletFlatExecutor {
                 logl << " txId " << txId << " }";
             }
 
-            if (!FtState) {
+            if (TierAware) {
                 Y_ENSURE(!Outputs.HasActiveKey(), "Uncommitted delta after a committed compaction row");
                 auto [it, inserted] = BufferedDeltas.try_emplace(txId);
                 if (inserted) {
@@ -710,8 +715,17 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            // Keep the owned prefix until the first committed row chooses its
-            // destination, or EndKey selects the delta/lock-only fallback.
+            // Regular writes the merged deltas at the end of this scan phase.
+            // TAC keeps its owned deltas until the destination is known.
+            if (!TierAware && !Deltas.empty()) {
+                for (ui64 txId : DeltasOrder) {
+                    const auto it = Deltas.find(txId);
+                    Y_ENSURE(it != Deltas.end(), "Missing compaction delta for txId " << txId);
+                    Outputs.AddKeyDelta(it->second, txId);
+                }
+                Deltas.clear();
+                DeltasOrder.clear();
+            }
             return Flush(false /* intermediate, sleep or feed */);
         }
 
@@ -739,7 +753,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            if (!Outputs.HasActiveKey()) {
+            if (TierAware && !Outputs.HasActiveKey()) {
                 SelectWriter(&row, CurrentSourceTier);
             }
             Outputs.AddKeyVersion(row, rowVersion);
@@ -759,12 +773,19 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            if (!Outputs.HasActiveKey() && (PendingLockMode != ELockMode::None || !BufferedDeltas.empty())) {
-                SelectWriter(nullptr, FallbackSourceTier);
+            ui32 written = 0;
+            if (TierAware) {
+                if (!Outputs.HasActiveKey() && (PendingLockMode != ELockMode::None || !BufferedDeltas.empty())) {
+                    SelectWriter(nullptr, FallbackSourceTier);
+                }
+                if (Outputs.HasActiveKey()) {
+                    written = Outputs.EndKey();
+                }
+                PendingKey = TOwnedCellVec();
+                PendingKeyActive = false;
+            } else {
+                written = Outputs.EndKey();
             }
-            const ui32 written = Outputs.HasActiveKey() ? Outputs.EndKey() : 0;
-            PendingKey = TOwnedCellVec();
-            PendingKeyActive = false;
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end key { written " << written << " row versions }";
@@ -1156,6 +1177,7 @@ namespace NTabletFlatExecutor {
         TAutoPtr<NUtil::ILogger> Logger;
         IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;
+        const bool TierAware;
         TIntrusiveConstPtr<TScheme> Scheme;
 
         TCompactionOutputs Outputs;

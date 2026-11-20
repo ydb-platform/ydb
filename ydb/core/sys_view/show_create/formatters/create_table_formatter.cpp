@@ -28,6 +28,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <cmath>
 #include <limits>
 
 namespace NKikimr {
@@ -119,6 +120,16 @@ void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isParti
             ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported value type for SHOW CREATE TABLE");
     }
 }
+static void FormatFloating(const TString& typeName, const bool isFinite, const TString& value, TStringStream& stream) {
+    if (isFinite) {
+        stream << value;
+        return;
+    }
+    stream << typeName << "(";
+    EscapeString(value, stream);
+    stream << ")";
+}
+
 void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
     switch (parser.GetPrimitiveType()) {
         case NYdb::EPrimitiveType::Bool: {
@@ -178,15 +189,17 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             break;
         }
         case NYdb::EPrimitiveType::Float: {
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(parser.GetFloat()));
+            const float value = parser.GetFloat();
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(value));
             Y_ENSURE(str.HasValue(), "Failed to convert Float value to string");
-            Stream << TString(str.AsStringRef());
+            FormatFloating("Float", std::isfinite(value), TString(str.AsStringRef()), Stream);
             break;
         }
         case NYdb::EPrimitiveType::Double: {
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(parser.GetDouble()));
+            const double value = parser.GetDouble();
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(value));
             Y_ENSURE(str.HasValue(), "Failed to convert Double value to string");
-            Stream << TString(str.AsStringRef());
+            FormatFloating("Double", std::isfinite(value), TString(str.AsStringRef()), Stream);
             break;
         }
         case NYdb::EPrimitiveType::Utf8: {

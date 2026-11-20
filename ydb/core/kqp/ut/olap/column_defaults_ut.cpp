@@ -55,9 +55,44 @@ TString SelectYson(TQueryClient& db, const TString& query) {
     return FormatResultSetYson(result.GetResultSet(0));
 }
 
+TString ShowCreateQuery(TQueryClient& db, const TString& path) {
+    auto result = db.ExecuteQuery("SHOW CREATE TABLE `" + path + "`;", NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    TResultSetParser parser(result.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+    auto& column = parser.ColumnParser("CreateQuery");
+    column.OpenOptional();
+    return TString(column.GetUtf8());
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
+    Y_UNIT_TEST(ShowCreateNonFiniteDefaultsRecreate) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        const char* columns = R"(
+            Key Uint64 NOT NULL,
+            N Double DEFAULT Double('nan'),
+            D Double DEFAULT Double('inf'),
+            F Float DEFAULT Float('-inf'),
+            PRIMARY KEY (Key)
+        )";
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/DsNonFinite` (" << columns << ");");
+        ExecScheme(db, TStringBuilder() << "CREATE TABLE `/Root/CsNonFinite` (" << columns << ") WITH (STORE = COLUMN);");
+        for (const char* table : {"DsNonFinite", "CsNonFinite"}) {
+            const TString path = TStringBuilder() << "/Root/" << table;
+            const TString createQuery = ShowCreateQuery(db, path);
+            UNIT_ASSERT_STRING_CONTAINS(createQuery, "DEFAULT Double(");
+            UNIT_ASSERT_STRING_CONTAINS(createQuery, "DEFAULT Float(");
+            ExecScheme(db, "DROP TABLE `" + path + "`;");
+            ExecScheme(db, createQuery);
+            UNIT_ASSERT_VALUES_EQUAL(ShowCreateQuery(db, path), createQuery);
+            ExecDml(db, "INSERT INTO `" + path + "` (Key) VALUES (1);");
+            CompareYson(R"([[1u;[%nan];[%inf];[%-inf]]])", SelectYson(db, "SELECT Key, N, D, F FROM `" + path + "`;"));
+        }
+    }
+
 
     Y_UNIT_TEST(InsertOmitAndExplicitNull) {
         TKikimrRunner kikimr(DefaultsSettings());

@@ -4,17 +4,6 @@
 
 namespace NSchemeShardUT_Private {
 
-inline auto WithReducedReplayLogging(std::function<void(TTestActorRuntime&, bool&)> testScenario) {
-    return [testScenario = std::move(testScenario), replay = false](TTestActorRuntime& runtime, bool& activeZone) mutable {
-        if (replay && !TTestEnv::ENABLE_SCHEMESHARD_LOG) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_WARN);
-            runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_WARN);
-        }
-        replay = true;
-        testScenario(runtime, activeZone);
-    };
-}
-
 class TTestWithTabletReboots: public TTestWithReboots {
 public:
     explicit TTestWithTabletReboots(bool killOnCommit = false)
@@ -22,7 +11,7 @@ public:
     {}
     void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching) override {
         TDatashardLogBatchingSwitch logBatchingSwitch(allowLogBatching);
-        RunWithTabletReboots(WithReducedReplayLogging(std::move(testScenario)));
+        RunWithTabletReboots(testScenario);
     }
     void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
         Run(testScenario, false /* without batching */);
@@ -36,7 +25,7 @@ public:
     {}
     void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching) override {
         TDatashardLogBatchingSwitch logBatchingSwitch(allowLogBatching);
-        RunWithPipeResets(WithReducedReplayLogging(std::move(testScenario)));
+        RunWithPipeResets(testScenario);
     }
     void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
         Run(testScenario, false /* without batching */);

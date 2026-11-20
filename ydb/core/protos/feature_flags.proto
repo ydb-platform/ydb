@@ -497,4 +497,5 @@ message TFeatureFlags {
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
+    optional bool EnableDefaultFromExpression = 397 [default = false];
 }

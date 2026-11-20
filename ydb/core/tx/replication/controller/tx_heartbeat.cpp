@@ -25,6 +25,14 @@ bool TController::IsHeartbeatParticipant(const TWorkerId& id) const {
     return target && target->GetDstState() != TReplication::EDstState::Removing && !target->IsIndexBuild();
 }
 
+bool TController::HasMissingIndexWorkers(const TReplication& replication) const {
+    // PAUSE clears the worker set and its completion marker. A missing feed
+    // cannot enumerate its partitions on RESUME.
+    return AnyOf(replication.GetMissingIndexStreams(), [&](ui64 tid) {
+        return !CompleteWorkerSets.contains({replication.GetId(), tid}) || !replication.FindTarget(tid)->HasWorkers();
+    });
+}
+
 size_t TController::CountHeartbeatParticipants() const {
     return CountIf(Workers, [this](const auto& item) {
         return IsHeartbeatParticipant(item.first);
@@ -163,7 +171,7 @@ public:
         }
 
         const auto participants = Self->CountHeartbeatParticipants();
-        if (!participants || participants != Self->WorkersWithHeartbeat.size()) {
+        if (!participants || participants != Self->WorkersWithHeartbeat.size() || Self->HasMissingIndexWorkers(*replication)) {
             return true; // no quorum
         }
 
@@ -280,7 +288,9 @@ public:
                 {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
-            if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
+            if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())
+                && !Self->HasMissingIndexWorkers(*replication))
+            {
                 CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
             } else {
                 Self->CommittingTxId = 0;
@@ -306,7 +316,7 @@ public:
         db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
-        if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
+        if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId()) || Self->HasMissingIndexWorkers(*replication)) {
             return true;
         }
 

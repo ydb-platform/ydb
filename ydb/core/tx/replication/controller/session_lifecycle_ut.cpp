@@ -1089,6 +1089,100 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         }
     }
 
+    Y_UNIT_TEST(RefreshRecognizesMissingVectorTableUnderReplacementSecondaryIndex) {
+        TSetup s(1, false, true, ESecretCredentials::Static, ESourceSchema::IndexedTableWithSchemaChanges);
+        auto& runtime = s.Env.GetRuntime();
+        const auto description = s.Describe();
+        const auto& base = description.GetTargets(description.GetTargets(0).GetSrcPath() == "/Root/table" ? 0 : 1);
+        // Probe the old vector target's persisted path against a real secondary
+        // index at the same name. Its implementation table no longer exists.
+        TVector<TSecretProbeTopic> topics{
+            {TStringBuilder() << base.GetSrcPath() << "/" << base.GetSrcStreamName(), std::nullopt},
+            {"/Root/table/idx/indexImplLevelTable/old-feed", TSecretProbeTopic::TIndex{42, "/Root/table", "idx"}},
+        };
+        ++s.Secret->Revision->Version;
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(CreateSecretRefresh(edge, s.Worker.ReplicationId(), s.PathId, "/Root",
+            description.GetConnectionParams(), "schema:1:2:0", std::move(topics)));
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        const auto refreshed = runtime.GrabEdgeEvent<TEvPrivate::TEvRefreshCredentials>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(refreshed);
+        UNIT_ASSERT_VALUES_EQUAL(refreshed->Get()->MissingIndexStreams.size(), 1);
+        UNIT_ASSERT(refreshed->Get()->MissingIndexStreams.contains(42));
+    }
+
+    void CheckMissingIndexBlocksCommitAfterResume(TSetup& s) {
+        auto& runtime = s.Env.GetRuntime();
+        // PAUSE removes all worker rows. Only the base table can register again.
+        s.AlterState("Paused");
+        runtime.WaitFor("all workers paused", [&] { return s.Describe().GetState().HasPaused(); },
+            TDuration::Seconds(30));
+        s.Secret->Value = "root@builtin";
+        s.Env.RunCall([&] {
+            NYdb::NTable::TTableClient client(s.Env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto alter = session.ExecuteSchemeQuery(
+                "ALTER ASYNC REPLICATION `/Root/replication` SET (TOKEN_SECRET_PATH = '/Root/source-token');").GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
+        });
+        s.AlterState("StandBy");
+        runtime.WaitFor("base worker re-registered", [&] {
+            return s.HasWorkerRow() && s.Describe().GetState().HasError();
+        }, TDuration::Seconds(30));
+
+        // The on-disk Error also survives the configuration change. The next
+        // controller must select the configured OAuth provider for the base.
+        runtime.RegisterService(MakeReplicationServiceId(s.Edges[0].NodeId()),
+            runtime.Register(CreateReplicationMockService(s.Edges[0])));
+        s.Reboot();
+        s.Status(0, false);
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(30));
+        UNIT_ASSERT(run);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(run->Get()->Record.GetWorker()), s.Worker);
+        UNIT_ASSERT_VALUES_EQUAL(run->Get()->Record.GetCommand().GetRemoteTopicReader()
+            .GetConnectionParams().GetOAuthToken().GetToken(), "root@builtin");
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+
+        // Use a future interval so normal source heartbeats cannot reach it.
+        const ui64 boundary = 5000000000000;
+        s.Env.SendAsync(s.Controller, new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(boundary - 1, 0)}));
+        const auto assignedId = [&]() -> ui64 {
+            const auto description = s.Describe();
+            for (const auto& tx : description.GetTransactions().assigned()) {
+                if (tx.upper_bound_barrier().plan_step() == boundary) {
+                    return tx.write_tx_id();
+                }
+            }
+            return 0;
+        };
+        runtime.WaitFor("GLOBAL transaction assigned", [&] { return assignedId() != 0; }, TDuration::Seconds(30));
+        const ui64 txId = assignedId();
+        bool proposed = false;
+        auto proposals = runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>(
+            [&](TEvTxUserProxy::TEvProposeTransaction::TPtr& ev) {
+                if (ev->Sender == s.Controller && ev->Cookie == txId && ev->Get()->Record.GetTransaction().HasCommitWrites()) {
+                    proposed = true;
+                    ev.Reset();
+                }
+            });
+        auto heartbeat = MakeHolder<TEvService::TEvHeartbeat>(TRowVersion(boundary, 0));
+        s.Worker.Serialize(*heartbeat->Record.MutableWorker());
+        s.Env.SendAsync(s.Controller, std::move(heartbeat));
+        runtime.WaitFor("base heartbeat persisted", [&] {
+            NKikimrMiniKQL::TResult result;
+            const auto query = Sprintf(R"((
+                (let key '('('ReplicationId (Uint64 '%lu)) '('TargetId (Uint64 '%lu)) '('WorkerId (Uint64 '%lu))))
+                (return (AsList (SetResult 'Row (SelectRow 'Workers key '('HeartbeatVersionStep)))))
+            ))", s.Worker.ReplicationId(), s.Worker.TargetId(), s.Worker.WorkerId());
+            UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, s.ControllerId, query, result), NKikimrProto::OK);
+            const auto& row = result.GetValue().GetStruct(0).GetOptional();
+            return row.HasOptional() && row.GetOptional().GetStruct(0).GetOptional().GetUint64() == boundary;
+        }, TDuration::Seconds(30));
+        s.Sync();
+        UNIT_ASSERT_C(!proposed, "a base-only heartbeat proposed a GLOBAL commit while the index had no workers");
+        UNIT_ASSERT_VALUES_EQUAL(assignedId(), txId);
+    }
+
     Y_UNIT_TEST_TWIN(MissingIndexFeedDuringSecretRefresh, RecreateIndex) {
         TSetup s(1, false, true, ESecretCredentials::Static, ESourceSchema::IndexedTableWithSchemaChanges);
         auto& runtime = s.Env.GetRuntime();
@@ -1194,6 +1288,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             const auto& index = state.GetTargets(state.GetTargets(0).GetSrcPath() == "/Root/table" ? 1 : 0);
             UNIT_ASSERT_VALUES_EQUAL(index.GetId(), oldIndex.GetId());
             UNIT_ASSERT_VALUES_EQUAL(index.GetSrcStreamName(), oldIndex.GetSrcStreamName());
+            CheckMissingIndexBlocksCommitAfterResume(s);
         }
         runtime.Send(new IEventHandle(service, s.Controller, new TEvents::TEvPoison()), 0, true);
         runtime.WaitFor("replication service and source reads stopped", [&] {

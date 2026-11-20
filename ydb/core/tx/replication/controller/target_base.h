@@ -25,7 +25,7 @@ protected:
         return Replication;
     }
 
-    bool HasWorkers() const;
+    bool HasWorkers() const override;
     bool HasWorker(ui64 id) const;
     void RemoveWorkers(const TActorContext& ctx);
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;

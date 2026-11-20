@@ -202,6 +202,7 @@ private:
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     bool IsHeartbeatParticipant(const TWorkerId& id) const;
+    bool HasMissingIndexWorkers(const TReplication& replication) const;
     size_t CountHeartbeatParticipants() const;
     void AllocateTxIds(const TActorContext& ctx);
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;

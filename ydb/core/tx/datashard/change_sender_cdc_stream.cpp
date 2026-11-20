@@ -518,7 +518,7 @@ class TCdcChangeSenderMain
         }
 
         if (entry.ListNodeEntry->Children.size() != 1) {
-            YDB_LOG_ERROR("CDC stream has no topic, dropping change records",
+            YDB_LOG_ERROR("CDC stream does not have exactly one topic, dropping change records",
                 {"childrenCount", entry.ListNodeEntry->Children.size()});
 
             if (AggregatedHeartbeats) {

@@ -4053,8 +4053,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (2, 20);
         )");
 
+        runtime.WaitFor("dropped change records", [&] { return removed >= 2; }, TDuration::Seconds(5));
         UNIT_ASSERT(hidden > 0);
-        runtime.WaitFor("dropped change records", [&] { return removed >= 2; });
 
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
@@ -4066,7 +4066,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )");
 
-        runtime.WaitFor("dropped change records after split", [&] { return removed >= 3; });
+        runtime.WaitFor("dropped change records after split", [&] { return removed >= 3; }, TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(RenameTable) {

@@ -301,7 +301,7 @@ class TCdcWorker
         }
 
         if (entry.ListNodeEntry->Children.size() != 1) {
-            YDB_LOG_WARN("Auto-acknowledging split: CDC stream has no topic",
+            YDB_LOG_WARN("Auto-acknowledging split: CDC stream does not have exactly one topic",
                 {"childrenCount", entry.ListNodeEntry->Children.size()});
             return Ack();
         }

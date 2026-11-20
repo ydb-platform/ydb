@@ -10,12 +10,21 @@
 #include <util/digest/murmur.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
+
+TString MakeCdcSourceId(ui64 tabletId, const TString& replicationConsumer) {
+    if (replicationConsumer.empty()) {
+        return ToString(tabletId);
+    }
+
+    return TStringBuilder() << replicationConsumer << ":" << tabletId;
+}
 
 TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
     switch (generation) {

@@ -152,6 +152,7 @@ public:
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             TTopicInfo::TPtr topic,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
+            bool managedCdcTopic,
             TString& errStr)
     {
         bool splitMergeEnabled = NPQ::SplitMergeEnabled(*tabletConfig)
@@ -329,6 +330,22 @@ public:
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
+            }
+
+            if (managedCdcTopic) {
+                const auto& consumer = tabletConfig->GetReplicationSourceConsumer();
+                if (!consumer.empty()) {
+                    if (alterConfig.HasReplicationSourceConsumer() && alterConfig.GetReplicationSourceConsumer() != consumer) {
+                        errStr = "Cannot change the replication source consumer of a managed CDC topic";
+                        return nullptr;
+                    }
+                    alterConfig.SetReplicationSourceConsumer(consumer);
+                }
+
+                alterConfig.MutableCdcReplication()->CopyFrom(tabletConfig->GetCdcReplication());
+            } else if (alterConfig.HasCdcReplication()) {
+                errStr = "CDC replication settings require a managed changefeed";
+                return nullptr;
             }
 
             if (tabletConfig->HasId()) {
@@ -695,10 +712,47 @@ public:
         NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
         NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
-        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, errStr);
+        const auto streamPath = path.Parent();
+        const bool cdcTopic = streamPath.IsCdcStream();
+        const bool managedCdcTopic = cdcTopic && tabletConfig.HasCdcReplication()
+            && !tabletConfig.GetReplicationSourceConsumer().empty();
+        const bool attachCdcTopic = cdcTopic && !managedCdcTopic
+            && !alter.GetPQTabletConfig().GetReplicationSourceConsumer().empty();
+        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, managedCdcTopic || attachCdcTopic, errStr);
 
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
+        const bool willMirror = newTabletConfig.GetPartitionConfig().HasMirrorFrom();
+        const bool stopped = !tabletConfig.GetPartitionConfig().HasMirrorFrom() && !willMirror;
+        if (attachCdcTopic || (managedCdcTopic && willMirror)) {
+            const auto tablePath = streamPath.Parent();
+            const auto checks = tablePath.Check();
+            checks.NotEmpty().IsResolved().IsAtLocalSchemeShard().NotDeleted().IsTable().NotUnderOperation();
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
+            const auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
+            const auto expectedOwner = TPathId::FromProto(Transaction.GetExpectedReplicationOwnerPathId());
+            if (!Transaction.GetInternal() || !expectedOwner.OwnerId || !expectedOwner.LocalPathId
+                || !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) != expectedOwner
+                || config.GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                || stream->State != NKikimrSchemeOp::ECdcStreamStateDisabled)
+            {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Managed CDC attachment and mirroring require a Disabled stream and the current replica table owner");
+                return result;
+            }
+        }
+
+        if (attachCdcTopic && !stopped) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Managed CDC attachment requires a stopped topic");
             return result;
         }
 

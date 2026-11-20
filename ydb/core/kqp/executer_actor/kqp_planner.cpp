@@ -466,17 +466,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
     }
 
-    if (deepestTasks.size() <= placingOptions.MaxNonParallelTopStageExecutionLimit) {
-        // looks like the merge / union all connection
-        for(ui64 taskId: deepestTasks) {
-            auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
-            if (success) {
-                TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
-                TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = ExecuterId.NodeId();
-            }
-        }
-    }
-
     auto planner = (UseMockEmptyPlanner ? CreateKqpMockEmptyPlanner() : CreateKqpGreedyPlanner());  // KqpMockEmptyPlanner is a mock planner for tests
 
     auto ctx = TlsActivationContext->AsActorContext();
@@ -533,6 +522,17 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
+    }
+
+    if (deepestTasks.size() <= placingOptions.MaxNonParallelTopStageExecutionLimit) {
+        // looks like the merge / union all connection
+        for(ui64 taskId: deepestTasks) {
+            auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
+            if (success) {
+                TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
+                TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = ExecuterId.NodeId();
+            }
+        }
     }
 
     for (auto& group : plan) {

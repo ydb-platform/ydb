@@ -408,6 +408,7 @@ private:
         if (CompileActorSpan) {
             CompileTrace = MakeIntrusive<TCompileTrace>(CompileActorSpan.GetTraceId(), ctx.ActorSystem());
         }
+        TCompileTraceScope setupTrace(CompileTrace.Get(), TCompileTraceLevels::Step, "Initialize compilation host");
         std::function<NWilson::TTraceId()> traceParentProvider;
         if (CompileTrace) {
             // Bind to this compilation, even if the actor later starts another one.
@@ -467,6 +468,7 @@ private:
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
+        TCompileTraceScope replayTrace(CompileTrace.Get(), TCompileTraceLevels::Step, "Build compilation replay metadata");
         if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
             // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
             return;
@@ -590,6 +592,7 @@ private:
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
             bool allowCache, bool success) {
+        TCompileTraceScope resultTrace(CompileTrace.Get(), TCompileTraceLevels::Step, "Build prepared query holder");
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry, !success);
         preparedQueryHolder->SetUseKqpTasksGraphV2(Config->GetUseKqpTasksGraphV2());
@@ -613,6 +616,9 @@ private:
         }
 
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
+        // Native frontend fallback can switch optimizers during asynchronous
+        // preparation, after the initial Prepare call has returned.
+        EnableNewRBO = Config->GetEnableNewRBO();
         auto status = GetYdbStatus(kqpResult);
         auto meta = CollectMeta();
 
@@ -649,7 +655,11 @@ private:
             AddMessageToReplayLog(kqpResult.QueryPlan);
         }
 
-        ETableReadType maxReadType = ExtractMostHeavyReadType(kqpResult.QueryPlan);
+        ETableReadType maxReadType;
+        {
+            TCompileTraceScope planTrace(CompileTrace.Get(), TCompileTraceLevels::Step, "Classify compiled table reads");
+            maxReadType = ExtractMostHeavyReadType(kqpResult.QueryPlan);
+        }
 
         auto queryType = QueryId.Settings.QueryType;
 

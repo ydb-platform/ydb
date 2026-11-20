@@ -172,17 +172,25 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::LowerPhysicalStageCompatibility(
 
     TOptimizeExprSettings settings(&RBOCtx.TypeCtx);
     settings.CustomInstantTypeTransformer = RBOCtx.TypeCtx.CustomInstantTypeTransformer.Get();
+    // Revisit newly built nodes on later passes, while keeping unchanged,
+    // already typed subgraphs out of the rewrite traversal.
+    TProcessedNodesSet processedNodes;
+    settings.ProcessedNodes = &processedNodes;
     constexpr size_t MaxPasses = 64;
     for (size_t pass = 0; pass < MaxPasses && NeedsRboCompatibilityLowering(root); ++pass) {
         TExprNode::TPtr output;
-        const auto status = OptimizeExpr(
-            root,
-            output,
-            [&](const TExprNode::TPtr& node, TExprContext& ctx) {
-                return RewriteRboCompatibilityNode(node, ctx, RBOCtx.TypeCtx);
-            },
-            RBOCtx.ExprCtx,
-            settings);
+        const auto status = [&] {
+            TCompileTraceScope scope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Step,
+                "Rewrite incompatible callables");
+            return OptimizeExpr(
+                root,
+                output,
+                [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+                    return RewriteRboCompatibilityNode(node, ctx, RBOCtx.TypeCtx);
+                },
+                RBOCtx.ExprCtx,
+                settings);
+        }();
         YQL_ENSURE(status != IGraphTransformer::TStatus::Error,
             "Failed to lower execution-incompatible callables in new RBO physical stages");
         if (status == IGraphTransformer::TStatus::Ok) {
@@ -518,6 +526,12 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     TVector<TExprNode::TPtr> transactions;
     TVector<TExprNode::TPtr> resultBindings;
     TVector<std::pair<ui32, TExprNode::TPtr>> orderedResults;
+    THashMap<TString, TExprNode::TPtr> materializedBindings;
+    const auto bindParameter = [&](const TKqpParamBinding& parameter) {
+        const auto* binding = materializedBindings.FindPtr(parameter.Name().StringValue());
+        return binding ? Build<TKqpParamBinding>(ctx, pos)
+            .Name(parameter.Name()).Binding(*binding).Done() : parameter;
+    };
 
     // A query block's reads share a snapshot. Its effects also share a
     // snapshot, with sink priorities preserving their write order. Only cross
@@ -536,7 +550,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
         for (size_t i = begin; i < end; ++i) {
             for (const auto& parameter : CollectParamBindings(i, physicalStages[i].back())) {
                 if (paramNames.insert(parameter.Name().StringValue()).second) {
-                    paramBindings.push_back(parameter);
+                    paramBindings.push_back(bindParameter(parameter));
                 }
             }
             for (const auto& [paramNode, resultNode] : Materialize[i]) {
@@ -551,7 +565,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
                     .Name(param.Name()).Binding(binding.Ptr()).Done());
                 for (const auto& parameter : CollectParamBindings(i, result.Output().Stage().Ptr())) {
                     if (materializeParamNames.insert(parameter.Name().StringValue()).second) {
-                        materializeParams.push_back(parameter);
+                        materializeParams.push_back(bindParameter(parameter));
                     }
                 }
                 materializeStages.push_back(result.Output().Stage().Ptr());
@@ -588,11 +602,15 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
                 .Output().Stage(physicalStages[i].back()).Index().Build("0").Build()
                 .ColumnHints().Add(columns).Build().Done().Ptr();
             TypeAnnotate(result);
-            orderedResults.emplace_back(Roots[i]->PlanProps.ResultIndex.value_or(orderedResults.size()),
-                Build<TKqpTxResultBinding>(ctx, pos)
-                    .Type(ExpandType(pos, *result->GetTypeAnn(), ctx))
-                    .TxIndex().Build(ToString(transactions.size()))
-                    .ResultIndex().Build(ToString(results.size())).Done().Ptr());
+            auto binding = Build<TKqpTxResultBinding>(ctx, pos)
+                .Type(ExpandType(pos, *result->GetTypeAnn(), ctx))
+                .TxIndex().Build(ToString(transactions.size()))
+                .ResultIndex().Build(ToString(results.size())).Done().Ptr();
+            if (const auto& name = Roots[i]->PlanProps.MaterializedResult) {
+                Y_ENSURE(materializedBindings.emplace(*name, binding).second);
+            } else {
+                orderedResults.emplace_back(Roots[i]->PlanProps.ResultIndex.value_or(orderedResults.size()), binding);
+            }
             results.push_back(result);
         }
         transactions.push_back(Build<TKqpPhysicalTx>(ctx, pos)
@@ -776,6 +794,14 @@ void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhy
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages, bool enableWideChannels) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
+    if (!enableWideChannels) {
+        // The graph already connects the finalized stages. Only widening
+        // changes those connections and requires rebuilding the consumers.
+        TypeAnnotate(root);
+        TVector<TExprNode::TPtr> stagesTopSorted;
+        TopologicalSort(TDqPhyStage(root), stagesTopSorted);
+        return stagesTopSorted;
+    }
     if (!root->GetTypeAnn() && enableWideChannels) {
         TypeAnnotate(root);
     }
@@ -1002,7 +1028,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
-    TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail,
+    TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Step,
         "Annotate physical stage");
     RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;

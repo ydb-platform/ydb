@@ -1002,6 +1002,28 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
             updateState = BuildSumAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
         } else if (aggFunction == "some") {
             updateState = BuildSomeAggregationUpdateState(lambdaArgState, lambdaArgField, isOptional);
+        } else if (aggFunction == "min_by" || aggFunction == "max_by") {
+            // The tuple carries (key, payload). Only compare keys: payloads
+            // need not be comparable, and a NULL payload is a valid winner.
+            const auto choose = [&](TExprNode::TPtr incoming, TExprNode::TPtr previous) {
+                auto key = [&](TExprNode::TPtr tuple) {
+                    return Ctx.NewCallable(Pos, "Nth", {std::move(tuple), Ctx.NewAtom(Pos, "0")});
+                };
+                auto less = Ctx.NewCallable(Pos, "AggrLess", aggFunction == "min_by"
+                    ? TExprNode::TListType{key(incoming), key(previous)}
+                    : TExprNode::TListType{key(previous), key(incoming)});
+                return Ctx.NewCallable(Pos, "If", {std::move(less), incoming, previous});
+            };
+            if (isOptional) {
+                auto incoming = Ctx.NewArgument(Pos, "incoming");
+                auto previous = Ctx.NewArgument(Pos, "previous");
+                auto present = Ctx.NewCallable(Pos, "IfPresent", {lambdaArgState,
+                    Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {previous}),
+                        Ctx.NewCallable(Pos, "Just", {choose(incoming, previous)})),
+                    Ctx.NewCallable(Pos, "Just", {incoming})});
+                updateState = Ctx.NewCallable(Pos, "IfPresent", {lambdaArgField,
+                    Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {incoming}), std::move(present)), lambdaArgState});
+            } else { updateState = choose(lambdaArgField, lambdaArgState); }
         } else if (aggFunction == "variance_1_1") {
             updateState = isOptional ? BuildVarianceAggregationUpdateStateOptionalType(lambdaArgState, lambdaArgField, aggTraits.InputItemType)
                                      : BuildVarianceAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
@@ -1310,10 +1332,8 @@ TExprNode::TPtr TPhysicalAggregationBuilder::CreateNothingForEmptyInput(const TV
 
     bool processTuple = false;
     if (Aggregate.GetAggregationPhase() == EOpPhase::Final) {
-        for (const auto& item : aggStructType->GetItems()) {
-            auto itemType = item->Cast<TItemExprType>();
-            auto originalFieldType = itemType->GetItemType();
-            if (auto fieldType = &RemoveOptionality(*originalFieldType); fieldType->GetKind() == ETypeAnnotationKind::Tuple) {
+        for (const auto& traits : phyTraitsList) {
+            if (traits.AggFunc == "avg" && RemoveOptionality(*traits.OutputItemType).GetKind() == ETypeAnnotationKind::Tuple) {
                 processTuple = true;
                 break;
             }
@@ -1330,7 +1350,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::CreateNothingForEmptyInput(const TV
             const auto outputType = traits.OutputItemType;
             const auto& originalColName = traits.OriginalColName;
             const auto& resultColName = traits.ResultColName;
-            if (auto fieldType = &RemoveOptionality(*inputType); fieldType->GetKind() == ETypeAnnotationKind::Tuple) {
+            if (auto fieldType = &RemoveOptionality(*inputType); traits.AggFunc == "avg" && fieldType->GetKind() == ETypeAnnotationKind::Tuple) {
                 auto tupleType = fieldType->Cast<TTupleExprType>()->GetItems();
                 Y_ENSURE(tupleType.size() == 2);
                 auto newFieldType = tupleType.front();

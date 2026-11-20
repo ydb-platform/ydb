@@ -13,6 +13,7 @@
 #include <util/generic/ptr.h>
 
 #include <optional>
+#include <functional>
 
 namespace NYql {
 
@@ -31,6 +32,8 @@ class TKqpPhyQuery;
 
 namespace NKikimr::NKqp {
 
+struct TNativeQuery;
+
 struct TKqlTransformContext : TThrRefBase {
     TKqlTransformContext(const TIntrusivePtr<NYql::TKikimrConfiguration>& config, TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
         TIntrusivePtr<NYql::TKikimrTablesData> tables);
@@ -47,6 +50,11 @@ struct TKqlTransformContext : TThrRefBase {
     std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
     TOptimizerCacheOutput CacheOutput;
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
+
+    // Frontend input survives runner output resets and owns its RBO roots.
+    std::shared_ptr<TNativeQuery> NativeQuery;
+    TMaybe<bool> FrontendKeepInCache;
+    TMaybe<TString> FrontendCommandTag;
 
     void Reset();
 };

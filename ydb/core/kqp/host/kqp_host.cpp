@@ -1,5 +1,12 @@
+#include <ydb/core/kqp/opt/rbo/kqp_native_query.h>
 #include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
+#include "lazy_provider/kqp_lazy_provider.h"
+#include "new_parser/kqp_new_parser.h"
+#include "new_parser/kqp_name_resolver.h"
+#include "new_parser/kqp_pragma.h"
+#include "new_parser/kqp_type_annotation.h"
+#include "new_parser/rbo/kqp_rbo_lowering.h"
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include "kqp_statement_rewrite.h"
 
@@ -10,6 +17,7 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
@@ -461,8 +469,8 @@ public:
         prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
 
         prepareResult.NeedToSplit = false;
-        prepareResult.AllowCache = KeepInCache;
-        prepareResult.CommandTagName = CommandTagName;
+        prepareResult.AllowCache = TransformCtx->FrontendKeepInCache.GetOrElse(KeepInCache);
+        prepareResult.CommandTagName = TransformCtx->FrontendKeepInCache ? TransformCtx->FrontendCommandTag : CommandTagName;
     }
 
 private:
@@ -668,6 +676,83 @@ private:
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<IKqpRunner> KqpRunner;
     TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult> AsyncResult;
+    TPromise<void> Promise;
+};
+
+// A resolver requests catalog IO without constructing provider Read! nodes.
+struct TNativeMetadataPending {};
+
+// Select a metadata round, the native runner, or deferred legacy compilation.
+// Retry only after a metadata round completes; the selected transformer owns all
+// asynchronous work until its completion.
+class TNativeFrontendTransformer : public TGraphTransformerBase {
+public:
+    using TSelect = std::function<std::pair<IGraphTransformer*, bool>(TExprNode::TPtr&, TExprContext&)>;
+    explicit TNativeFrontendTransformer(TSelect select) : Select(std::move(select)) {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        output = input;
+        if (!Selected) {
+            std::tie(Selected, Retry) = Select(output, ctx);
+            if (!Selected) { return TStatus::Error; }
+            Selected->Rewind();
+        }
+        auto current = output;
+        return Finish(Selected->Transform(current, output, ctx));
+    }
+    TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
+        return Selected->GetAsyncFuture(input);
+    }
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        return Finish(Selected->ApplyAsyncChanges(input, output, ctx));
+    }
+    void Rewind() override {
+        if (Selected) { Selected->Rewind(); }
+        Selected = nullptr;
+    }
+private:
+    TStatus Finish(TStatus status) {
+        if (status == TStatus::Ok && Retry) {
+            Selected = nullptr;
+            return TStatus::Repeat;
+        }
+        return status;
+    }
+    TSelect Select;
+    IGraphTransformer* Selected = nullptr;
+    bool Retry = false;
+};
+
+class TPrepareNativeQueryTransformer : public TGraphTransformerBase {
+public:
+    TPrepareNativeQueryTransformer(TIntrusivePtr<IKqpRunner> runner, TIntrusivePtr<TKqlTransformContext> transformCtx)
+        : Runner(std::move(runner)), TransformCtx(std::move(transformCtx)) {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        output = input;
+        if (!Result) { Result = Runner->PrepareNativeQuery(TransformCtx->NativeQuery, ctx); }
+        Promise = NewPromise();
+        Result->Continue().Apply([promise = Promise](const TFuture<bool>& future) mutable {
+            try {
+                future.GetValue();
+                promise.SetValue();
+            } catch (...) {
+                promise.SetException(std::current_exception());
+            }
+        });
+        return TStatus::Async;
+    }
+    TFuture<void> DoGetAsyncFuture(const TExprNode&) override { return Promise.GetFuture(); }
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) override {
+        output = input;
+        if (!Result->HasResult()) { return TStatus::Repeat; }
+        return Result->GetResult().Success() ? TStatus::Ok : TStatus::Error;
+    }
+    void Rewind() override { Result.Reset(); }
+private:
+    TIntrusivePtr<IKqpRunner> Runner;
+    TIntrusivePtr<TKqlTransformContext> TransformCtx;
+    TIntrusivePtr<IKqpRunner::TAsyncQueryResult> Result;
     TPromise<void> Promise;
 };
 
@@ -1440,12 +1525,101 @@ private:
     {
         TCompileExprResult result;
         NYql::TAstParseResult queryAst;
+        // Native parsing and deferred fallback share effective translation
+        // settings, including parameters and table path prefixes.
         {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
                 .SetFromConfig(SessionCtx->Config());
+        }
+
+        // Build the owning syntax AST early, before asynchronous catalog loading.
+        // A syntax error is final; only explicit unsupported-feature exceptions
+        // permit fallback. Semantic passes below run once metadata is available.
+        if (isSql && !LegacyFrontendRequested && SessionCtx->Config().GetEnableNewYqlParser()) {
+            TCompileTraceScope traceScope(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
+                "Parse query with new YQL frontend");
+            try {
+                const auto translationSettings = settingsBuilder.Build(ctx);
+                auto parsed = ParseQueryWithNewParser(query.Text, translationSettings,
+                    settingsBuilder.GetIsAmbiguityError(), SessionCtx->Query().CompileTrace.Get());
+                traceScope.SetSuccess(parsed.IsOk());
+                if (!parsed.IsOk()) {
+                    YQL_CLOG(INFO, ProviderKqp) << "New YQL parser reported syntax errors";
+                    ctx.IssueManager.AddIssues(parsed.Issues);
+                    return result;
+                }
+                NewParserSettings = {translationSettings.DefaultCluster, translationSettings.PathPrefix,
+                    translationSettings.ClusterPathPrefixes};
+                NewParserTypeSettings = {};
+                // Forward the expression settings supported by the new scalar path.
+                // Pragmas with unsupported semantics are rejected by subsequent passes,
+                // so their effects cannot be silently lost by using default settings.
+                NewParserTypeSettings.Expressions.UnicodeLiterals = translationSettings.UnicodeLiterals;
+                NewParserTypeSettings.Expressions.FlexibleTypes = !translationSettings.Flags.contains("DisableFlexibleTypes");
+                if (translationSettings.Flags.contains("AnsiInForEmptyOrNullableItemsCollections")) {
+                    NewParserTypeSettings.Expressions.AnsiIn = true;
+                } else if (translationSettings.Flags.contains("DisableAnsiInForEmptyOrNullableItemsCollections")) {
+                    NewParserTypeSettings.Expressions.AnsiIn = false;
+                }
+                if (query.ParameterTypes) {
+                    for (const auto& [name, proto] : *query.ParameterTypes) {
+                        const auto* type = ParseTypeFromYdbType(proto, ctx);
+                        if (!type) {
+                            return result;
+                        }
+                        // SDK parameter keys may omit the SQL sigil; scalar bindings use
+                        // the exact $-prefixed convention. Types belong to this compile context.
+                        NewParserTypeSettings.Parameters[name.StartsWith('$') ? name : "$" + name] = type;
+                    }
+                }
+                NewParserSettings.Parameters = NewParserTypeSettings.Parameters;
+                NewParserAst = std::move(parsed.Ast);
+                SessionCtx->Query().TranslationSettings = translationSettings;
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL AST construction succeeded";
+                if (SessionCtx->Config().GetEnableNewRBO() && SessionCtx->Query().PrepareOnly
+                    && IsIn({EKikimrQueryType::Dml, EKikimrQueryType::Query, EKikimrQueryType::Scan}, SessionCtx->Query().Type)) {
+                    NativeFrontendActive = true;
+                    // Own text and settings across asynchronous metadata requests.
+                    LegacyCompile = [this, text = TString(query.Text), parameters = query.ParameterTypes,
+                        builder = settingsBuilder, version = sqlVersion](TExprContext& context) mutable {
+                        LegacyFrontendRequested = true;
+                        NativeFrontendActive = false;
+                        auto result = CompileYqlQuery(TKqpQueryRef(text, parameters), true, context, version, builder);
+                        TransformCtx->FrontendKeepInCache = result.KeepInCache;
+                        TransformCtx->FrontendCommandTag = result.CommandTagName;
+                        return result.QueryExpr;
+                    };
+                    result.QueryExpr = ctx.NewWorld(TPositionHandle());
+                    result.KeepInCache = true;
+                    result.CommandTagName = "SELECT";
+                    for (const auto& statement : NewParserAst->Statements) {
+                        if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
+                            switch (write->Kind) {
+                                case NNewYql::EWriteKind::Insert: result.CommandTagName = "INSERT"; break;
+                                case NNewYql::EWriteKind::Upsert: result.CommandTagName = "UPSERT"; break;
+                                case NNewYql::EWriteKind::Replace: result.CommandTagName = "REPLACE"; break;
+                                case NNewYql::EWriteKind::Update: result.CommandTagName = "UPDATE"; break;
+                                case NNewYql::EWriteKind::Delete: result.CommandTagName = "DELETE"; break;
+                            }
+                        }
+                    }
+                    sqlVersion = 1;
+                    return result;
+                }
+            } catch (const TNewYqlParserFallback& e) {
+                // No expression lowering has run yet. Resume the original pipeline
+                // with its existing AST, settings and optimizer selection intact.
+                traceScope.SetSuccess(true);
+                TraceNativeFallback(e);
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL parser fallback: " << e.what();
+            }
+        }
+
+        YQL_CLOG(INFO, ProviderKqp) << "Legacy YQL graph compilation started";
+        {
             TCompileTraceScope traceScope(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
                 "Parse query");
             NSQLTranslation::TTranslationSettings effectiveSettings;
@@ -1546,7 +1720,7 @@ private:
         TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
-        if (!compileResult.QueryExpr || compileResult.NeedToSplit) {
+        if (!compileResult.QueryExpr || compileResult.NeedToSplit || NativeFrontendActive) {
             return compileResult;
         }
 
@@ -1594,7 +1768,7 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, GetYqlTransformer(), Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1662,7 +1836,8 @@ private:
             return nullptr;
         }
 
-        auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+        auto& yqlTransformer = NativeFrontendActive ? GetNativeFrontend()
+            : GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO());
         return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
@@ -1698,7 +1873,7 @@ private:
         }
         YQL_ENSURE(!sqlVersion);
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, GetDataQueryAstTransformer(),
             SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
@@ -1754,12 +1929,13 @@ private:
                 if (!compileResult.QueryExpr) {
                     return nullptr;
                 }
-                auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+                auto& yqlTransformer = NativeFrontendActive ? GetNativeFrontend()
+            : GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO());
                 return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
         } else {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+            return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, GetYqlTransformer(), SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx, false, Nothing(), DataProvidersFinalizer);
         }
     }
@@ -1831,7 +2007,8 @@ private:
             return nullptr;
         }
 
-        auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+        auto& yqlTransformer = NativeFrontendActive ? GetNativeFrontend()
+            : GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO());
         return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
@@ -1856,7 +2033,7 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, GetDataQueryAstTransformer(),
             SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
@@ -1884,7 +2061,7 @@ private:
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, GetYqlTransformer(), Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1914,7 +2091,7 @@ private:
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, GetYqlTransformer(), Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1967,15 +2144,34 @@ private:
             return nullptr;
         }
 
+        GetYqlTransformer();
         return MakeIntrusive<TAsyncExplainYqlResult>(compileResult.QueryExpr.Get(), SessionCtx, ctx, YqlTransformer,
             *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer, true /* UseDqExplain */);
     }
 
-    void InitS3Provider(EKikimrQueryType queryType) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::S3ProviderName))) {
-            return;
-        }
+    static TDataProviderInfo MakeProviders(TIntrusivePtr<IDataProvider> source, TIntrusivePtr<IDataProvider> sink) {
+        TDataProviderInfo providers;
+        providers.Source = std::move(source);
+        providers.Sink = std::move(sink);
+        return providers;
+    }
 
+    void RegisterLazyProvider(TStringBuf name, TStringBuf callablePrefix,
+        std::function<TDataProviderInfo()> factory, bool hasLayers = false)
+    {
+        auto providers = CreateLazyProvider(name, callablePrefix, [this, name = TString(name), factory = std::move(factory)] {
+            TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+                TStringBuilder() << "Initialize " << name << " provider");
+            auto providers = factory();
+            YQL_ENSURE(providers.Source->Initialize(*ExprCtx));
+            YQL_ENSURE(providers.Sink->Initialize(*ExprCtx));
+            return providers;
+        }, hasLayers);
+        TypesCtx->AddDataSource(name, std::move(providers.Source));
+        TypesCtx->AddDataSink(name, std::move(providers.Sink));
+    }
+
+    TDataProviderInfo CreateS3Provider(EKikimrQueryType queryType) {
         auto state = MakeIntrusive<NYql::TS3State>(TypesCtx->StrictConfigValidation);
 
         auto& configuration = *state->Configuration;
@@ -2005,33 +2201,19 @@ private:
         auto dataSource = NYql::CreateS3DataSource(state);
         auto dataSink = NYql::CreateS3DataSink(state);
 
-        TypesCtx->AddDataSource(NYql::S3ProviderName, std::move(dataSource));
-        TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
+        return MakeProviders(std::move(dataSource), std::move(dataSink));
     }
 
-    void InitYdbExternalProvider() {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YdbExternalProviderName))) {
-            return;
-        }
-
+    TDataProviderInfo CreateYdbExternalProvider() {
         const auto& resources = FederatedQuerySetup->YdbExternalResources;
         YQL_ENSURE(resources, "Missing YdbExternal resources");
         auto provider = NYql::CreateYdbExternalDataProviders(
             TypesCtx.Get(), [resources] { return resources->GetMetadataClientCache(); },
             FederatedQuerySetup->CredentialsFactory);
-        TypesCtx->AddDataSource(NYql::YdbExternalProviderName, std::move(provider.Source));
-        TypesCtx->AddDataSink(NYql::YdbExternalProviderName, std::move(provider.Sink));
+        return MakeProviders(std::move(provider.Source), std::move(provider.Sink));
     }
 
-    void InitGenericProvider() {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::GenericProviderName))) {
-            return;
-        }
-
-        if (!FederatedQuerySetup->ConnectorClient) {
-            return;
-        }
-
+    TDataProviderInfo CreateGenericProvider() {
         auto state = MakeIntrusive<NYql::TGenericState>(
             TypesCtx.Get(),
             FuncRegistry,
@@ -2041,15 +2223,10 @@ private:
             FederatedQuerySetup->GenericGatewayConfig
         );
 
-        TypesCtx->AddDataSource(NYql::GenericProviderName, NYql::CreateGenericDataSource(state));
-        TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
+        return MakeProviders(NYql::CreateGenericDataSource(state), NYql::CreateGenericDataSink(state));
     }
 
-    void InitYtProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
-            return;
-        }
-
+    TDataProviderInfo CreateYtProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         TString userName = CreateGuidAsString();
         if (SessionCtx->GetUserToken() && SessionCtx->GetUserToken()->GetUserSID()) {
             userName = SessionCtx->GetUserToken()->GetUserSID();
@@ -2073,27 +2250,21 @@ private:
             ytSource = NYql::WrapYtDataSourceWithMessageStreams(std::move(ytSource),
                 NYql::CreateYtMessageStreamIntegration(FederatedQuerySetup->CredentialsFactory));
         }
-        TypesCtx->AddDataSource(YtProviderName, std::move(ytSource));
-        TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
         finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
             return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
         });
+        return MakeProviders(std::move(ytSource), CreateYtDataSink(ytState));
     }
 
-    void InitPgProvider() {
+    TDataProviderInfo CreatePgProvider() {
         auto state = MakeIntrusive<NYql::TPgState>();
         state->Types = TypesCtx.Get();
 
-        TypesCtx->AddDataSource(NYql::PgProviderName, NYql::CreatePgDataSource(state));
-        TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
+        return MakeProviders(NYql::CreatePgDataSource(state), NYql::CreatePgDataSink(state));
     }
 
-    void InitSolomonProvider() {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::SolomonProviderName))) {
-            return;
-        }
-
+    TDataProviderInfo CreateSolomonProvider() {
         auto solomonState = MakeIntrusive<TSolomonState>(TypesCtx->StrictConfigValidation);
 
         solomonState->WriteThroughDqIntegration = true;
@@ -2104,16 +2275,10 @@ private:
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
         solomonState->ExecutorPoolId = AppData()->UserPoolId;
 
-        TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
-        TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
+        return MakeProviders(NYql::CreateSolomonDataSource(solomonState), NYql::CreateSolomonDataSink(solomonState));
     }
 
-    void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))
-            && !AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations()) {
-            return;
-        }
-
+    TDataProviderInfo CreatePqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId, TypesCtx->StrictConfigValidation);
         state->SupportRtmrMode = false;
@@ -2152,15 +2317,24 @@ private:
             state->WatermarkLateEventsPolicy = requestContext->WatermarkLateEventsPolicy;
         }
 
-        TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
-        TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
-
         finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
             return pqGateway->CloseSession(sessionId);
         });
+        return MakeProviders(NYql::CreatePqDataSource(state, state->Gateway), NYql::CreatePqDataSink(state, state->Gateway));
     }
 
     void Init(EKikimrQueryType queryType) {
+        auto* trace = SessionCtx->Query().CompileTrace.Get();
+        TCompileTraceScope providersTrace(trace, TCompileTraceLevels::Step,
+            "Initialize compilation providers");
+        // A host can prepare more than one query. Retire the previous factories
+        // and registrations before creating this compilation's provider pairs.
+        TypesCtx->DataSources.clear();
+        TypesCtx->DataSinks.clear();
+        TypesCtx->DataSourceMap.clear();
+        TypesCtx->DataSinkMap.clear();
+        TypesCtx->LayersRegistry.Reset();
+        TypesCtx->InitializeResult.reset();
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem, UsePessimisticLocks);
 
@@ -2202,35 +2376,47 @@ private:
         bool isSupportedQueryType = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
             || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming;
         if (isSupportedQueryType && FederatedQuerySetup) {
-            TVector<std::function<TFuture<void>()>> finalizers;
+            // Metadata may activate a provider after the async result has copied
+            // its finalizer. Share the list so every opened session is closed.
+            auto finalizers = std::make_shared<TVector<std::function<TFuture<void>()>>>();
+            const auto available = [this](TStringBuf name) {
+                return ExternalSourceFactory->IsAvailableProvider(TString(name));
+            };
             if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
-                InitS3Provider(queryType);
-                InitGenericProvider();
-                InitYdbExternalProvider();
-                InitSolomonProvider();
-
-                if (FederatedQuerySetup->YtGateway) {
-                    InitYtProvider(finalizers);
+                if (available(S3ProviderName)) {
+                    RegisterLazyProvider(S3ProviderName, "S3", [this, queryType] { return CreateS3Provider(queryType); });
+                }
+                if (available(GenericProviderName) && FederatedQuerySetup->ConnectorClient) {
+                    RegisterLazyProvider(GenericProviderName, "Generic", [this] { return CreateGenericProvider(); });
+                }
+                if (available(YdbExternalProviderName)) {
+                    RegisterLazyProvider(YdbExternalProviderName, "YdbExternal", [this] { return CreateYdbExternalProvider(); });
+                }
+                if (available(SolomonProviderName)) {
+                    RegisterLazyProvider(SolomonProviderName, "So", [this] { return CreateSolomonProvider(); });
+                }
+                if (available(YtProviderName) && FederatedQuerySetup->YtGateway) {
+                    RegisterLazyProvider(YtProviderName, "Yt", [this, finalizers] { return CreateYtProvider(*finalizers); }, true);
                 }
             }
+            const bool topicsEnabled = AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations();
             if (FederatedQuerySetup->PqGatewayFactory
-                && (AppData()->FeatureFlags.GetEnableExternalDataSources() || AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations())) {
-                InitPqProvider(finalizers);
+                && (AppData()->FeatureFlags.GetEnableExternalDataSources() || topicsEnabled)
+                && (available(PqProviderName) || topicsEnabled)) {
+                RegisterLazyProvider(PqProviderName, "Pq", [this, finalizers] { return CreatePqProvider(*finalizers); });
             }
-
-            if (!finalizers.empty()) {
-                DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
-                    TVector<TFuture<void>> futures;
-                    for (const auto& f : finalizers) {
-                        futures.push_back(f());
-                    }
-                    return WaitAll(futures);
-                };
-            }
+            DataProvidersFinalizer = [finalizers](const NYql::IGraphTransformer::TStatus&) {
+                TVector<TFuture<void>> futures;
+                for (const auto& finalize : *finalizers) {
+                    futures.push_back(finalize());
+                }
+                finalizers->clear();
+                return WaitAll(futures);
+            };
             TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
-        InitPgProvider();
+        RegisterLazyProvider(PgProviderName, "Pg", [this] { return CreatePgProvider(); });
 
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;
@@ -2275,6 +2461,17 @@ private:
         TypesCtx->MatchRecognize = QueryServiceConfig.GetEnableMatchRecognize();
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
+    }
+
+    IGraphTransformer& GetYqlTransformer(bool newRbo = false) {
+        auto& transformer = newRbo ? YqlTransformerNewRBO : YqlTransformer;
+        if (transformer) {
+            return *transformer;
+        }
+        auto* trace = SessionCtx->Query().CompileTrace.Get();
+        TCompileTraceScope pipelinesTrace(trace, TCompileTraceLevels::Step,
+            newRbo ? "Create new RBO frontend pipeline" : "Create legacy frontend pipeline");
+        const auto queryType = SessionCtx->Query().Type;
 
         // Compilation spans of the pipeline phases. The logical phases run in a loop
         // that restarts until the query stops changing: a phase span covers the loop,
@@ -2295,33 +2492,42 @@ private:
         const auto endPass = [&](const TString& name) {
             return CreateCompileTraceEnd(getTrace, name, &passes);
         };
+        const auto providerPeephole = [this] {
+            TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+                "Create provider peephole pipeline");
+            return GetDqIntegrationPeepholeTransformer(true, TypesCtx);
+        };
 
-        YqlTransformer = TTransformationPipeline(TypesCtx)
-            .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
-                NYql::NLog::ELevel::TRACE), "LogYqlTransform")
-            .Add(beginTrace("Prepare logical query"), "TraceBeginPrepareLogicalQuery")
-            .Add(beginPass("Annotate IO"), "TraceBeginIOAnnotation")
-            .AddPreTypeAnnotation()
-            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
-            .AddExpressionEvaluation(*FuncRegistry)
-            .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
-            .AddIOAnnotation(false)
-            .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
-            .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
-            .AddTypeAnnotation()
-            .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
-            .AddPostTypeAnnotation()
-            .Add(endPass("Annotate types"), "TraceEndTypeAnnotation")
-            .Add(beginPass("Apply provider optimizations"), "TraceBeginProviderOptimization")
-            .AddOptimization(true, false)
-            .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
-            .Add(endPass("Apply provider optimizations"), "TraceEndProviderOptimization")
-            .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
-            .Add(beginTrace("Prepare physical query"), "TraceBeginPreparePhysicalQuery")
-            .AddRun(&NullProgressWriter)
-            .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
-            .Build();
+        if (!newRbo) {
+            YqlTransformer = TTransformationPipeline(TypesCtx)
+                .AddServiceTransformers()
+                .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
+                    NYql::NLog::ELevel::TRACE), "LogYqlTransform")
+                .Add(beginTrace("Prepare logical query"), "TraceBeginPrepareLogicalQuery")
+                .Add(beginPass("Annotate IO"), "TraceBeginIOAnnotation")
+                .AddPreTypeAnnotation()
+                .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
+                .AddExpressionEvaluation(*FuncRegistry)
+                .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
+                .AddIOAnnotation(false)
+                .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
+                .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
+                .AddTypeAnnotation()
+                .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+                .AddPostTypeAnnotation()
+                .Add(endPass("Annotate types"), "TraceEndTypeAnnotation")
+                .Add(beginPass("Apply provider optimizations"), "TraceBeginProviderOptimization")
+                .AddOptimization(true, false)
+                .Add(CreateLazyTransformer(providerPeephole), "DqIntegrationPeephole")
+                .Add(endPass("Apply provider optimizations"), "TraceEndProviderOptimization")
+                .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
+                .Add(beginTrace("Prepare physical query"), "TraceBeginPreparePhysicalQuery")
+                .AddRun(&NullProgressWriter)
+                .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
+                .Build();
+
+            return *YqlTransformer;
+        }
 
         auto typesCtx = TypesCtx;
         EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION;
@@ -2387,7 +2593,7 @@ private:
             .Add(beginPass("Apply provider optimizations"), "TraceBeginProviderOptimization")
             //.AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
             .Add(RBOOptimizationTransformer.Release(), "RBOOptimizationTransformer")
-            .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
+            .Add(CreateLazyTransformer(providerPeephole), "DqIntegrationPeephole")
             .Add(endPass("Apply provider optimizations"), "TraceEndProviderOptimization")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .Add(beginTrace("Prepare physical query"), "TraceBeginPreparePhysicalQuery")
@@ -2395,6 +2601,15 @@ private:
             .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
             .Build();
 
+        return *YqlTransformerNewRBO;
+    }
+
+    IGraphTransformer& GetDataQueryAstTransformer() {
+        if (DataQueryAstTransformer) {
+            return *DataQueryAstTransformer;
+        }
+        TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+            "Create data query AST pipeline");
         DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .AddIntentDeterminationTransformer()
@@ -2403,9 +2618,31 @@ private:
             .Add(new TPrepareDataQueryAstTransformer(Cluster, ExecuteCtx, SessionCtx->QueryPtr(), KqpRunner),
                 "PrepareDataQueryAst")
             .Build();
+        return *DataQueryAstTransformer;
     }
 
     void SetupSession(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
+        if (TransformCtx) {
+            // Release native plans before their annotation and AST owners.
+            TransformCtx->NativeQuery.reset();
+            TransformCtx->FrontendKeepInCache.Clear();
+            TransformCtx->FrontendCommandTag.Clear();
+        }
+        YqlTransformer.Destroy();
+        YqlTransformerNewRBO.Destroy();
+        DataQueryAstTransformer.Destroy();
+        NativeFrontendTransformer.Destroy();
+        NativeMetadataTransformer.Destroy();
+        NativePrepareTransformer.Destroy();
+        LegacyCompile = {};
+        NativeFrontendActive = false;
+        LegacyFrontendRequested = false;
+        NewParserTypes.reset();
+        NewParserTypeSettings = {};
+        NewParserNames.reset();
+        NewParserSettings = {};
+        NewParserTablesCollected = false;
+        NewParserAst.reset();
         SessionCtx->Reset(KeepConfigChanges);
         SessionCtx->Query().Type = queryType;
         SessionCtx->Query().CompileTrace = std::move(trace);
@@ -2428,11 +2665,336 @@ private:
         std::get<2>(TypesCtx->CachedRandom).reset();
     }
 
+    bool BuildNativeQuery(TExprContext& ctx) {
+        auto* trace = SessionCtx->Query().CompileTrace.Get();
+        size_t executableStatements = 0;
+        bool hasWrites = false;
+        for (const auto& statement : NewParserAst->Statements) {
+            if (statement.Explain != NNewYql::EExplainMode::None) {
+                ythrow TNewYqlParserFallback() << "EXPLAIN statement execution";
+            }
+            executableStatements += std::holds_alternative<NNewYql::TQueryStatement>(statement.Value)
+                || std::holds_alternative<NNewYql::TWriteStatement>(statement.Value);
+            hasWrites |= std::holds_alternative<NNewYql::TWriteStatement>(statement.Value);
+        }
+        if (hasWrites && (executableStatements != 1 || SessionCtx->Config().GetEnableFallbackOnDML())) {
+            ythrow TNewYqlParserFallback() << "Native multi-statement writes or configured DML fallback";
+        }
+        if (!NewParserTablesCollected) {
+            bool pending = false;
+            {
+                TCompileTraceScope tablesTrace(trace, TCompileTraceLevels::Step, "Collect native tables");
+                auto references = NNewYql::CollectTableReferences(*NewParserAst, NewParserSettings);
+                tablesTrace.SetSuccess(references.IsOk());
+                if (!references.IsOk()) {
+                    ctx.IssueManager.AddIssues(references.Issues);
+                    return false;
+                }
+                for (const auto& [pragma, setting] : references.ProviderPragmas) {
+                    Y_UNUSED(pragma);
+                    if (setting.Provider == "kikimr" && SessionCtx->Config().IsRuntime(setting.Name)) {
+                        ythrow TNewYqlParserFallback() << "Native runtime pragma: " << setting.Name;
+                    }
+                }
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL pragma configuration started";
+                if (!NNewYql::ApplyProviderPragmas(*NewParserAst, references.ProviderPragmas, ctx, *TypesCtx)) {
+                    return false;
+                }
+                // Native plans bypass RewriteSelect, where this setting
+                // normally requests a retry through the legacy optimizer.
+                if (SessionCtx->Config().OptFallbackToLegacyOptimizer.Get()) {
+                    ythrow TNewYqlParserFallback() << "Forced fallback to legacy optimizer";
+                }
+                for (const auto& [cluster, path] : references.Tables) {
+                    const auto* description = SessionCtx->Tables().GetTables().FindPtr(std::make_pair(cluster, path));
+                    if (description && description->Metadata) { continue; }
+                    if (cluster != Cluster) {
+                        ythrow TNewYqlParserFallback() << "Cross-cluster catalog lookup";
+                    }
+                    auto& table = SessionCtx->Tables().GetOrAddTable(cluster, SessionCtx->GetDatabase(), path);
+                    if (table.Metadata) {
+                        ythrow TNewYqlParserFallback() << "Catalog path was rewritten: " << path;
+                    }
+                    table.RequireStats();
+                    pending = true;
+                }
+                NewParserTablesCollected = true;
+            }
+            if (pending) { throw TNativeMetadataPending{}; }
+        }
+        if (!NewParserNames) {
+            TCompileTraceScope namesTrace(trace, TCompileTraceLevels::Step, "Resolve native names");
+            THashMap<std::pair<TString, TString>, NNewYql::TTableMetadataPtr> snapshots;
+            const auto lookup = [&](const TString& cluster, const TString& path) -> NNewYql::TTableMetadataPtr {
+                const auto key = std::make_pair(cluster, path);
+                if (const auto* snapshot = snapshots.FindPtr(key)) {
+                    return *snapshot;
+                }
+                const auto* description = SessionCtx->Tables().GetTables().FindPtr(key);
+                // A missing catalog entry can mean a rewritten path, a view
+                // or a different provider, not necessarily a missing table.
+                if (!description || !description->Metadata) {
+                    if (cluster != Cluster) {
+                        ythrow TNewYqlParserFallback() << "Cross-cluster catalog lookup";
+                    }
+                    auto& table = SessionCtx->Tables().GetOrAddTable(cluster, SessionCtx->GetDatabase(), path);
+                    if (table.Metadata) {
+                        ythrow TNewYqlParserFallback() << "Catalog path was rewritten: " << path;
+                    }
+                    table.RequireStats();
+                    throw TNativeMetadataPending{};
+                }
+                const auto& metadata = *description->Metadata;
+                if (!metadata.DoesExist) {
+                    return {};
+                }
+                if (metadata.Temporary || metadata.Kind == EKikimrTableKind::External
+                    || metadata.Kind == EKikimrTableKind::View || metadata.Kind == EKikimrTableKind::SysView
+                    || SessionCtx->Config().SystemColumnsEnabled()) {
+                    ythrow TNewYqlParserFallback() << "Unsupported catalog schema in new name resolution: " << path;
+                }
+                auto snapshot = std::make_shared<NNewYql::TTableMetadata>();
+                snapshot->Cluster = metadata.Cluster;
+                snapshot->Path = metadata.Name;
+                snapshot->OwnerId = metadata.PathId.OwnerId();
+                snapshot->TableId = metadata.PathId.TableId();
+                snapshot->SchemaVersion = metadata.SchemaVersion;
+                snapshot->KeyColumns = metadata.KeyColumnNames;
+                for (const auto& index : metadata.Indexes) { snapshot->HasWriteIndexes |= index.ItUsedForWrite(); }
+                const auto addColumn = [&](const TKikimrColumnMetadata& column) {
+                    if (column.IsBuildInProgress || column.SetNotNullInProgress) {
+                        ythrow TNewYqlParserFallback() << "Column schema change in progress: " << path;
+                    }
+                    const auto* type = description->GetColumnType(column.Name);
+                    if (!type) {
+                        ythrow TNewYqlParserFallback() << "Column type is not available: " << path << "." << column.Name;
+                    }
+                    const bool hasDefault = column.DefaultKind != NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED
+                        || bool(column.DefaultExpression);
+                    snapshot->Columns.push_back({column.Name, column.Id, FormatType(type), column.NotNull, hasDefault});
+                    snapshot->HasDefaults |= hasDefault;
+                    snapshot->HasGeneratedColumns |= bool(column.DefaultExpression);
+                };
+                // Catalog order determines native star expansion and result columns.
+                if (metadata.ColumnOrder.empty()) {
+                    for (const auto& [name, column] : metadata.Columns) {
+                        Y_UNUSED(name);
+                        addColumn(column);
+                    }
+                } else {
+                    for (const auto& name : metadata.ColumnOrder) {
+                        addColumn(metadata.Columns.at(name));
+                    }
+                }
+                snapshots.emplace(key, snapshot);
+                return snapshot;
+            };
+            auto resolved = NNewYql::ResolveNames(*NewParserAst, NewParserSettings, lookup);
+            namesTrace.SetSuccess(resolved.IsOk());
+            if (!resolved.IsOk()) {
+                ctx.IssueManager.AddIssues(resolved.Issues);
+                return false;
+            }
+            NewParserNames = std::move(resolved.Names);
+            YQL_CLOG(INFO, ProviderKqp) << "New YQL name resolution succeeded";
+        }
+        // Each native result currently owns a separate importer/IU registry.
+        // Named producers can be shared across results, including volatile
+        // values. The legacy importer materializes them once across roots.
+        if (executableStatements > 1 && !NewParserNames->NamedQueries.empty()) {
+            ythrow TNewYqlParserFallback() << "Native multi-result named query sharing";
+        }
+        {
+            TCompileTraceScope typesTrace(trace, TCompileTraceLevels::Step, "Annotate native AST");
+            NewParserTypeSettings.CompileTrace = trace;
+            NewParserTypes = NNewYql::AnnotateAst(*NewParserAst, *NewParserNames, ctx, *TypesCtx, NewParserTypeSettings);
+            typesTrace.SetSuccess(bool(NewParserTypes));
+        }
+        if (!NewParserTypes) { return false; }
+        YQL_CLOG(INFO, ProviderKqp) << "New YQL type annotation succeeded";
+        std::optional<TCompileTraceScope> contractTrace(std::in_place, trace, TCompileTraceLevels::Step,
+            "Validate native execution contract");
+        auto native = std::make_shared<TNativeQuery>();
+        const auto lookup = [&](const NNewYql::TTableMetadata& snapshot) -> NNewYql::TRboTable {
+            if (snapshot.Cluster != Cluster) {
+                ythrow TNewYqlParserFallback() << "Cross-cluster RBO reads are not supported";
+            }
+            const auto& description = SessionCtx->Tables().ExistingTable(snapshot.Cluster, snapshot.Path);
+            const auto& metadata = *description.Metadata;
+            if (metadata.PathId.OwnerId() != snapshot.OwnerId || metadata.PathId.TableId() != snapshot.TableId
+                || metadata.SchemaVersion != snapshot.SchemaVersion
+                || (metadata.Kind != EKikimrTableKind::Datashard && metadata.Kind != EKikimrTableKind::Olap)) {
+                ythrow TNewYqlParserFallback() << "Table metadata changed before RBO lowering";
+            }
+            auto table = Build<TKqpTable>(ctx, TPositionHandle())
+                .Path().Build(snapshot.Path)
+                .PathId().Build(TStringBuilder() << snapshot.OwnerId << ':' << snapshot.TableId)
+                .SysView().Build("").Version().Build(ToString(snapshot.SchemaVersion)).Done().Ptr();
+            return {table, metadata.Kind == EKikimrTableKind::Olap ? NYql::EStorageType::ColumnStorage : NYql::EStorageType::RowStorage};
+        };
+
+        THashSet<const NNewYql::TSource*> writeOnlyTargets;
+        for (const auto& statement : NewParserAst->Statements) {
+            const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value);
+            if (!write) { continue; }
+            const auto& snapshot = *NewParserNames->Tables.at(write->Target.get());
+            const auto& metadata = *SessionCtx->Tables().ExistingTable(snapshot.Cluster, snapshot.Path).Metadata;
+            for (const auto& index : metadata.Indexes) {
+                if (index.ItUsedForWrite() && !index.IsWrittenBySink(SessionCtx->Config().GetEnableIndexStreamWrite())) {
+                    ythrow TNewYqlParserFallback() << "Native writes require sink-maintained indexes";
+                }
+            }
+            const bool inputRows = write->Input || !write->Rows.empty();
+            if (inputRows) { writeOnlyTargets.insert(write->Target.get()); }
+            auto& op = native->Execution.TableOperations.emplace_back();
+            op.SetTable(snapshot.Path);
+            const auto operation = write->Kind == NNewYql::EWriteKind::Insert
+                ? (write->OnConflict == "revert" ? TYdbOperation::InsertRevert : TYdbOperation::InsertAbort)
+                : write->Kind == NNewYql::EWriteKind::Upsert ? TYdbOperation::Upsert
+                : write->Kind == NNewYql::EWriteKind::Replace ? TYdbOperation::Replace
+                : write->Kind == NNewYql::EWriteKind::Update ? (inputRows ? TYdbOperation::UpdateOn : TYdbOperation::Update)
+                : inputRows ? TYdbOperation::DeleteOn : TYdbOperation::Delete;
+            op.SetOperation(static_cast<ui32>(operation));
+        }
+        THashSet<TString> tables;
+        for (const auto& [source, snapshot] : NewParserNames->Tables) {
+            lookup(*snapshot); // Validate identity and provider even for unused definitions.
+            if (writeOnlyTargets.contains(source)) { continue; }
+            if (tables.insert(snapshot->Path).second) {
+                auto& op = native->Execution.TableOperations.emplace_back();
+                op.SetTable(snapshot->Path);
+                op.SetOperation(static_cast<ui32>(TYdbOperation::Select));
+            }
+        }
+        contractTrace.reset();
+        const bool dataQuery = SessionCtx->Query().Type == EKikimrQueryType::Dml;
+        const auto cap = dataQuery ? FillSettings.RowsLimitPerWrite : Nothing();
+        for (const auto& statement : NewParserAst->Statements) {
+            if (const auto* write = std::get_if<NNewYql::TWriteStatement>(&statement.Value)) {
+                TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
+                auto root = NNewYql::LowerWriteToRbo(*write, *NewParserAst, *NewParserNames, *NewParserTypes, ctx, lookup,
+                    {.OrderedColumns = TypesCtx->OrderedColumns,
+                     .EnableIndexStreamWrite = SessionCtx->Config().GetEnableIndexStreamWrite()}, trace);
+                root->PlanProps.PhysicalTxGroup = 0;
+                root->PlanProps.EffectPriority = 0;
+                if (root->PlanProps.WithReturning) {
+                    root->PlanProps.ResultIndex = native->Execution.DiscardResults.size();
+                    if (cap && *cap < Max<ui64>()) {
+                        root->PlanProps.ReturningRowsLimit = Build<TCoUint64>(ctx, root->Pos).Literal().Build(ToString(*cap + 1)).Done().Ptr();
+                    }
+                    native->Execution.DiscardResults.push_back(false);
+                }
+                native->Roots.push_back(std::move(root));
+                continue;
+            }
+            const auto* query = std::get_if<NNewYql::TQueryStatement>(&statement.Value);
+            if (!query) { continue; }
+            TCompileTraceScope lowerTrace(trace, TCompileTraceLevels::Step, "Lower native AST to RBO");
+            auto lowered = NNewYql::LowerToRbo(*query->Query, *NewParserAst, *NewParserNames, *NewParserTypes,
+                ctx, lookup, TypesCtx->OrderedColumns, trace);
+            TVector<TString> columns;
+            for (const auto& column : lowered->GetColumns().Items()) { columns.push_back(column.second); }
+            auto input = lowered->GetInput();
+            if (cap && *cap < Max<ui64>()) {
+                auto count = Build<TCoUint64>(ctx, lowered->Pos).Literal().Build(ToString(*cap + 1)).Done().Ptr();
+                input = MakeIntrusive<TOpLimit>(input, lowered->Pos, NKqp::TExpression(count, &ctx), EOpPhase::Undefined);
+            }
+            auto root = MakeIntrusive<TOpRoot>(input, lowered->Pos, lowered->GetColumns(), columns);
+            root->PlanProps = std::move(lowered->PlanProps);
+            root->PlanProps.ResultIndex = native->Roots.size();
+            root->PlanProps.PhysicalTxGroup = 0;
+            root->PlanProps.EffectPriority = 0;
+            for (const auto& item : IterateSubtreeWithSubplans(root.Get(), root->PlanProps)) {
+                item.Current->BindExpressionPlanProps(&root->PlanProps);
+            }
+            native->Roots.push_back(std::move(root));
+            native->Execution.DiscardResults.push_back(false);
+        }
+        if (native->Roots.empty()) { ythrow TNewYqlParserFallback() << "No native query results"; }
+        TCompileTraceScope finalizeTrace(trace, TCompileTraceLevels::Step, "Finalize native execution contract");
+        finalizeTrace.SetSuccess(false);
+        for (const auto& root : native->Roots) {
+            if (root->PlanProps.WithEffects && !root->PlanProps.WithReturning) { continue; }
+            native->Results.push_back({root->GetQueryColumns(), cap.GetOrElse(0)});
+        }
+        // Annotation can clone the same parameter into several expressions.
+        // Export one declaration per name, independently of expression identity.
+        TExprNode::TListType expressions;
+        THashSet<TString> parameterNames;
+        for (const auto& [expression, annotation] : NewParserTypes->Expressions) {
+            Y_UNUSED(expression);
+            VisitExpr(annotation.Lambda, [&](const TExprNode::TPtr& node) {
+                if (auto parameter = TMaybeNode<TCoParameter>(node)) {
+                    if (parameterNames.insert(TString(parameter.Cast().Name().Value())).second) {
+                        expressions.push_back(node);
+                    }
+                }
+                return true;
+            });
+        }
+        auto parameters = ctx.NewList(TPositionHandle(), std::move(expressions));
+        TExprNode::TPtr output;
+        if (TCollectParametersTransformer(SessionCtx->QueryPtr())(parameters, output, ctx) == IGraphTransformer::TStatus::Error) {
+            return false;
+        }
+        TransformCtx->NativeQuery = std::move(native);
+        YQL_CLOG(INFO, ProviderKqp) << "New YQL native execution contract built";
+        for (size_t i = 0; i < TransformCtx->NativeQuery->Roots.size(); ++i) {
+            YQL_CLOG(INFO, ProviderKqp) << "New YQL RBO lowering succeeded";
+        }
+        finalizeTrace.SetSuccess(true);
+        return true;
+    }
+
+    void TraceNativeFallback(const TNewYqlParserFallback& reason) const {
+        if (auto* trace = SessionCtx->Query().CompileTrace.Get()) {
+            auto span = trace->StartSpan(TCompileTraceLevels::Step, "New YQL frontend fallback");
+            span.Attribute("fallback.reason", TString(reason.what()));
+            TCompileTrace::EndSpan(span);
+        }
+    }
+
+    IGraphTransformer& GetNativeFrontend() {
+        if (NativeFrontendTransformer) {
+            return *NativeFrontendTransformer;
+        }
+        TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Step,
+            "Create native frontend pipeline");
+        NativeMetadataTransformer = CreateCompileTraceTransformer(
+            CreateKiSourceLoadTableMetadataTransformer(
+                CreateKqpGatewayProxy(Gateway, SessionCtx, ActorSystem), SessionCtx, *TypesCtx, ExternalSourceFactory, IsInternalCall),
+            [this] { return SessionCtx->Query().CompileTrace.Get(); }, TCompileTraceLevels::Phase, "Load native table metadata");
+        NativePrepareTransformer = new TPrepareNativeQueryTransformer(KqpRunner, TransformCtx);
+        NativeFrontendTransformer = new TNativeFrontendTransformer([this](TExprNode::TPtr& input, TExprContext& ctx)
+            -> std::pair<IGraphTransformer*, bool> {
+            TCompileTraceScope buildTrace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase, "Build native query");
+            try {
+                if (!BuildNativeQuery(ctx)) {
+                    buildTrace.SetSuccess(false);
+                    return {nullptr, false};
+                }
+                return {NativePrepareTransformer.Get(), false};
+            } catch (const TNativeMetadataPending&) {
+                return {NativeMetadataTransformer.Get(), true};
+            } catch (const TNewYqlParserFallback& e) {
+                TraceNativeFallback(e);
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL frontend fallback: " << e.what();
+                TransformCtx->NativeQuery.reset();
+                NewParserTypes.reset();
+                NewParserNames.reset();
+                // Literal provider settings apply to the whole compilation.
+                // The legacy configuration pass replays them in source order,
+                // including any configuration emitted by SQL translation.
+                input = LegacyCompile(ctx);
+                if (!input) { return {nullptr, false}; }
+                return {&GetYqlTransformer(SessionCtx->Config().GetEnableNewRBO()), false};
+            }
+        });
+        return *NativeFrontendTransformer;
+    }
+
     void SetupYqlTransformer(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
         SetupSession(queryType, std::move(trace));
-
-        YqlTransformer->Rewind();
-        YqlTransformerNewRBO->Rewind();
 
         ResultProviderConfig->FillSettings = FillSettings;
         ResultProviderConfig->CommittedResults.clear();
@@ -2441,8 +3003,6 @@ private:
     void SetupDataQueryAstTransformer(const IKikimrQueryExecutor::TExecuteSettings& settings, EKikimrQueryType queryType,
         TCompileTrace::TPtr trace = {}) {
         SetupSession(queryType, std::move(trace));
-
-        DataQueryAstTransformer->Rewind();
 
         ExecuteCtx->Reset(settings);
     }
@@ -2472,6 +3032,20 @@ private:
     TAutoPtr<IGraphTransformer> YqlTransformer;
     TAutoPtr<IGraphTransformer> YqlTransformerNewRBO;
     TAutoPtr<IGraphTransformer> DataQueryAstTransformer;
+    // Names and annotations borrow AST addresses. SetupSession releases native
+    // plans and async transformers before their semantic and syntax owners.
+    mutable std::unique_ptr<NNewYql::TScript> NewParserAst;
+    mutable NNewYql::TNameResolutionSettings NewParserSettings;
+    std::unique_ptr<NNewYql::TResolvedNames> NewParserNames;
+    mutable NNewYql::TAstTypeAnnotationSettings NewParserTypeSettings;
+    std::unique_ptr<NNewYql::TAnnotatedAst> NewParserTypes;
+    TAutoPtr<IGraphTransformer> NativeFrontendTransformer;
+    TAutoPtr<IGraphTransformer> NativeMetadataTransformer;
+    bool NewParserTablesCollected = false;
+    TAutoPtr<IGraphTransformer> NativePrepareTransformer;
+    mutable bool NativeFrontendActive = false;
+    mutable bool LegacyFrontendRequested = false;
+    mutable std::function<TExprNode::TPtr(TExprContext&)> LegacyCompile;
     TExprNode::TPtr FakeWorld;
     TKqpAsyncResultBase<IKqpHost::TQueryResult>::TAsyncTransformStatusCallback DataProvidersFinalizer;
 

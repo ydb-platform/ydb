@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -13,7 +14,7 @@ class TCompileTrace;
 
 void CompileOlapProgram(const NYql::NNodes::TCoLambda& lambda, const NYql::TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames, NYql::TExprContext &exprCtx,
-    NYql::TTypeAnnotationContext& typesCtx, TCompileTrace* trace = nullptr);
+    NYql::TTypeAnnotationContext& typesCtx, const NMiniKQL::IFunctionRegistry& functionRegistry, TCompileTrace* trace = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

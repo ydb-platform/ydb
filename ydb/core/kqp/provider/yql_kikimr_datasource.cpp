@@ -21,6 +21,7 @@
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -697,13 +698,25 @@ public:
         , SessionCtx(sessionCtx)
         , ExternalSourceFactory(externalSourceFactory)
         , GUCSettings(gucSettings)
-        , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
-        , IntentDeterminationTransformer(CreateSqlPathAliasesTransformer(sessionCtx,
-            new TKiSourceIntentDeterminationTransformer(sessionCtx, types)))
-        , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
-        , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
-        , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types))
-        , ConstraintsTransformer(CreateKiSourceConstraintsTransformer(sessionCtx))
+        , ConfigurationTransformer([sessionCtx, &types] {
+            return THolder<IGraphTransformer>(new TKikimrConfigurationTransformer(sessionCtx, types));
+        })
+        , IntentDeterminationTransformer([sessionCtx, &types] {
+            return THolder<IGraphTransformer>(CreateSqlPathAliasesTransformer(sessionCtx,
+                new TKiSourceIntentDeterminationTransformer(sessionCtx, types)).Release());
+        })
+        , LoadTableMetadataTransformer([gateway, sessionCtx, &types, externalSourceFactory, isInternalCall] {
+            return THolder<IGraphTransformer>(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall).Release());
+        })
+        , TypeAnnotationTransformer([sessionCtx, &types] {
+            return THolder<IGraphTransformer>(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types).Release());
+        })
+        , CallableExecutionTransformer([gateway, sessionCtx, &types] {
+            return THolder<IGraphTransformer>(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types).Release());
+        })
+        , ConstraintsTransformer([sessionCtx] {
+            return THolder<IGraphTransformer>(CreateKiSourceConstraintsTransformer(sessionCtx).Release());
+        })
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -1158,12 +1171,12 @@ private:
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
     TGUCSettings::TPtr GUCSettings;
 
-    TAutoPtr<IGraphTransformer> ConfigurationTransformer;
-    TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
-    TAutoPtr<IGraphTransformer> LoadTableMetadataTransformer;
-    TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
-    TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
+    TLazyInitHolder<IGraphTransformer> ConfigurationTransformer;
+    TLazyInitHolder<IGraphTransformer> IntentDeterminationTransformer;
+    TLazyInitHolder<IGraphTransformer> LoadTableMetadataTransformer;
+    TLazyInitHolder<IGraphTransformer> TypeAnnotationTransformer;
+    TLazyInitHolder<IGraphTransformer> CallableExecutionTransformer;
+    const TLazyInitHolder<IGraphTransformer> ConstraintsTransformer;
     THolder<IDqIntegration> KikimrDqIntegration;
 };
 

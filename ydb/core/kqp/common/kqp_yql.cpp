@@ -5,6 +5,8 @@
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
+#include <util/memory/pool.h>
+
 namespace NYql {
 
 using namespace NKikimr;
@@ -763,7 +765,14 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
 
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
     try {
+        // Conversion tables and AST nodes live only until printing finishes.
+        // Release their allocations together; the expression owns atom text
+        // for the entire conversion and printing interval.
+        TMemoryPool pool(4096);
+        TMemoryPoolAllocator allocator(&pool);
         TConvertToAstSettings settings;
+        settings.Allocator = &allocator;
+        settings.RefAtoms = true;
         settings.AllowFreeArgs = true;
         settings.NoInlineFunc = [] (const TExprNode& exprNode) {
             TExprBase node(&exprNode);

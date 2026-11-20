@@ -1,0 +1,132 @@
+#pragma once
+
+#include "kqp_ast.h"
+
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+
+#include <functional>
+
+namespace NYql {
+class TTypeAnnotationNode;
+}
+
+namespace NKikimr::NKqp::NNewYql {
+
+// Catalog snapshots, independent of both the syntax tree and ExprNodes.
+// Types and nullability describe stored columns, before relational operations.
+struct TColumnMetadata {
+    TString Name;
+    ui32 Id = 0;
+    TString Type;
+    bool NotNull = false;
+    bool HasDefault = false;
+};
+
+struct TTableMetadata {
+    TString Cluster;
+    TString Path;
+    ui64 OwnerId = 0;
+    ui64 TableId = 0;
+    ui64 SchemaVersion = 0;
+    TVector<TColumnMetadata> Columns; // Catalog column order.
+    TVector<TString> KeyColumns;
+    bool HasWriteIndexes = false;
+    bool HasDefaults = false;
+    bool HasGeneratedColumns = false;
+};
+
+using TTableMetadataPtr = std::shared_ptr<const TTableMetadata>;
+// A null result means a confirmed missing table. An unavailable or unsupported
+// catalog must throw TNewYqlParserFallback instead of reporting a missing table.
+using TTableLookup = std::function<TTableMetadataPtr(const TString& cluster, const TString& path)>;
+
+struct TNameResolutionSettings {
+    TString DefaultCluster;
+    TString TablePathPrefix;
+    THashMap<TString, TString> ClusterPathPrefixes;
+    // External parameter types belong to the caller's expression context and
+    // names include '$'. SQL DECLARE takes precedence over these SDK types.
+    THashMap<TString, const NYql::TTypeAnnotationNode*> Parameters = {};
+};
+
+// These IDs identify logical column occurrences, not catalog column numbers.
+// Aliases, projections and repeated CTE references may allocate fresh IDs while
+// retaining an Input link to the value they expose.
+using TColumnId = size_t;
+
+// Table/MetadataColumnId describe stored provenance; Expression describes a
+// projection producer. Input links renames and direct projections back to their
+// producer without merging independent source occurrences such as self joins.
+struct TResolvedColumn {
+    TString Name;
+    const TSource* Source = nullptr; // Distinguishes occurrences in self joins.
+    TTableMetadataPtr Table;
+    std::optional<ui32> MetadataColumnId;
+    const TExpression* Expression = nullptr;
+    std::optional<TColumnId> Input; // Projection or derived-table column.
+};
+
+// Provider configuration is applied before metadata loading and scalar typing.
+// DEFAULT is distinct from a bare pragma, which supplies an empty string.
+struct TProviderPragma {
+    TString Provider;
+    TString Name;
+    TVector<TString> Values;
+    bool Default = false;
+};
+
+using TProviderPragmas = THashMap<const TPragmaStatement*, TProviderPragma>;
+
+// Pointer keys refer to the unchanged input AST, which must outlive this result.
+// Column IDs are local to this result; RBO lowering can allocate IUs for them.
+struct TResolvedNames {
+    THashMap<const TDeclareStatement*, TString> DeclarationNames;
+    THashMap<const TWriteStatement*, TVector<TString>> WriteColumns;
+    THashMap<const TWriteStatement*, TVector<TString>> ReturningColumns;
+    TProviderPragmas ProviderPragmas;
+    TVector<TResolvedColumn> Columns;
+    THashMap<const TSource*, TTableMetadataPtr> Tables;
+    THashMap<const TExpression*, TColumnId> ColumnReferences;
+    THashMap<const TExpression*, TVector<TColumnId>> Stars;
+    // SQL projection order, independent of attribute order in YQL struct types.
+    THashMap<const TQuery*, TVector<TColumnId>> QueryOutputs;
+    // GROUP BY aliases are visible after the grouping expression is resolved.
+    THashMap<const TExpression*, TColumnId> GroupAliases;
+    THashMap<const TWindowReference*, const TWindowDefinition*> WindowReferences;
+    // Lexical identities distinguish lambda arguments and successive named
+    // definitions. Unbound parameter references remain external SDK parameters.
+    THashMap<const TExpression*, const TParameter*> BindingReferences;
+    THashMap<const TParameter*, const TExpression*> Definitions;
+    THashMap<const TParameter*, const TQuery*> NamedQueries;
+    THashMap<const TSource*, const TQuery*> NamedSources;
+};
+
+struct TNameResolutionResult {
+    std::unique_ptr<TResolvedNames> Names;
+    NYql::TIssues Issues;
+
+    bool IsOk() const { return bool(Names); }
+};
+
+struct TTableReferencesResult {
+    TVector<std::pair<TString, TString>> Tables; // Unique (cluster, path), in first-use order.
+    TProviderPragmas ProviderPragmas;
+    NYql::TIssues Issues;
+
+    bool IsOk() const { return Issues.Empty(); }
+};
+
+// Discover physical reads without catalog IO or column binding. This lets the
+// host load metadata in one batch before resolving names. CTE visibility and
+// path pragmas follow the same rules as resolution; unsupported rules fall back.
+TTableReferencesResult CollectTableReferences(const TScript& script, TNameResolutionSettings settings);
+
+// Resolution reads catalog snapshots but does not construct ExprNodes or infer
+// types. A user name error returns Issues and no partial Names; unsupported
+// binding rules throw TNewYqlParserFallback for the entire script.
+TNameResolutionResult ResolveNames(const TScript& script, TNameResolutionSettings settings,
+    const TTableLookup& lookup);
+
+} // namespace NKikimr::NKqp::NNewYql

@@ -94,6 +94,7 @@ EDstState TTargetBase::GetDstState() const {
 
 void TTargetBase::SetDstState(const EDstState value) {
     DstState = value == EDstState::Ready && HasMissingIndexStream() ? EDstState::Error : value;
+    Replication->UpdateMissingIndexStream(*this);
     switch (DstState) {
     case EDstState::Alter:
         Replication->AddPendingAlterTarget(Id);
@@ -162,6 +163,7 @@ EStreamState TTargetBase::GetStreamState() const {
 
 void TTargetBase::SetStreamState(EStreamState value) {
     StreamState = value;
+    Replication->UpdateMissingIndexStream(*this);
 }
 
 std::optional<bool> TTargetBase::GetStreamSchemaChanges() const {

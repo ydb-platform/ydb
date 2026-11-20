@@ -195,6 +195,7 @@ public:
         const auto it = Targets.find(id);
         if (it != Targets.end()) {
             TLagProvider::RemoveLag(it->second, id);
+            MissingIndexStreams.erase(id);
             Targets.erase(it);
             NotifyLagChanged(previousLag);
         }
@@ -235,6 +236,16 @@ public:
             return ProgressTargets(ctx);
         }
 
+        const auto& params = Config.GetSrcConnectionParams();
+        if (State == EState::Error && DesiredState == EState::Ready
+            && AuthenticationErrorRevision == MissingIndexStreamRecoveryMarker
+            && (!params.HasStaticCredentials() || params.GetStaticCredentials().GetPasswordSecretName().empty()))
+        {
+            // PAUSE allows replacing the password secret with another credential
+            // type. Resume its normal provider while the missing index stays fenced.
+            State = EState::Ready;
+        }
+
         // A persisted authentication error owns its secret lookups across restarts.
         // The bootstrap resolver would turn a transient lookup failure into a generic error.
         if (State == EState::Error && DesiredState == EState::Ready && !AuthenticationErrorRevision.empty()) {
@@ -250,7 +261,6 @@ public:
 
         if (!YdbProxy && !(State == EState::Removing && !HasSourceStreams())) {
             THolder<IActor> ydbProxy;
-            const auto& params = Config.GetSrcConnectionParams();
             const auto& endpoint = params.GetEndpoint();
             const auto& database = params.GetDatabase();
             const bool ssl = params.GetEnableSsl();
@@ -343,15 +353,10 @@ public:
         AuthenticationErrorRevision.clear();
         CancelSecretRefresh();
         State = state;
-        if (state == EState::Ready && DesiredState == EState::Ready) {
-            for (const auto& [id, target] : Targets) {
-                if (target->HasMissingIndexStream()) {
-                    AuthenticationErrorRevision = MissingIndexStreamRecoveryMarker;
-                    issue = TStringBuilder() << "Source changefeed is missing for index target #" << id
-                        << ". Waiting for the base table to report DROP INDEX.";
-                    break;
-                }
-            }
+        if (state == EState::Ready && DesiredState == EState::Ready && !MissingIndexStreams.empty()) {
+            AuthenticationErrorRevision = MissingIndexStreamRecoveryMarker;
+            issue = TStringBuilder() << "Source changefeed is missing for index target #" << *MissingIndexStreams.begin()
+                << ". Waiting for the base table to report DROP INDEX.";
         }
         Issue = TruncatedIssue(issue);
     }
@@ -458,6 +463,7 @@ private:
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
+    THashSet<ui64> MissingIndexStreams;
     TActorId SecretRefresh;
     TString SecretRevision;
     TString AuthenticationErrorRevision;
@@ -512,6 +518,18 @@ const TReplication::ITarget* TReplication::FindTarget(ui64 id) const {
 
 TReplication::ITarget* TReplication::FindTarget(ui64 id) {
     return Impl->FindTarget(id);
+}
+
+void TReplication::UpdateMissingIndexStream(const ITarget& target) {
+    if (target.HasMissingIndexStream()) {
+        Impl->MissingIndexStreams.insert(target.GetId());
+    } else {
+        Impl->MissingIndexStreams.erase(target.GetId());
+    }
+}
+
+const THashSet<ui64>& TReplication::GetMissingIndexStreams() const {
+    return Impl->MissingIndexStreams;
 }
 
 void TReplication::RemoveTarget(ui64 id) {

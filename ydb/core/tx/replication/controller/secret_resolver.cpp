@@ -3,6 +3,7 @@
 #include "secret_resolver.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -13,6 +14,7 @@
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 
+#include <util/generic/is_in.h>
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
 #include <util/generic/scope.h>
@@ -228,6 +230,26 @@ class TSecretRefresh: public TActorBootstrapped<TSecretRefresh> {
     const TString FailedRevision;
     const TVector<TSecretProbeTopic> Topics;
 
+    static bool MayHaveImplTable(const NYdb::NTable::TIndexDescription& index, TStringBuf name) {
+        using NYdb::NTable::EIndexType;
+        if (IsIn({EIndexType::LocalBloomFilter, EIndexType::LocalBloomNgramFilter, EIndexType::LocalMinMax}, index.GetIndexType())) {
+            return false;
+        }
+        TVector<TString> keys;
+        for (const auto& key : index.GetIndexColumns()) {
+            keys.emplace_back(key.data(), key.size());
+        }
+        // The remote source may use either fulltext layout. A type unknown to
+        // this controller gives no evidence that the old table is gone.
+        for (const bool compact : {false, true}) {
+            const auto type = NTableIndex::TryConvertIndexType(index.GetIndexType(), compact);
+            if (!type || IsIn(NTableIndex::GetImplTables(*type, keys), name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static NActors::async<NYdb::EStatus> ProbeTopic(const TActorId& proxy, const TSecretProbeTopic& topic,
             THashSet<ui64>& missingIndexStreams) {
         auto described = co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTopicResponse>(proxy,
@@ -249,10 +271,17 @@ class TSecretRefresh: public TActorBootstrapped<TSecretRefresh> {
         }
         for (const auto& present : result.GetTableDescription().GetIndexDescriptions()) {
             if (TStringBuf(present.GetIndexName()) == index.Name) {
+                const TString implPath(ExtractParent(topic.Path));
                 auto implTable = co_await NActors::ActorRequest<TEvYdbProxy::TEvDescribeTableResponse>(proxy,
-                    new TEvYdbProxy::TEvDescribeTableRequest(TString(ExtractParent(topic.Path)), {}));
+                    new TEvYdbProxy::TEvDescribeTableRequest(implPath, {}));
                 const auto& impl = implTable->Get()->Result;
                 if (!impl.IsSuccess()) {
+                    if (impl.GetStatus() == NYdb::EStatus::SCHEME_ERROR && !MayHaveImplTable(present, ExtractBase(implPath))) {
+                        // The authenticated index description excludes this
+                        // implementation table even if its topic ACL is hidden.
+                        missingIndexStreams.insert(index.TargetId);
+                        break;
+                    }
                     co_return impl.GetStatus();
                 }
                 for (const auto& feed : impl.GetTableDescription().GetChangefeedDescriptions()) {

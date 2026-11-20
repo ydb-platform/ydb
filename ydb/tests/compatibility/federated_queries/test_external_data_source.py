@@ -3,7 +3,11 @@ import boto3
 import pytest
 import yatest
 import os
+import requests
+import yaml
 
+from ydb.draft import DynamicConfigClient
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.compatibility.fixtures import (
     MixedClusterFixture,
@@ -31,10 +35,38 @@ class ExternalDataTableTestBase:
             .with_bucket(s3_bucket)
         )
 
-        yield from super().setup_cluster(
-            disabled_feature_flags=["enable_drain_on_shutdown", "disable_old_secret_creation"],
+        for _ in super().setup_cluster(
+            disabled_feature_flags=["enable_drain_on_shutdown"],
             extra_feature_flags=["enable_external_data_sources"],
-        )
+        ):
+            # Dynamic config tolerates unknown flags on older binaries, unlike
+            # the startup YAML. Keep legacy secrets enabled across version changes.
+            config = {
+                "metadata": {"kind": "MainConfig", "cluster": "", "version": 0},
+                "config": {
+                    "yaml_config_enabled": True,
+                    "feature_flags": dict(self.config.yaml_config["feature_flags"], disable_old_secret_creation=False),
+                },
+            }
+            DynamicConfigClient(self.driver).set_config(
+                yaml.safe_dump(config), dry_run=False, allow_unknown_fields=True
+            )
+            assert wait_for(self.legacy_secrets_enabled, timeout_seconds=30), "Legacy secrets flag was not applied"
+            yield
+
+    def legacy_secrets_enabled(self):
+        for node in self.cluster.nodes.values():
+            response = requests.get(
+                f"http://{node.host}:{node.mon_port}/viewer/json/feature_flags",
+                params={"direct": "true", "features": "DisableOldSecretCreation"},
+                timeout=5,
+            )
+            response.raise_for_status()
+            for database in response.json()["Databases"]:
+                for flag in database.get("FeatureFlags", []):
+                    if flag.get("Current", flag.get("Default")) is not False:
+                        return False
+        return True
 
     @staticmethod
     def setup_s3():

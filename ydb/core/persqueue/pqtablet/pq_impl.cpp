@@ -3046,8 +3046,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-<<<<<<< HEAD
-=======
     if (IsTopicMutateDisabled(ctx)
         && (req.CmdWriteSize() > 0 || req.HasCmdEmitHeartbeat()))
     {
@@ -3067,7 +3065,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         }
     }
 
->>>>>>> dcce6c6f21b (allow commits for consumers with type replication (#59306))
     if (req.HasWriteId()) {
         HandleEventForSupportivePartition(responseCookie, ev, ev->Sender, ctx);
         return;

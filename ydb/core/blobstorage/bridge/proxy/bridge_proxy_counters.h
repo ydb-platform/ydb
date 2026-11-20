@@ -24,14 +24,32 @@ namespace NKikimr {
         using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
         using EHandleClass = TStoragePoolCounters::EHandleClass;
 
+    public:
         struct TRequestCounters {
             ::NMonitoring::TDynamicCounterPtr Group;
             ::NMonitoring::THistogramPtr ResponseTime;
             TCounterPtr RequestBytes;
             TCounterPtr ResponseBytes;
             THashMap<NKikimrProto::EReplyStatus, TCounterPtr> Completed;
+
+            void CountReply(ui64 bytes, const IEventBase& response, NKikimrProto::EReplyStatus status, TDuration latency) {
+                ResponseTime->Collect(latency.MicroSeconds() / 1000.0);
+                if (RequestBytes) {
+                    *RequestBytes += bytes;
+                }
+                if (response.Type() == TEvBlobStorage::EvGetResult) {
+                    *ResponseBytes += static_cast<const TEvBlobStorage::TEvGetResult&>(response).PayloadSizeBytes();
+                }
+                auto& completed = Completed[status];
+                if (!completed) {
+                    completed = Group->GetSubgroup("status", NKikimrProto::EReplyStatus_Name(status))
+                        ->GetCounter("completedRequests", true);
+                }
+                ++*completed;
+            }
         };
 
+    private:
         ::NMonitoring::TDynamicCounterPtr Pool;
         // Cache the handles used by this actor. The sensors themselves are shared by all proxies in the pool.
         std::map<std::tuple<ui32, EHandleClass, ui32>, TRequestCounters> Requests;
@@ -58,15 +76,13 @@ namespace NKikimr {
         }
 
     public:
-        void CountReply(const TBridgeProxyPoolCounters& admitted, const IEventBase& request, const IEventBase& response,
-                NKikimrProto::EReplyStatus status, TDuration latency) {
+        std::pair<TRequestCounters&, ui64> ForRequest(const TBridgeProxyPoolCounters& admitted, const IEventBase& request) {
             if (Pool != admitted.Pool) {
                 Pool = admitted.Pool;
                 Requests.clear();
             }
             EHandleClass handleClass = TStoragePoolCounters::HcCount;
             ui64 bytes = 0;
-            ui64 responseBytes = 0;
             if (request.Type() == TEvBlobStorage::EvPut) {
                 const auto& put = static_cast<const TEvBlobStorage::TEvPut&>(request);
                 handleClass = HandleClassToHandleClass(put.HandleClass);
@@ -75,22 +91,8 @@ namespace NKikimr {
                 const auto& get = static_cast<const TEvBlobStorage::TEvGet&>(request);
                 handleClass = HandleClassToHandleClass(get.GetHandleClass);
                 bytes = get.CountRequestBytes({get.Queries.Get(), get.QuerySize});
-                responseBytes = static_cast<const TEvBlobStorage::TEvGetResult&>(response).PayloadSizeBytes();
             }
-            auto& counters = GetRequestCounters(request.Type(), handleClass, bytes);
-            counters.ResponseTime->Collect(latency.MicroSeconds() / 1000.0);
-            if (counters.RequestBytes) {
-                *counters.RequestBytes += bytes;
-            }
-            if (counters.ResponseBytes) {
-                *counters.ResponseBytes += responseBytes;
-            }
-            auto& completed = counters.Completed[status];
-            if (!completed) {
-                completed = counters.Group->GetSubgroup("status", NKikimrProto::EReplyStatus_Name(status))
-                    ->GetCounter("completedRequests", true);
-            }
-            ++*completed;
+            return {GetRequestCounters(request.Type(), handleClass, bytes), bytes};
         }
     };
 

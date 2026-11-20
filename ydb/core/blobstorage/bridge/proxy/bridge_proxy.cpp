@@ -22,6 +22,47 @@ namespace NKikimr {
         value.ApproximateFreeSpaceShare;
     };
 
+    namespace {
+        // A physical retry can pass through a bridge again after reconversion. DSProxy carries the
+        // execution relay across retries, so the same reply observer remains responsible for it.
+        TEvBlobStorage::TExecutionRelay RollbackRelayTag;
+
+        class TRollbackReplyActor : public TActor<TRollbackReplyActor> {
+            const TActorId Client;
+            const bool TrackDelivery;
+            const TMonotonic StartTime;
+            const ui64 RequestBytes;
+            TBridgeProxyCounters::TRequestCounters Counters;
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> ClientRelay;
+
+        public:
+            TRollbackReplyActor(TActorId client, bool trackDelivery, TMonotonic startTime, ui64 requestBytes,
+                    const TBridgeProxyCounters::TRequestCounters& counters, std::shared_ptr<TEvBlobStorage::TExecutionRelay> relay)
+                : TActor(&TThis::StateFunc)
+                , Client(client)
+                , TrackDelivery(trackDelivery)
+                , StartTime(startTime)
+                , RequestBytes(requestBytes)
+                , Counters(counters)
+                , ClientRelay(std::move(relay))
+            {}
+
+            STATEFN(StateFunc) {
+                if (ev->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
+                    if (TrackDelivery) {
+                        TActivationContext::Send(ev->Forward(Client));
+                    }
+                } else {
+                    const auto& result = dynamic_cast<const TEvBlobStorage::TEvResultCommon&>(*ev->GetBase());
+                    Counters.CountReply(RequestBytes, *ev->GetBase(), result.Status, TActivationContext::Monotonic() - StartTime);
+                    SetExecutionRelay(*ev->GetBase(), std::move(ClientRelay));
+                    TActivationContext::Send(ev->Forward(Client));
+                }
+                PassAway();
+            }
+        };
+    }
+
     class TBridgedBlobStorageProxyActor : public TActorBootstrapped<TBridgedBlobStorageProxyActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TGroupId GroupId;
@@ -1219,11 +1260,13 @@ namespace NKikimr {
         }
 
         void SendReply(IEventBase& request, TActorId sender, ui64 cookie, std::unique_ptr<IEventBase> response,
-                NKikimrProto::EReplyStatus status, bool routingTimeout = false) {
+                bool routingTimeout = false) {
             auto& common = dynamic_cast<TEvBlobStorage::TEvRequestCommon&>(request);
             if (common.BridgeProxyPoolCounters) {
                 const TDuration latency = TActivationContext::Monotonic() - common.BridgeProxyStartTime;
-                RequestCounters.CountReply(*common.BridgeProxyPoolCounters, request, *response, status, latency);
+                auto [counters, bytes] = RequestCounters.ForRequest(*common.BridgeProxyPoolCounters, request);
+                const auto& result = dynamic_cast<const TEvBlobStorage::TEvResultCommon&>(*response);
+                counters.CountReply(bytes, *response, result.Status, latency);
                 if (routingTimeout) {
                     ++*common.BridgeProxyPoolCounters->RoutingTimeouts;
                 }
@@ -1234,8 +1277,7 @@ namespace NKikimr {
 
         template<typename TEvent>
         void ReplyWithError(TEvent& msg, TActorId sender, ui64 cookie, const TString& errorReason, bool routingTimeout = false) {
-            SendReply(msg, sender, cookie, msg.MakeErrorResponse(NKikimrProto::ERROR, errorReason, GroupId),
-                NKikimrProto::ERROR, routingTimeout);
+            SendReply(msg, sender, cookie, msg.MakeErrorResponse(NKikimrProto::ERROR, errorReason, GroupId), routingTimeout);
         }
 
         void ReplyWithError(IEventBase& msg, TActorId sender, ui64 cookie, const TString& errorReason, bool routingTimeout = false) {
@@ -1308,16 +1350,36 @@ namespace NKikimr {
         }
 
         void MarkReceived(TEvBlobStorage::TEvRequestCommon& request) {
-            if (!request.ForceGroupGeneration && !request.IsPatchSubrequest && !request.BridgeProxyPoolCounters) {
+            if (!request.ForceGroupGeneration && !request.IsPatchSubrequest && !request.BridgeProxyPoolCounters &&
+                    request.ExecutionRelay.get() != &RollbackRelayTag) {
                 request.BridgeProxyStartTime = TActivationContext::Monotonic();
                 request.BridgeProxyPoolCounters = PoolCounters;
             }
         }
 
+        void ForwardToOrdinaryProxy(IEventHandle& ev, TEvBlobStorage::TEvRequestCommon& request) {
+            if (!request.BridgeProxyPoolCounters) {
+                TActivationContext::Send(ev.Forward(InnerProxyId));
+                return;
+            }
+
+            auto [counters, bytes] = RequestCounters.ForRequest(*request.BridgeProxyPoolCounters, *ev.GetBase());
+            const auto observer = RegisterWithSameMailbox(new TRollbackReplyActor(ev.Sender,
+                ev.Flags & IEventHandle::FlagTrackDelivery, request.BridgeProxyStartTime, bytes, counters,
+                std::move(request.ExecutionRelay)));
+            request.ExecutionRelay = std::shared_ptr<TEvBlobStorage::TExecutionRelay>(
+                std::move(request.BridgeProxyPoolCounters), &RollbackRelayTag);
+            // The original nondelivery recipient handles a group service ID. The inner proxy is a concrete actor.
+            // Track this hop so a missing inner proxy releases the observer even for an untracked client request.
+            const ui32 flags = (ev.Flags & ~IEventHandle::FlagForwardOnNondelivery) | IEventHandle::FlagTrackDelivery;
+            TActivationContext::Send(new IEventHandle(InnerProxyId, observer, ev.ReleaseBase().Release(), flags,
+                ev.Cookie, nullptr, std::move(ev.TraceId)));
+        }
+
         template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev, std::optional<TDuration> routingBudget = {}) {
             if (Passthrough) {
-                TActivationContext::Send(ev->Forward(InnerProxyId));
+                ForwardToOrdinaryProxy(*ev, *ev->Get());
                 return;
             }
             MarkReceived(*ev->Get());
@@ -1927,7 +1989,7 @@ namespace NKikimr {
                     } else if (Passthrough) {
                         // the group is an ordinary one now (our bridged info is not updated anymore), the inner proxy
                         // has its new info and serves the restarted request
-                        TActivationContext::Send(IEventHandle::Forward(std::move(handle), InnerProxyId).release());
+                        ForwardToOrdinaryProxy(*handle, *common);
                     } else if (myGeneration < msg->RacingGeneration) {
                         QueuePending(PendingForNextGeneration, std::move(handle), request->RoutingBudget);
                     } else if (msg->RacingGeneration < myGeneration) {
@@ -1989,7 +2051,7 @@ namespace NKikimr {
                             request->Span.EndError(common->ErrorReason);
                         }
 
-                        SendReply(*request->OriginalRequest, request->Sender, request->Cookie, std::move(response), common->Status);
+                        SendReply(*request->OriginalRequest, request->Sender, request->Cookie, std::move(response));
                         FinishRequest(*request);
                     } else if (request->RestartNeeded) {
                         STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "request restarted as its restoration source is out of"
@@ -2040,7 +2102,7 @@ namespace NKikimr {
                     msg->StoragePoolCounters));
                 for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
                     for (auto& [deadline, ev] : std::exchange(*queue, {})) {
-                        TActivationContext::Send(IEventHandle::Forward(std::move(ev), InnerProxyId).release());
+                        ForwardToOrdinaryProxy(*ev, dynamic_cast<TEvBlobStorage::TEvRequestCommon&>(*ev->GetBase()));
                     }
                 }
                 return;

@@ -369,6 +369,8 @@ message TWalleCreateTaskRequest {
   optional string Action = 4;
   repeated string Hosts = 5;
   optional bool   DryRun = 6;
+  // Passed as EvictVDisks in the CMS permission request.
+  optional bool   DrainData = 7;
 }
 
 message TWalleCreateTaskResponse {

@@ -2,6 +2,7 @@
 #include "tables_manager.h"
 
 #include "engines/column_engine_logs.h"
+#include "engines/index_portions_by_last_key.h"
 #include "engines/metadata_accessor.h"
 #include "engines/reader/simple_reader/iterator/sys_view/abstract/schema.h"
 #include "transactions/transactions/tx_add_sharding_info.h"
@@ -600,6 +601,8 @@ void TTablesManager::AddSchemaVersion(
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
             DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
             NOlap::IColumnEngine::TSchemaVersionView(versionInfo), PortionsStats);
+        NOlap::TIndexPortionsByLastKey::Create(
+            db.GetDatabase(), PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetPrimaryKeyColumns());
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }

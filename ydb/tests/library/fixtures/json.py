@@ -127,19 +127,25 @@ class JsonCorpusGenerator:
 
 
 class JsonPredicateGenerator:
-    """Generate JSON index predicates, with a limited pool for compatibility tests."""
-
     _COMMON_TYPES = ("base", "extended", "compact")
     _COMMON_VERSIONS = tuple(range(1, 6))
 
-    def __init__(self, column="`json`", mode="strict", indexable_only=False):
+    def __init__(self, column="`json`", mode="strict"):
         self._column = column
         self._mode = mode
-        self._indexable_only = indexable_only
         self._atoms = []
         self._and_pairs = []
         self._or_pairs = []
         self._build_pool()
+        # A forced JSON index needs a searchable token in every OR branch.
+        has_region = self._je("$.region")
+        has_tenant = self._je("$.tenant")
+        common_types = [self._jv("$.common_type", "Utf8", f'= "{value}"') for value in self._COMMON_TYPES]
+        self.explicit_index_predicates = (
+            has_region, has_tenant, *common_types,
+            f"({common_types[0]}) AND ({has_region})",
+            f"({has_region}) OR ({has_tenant})",
+        )
 
     def _je(self, path, suffix=""):
         return f"JSON_EXISTS({self._column}, '{self._mode} {path}'){suffix}"
@@ -154,38 +160,19 @@ class JsonPredicateGenerator:
         self._atoms.append(sql)
 
     def _build_pool(self):
-        if self._indexable_only:
-            self._build_indexable_pool()
-            return
         self._build_json_exists()
         self._build_json_value()
         self._build_compound_pairs()
 
-    def _build_indexable_pool(self):
-        for field in JsonCorpusGenerator._COMMON_FIELDS + JsonCorpusGenerator._PARTIAL_FIELDS:
-            self._add(self._je(f"$.{field}"))
-
-        for value in self._COMMON_TYPES:
-            self._add(self._je(f'$.common_type ? (@ == "{value}")'))
-            self._add(self._jv("$.common_type", "Utf8", f'= "{value}"'))
-
-        for version in self._COMMON_VERSIONS:
-            self._add(self._je(f"$.common_version ? (@ == {version})"))
-            self._add(self._jv("$.common_version", "Int64", f"= {version}"))
-
-        for comparison in (">= 1", "<= 5", "> 0", "< 6"):
-            self._add(self._jv("$.common_version", "Int64", comparison))
-
-        for value in ("true", "false"):
-            self._add(self._je(f"$.active ? (@ == {value})"))
-        self._add(self._jv("$.active", "Bool", "= true"))
-
     def _build_json_exists(self):
+        self._add(self._je("$"))
+        self._add(self._je("$") + " = true")
         self._add(self._je("$.common_type"))
         self._add(self._je("$.common_version"))
         for field in JsonCorpusGenerator._PARTIAL_FIELDS:
             self._add(self._je(f"$.{field}"))
 
+        self._add(self._je("$.*"))
         self._add(self._je('$ ? (@.common_type starts with "b")'))
         self._add(self._je('$ ? (@.common_type starts with "e")'))
 
@@ -203,6 +190,7 @@ class JsonPredicateGenerator:
 
         self._add(self._je("$.common_type ? (@ != null)"))
         self._add(self._je("$ ? (@.common_type != null)"))
+        self._add(self._je("$.* ? (@ != null)"))
 
         self._add(self._je("$.active ? (@ == true)"))
         self._add(self._je("$.active ? (@ == false)"))
@@ -231,6 +219,26 @@ class JsonPredicateGenerator:
             )
         )
 
+        self._add(self._je('$.* ? (@ == "base")'))
+        self._add(self._je('$.* ? (@ != null)'))
+        self._add(self._je('$ ? (@.* != null)'))
+
+        self._add(self._je("$[*]"))
+        self._add(self._je("$.*[*]"))
+        self._add(self._je("$.*[0]"))
+        self._add(self._je("$.*[last]"))
+        self._add(self._je("$.*[0 to 1]"))
+        self._add(self._je("$.*[0, 2]"))
+        self._add(self._je("$.*[*] ? (@ != null)"))
+        self._add(self._je("$.*[*] ? (@ == true)"))
+        self._add(self._je("$.*[*] ? (@ == false)"))
+        self._add(self._je("$.*[0] ? (@ != null)"))
+        self._add(self._je("$.*[last] ? (@ != null)"))
+
+        self._add(self._je("$.*.common_type"))
+        self._add(self._je("$.*.common_version"))
+        self._add(self._je('$.*.common_type ? (@ == "base")'))
+        self._add(self._je("$.*[*].common_type"))
         self._add(self._je('$ ? (@.common_type == "base" && @.common_version == 3)'))
 
         self._add(self._je('$.common_version.type() ? (@ == "number")'))
@@ -239,9 +247,28 @@ class JsonPredicateGenerator:
         self._add(self._je("$.common_version.floor() ? (@ >= 1)"))
         self._add(self._je("$.common_version.abs() ? (@ >= 1)"))
         self._add(self._je("$.common_version.ceiling() ? (@ <= 5)"))
+        self._add(
+            self._je(
+                '$.keyvalue() ? (@.name == "common_type" && @.value == "base")'
+            )
+        )
+        self._add(
+            self._je(
+                '$.keyvalue() ? (@.name == "common_version" && @.value != null)'
+            )
+        )
+        self._add(self._je('$.keyvalue() ? (@.name starts with "common_")'))
+        self._add(self._je('$.*.type() ? (@ == "string")'))
+        self._add(self._je('$.*.type() ? (@ == "number")'))
+        self._add(self._je('$.*.type() ? (@ == "boolean")'))
+        self._add(self._je("$.*.size() ? (@ >= 0)"))
+        self._add(self._je("$.*[*].size() ? (@ >= 0)"))
+
         self._add(self._je("$ ? (@ == null)"))
+        self._add(self._je("$ ? (@ != null)"))
         self._add(self._je("$ ? (@ == true)"))
         self._add(self._je("$ ? (@ == false)"))
+        self._add(self._je("$ ? (@ > -10000 && @ < 10000)"))
 
     def _build_json_value(self):
         for value in self._COMMON_TYPES:
@@ -279,7 +306,22 @@ class JsonPredicateGenerator:
         self._add(self._jv("$.common_version.abs()", "Int64", ">= 1"))
         self._add(self._jv('$.common_type.type()', "Utf8", '= "string"'))
         self._add(self._jv('$.common_version.type()', "Utf8", '= "number"'))
+        self._add(
+            self._jv(
+                '$.keyvalue() ? (@.name == "common_type").value',
+                "Utf8",
+                '= "base"',
+            )
+        )
+
+        self._add(self._jv("$.*[0]", "Utf8", '!= ""'))
+        self._add(self._jv("$.*[0]", "Int64", ">= -10000"))
+        self._add(self._jv("$.*[last]", "Utf8", '!= ""'))
+        self._add(self._jv("$.*[*]", "Bool", "= true"))
+        self._add(self._jv("$.*[*]", "Bool", "!= false"))
+
         self._add(self._jv("$ ? (@ == null)", "Bool", "= true"))
+        self._add(self._jv("$ ? (@ != null)", "Bool", "= true"))
         self._add(self._jv("$ ? (@ == true)", "Bool", "= true"))
         self._add(self._jv("$ ? (@ == false)", "Bool", "= true"))
 
@@ -292,8 +334,6 @@ class JsonPredicateGenerator:
             self._jv("$.common_type", "Utf8", '= "base"'),
             self._jv("$.common_version", "Int64", "= 3"),
         ]
-        # Wildcard operands are supported in AND pairs with a selective predicate,
-        # even though they cannot use the index on their own.
         medium = [
             self._je("$.tenant"),
             self._je("$.region"),
@@ -332,7 +372,9 @@ class JsonPredicateGenerator:
             f"({self._jv('$.common_type', 'Utf8', '= \"extended\"')})"
         )
 
-    def random_predicate(self):
+    def random_predicate(self, *, explicit_index=False):
+        if explicit_index:
+            return random.choice(self.explicit_index_predicates)
         roll = random.random()
         if roll < 0.55:
             return random.choice(self._atoms)
@@ -353,12 +395,10 @@ def get_random_json():
     return JsonCorpusGenerator().random_json()
 
 
-def get_random_predicate(column="`json`", mode="strict", indexable_only=False):
+def get_random_predicate(column="`json`", mode="strict", *, explicit_index=False):
     global _PREDICATE_GENERATOR
     if _PREDICATE_GENERATOR is None or (
-        _PREDICATE_GENERATOR._column != column
-        or _PREDICATE_GENERATOR._mode != mode
-        or _PREDICATE_GENERATOR._indexable_only != indexable_only
+        _PREDICATE_GENERATOR._column != column or _PREDICATE_GENERATOR._mode != mode
     ):
-        _PREDICATE_GENERATOR = JsonPredicateGenerator(column=column, mode=mode, indexable_only=indexable_only)
-    return _PREDICATE_GENERATOR.random_predicate()
+        _PREDICATE_GENERATOR = JsonPredicateGenerator(column=column, mode=mode)
+    return _PREDICATE_GENERATOR.random_predicate(explicit_index=explicit_index)

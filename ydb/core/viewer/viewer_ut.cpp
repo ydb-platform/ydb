@@ -4535,6 +4535,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         vdisk->SetDetailedReplicationStatus(TVDiskDetailedReplicationStatus::Replicated);
                         vdisk->SetAllocatedSize(100);
                         vdisk->SetAvailableSize(900);
+
+                        if (groups) {
+                            auto* stale = record.AddVDiskStateInfo();
+                            stale->CopyFrom(*vdisk);
+                            stale->MutableVDiskId()->SetGroupGeneration(0);
+                            stale->SetVDiskState(EVDiskState::LocalRecoveryError);
+                            stale->SetChangeTime(1);
+                        }
                     }
                     break;
                 }
@@ -4629,6 +4637,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     }
                     if (groups) {
                         const auto& vdiskWhiteboard = disk.GetMap().at("Whiteboard").GetMap();
+                        UNIT_ASSERT_VALUES_EQUAL(vdiskWhiteboard.at("VDiskId")["GroupGeneration"].GetUInteger(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(vdiskWhiteboard.at("VDiskState").GetString(), "OK");
                         UNIT_ASSERT_VALUES_EQUAL(vdiskWhiteboard.at("DetailedReplicationStatus").GetString(), "Replicated");
                     }
                 }
@@ -4865,7 +4875,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     pdisk.AvailableSize = 512;
                 }
                 handler->PDisksByPDiskId[hasPDiskWhiteboard ? vdisk.VSlotId : donorId] = &pdiskWhiteboard;
-                handler->VDisksByVSlotId[hasVDiskWhiteboard ? vdisk.VSlotId : donorId] = &vdiskWhiteboard;
+                handler->VDisksByVSlotId.emplace(hasVDiskWhiteboard ? vdisk.VSlotId : donorId, &vdiskWhiteboard);
 
                 NKikimrViewer::TStorageVDisk rendered;
                 handler->RenderVDisk(rendered, vdisk);
@@ -4898,6 +4908,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NKikimrWhiteboard::TPDiskStateInfo pdiskWhiteboard;
         handler->PDisksByPDiskId[donorId] = &pdiskWhiteboard;
 
+        // The slot was reused and the only Whiteboard record is for an active VDisk.
+        NKikimrWhiteboard::TVDiskStateInfo activeVDisk;
+        activeVDisk.MutableVDiskId()->SetGroupID(2);
+        activeVDisk.MutableVDiskId()->SetGroupGeneration(2);
+        handler->VDisksByVSlotId.emplace(donorId, &activeVDisk);
+
         NKikimrViewer::TStorageVDisk rendered;
         handler->RenderVDisk(rendered, vdisk);
         NJson::TJsonValue json;
@@ -4906,6 +4922,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(donors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(donors[0]["NodeId"].GetUInteger(), donorId.NodeId);
         AssertStorageVDiskWhiteboardData(donors[0], false, true);
+
+        NKikimrWhiteboard::TVDiskStateInfo donorWhiteboard;
+        donorWhiteboard.MutableVDiskId()->SetGroupID(1);
+        donorWhiteboard.MutableVDiskId()->SetGroupGeneration(1);
+        donorWhiteboard.SetDonorMode(true);
+        handler->VDisksByVSlotId.emplace(donorId, &donorWhiteboard);
+        rendered.Clear();
+        handler->RenderVDisk(rendered, vdisk);
+        UNIT_ASSERT(rendered.GetDonors(0).GetHasWhiteboardData());
+        UNIT_ASSERT_VALUES_EQUAL(rendered.GetDonors(0).GetWhiteboard().GetVDiskId().GetGroupID(), 1);
     }
 
     template <typename TDisk>

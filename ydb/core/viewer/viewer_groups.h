@@ -736,7 +736,7 @@ public:
     std::unordered_map<TGroupId, TGroup*> GroupsByGroupId;
     std::unordered_map<TPDiskId, TPDisk> PDisks;
     std::unordered_map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotsByVSlotId;
-    std::unordered_map<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
+    std::unordered_multimap<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
     std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo*> PDisksByPDiskId;
     std::unordered_map<TBridgePileId, TString> PileNames;
     std::unordered_map<TGroupId, TGroupView> BridgeGroups;
@@ -2214,7 +2214,7 @@ public:
             if (vDiskStateResponse.IsOk()) {
                 for (const NKikimrWhiteboard::TVDiskStateInfo& info : vDiskStateResponse->Record.GetVDiskStateInfo()) {
                     TVSlotId vSlotId(nodeId, info.GetPDiskId(), info.GetVDiskSlotId());
-                    VDisksByVSlotId[vSlotId] = &info;
+                    VDisksByVSlotId.emplace(vSlotId, &info);
                     ui32 groupId = info.GetVDiskId().GetGroupID();
                     ui32 groupGeneration = info.GetVDiskId().GetGroupGeneration();
                     auto itGroup = GroupsByGroupId.find(groupId);
@@ -2503,6 +2503,22 @@ public:
         }
     }
 
+    const NKikimrWhiteboard::TVDiskStateInfo* FindVDiskState(const TVSlotId& slotId, const TVDiskID* diskId) const {
+        const NKikimrWhiteboard::TVDiskStateInfo* latest = nullptr;
+        const auto [begin, end] = VDisksByVSlotId.equal_range(slotId);
+        for (auto it = begin; it != end; ++it) {
+            const auto* info = it->second;
+            // Without a controller record, a donor is known only by its slot.
+            if (diskId ? !diskId->SameDisk(info->GetVDiskId()) : !info->GetDonorMode()) {
+                continue;
+            }
+            if (!latest || info->GetChangeTime() > latest->GetChangeTime()) {
+                latest = info;
+            }
+        }
+        return latest;
+    }
+
     void RenderVDisk(NKikimrViewer::TStorageVDisk& jsonVDisk, const TVDisk& vdisk) {
         jsonVDisk.SetVDiskId(vdisk.GetVDiskId());
         jsonVDisk.SetNodeId(vdisk.VSlotId.NodeId);
@@ -2512,11 +2528,11 @@ public:
         if (vdisk.DiskSpace != NKikimrViewer::Grey) {
             jsonVDisk.SetDiskSpace(vdisk.DiskSpace);
         }
-        auto itVDiskByVSlotId = VDisksByVSlotId.find(vdisk.VSlotId);
-        jsonVDisk.SetHasWhiteboardData(itVDiskByVSlotId != VDisksByVSlotId.end());
-        if (itVDiskByVSlotId != VDisksByVSlotId.end()) {
+        const auto* info = FindVDiskState(vdisk.VSlotId, &vdisk.VDiskId);
+        jsonVDisk.SetHasWhiteboardData(info != nullptr);
+        if (info) {
             auto& whiteboard = *jsonVDisk.MutableWhiteboard();
-            whiteboard.CopyFrom(*(itVDiskByVSlotId->second));
+            whiteboard.CopyFrom(*info);
             if (whiteboard.GetReplicated() || (whiteboard.GetReplicationProgress() == NAN)) {
                 whiteboard.ClearReplicationProgress();
                 whiteboard.ClearReplicationSecondsRemaining();
@@ -2559,9 +2575,8 @@ public:
                 if (itVSlotInfo != VSlotsByVSlotId.end()) {
                     FillVDiskFromVSlotInfo(donor, donorId, *(itVSlotInfo->second));
                 }
-                auto itVDiskInfo = VDisksByVSlotId.find(donorId);
-                if (itVDiskInfo != VDisksByVSlotId.end()) {
-                    FillVDiskFromVDiskStateInfo(donor, donorId, *(itVDiskInfo->second));
+                if (const auto* donorState = FindVDiskState(donorId, donor.Present ? &donor.VDiskId : nullptr)) {
+                    FillVDiskFromVDiskStateInfo(donor, donorId, *donorState);
                 }
                 RenderVDisk(jsonDonor, donor);
             }

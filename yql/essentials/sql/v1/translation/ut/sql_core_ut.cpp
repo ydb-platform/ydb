@@ -97,12 +97,12 @@ Y_UNIT_TEST(ValidUseFunctions) {
 
 Y_UNIT_TEST(InValidUseFunctions) {
     ExpectFailWithError("PROCESS plato.Input USING some::udf(*) WITH INPUT_TYPE=Struct<a:Int32>",
-                        "<main>:1:33: Error: PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block\n");
+                        "<main>:1:40: Error: PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block\n");
 
     ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'jhhjfh88134d')"
                         " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>"
                         " ASSUME ORDER BY key",
-                        "<main>:1:129: Error: PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block\n");
+                        "<main>:1:138: Error: PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block\n");
 
     ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', 'bar', 'baz')",
                         "<main>:1:15: Error: EXTERNAL FUNCTION requires from 2 to 3 arguments, but got: 4\n");

@@ -17,6 +17,10 @@
 #include <yt/yt/core/crypto/config.h>
 #include <yt/yt/core/crypto/tls.h>
 
+#include <yt/yt/core/http/compression.h>
+#include <yt/yt/core/http/config.h>
+#include <yt/yt/core/http/stream.h>
+
 #include <util/system/env.h>
 
 namespace NYT {
@@ -120,6 +124,37 @@ TEST_F(TTlsTest, CreateDialer)
 TEST_F(TTlsTest, SimplePingPong)
 {
     PingPong();
+}
+
+TEST_F(TTlsTest, FailedCompressedWriteReleasesConnection)
+{
+    Listener = Context->CreateListener(TNetworkAddress::CreateIPv6Loopback(0), Poller, Poller);
+    Dialer = CreateDialer(New<TDialerConfig>(), Poller, NetLogger());
+    auto client = WaitForFast(Dialer->Dial(Listener->GetAddress())).ValueOrThrow();
+    auto connection = WaitForFast(Listener->Accept()).ValueOrThrow();
+    auto weakConnection = MakeWeak(connection);
+
+    WaitForFast(connection->Abort()).ThrowOnError();
+
+    auto response = New<NHttp::THttpOutput>(
+        connection,
+        NHttp::EMessageType::Response,
+        New<NHttp::THttpIOConfig>());
+    auto compressor = NHttp::CreateCompressingAdapter(response, "gzip", Poller->GetInvoker());
+    auto weakCompressor = MakeWeak(compressor);
+
+    // Finishing even an empty gzip response writes its header and trailer.
+    // The compressed buffer's holder owns the compressor, which owns the
+    // response and connection. Failed writes must release that buffer.
+    EXPECT_FALSE(WaitForFast(compressor->Close()).IsOK());
+
+    compressor.Reset();
+    response.Reset();
+    connection.Reset();
+
+    WaitForPredicate([&] {
+        return weakCompressor.IsExpired() && weakConnection.IsExpired();
+    }, 100, TDuration::MilliSeconds(10));
 }
 
 TEST_F(TTlsTest, LoadCertificatesFromValues)

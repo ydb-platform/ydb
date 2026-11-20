@@ -19,24 +19,22 @@ static bool IsDefaultAllocator = true;
     #else
 static bool IsDefaultAllocator = false;
     #endif
+
 void UseDefaultAllocator() {
     // TODO: check that we didn't already used the MKQL allocator
     IsDefaultAllocator = true;
+}
+
+bool IsDefaultAllocatorUsed() {
+    return IsDefaultAllocator;
 }
 #endif
 
 namespace {
 
-bool IsDefaultArrowAllocator = false;
-
 ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
 
 } // namespace
-
-void UseDefaultArrowAllocator() {
-    // TODO: check that we didn't already used the MKQL allocator
-    IsDefaultArrowAllocator = true;
-}
 
 TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot, const TString& name) {
     if (!countersRoot || name.empty()) {
@@ -426,19 +424,6 @@ template <typename T>
 void TAlignedPagePoolImpl<T>::ResetGlobalsUT()
 {
     TGlobalPools<T, false>::Instance().Reset();
-}
-
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-// static
-template <typename T>
-bool TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed() {
-    return IsDefaultAllocator;
-}
-#endif
-// static
-template <typename T>
-bool TAlignedPagePoolImpl<T>::IsDefaultArrowAllocatorUsed() {
-    return IsDefaultArrowAllocator || IsDefaultAllocatorUsed();
 }
 
 template class TAlignedPagePoolImpl<>;

@@ -285,7 +285,8 @@ public:
             NKikimrConfig::TTableServiceConfig::TResourceManager{},
             NKikimrConfig::TTableServiceConfig::TAggregationConfig{},
             MakeIntrusive<TKqpRequestCounters>(),
-            NActors::TActorId{}, nullptr, true);
+            NActors::TActorId{}, nullptr, true,
+            Plan->GetPhysicalQuery().GetMaxTasksPerStage());
 
         Graph->GetMeta().IsScan             = Config.IsScan;
         Graph->GetMeta().AllowOlapDataQuery = true;
@@ -2585,8 +2586,8 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery20, TKqpTasksGraphTpchFixture) {
-        const TString& queryText = R"(
+    Y_UNIT_TEST_TWIN_F(TpchQuery20, SetMaxTasksPerStage, TKqpTasksGraphTpchFixture) {
+        TString queryText = R"(
             $z0_5_35 = cast("0.5" as decimal(35,2));
             $border = Date("1994-01-01");
             $threshold = (
@@ -2661,6 +2662,9 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
             order by
                 s_name;
         )";
+        if (SetMaxTasksPerStage) {
+            queryText = "PRAGMA ydb.MaxTasksPerStage = '230';\n" + queryText;
+        }
 
         auto dist = BuildTasks(queryText);
         AssertNoCrossNodeCopyChannels(dist);

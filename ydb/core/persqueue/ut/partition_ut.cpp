@@ -3052,8 +3052,11 @@ void TPartitionFixture::TestRestoreReadSessionActor(bool hasDataRequest)
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetCookie(), cookie);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetSessionInvalidated(), sessionId != session);
         } else {
-            auto event = MakeTestRead(++cookie, 0, 1, "replication");
-            event->SessionId = sessionId;
+            auto event = MakeHolder<TEvPQ::TEvRead>(
+                ++cookie, /*offset=*/0, /*lastOffset=*/0, /*partNo=*/0, /*count=*/1,
+                sessionId, /*clientId=*/"replication", /*timeout=*/0, /*size=*/100,
+                /*readToBlobEnd=*/false, /*maxTimeLagMs=*/0, /*readTimestampMs=*/0,
+                /*clientDC=*/"", /*externalOperation=*/false, /*pipeClient=*/TActorId{});
             event->ReadSessionActor = sender;
             // The local event is forwarded by the tablet, not by the read-session actor.
             SendEvent(event.Release());
@@ -3367,9 +3370,7 @@ Y_UNIT_TEST_F(ReplicationDataMirroredOffsetPreservesBufferedMessages, TPartition
     auto& encoder = TPartitionTestWrapper::BlobEncoder(*partition);
 
     // A message has been accepted into NewHead, but EndOffset is still zero.
-    TBatch batch(0, 0);
-    batch.AddBlob(MakeResetOffsetTestBlob("message", 1, TInstant::Seconds(1)));
-    batch.Pack();
+    auto batch = CreateBatch(/*count=*/1, /*offset=*/0);
     encoder.NewHead.PackedSize = batch.GetPackedSize();
     encoder.NewHead.AddBatch(batch);
     const auto nextOffset = encoder.NewHead.GetNextOffset();

@@ -32,6 +32,7 @@ void TCdcStreamUnitBase::AddCdcStream(
     const TPathId& tablePathId,
     const TPathId& streamPathId,
     const NKikimrSchemeOp::TCdcStreamDescription& streamDesc,
+    const TUserTable& tableInfo,
     const TString& snapshotName,
     ui64 step,
     ui64 txId)
@@ -55,7 +56,7 @@ void TCdcStreamUnitBase::AddCdcStream(
     }
 
     AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-        tablePathId, streamPathId, TEvChangeExchange::TCdcStreamSender{TUserTable::TCdcStream(streamDesc)}
+        tablePathId, streamPathId, TEvChangeExchange::TCdcStreamSender{TUserTable::TCdcStream(streamDesc), tableInfo.Range}
     ));
 }
 

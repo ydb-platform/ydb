@@ -1466,16 +1466,10 @@ namespace {
             Ydb::Topic::CreateTopicRequest exported;
             const auto content = GetS3FileContent(topic.GetPath());
             UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(content, &exported), content);
-            const auto attribute = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE ? "_write_unavailable"
-                : mode == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ? "_write_prohibited" : "_write_available";
-            for (const auto* name : {"_write_available", "_write_unavailable", "_write_prohibited"}) {
-                if (TStringBuf(name) == attribute) {
-                    UNIT_ASSERT(exported.attributes().contains(name));
-                    UNIT_ASSERT_VALUES_EQUAL(exported.attributes().at(name), "true");
-                } else {
-                    UNIT_ASSERT(!exported.attributes().contains(name));
-                }
-            }
+            const auto value = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE ? "unavailable"
+                : mode == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ? "prohibited" : "available";
+            UNIT_ASSERT(exported.attributes().contains("_write_mode"));
+            UNIT_ASSERT_VALUES_EQUAL(exported.attributes().at("_write_mode"), value);
 
             TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
                 ImportFromS3Settings {
@@ -6231,8 +6225,8 @@ WITH (
         UNIT_ASSERT(attrs.contains("_allow_unauthenticated_write"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_write"), "true");
 
-        UNIT_ASSERT(attrs.contains("_write_prohibited"));
-        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_write_prohibited"), "true");
+        UNIT_ASSERT(attrs.contains("_write_mode"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_write_mode"), "prohibited");
 
         UNIT_ASSERT(attrs.contains("_abc_id"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_id"), "123");

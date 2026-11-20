@@ -15,9 +15,10 @@ using namespace NYdb::NTopic;
 
 const TString TOPIC = "/Root/write-mode";
 const TString CONSUMER = "reader";
-const TString AVAILABLE = "_write_available";
-const TString UNAVAILABLE = "_write_unavailable";
-const TString PROHIBITED = "_write_prohibited";
+const TString WRITE_MODE = "_write_mode";
+const TString AVAILABLE = "available";
+const TString UNAVAILABLE = "unavailable";
+const TString PROHIBITED = "prohibited";
 using TAttributes = std::map<TString, TString>;
 
 class TWriteModeEnv {
@@ -103,9 +104,7 @@ public:
             request.set_path(TOPIC);
             *request.mutable_settings() = DescribePq();
             auto& attrs = *request.mutable_settings()->mutable_attributes();
-            for (const auto& name : {AVAILABLE, UNAVAILABLE, PROHIBITED}) {
-                attrs.erase(name);
-            }
+            attrs.erase(WRITE_MODE);
             for (const auto& [name, value] : attributes) {
                 attrs[name] = value;
             }
@@ -129,18 +128,16 @@ public:
         const auto describe = Client.DescribeTopic(TOPIC).GetValueSync();
         AssertSuccess(describe);
         const auto& attributes = describe.GetTopicDescription().GetAttributes();
-        for (const auto& name : {AVAILABLE, UNAVAILABLE, PROHIBITED}) {
-            const auto pqIt = pqSettings.attributes().find(name);
-            const auto it = attributes.find(name);
-            if (name == mode) {
-                UNIT_ASSERT(pqIt != pqSettings.attributes().end());
-                UNIT_ASSERT_VALUES_EQUAL(pqIt->second, "true");
-                UNIT_ASSERT(it != attributes.end());
-                UNIT_ASSERT_VALUES_EQUAL(it->second, "true");
-            } else {
-                UNIT_ASSERT(pqIt == pqSettings.attributes().end());
-                UNIT_ASSERT(it == attributes.end());
-            }
+        const auto pqIt = pqSettings.attributes().find(WRITE_MODE);
+        const auto it = attributes.find(WRITE_MODE);
+        if (mode.empty()) {
+            UNIT_ASSERT(pqIt == pqSettings.attributes().end());
+            UNIT_ASSERT(it == attributes.end());
+        } else {
+            UNIT_ASSERT(pqIt != pqSettings.attributes().end());
+            UNIT_ASSERT_VALUES_EQUAL(pqIt->second, mode);
+            UNIT_ASSERT(it != attributes.end());
+            UNIT_ASSERT_VALUES_EQUAL(it->second, mode);
         }
     }
 
@@ -175,7 +172,7 @@ public:
                 }
             } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
                 UNIT_ASSERT(sent);
-                const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::PRECONDITION_FAILED;
+                const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::BAD_REQUEST;
                 const auto reason = mode == UNAVAILABLE ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
                 UNIT_ASSERT_VALUES_EQUAL_C(closed->GetStatus(), expected, closed->DebugString());
                 UNIT_ASSERT_STRING_CONTAINS(closed->GetIssues().ToString(), reason);
@@ -233,7 +230,7 @@ Y_UNIT_TEST_SUITE(TTopicWriteMode) {
     Y_UNIT_TEST_TWIN(CreateWithWriteMode, pqv1) {
         for (const auto& mode : {AVAILABLE, UNAVAILABLE, PROHIBITED}) {
             TWriteModeEnv env;
-            env.Create(pqv1, {{mode, "true"}});
+            env.Create(pqv1, {{WRITE_MODE, mode}});
             env.AssertAttribute(mode);
             if (mode == AVAILABLE) {
                 env.Write(1);
@@ -252,7 +249,7 @@ Y_UNIT_TEST_SUITE(TTopicWriteMode) {
         ui64 seqNo = 1;
         env.Write(seqNo);
         for (const auto& mode : {UNAVAILABLE, PROHIBITED}) {
-            env.Alter(pqv1, {{mode, "true"}});
+            env.Alter(pqv1, {{WRITE_MODE, mode}});
             env.AssertAttribute(mode);
 
             // SDK settings do not expose the mode; ordinary alters must preserve it.
@@ -267,46 +264,41 @@ Y_UNIT_TEST_SUITE(TTopicWriteMode) {
             env.AssertSuccess(env.Client.CommitOffset(TOPIC, 0, CONSUMER, seqNo).GetValueSync());
             env.AssertOffsets(seqNo, seqNo);
 
-            env.Alter(pqv1, {{AVAILABLE, "true"}});
+            env.Alter(pqv1, {{WRITE_MODE, AVAILABLE}});
             env.AssertAttribute(AVAILABLE);
             env.Write(++seqNo);
         }
         env.AssertOffsets(seqNo - 1, seqNo);
     }
 
-    Y_UNIT_TEST_TWIN(ResetWriteMode, pqv1) {
+    Y_UNIT_TEST_TWIN(SwitchRestrictedWriteMode, pqv1) {
         TWriteModeEnv env;
-        env.Create(pqv1);
-        ui64 seqNo = 0;
-        for (const auto& mode : {AVAILABLE, UNAVAILABLE, PROHIBITED}) {
-            for (const auto* value : {"", "false"}) {
-                env.Alter(pqv1, {{mode, "true"}});
-                env.AssertAttribute(mode);
-                const auto other = mode == PROHIBITED ? UNAVAILABLE : PROHIBITED;
-                env.Alter(pqv1, {{other, value}});
-                env.AssertAttribute(mode);
-                env.Alter(pqv1, {{mode, value}});
-                env.AssertAttribute();
-                env.Write(++seqNo);
-            }
+        env.Create(pqv1, {{WRITE_MODE, PROHIBITED}});
+        for (const auto& mode : {UNAVAILABLE, PROHIBITED}) {
+            env.Alter(pqv1, {{WRITE_MODE, mode}});
+            env.AssertAttribute(mode);
+            env.RejectWrites(pqv1, mode);
         }
-        env.AssertOffsets(0, seqNo);
+        env.AssertOffsets(0, 0);
+        env.Alter(pqv1, {{WRITE_MODE, AVAILABLE}});
+        env.AssertAttribute(AVAILABLE);
+        env.Write(1);
+        env.AssertOffsets(0, 1);
     }
 
     Y_UNIT_TEST_TWIN(RejectInvalidWriteModeAttributes, pqv1) {
         TWriteModeEnv env;
         const TVector<TAttributes> invalid = {
-            {{AVAILABLE, "not-bool"}},
-            {{UNAVAILABLE, "not-bool"}},
-            {{PROHIBITED, "not-bool"}},
-            {{AVAILABLE, "true"}, {UNAVAILABLE, "true"}},
-            {{AVAILABLE, "true"}, {PROHIBITED, "true"}},
-            {{UNAVAILABLE, "true"}, {PROHIBITED, "true"}},
+            {{WRITE_MODE, ""}},
+            {{WRITE_MODE, "true"}},
+            {{WRITE_MODE, "false"}},
+            {{WRITE_MODE, "unknown"}},
+            {{WRITE_MODE, "AVAILABLE"}},
         };
         for (const auto& attrs : invalid) {
             env.Create(pqv1, attrs, Ydb::StatusIds::BAD_REQUEST);
         }
-        env.Create(pqv1, {{PROHIBITED, "true"}});
+        env.Create(pqv1, {{WRITE_MODE, PROHIBITED}});
         for (const auto& attrs : invalid) {
             env.Alter(pqv1, attrs, Ydb::StatusIds::BAD_REQUEST);
             env.AssertAttribute(PROHIBITED);

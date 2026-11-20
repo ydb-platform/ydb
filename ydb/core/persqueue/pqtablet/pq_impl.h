@@ -48,7 +48,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 =======
     // Client will get UNAVAILABLE error code
     bool IsWriteUnavailable() const;
-    // Client will get PRECONDITION_FAILED error code
+    // Client will get BAD_REQUEST error code
     bool IsWriteProhibited() const;
     bool IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const;
 >>>>>>> 8c7975308c1 (better)

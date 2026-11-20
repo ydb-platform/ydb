@@ -50,7 +50,7 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
             }
         }
 
-        // Ordinary SDK settings do not expose the system write-mode attributes.
+        // Ordinary SDK settings do not expose the system _write_mode attribute.
         if (sourceTabletConfig.HasWriteMode()) {
             targetConfig.MutablePQTabletConfig()->SetWriteMode(sourceTabletConfig.GetWriteMode());
         }

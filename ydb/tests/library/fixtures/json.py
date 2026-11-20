@@ -160,8 +160,6 @@ class JsonPredicateGenerator:
         self._build_compound_pairs()
 
     def _build_indexable_pool(self):
-        # An explicit VIEW cannot fall back to a full scan. Keep every atom
-        # rooted at a named field so AND/OR combinations have index tokens.
         for field in JsonCorpusGenerator._COMMON_FIELDS + JsonCorpusGenerator._PARTIAL_FIELDS:
             self._add(self._je(f"$.{field}"))
 
@@ -178,8 +176,6 @@ class JsonPredicateGenerator:
 
         for value in ("true", "false"):
             self._add(self._je(f"$.active ? (@ == {value})"))
-        # Comparing JSON_VALUE(... RETURNING Bool) with false rewrites to NOT,
-        # which cannot be served by an explicit JSON index VIEW.
         self._add(self._jv("$.active", "Bool", "= true"))
 
     def _build_json_exists(self):
@@ -412,7 +408,6 @@ def get_random_json():
 
 
 def get_random_predicate(column="`json`", mode="strict", indexable_only=False):
-    """Use indexable_only for queries with an explicit JSON index VIEW."""
     global _PREDICATE_GENERATOR
     if _PREDICATE_GENERATOR is None or (
         _PREDICATE_GENERATOR._column != column

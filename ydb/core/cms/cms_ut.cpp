@@ -3338,6 +3338,89 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
     }
 
+    Y_UNIT_TEST(WalleDrainDataRequiresCmsSupport)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        ui32 configResponses = 0;
+        ui32 createRequests = 0;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCms::EvGetConfigResponse) {
+                ++configResponses;
+                // Older CMS versions do not report support for DrainData.
+                ev->Get<TEvCms::TEvGetConfigResponse>()->Record.ClearSupportsWalleDrainData();
+            } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
+                ++createRequests;
+            }
+            return prev(ev);
+        });
+
+        for (const TString uri : {"/api/walle/v11/tasks", "/api/walle/v11/tasks?dry_run=true"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri, MakeWalleDrainDataJson(nodeId));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 503"), response);
+            UNIT_ASSERT_C(response.Contains("CMS does not support drain_data"), response);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(configResponses, 2);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
+        env.CheckWalleListTasks(0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckListRequests(WALLE_CMS_USER, 0);
+
+        // Ordinary tasks do not require the support check.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(configResponses, 2);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
+    }
+
+    Y_UNIT_TEST(WalleDrainDataRechecksCmsSupportAfterRestart)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        TFakeMonHttpRequest httpRequest(HTTP_METHOD_POST, "/api/walle/v11/tasks", {},
+            MakeWalleDrainDataJson(env.GetNodeId(0)));
+        const auto edge = env.AllocateEdgeActor();
+        NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+            TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+        const auto handler = env.Register(CreateWalleApiHandler(event));
+
+        THolder<IEventHandle> firstResponse;
+        THolder<IEventHandle> secondResponse;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == handler && ev->GetTypeRewrite() == TEvCms::EvGetConfigResponse) {
+                if (!firstResponse) {
+                    UNIT_ASSERT(ev->Get<TEvCms::TEvGetConfigResponse>()->Record.GetSupportsWalleDrainData());
+                    firstResponse.Reset(ev.Release());
+                } else {
+                    // Simulate reconnecting to a CMS version without DrainData support.
+                    ev->Get<TEvCms::TEvGetConfigResponse>()->Record.ClearSupportsWalleDrainData();
+                    secondResponse.Reset(ev.Release());
+                }
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return prev(ev);
+        });
+
+        env.WaitFor("first CMS support response", [&] { return bool(firstResponse); }, TDuration::Seconds(30));
+        env.RestartCms();
+        env.WaitFor("CMS support response after restart", [&] { return bool(secondResponse); }, TDuration::Seconds(30));
+        env.SetObserverFunc(prev);
+
+        // The delayed confirmation from the old connection must not authorize task creation.
+        env.Send(firstResponse.Release(), 0, true);
+        env.Send(secondResponse.Release(), 0, true);
+        TAutoPtr<IEventHandle> handle;
+        const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 503"), response->Answer);
+        UNIT_ASSERT_C(response->Answer.Contains("CMS does not support drain_data"), response->Answer);
+        env.CheckWalleListTasks(0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckListRequests(WALLE_CMS_USER, 0);
+    }
+
     Y_UNIT_TEST(WalleDrainDataDisabledEvictVDisks)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());

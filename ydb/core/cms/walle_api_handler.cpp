@@ -95,7 +95,47 @@ private:
         if (params.contains("dry_run"))
             request->Record.SetDryRun(params.find("dry_run")->second == "true");
 
+        if (request->Record.GetDrainData()) {
+            CreateTaskRequest = request.Release();
+            SendToCms(new TEvCms::TEvGetConfigRequest, ctx);
+            Become(&TThis::StateCheckCmsSupport, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
+            return;
+        }
+
         SendToCms(request.Release(), ctx);
+        Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
+    }
+
+    STFUNC(StateCheckCmsSupport) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvCms::TEvGetConfigResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            CFunc(TEvents::TSystem::Wakeup, Timeout);
+        default:
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckCmsSupport ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
+        }
+    }
+
+    void Handle(TEvCms::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
+        // Ignore replies from a previous pipe connection.
+        if (ev->Cookie != CmsPipeCookie) {
+            return;
+        }
+
+        const auto &rec = ev->Get()->Record;
+        if (rec.GetStatus().GetCode() != TStatus::OK) {
+            ReplyWithError("HTTP/1.1 503 Service Unavailable\r\n\r\nCannot check CMS drain_data support", ctx);
+            return;
+        }
+        if (!rec.GetSupportsWalleDrainData()) {
+            ReplyWithError("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support drain_data", ctx);
+            return;
+        }
+
+        NTabletPipe::SendData(ctx, CmsPipe, CreateTaskRequest.Release());
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -335,7 +375,7 @@ private:
             .MaxRetryTime = TDuration::Seconds(10),
         };
         CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
-        NTabletPipe::SendData(ctx, CmsPipe, ev);
+        NTabletPipe::SendData(ctx, CmsPipe, ev, ++CmsPipeCookie);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
@@ -366,7 +406,9 @@ private:
     }
 
     NMon::TEvHttpInfo::TPtr RequestEvent;
+    TAutoPtr<TEvCms::TEvWalleCreateTaskRequest> CreateTaskRequest;
     TActorId CmsPipe;
+    ui64 CmsPipeCookie = 0;
 };
 
 IActor *CreateWalleApiHandler(NMon::TEvHttpInfo::TPtr &event) {

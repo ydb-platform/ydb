@@ -22,6 +22,8 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/grpcio
+    ydb/public/api/client/yc_private/resourcemanager
     ydb/tests/library
     ydb/tests/library/sqs
     contrib/python/xmltodict

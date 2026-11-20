@@ -4687,11 +4687,8 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Generation = 0;
             userInfo.Step = 0;
             userInfo.PipeClient = {};
-<<<<<<< HEAD
-=======
             userInfo.ReadSessionActor = {};
             FailStaleSessionReadRequests(user, ctx);
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
         }
 
         PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);

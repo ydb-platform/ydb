@@ -1984,7 +1984,7 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (!SupportsReplicationMessages) {
         return;
     }
@@ -2013,7 +2013,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr&
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<Protocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
     if (!ActualPartitionActors.contains(ev->Sender)) {
         return;
     }

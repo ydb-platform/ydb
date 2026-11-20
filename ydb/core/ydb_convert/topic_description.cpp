@@ -147,8 +147,18 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
 
     out.set_content_based_deduplication(config.GetContentBasedDeduplication());
 
-    if (config.HasWriteEnabled()) {
-        (*out.mutable_attributes())["_write_enabled"] = config.GetWriteEnabled() ? "true" : "false";
+    if (config.HasWriteMode()) {
+        switch (config.GetWriteMode()) {
+            case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+                (*out.mutable_attributes())["_write_available"] = "true";
+                break;
+            case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+                (*out.mutable_attributes())["_write_unavailable"] = "true";
+                break;
+            case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+                (*out.mutable_attributes())["_write_prohibited"] = "true";
+                break;
+        }
     }
 
     if (!config.GetRequireAuthWrite()) {

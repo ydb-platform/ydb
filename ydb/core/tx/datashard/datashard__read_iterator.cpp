@@ -255,13 +255,16 @@ public:
 public:
     void FlushBatch(TOwnedCellVecBatch & result) {
         result = std::move(Batch);
-        Batch = {};
+        Batch = TOwnedCellVecBatch(std::make_unique<TMemoryPool>(InitialPoolSize));
     }
 
 private:
+    // Reserve 256 bytes for the private pool chunk header so the first allocation rounds to 8 KiB.
+    static constexpr size_t InitialPoolSize = 8 * 1024 - 256;
+
     std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
-    TOwnedCellVecBatch Batch;
+    TOwnedCellVecBatch Batch{std::make_unique<TMemoryPool>(InitialPoolSize)};
     ui64 BytesCount = 0;
 
     std::unique_ptr<IBlockBuilder> Clone() const override {
@@ -1813,6 +1816,11 @@ std::unique_ptr<TEvDataShard::TEvReadResult> MakeEvReadResult(ui32 nodeId) {
 
 const TDuration MaxTimePerIteration = TDuration::MilliSeconds(10);
 
+TString ZeroReadQuotaError(const NKikimrTxDataShard::TEvRead& request) {
+    return TStringBuilder() << "Request " << request.GetReadId() << " rejected, resource pool "
+        << request.GetPoolId() << " has zero CPU quota";
+}
+
 const NHPTimer::STime TReader::MaxCyclesPerIteration =
     ((NHPTimer::GetCyclesPerSecond() * MaxTimePerIteration.MicroSeconds()) + TDuration::Seconds(1).MicroSeconds() - 1)
     / TDuration::Seconds(1).MicroSeconds();
@@ -2501,7 +2509,10 @@ public:
         if (schedulableRead) {
             // Admission happened before entering the pipeline. Do not prolong
             // dependencies with quota waits, including after a page-fault restart.
-            schedulableRead->ConsumeQuotaForAdmittedRead(MaxTimePerIteration);
+            if (!schedulableRead->ConsumeQuotaForAdmittedRead(MaxTimePerIteration)) {
+                SetStatusError(Result->Record, Ydb::StatusIds::PRECONDITION_FAILED, ZeroReadQuotaError(request->Record));
+                return EExecutionStatus::DelayComplete;
+            }
         }
         NHPTimer::STime readCycles = 0;
         Y_DEFER {
@@ -3576,8 +3587,14 @@ public:
             // operation accounts every read attempt without further quota waits.
             if (const auto& read = state.SchedulableRead) {
                 if (!read->TryConsumeQuota(MaxTimePerIteration)) {
+                    const auto delay = read->EstimateQuotaDelay(MaxTimePerIteration);
+                    if (!delay) {
+                        ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, ZeroReadQuotaError(record), ctx.SelfID.NodeId(), state);
+                        Reply->Record.SetSeqNo(state.SeqNo + 1);
+                        return true;
+                    }
                     state.ReadContinuePending = true;
-                    ctx.Schedule(read->EstimateQuotaDelay(MaxTimePerIteration),
+                    ctx.Schedule(*delay,
                         new TEvDataShard::TEvReadContinue(LocalReadId));
                     return true;
                 }
@@ -4062,13 +4079,19 @@ public:
         const auto& schedulableRead = state.SchedulableRead;
         if (schedulableRead) {
             if (!schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
+                const auto delay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
+                if (!delay) {
+                    SetStatusError(Result->Record, Ydb::StatusIds::PRECONDITION_FAILED, ZeroReadQuotaError(state.Request->Record));
+                    SendResult(ctx);
+                    return true;
+                }
                 // KQP read quota exhausted, reschedule with delay.
                 // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
                 state.ReadContinuePending = true;
                 Reader.reset();
                 Result.reset();
                 ctx.Schedule(
-                    schedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
+                    *delay,
                     new TEvDataShard::TEvReadContinue(LocalReadId));
                 return true;
             }
@@ -4462,7 +4485,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         schedulableRead = SchedulableReadFactory->Get(record.GetDatabaseId(), record.GetPoolId());
         if (schedulableRead && !schedulableRead->IsValid()) {
             replyWithError(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
-                << "Request " << readId.ReadId << " rejected, resource pool " << record.GetPoolId() << " has zero CPU quota"
+                << ZeroReadQuotaError(record)
                 << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
             return;
         }
@@ -4523,9 +4546,21 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
     // Explicitly set ReadContinuePending so ReadAck won't schedule a duplicate
     // continue regardless of what may have cleared the flag before this point.
     if (state.SchedulableRead && !state.SchedulableRead->HasAvailableQuota()) {
+        const auto delay = state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
+        if (!delay) {
+            auto result = MakeEvReadResult(ctx.SelfID.NodeId());
+            const auto issue = ZeroReadQuotaError(state.Request->Record);
+            SetStatusError(result->Record, Ydb::StatusIds::PRECONDITION_FAILED, issue);
+            result->Record.SetReadId(state.ReadId.ReadId);
+            result->Record.SetSeqNo(state.SeqNo + 1);
+            SendImmediateReadResult(state.ReadId.Sender, result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
+            state.Request->ReadSpan.EndError(issue);
+            DeleteReadIterator(it);
+            return;
+        }
         state.ReadContinuePending = true;
         ctx.Schedule(
-            state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
+            *delay,
             new TEvDataShard::TEvReadContinue(localReadId));
         return;
     }

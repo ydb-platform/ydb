@@ -18,3 +18,5 @@ RECURSE(
     py2
     py3
 )
+
+RECURSE_FOR_TESTS(tests)

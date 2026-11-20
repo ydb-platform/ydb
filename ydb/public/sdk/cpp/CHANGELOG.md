@@ -1,3 +1,11 @@
+* Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
+
+* Added `TOperation::HasMetadata()` to check whether operation metadata is available.
+
+* Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+
+* Added optional `ClientTimeout` and `Deadline` settings to `TOperationClient::Get()` without cancelling the server operation or changing defaults.
+
 * Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 * Added support for tablet reassignment operation IDs.

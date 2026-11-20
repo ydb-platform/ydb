@@ -140,7 +140,7 @@ public:
     TGraphNode(const ui32 id, const std::shared_ptr<IResourceProcessor>& processor)
         : Identifier(id)
         , Processor(processor) {
-        AFL_VERIFY(Processor);
+        YDB_LOG_VERIFY(Processor);
     }
 
     template <class TProcessor>
@@ -162,7 +162,7 @@ private:
     ui32 NodeId = 0;
     TGraphNode* GetProducerVerified(const TResourceAddress& resourceId) const {
         auto it = Producers.find(resourceId);
-        AFL_VERIFY(it != Producers.end());
+        YDB_LOG_VERIFY(it != Producers.end());
         return it->second;
     }
     std::optional<TResourceAddress> GetOriginalAddress(TGraphNode* condNode) const;
@@ -213,12 +213,12 @@ private:
     TConclusionStatus Collapse();
 
     void RegisterProducer(const TResourceAddress& resourceId, TGraphNode* node) {
-        AFL_VERIFY(Producers.emplace(resourceId, node).second);
+        YDB_LOG_VERIFY(Producers.emplace(resourceId, node).second);
     }
 
     void ResetProducer(const TResourceAddress& resourceId, TGraphNode* node) {
         auto it = Producers.find(resourceId);
-        AFL_VERIFY(it != Producers.end());
+        YDB_LOG_VERIFY(it != Producers.end());
         it->second = node;
     }
 
@@ -246,17 +246,17 @@ public:
         }
 
         void Add(const std::shared_ptr<IResourceProcessor>& processor) {
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(!Finished);
             Processors.emplace_back(processor);
         }
 
         void EnableIndexMemoryReserve() {
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(!Finished);
             ReserveIndexMemory = true;
         }
 
         TConclusion<std::shared_ptr<NExecution::TCompiledGraph>> Finish() {
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(!Finished);
             Finished = true;
             TGraph graph(std::move(Processors), Resolver, ReserveIndexMemory);
             graph.Collapse();

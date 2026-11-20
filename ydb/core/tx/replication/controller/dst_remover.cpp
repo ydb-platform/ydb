@@ -18,6 +18,8 @@ using namespace NSchemeShard;
 
 class TDstRemover: public TActorBootstrapped<TDstRemover> {
     void AllocateTxId() {
+        TxId = 0;
+        WaitingTxId = 0;
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
         Become(&TThis::StateAllocateTxId);
     }
@@ -51,6 +53,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
 
         switch (Kind) {
+        case TReplication::ETargetKind::Topic:
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
+            break;
         case TReplication::ETargetKind::Table:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
             break;
@@ -69,7 +74,6 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            sFunc(TEvents::TEvWakeup, AllocateTxId);
         default:
             return StateBase(ev);
         }
@@ -79,10 +83,12 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
+        if (record.GetTxId() != TxId) {
+            return;
+        }
 
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
-            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
             if (ReplicationPathId) {
@@ -94,6 +100,17 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
                 return Error(record.GetStatus(), record.GetReason());
             }
             break;
+        case NKikimrScheme::StatusNameConflict:
+            if (Kind == TReplication::ETargetKind::Topic) {
+                // A collected destination id also produces a name conflict.
+                DropError = record.GetReason();
+                Send(PipeCache, new TEvPipeCache::TEvForward(
+                    new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId, true));
+                return Become(&TThis::StateCheckDst);
+            }
+            return Error(record.GetStatus(), record.GetReason());
+        case NKikimrScheme::StatusResourceExhausted:
+            return Retry();
         case NKikimrScheme::StatusSuccess:
             // SchemeShard completed the conditional cleanup without changes.
             return Success();
@@ -104,7 +121,26 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         }
     }
 
+    STATEFN(StateCheckDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCheckDst"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            return Success();
+        }
+
+        return Error(NKikimrScheme::StatusNameConflict, DropError);
+    }
+
     void SubscribeTx(ui64 txId) {
+        WaitingTxId = txId;
         YDB_LOG_DEBUG("Subscribe tx",
             {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
@@ -113,7 +149,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
-        Success();
+        if (WaitingTxId && ev->Get()->Record.GetTxId() == WaitingTxId) {
+            Success();
+        }
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -151,7 +189,16 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
     void Retry() {
         YDB_LOG_DEBUG("Retry");
+        WaitingTxId = 0;
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+        Become(&TThis::StateRetry);
+    }
+
+    STATEFN(StateRetry) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, AllocateTxId);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
 public:
@@ -187,6 +234,7 @@ public:
         } else {
             switch (Kind) {
             case TReplication::ETargetKind::Table:
+            case TReplication::ETargetKind::Topic:
                 return AllocateTxId();
             case TReplication::ETargetKind::IndexTable:
             case TReplication::ETargetKind::Transfer:
@@ -219,7 +267,9 @@ private:
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
+    ui64 WaitingTxId = 0;
     TActorId PipeCache;
+    TString DropError;
 
 }; // TDstRemover
 

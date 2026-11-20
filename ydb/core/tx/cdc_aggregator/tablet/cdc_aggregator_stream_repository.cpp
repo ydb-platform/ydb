@@ -8,7 +8,7 @@ void TCdcAggregatorStreamRepository::InsertCdcAggregatorStream(NIceDb::TNiceDb& 
     db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
         NIceDb::TUpdate<Schema::State::TrackingConfig>(Converter.SerializeTopic(stream.GetTopic())));
 
-    for (const auto dataShardId : stream.GetSourceDataShardIds()) {
+    for (const auto& [dataShardId, _] : stream.GetLastHeartbeatsBySourceDataShardId()) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
 }
@@ -27,6 +27,22 @@ void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamSourcesDiff(NIceDb:
     }
 }
 
+void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamHeartbeatsDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamHeartbeatsDiff& diff) const {
+    for (const auto& [dataShardId, heartbeat] : diff.LastHeartbeatsBySourceDataShardId) {
+        db.Table<Schema::Sources>().Key(dataShardId).Update(
+            NIceDb::TUpdate<Schema::Sources::LastHeartbeatStep>(heartbeat.Version.Step),
+            NIceDb::TUpdate<Schema::Sources::LastHeartbeatTxId>(heartbeat.Version.TxId),
+            NIceDb::TUpdate<Schema::Sources::LastHeartbeatData>(heartbeat.Data));
+    }
+
+    if (const auto& heartbeat = diff.UpdatedCurrentHeartbeat) {
+        db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
+            NIceDb::TUpdate<Schema::State::CurrentHeartbeatStep>(heartbeat->Version.Step),
+            NIceDb::TUpdate<Schema::State::CurrentHeartbeatTxId>(heartbeat->Version.TxId),
+            NIceDb::TUpdate<Schema::State::CurrentHeartbeatData>(heartbeat->Data));
+    }
+}
+
 void TCdcAggregatorStreamRepository::InsertCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change) const {
     db.Table<Schema::PartitioningChanges>().Key(change.ParentDataShardId, change.OperationId).Update(
         NIceDb::TUpdate<Schema::PartitioningChanges::ChildDataShardIds>(change.ChildDataShardIds));
@@ -41,8 +57,8 @@ std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamReposit
         return {true, std::nullopt};
     }
 
-    auto sources = LoadSourceDataShardIds(db);
-    if (!sources) {
+    auto lastHeartbeats = LoadLastHeartbeats(db);
+    if (!lastHeartbeats) {
         return {false, std::nullopt};
     }
     auto changes = LoadPartitioningChanges(db);
@@ -55,25 +71,39 @@ std::pair<bool, std::optional<TCdcAggregatorStream>> TCdcAggregatorStreamReposit
     auto [topic, error] = Converter.ParseTopic(proto);
     Y_ENSURE(topic, "Invalid tracking config: " << error);
 
-    return {true, TCdcAggregatorStream(std::move(*topic), std::move(*sources), std::move(*changes))};
+    std::optional<NPQ::THeartbeat> currentHeartbeat;
+    if (state.HaveValue<Schema::State::CurrentHeartbeatStep>()) {
+        currentHeartbeat = NPQ::THeartbeat{
+            .Version = TRowVersion(state.GetValue<Schema::State::CurrentHeartbeatStep>(), state.GetValue<Schema::State::CurrentHeartbeatTxId>()),
+            .Data = state.GetValue<Schema::State::CurrentHeartbeatData>(),
+        };
+    }
+
+    return {true, TCdcAggregatorStream(std::move(*topic), std::move(*lastHeartbeats), std::move(currentHeartbeat), std::move(*changes))};
 }
 
-std::optional<THashSet<ui64>> TCdcAggregatorStreamRepository::LoadSourceDataShardIds(NIceDb::TNiceDb& db) const {
+std::optional<TCdcAggregatorStream::TLastHeartbeats> TCdcAggregatorStreamRepository::LoadLastHeartbeats(NIceDb::TNiceDb& db) const {
     auto rowset = db.Table<Schema::Sources>().Select();
     if (!rowset.IsReady()) {
         return std::nullopt;
     }
 
-    THashSet<ui64> sources;
+    TCdcAggregatorStream::TLastHeartbeats lastHeartbeats;
     while (!rowset.EndOfSet()) {
-        sources.insert(rowset.GetValue<Schema::Sources::DataShardId>());
+        auto& lastHeartbeat = lastHeartbeats[rowset.GetValue<Schema::Sources::DataShardId>()];
+        if (rowset.HaveValue<Schema::Sources::LastHeartbeatStep>()) {
+            lastHeartbeat = NPQ::THeartbeat{
+                .Version = TRowVersion(rowset.GetValue<Schema::Sources::LastHeartbeatStep>(), rowset.GetValue<Schema::Sources::LastHeartbeatTxId>()),
+                .Data = rowset.GetValue<Schema::Sources::LastHeartbeatData>(),
+            };
+        }
 
         if (!rowset.Next()) {
             return std::nullopt;
         }
     }
 
-    return sources;
+    return lastHeartbeats;
 }
 
 std::optional<TCdcAggregatorStream::TPartitioningChanges> TCdcAggregatorStreamRepository::LoadPartitioningChanges(NIceDb::TNiceDb& db) const {

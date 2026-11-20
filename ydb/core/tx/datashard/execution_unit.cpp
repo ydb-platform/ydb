@@ -120,6 +120,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateReceiveSnapshotCleanupUnit(dataShard, pipeline);
     case EExecutionUnitKind::AlterMoveShadow:
         return CreateAlterMoveShadowUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BuildHnswIndex:
+        return CreateBuildHnswIndexUnit(dataShard, pipeline);
     case EExecutionUnitKind::AlterTable:
         return CreateAlterTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropTable:

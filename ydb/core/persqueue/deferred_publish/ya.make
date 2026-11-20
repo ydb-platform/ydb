@@ -17,14 +17,14 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/kqp/common
+    ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/protos
     ydb/library/aclib
     ydb/library/actors/core
+    ydb/library/persqueue/topic_parser
     ydb/library/query_actor
     ydb/library/services
-    ydb/library/persqueue/topic_parser
     ydb/library/table_creator
     ydb/public/lib/scheme_types
     yql/essentials/public/issue

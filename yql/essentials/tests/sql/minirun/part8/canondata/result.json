@@ -1108,6 +1108,20 @@
             "uri": "https://{canondata_backend}/1781765/a173c93434bd360c8f12636e7cfb2943057a075d/resource.tar.gz#test.test_select_yql-from_as_table_subquery-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-group_by_a_agglist_b--Debug]": [
+        {
+            "checksum": "ca94fba3b85376805d3a5403665a2f64",
+            "size": 1113,
+            "uri": "https://{canondata_backend}/1942671/aa948a63a9f9909be2d12b41c078bb144e1128d2/resource.tar.gz#test.test_select_yql-group_by_a_agglist_b--Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-group_by_a_agglist_b--Results]": [
+        {
+            "checksum": "2ef658d891426e29582da284b101dd89",
+            "size": 1592,
+            "uri": "https://{canondata_backend}/1942671/aa948a63a9f9909be2d12b41c078bb144e1128d2/resource.tar.gz#test.test_select_yql-group_by_a_agglist_b--Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-group_by_a_having_b-default.txt-Debug]": [
         {
             "checksum": "7f9b196422b65025099c81ed7bc10a7f",
@@ -1166,16 +1180,16 @@
     ],
     "test.test[select_yql-qualified_asterisk-default.txt-Debug]": [
         {
-            "checksum": "e59cc8c9370e45eeb37fb8055144cecc",
-            "size": 558,
-            "uri": "https://{canondata_backend}/1871182/ae61926140c7a2a68f9505f33fd6a4c9ed42096a/resource.tar.gz#test.test_select_yql-qualified_asterisk-default.txt-Debug_/opt.yql"
+            "checksum": "204cba84f6414b06628e005c3b1861cd",
+            "size": 688,
+            "uri": "https://{canondata_backend}/1916746/1dcc21e518ff5ee4d403927c48ed98b9b6a17e18/resource.tar.gz#test.test_select_yql-qualified_asterisk-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-qualified_asterisk-default.txt-Results]": [
         {
-            "checksum": "b640423a243bbfbe74bb9317b16a09ea",
-            "size": 1950,
-            "uri": "https://{canondata_backend}/1871182/ae61926140c7a2a68f9505f33fd6a4c9ed42096a/resource.tar.gz#test.test_select_yql-qualified_asterisk-default.txt-Results_/results.txt"
+            "checksum": "8c1fd34bc543b294e0a3dfcbe98f79e4",
+            "size": 2930,
+            "uri": "https://{canondata_backend}/1916746/1dcc21e518ff5ee4d403927c48ed98b9b6a17e18/resource.tar.gz#test.test_select_yql-qualified_asterisk-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-select_op_intersect_all-default.txt-Debug]": [

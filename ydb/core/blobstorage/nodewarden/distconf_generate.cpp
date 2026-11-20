@@ -705,11 +705,15 @@ namespace NKikimr::NStorage {
                 break;
             }
         }
+        TVector<std::optional<NKikimrBlobStorage::TDataCenterState::EState>> realmStates;
         if (!sGroup) {
             sGroup = sSet->AddGroups();
             params.GroupId.CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetGroupID);
             sGroup->SetErasureSpecies(params.GroupType.GetErasure());
         } else {
+            for (const auto& realm : sGroup->GetRings()) {
+                realmStates.push_back(realm.HasState() ? std::optional(realm.GetState()) : std::nullopt);
+            }
             sGroup->ClearRings();
         }
         sGroup->SetGroupGeneration(params.GroupGeneration);
@@ -770,6 +774,9 @@ namespace NKikimr::NStorage {
         NBsController::TGroupMapper::Traverse(groupDefinition, [&](TVDiskIdShort vdiskId, TPDiskId pdiskId) {
             if (!sRealm || vdiskId.FailRealm != prev.FailRealm) {
                 sRealm = sGroup->AddRings();
+                if (vdiskId.FailRealm < realmStates.size() && realmStates[vdiskId.FailRealm]) {
+                    sRealm->SetState(*realmStates[vdiskId.FailRealm]);
+                }
                 sDomain = nullptr;
             }
             if (!sDomain || vdiskId.FailDomain != prev.FailDomain) {

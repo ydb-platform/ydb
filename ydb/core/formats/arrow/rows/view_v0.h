@@ -64,7 +64,7 @@ private:
         }
 
         [[nodiscard]] TConclusionStatus Next() {
-            AFL_VERIFY(!IsFinishedFlag);
+            YDB_LOG_VERIFY(!IsFinishedFlag);
             if (!!CurrentValue) {
                 Values.Skip(CurrentValue->size());
             }
@@ -96,9 +96,33 @@ private:
         return TConclusionStatus::Success();
     }
 
+    template <class TOnValue>
+    class TForEachValueActor {
+    private:
+        TOnValue& OnValueCallback;
+
+    public:
+        TForEachValueActor(TOnValue& onValue)
+            : OnValueCallback(onValue) {
+        }
+
+        template <class TWrap>
+        bool OnValue(const ui32 /*fieldIndex*/, const char* data, const ui32 size) {
+            OnValueCallback(data ? std::optional<std::string_view>(std::string_view(data, size)) : std::nullopt);
+            return false;
+        }
+    };
+
 public:
     TSimpleRowViewV0(const TStringBuf sb)
         : Values(sb) {
+    }
+
+    // Calls onValue for each column in order, with the column's bytes, or with nullopt if it is null
+    template <class TOnValue>
+    [[nodiscard]] TConclusionStatus ForEachValue(const arrow::Schema& schema, TOnValue&& onValue) const {
+        TForEachValueActor<TOnValue> actor(onValue);
+        return Scan(schema, actor);
     }
 
     class TActorValidator {
@@ -177,7 +201,7 @@ public:
             if (fieldIndex != ColumnIndex) {
                 return false;
             }
-            AFL_VERIFY(fieldIndex == ColumnIndex);
+            YDB_LOG_VERIFY(fieldIndex == ColumnIndex);
             if (!data) {
                 return true;
             }
@@ -186,7 +210,7 @@ public:
                     Result = std::string_view(data, size);
                     return true;
                 }
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
             if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
                 using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
@@ -194,7 +218,7 @@ public:
                     Result = *(CType*)(data);
                     return true;
                 }
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
             return true;
         }

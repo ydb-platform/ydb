@@ -10,7 +10,7 @@ try:
 except ImportError:
     import yaml
 
-T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
+T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/tier0-settings/src/settings.yaml"
 
 
 def load_local_config(pj):

@@ -3,16 +3,58 @@
 #include "events.h"
 #include "persqueue_utils.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/public/utils.h>
+
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
+#include <fmt/format.h>
+
+#include <string_view>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
 
+namespace {
+
+TProcessingResult DescribeFailure(const TString& path, NPQ::NDescriber::EStatus status) {
+    const std::string_view topic = path;
+    switch (status) {
+        case NPQ::NDescriber::EStatus::NotFound:
+            return {
+                Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC,
+                TString(fmt::format("no path '{}', Marker# PQ15", topic)),
+                true
+            };
+        case NPQ::NDescriber::EStatus::NotTopic:
+            return {
+                Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC,
+                TString(fmt::format("item '{}' is not a topic, Marker# PQ13", topic)),
+                true
+            };
+        case NPQ::NDescriber::EStatus::Unauthorized:
+        case NPQ::NDescriber::EStatus::UnauthorizedWithDescribeAccess:
+            return {
+                Ydb::PersQueue::ErrorCode::ERROR,
+                TString(fmt::format("topic '{}' describe error, Status# AccessDenied, Marker# PQ1", topic)),
+                true
+            };
+        default:
+            return {
+                Ydb::PersQueue::ErrorCode::ERROR,
+                TString(fmt::format("topic '{}' describe error, Status# Unknown, Marker# PQ1", topic)),
+                true
+            };
+    }
+}
+
+} // namespace
+
 
 TReadInitAndAuthActor::TReadInitAndAuthActor(
         const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
-        const TString& session, const NActors::TActorId& metaCache, const NActors::TActorId& newSchemeCache,
+        const TString& session, const TString& database, const NActors::TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
         const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck
 )
@@ -20,7 +62,7 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
     , ParentId(parentId)
     , Cookie(cookie)
     , Session(session)
-    , MetaCacheId(metaCache)
+    , Database(database)
     , NewSchemeCache(newSchemeCache)
     , ClientId(clientId)
     , ClientPath(NPersQueue::ConvertOldConsumerName(ClientId, ctx))
@@ -43,20 +85,33 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
         {"clientId", ClientId});
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
-    DescribeTopics(ctx, true);
+    DescribeTopics(ctx);
 }
 
-void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate) {
-    TVector<NPersQueue::TDiscoveryConverterPtr> topics;
+void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext&) {
+    absl::flat_hash_set<TString> topics;
     for (const auto& topic : Topics) {
-        topics.push_back(topic.second.DiscoveryConverter);
         AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
+        topics.insert(topic.second.DiscoveryConverter->GetPrimaryPath());
     }
+    DescribePaths(std::move(topics));
+}
 
-    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, true, showPrivate));
+void TReadInitAndAuthActor::DescribePaths(absl::flat_hash_set<TString> topics) {
+    // Paths come from the discovery converter (primary, then modern secondary).
+    // ResolveName would rewrite a legacy primary path under LbUserDatabaseRoot
+    // and drop the dc baked into -mirrored-from-.
+    NPQ::NDescriber::TDescribeSettings settings;
+    settings.ResolvedPaths = true;
+    DescriberId = RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
+        SelfId(), Database, std::move(topics), settings));
 }
 
 void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
+    if (DescriberId) {
+        ctx.Send(DescriberId, new TEvents::TEvPoison());
+        DescriberId = {};
+    }
     for (auto& [_, holder] : Topics) {
         if (holder.PipeClient)
             NTabletPipe::CloseClient(ctx, holder.PipeClient);
@@ -100,20 +155,36 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
 
 
 bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+        const NPQ::NDescriber::TTopicInfo& topicInfo,
         THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
-    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
-    auto& pqDescr = entry.PQGroupInfo->Description;
+    AFL_ENSURE(topicInfo.Info);
+    // Scheme board describe leaves TopicPath empty. Metacache filled it from the
+    // navigate path before UpgradeToFullConverter; do the same here.
+    auto pqInfo = topicInfo.Info;
+    if (pqInfo->Description.GetPQTabletConfig().GetTopicPath().empty()) {
+        auto copy = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>(*pqInfo);
+        copy->Description.MutablePQTabletConfig()->SetTopicPath(
+            topicInfo.RealPath.empty() ? ("/" + topicsIter->first) : topicInfo.RealPath);
+        pqInfo = copy;
+    }
+    auto& pqDescr = pqInfo->Description;
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
     topicsIter->second.DbId = pqDescr.GetPQTabletConfig().GetYdbDatabaseId();
     topicsIter->second.FolderId = pqDescr.GetPQTabletConfig().GetYcFolderId();
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
-    topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
-    topicsIter->second.SetPartitionGraph(entry.PQGroupInfo->PartitionGraph);
+    topicsIter->second.IsServerless = topicInfo.IsServerless;
+    topicsIter->second.SetPartitionGraph(pqInfo->PartitionGraph);
+    if (topicInfo.CdcStream) {
+        topicsIter->second.CdcStreamPath = CanonizePath(topicsIter->first);
+        topicsIter->second.IsAsyncReplication = topicInfo.IsAsyncReplication;
+    }
+    const auto* consumer = NPQ::GetConsumer(pqDescr.GetPQTabletConfig(), ClientId);
+    topicsIter->second.IsReplicationConsumer = consumer
+        && consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
@@ -121,8 +192,8 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     }
 
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {
-        TString errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503",
-                                      topicsIter->second.DiscoveryConverter->GetPrintableString().c_str());
+        const TString printable = topicsIter->second.DiscoveryConverter->GetPrintableString();
+        TString errorReason(fmt::format("Internal server error with topic '{}', Marker# PQ503", std::string_view(printable)));
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return false;
     }
@@ -132,62 +203,71 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         topicsIter->second.CdcStreamPath
     );
     AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
-    return CheckTopicACL(entry, topicsIter->first, ctx);
+    return CheckTopicACL(topicInfo, topicsIter->first, ctx);
 }
 
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Handle describe topics response");
+    DescriberId = {};
+    const bool secondaryPass = SecondaryDescribe;
+    SecondaryDescribe = false;
 
-    bool reDescribe = false;
-    auto i = 0u;
-    auto& topicsRequested = ev->Get()->TopicsRequested;
-    for (const auto& entry : ev->Get()->Result->ResultSet) {
-        const auto& path = topicsRequested[i++]->GetOriginalPath();
-        auto it = Topics.find(path);
-        AFL_ENSURE(it != Topics.end());
+    absl::flat_hash_set<TString> secondaryPaths;
+    const TString lbRoot = AppData(ctx)->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
 
-        if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
-            const auto& topic = entry.ListNodeEntry->Children.at(0);
-
-            // primary path used to re-describe
-            it->second.DiscoveryConverter = std::make_shared<NPersQueue::TDiscoveryConverter>(*it->second.DiscoveryConverter);
-            it->second.DiscoveryConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
-            it->second.CdcStreamPath = CanonizePath(entry.Path);
-            it->second.IsAsyncReplication = entry.Attributes.contains("__async_replication");
-
-//            Topics[it->second.DiscoveryConverter->GetInternalName()] = it->second;
-//            Topics.erase(it);
-
-            reDescribe = true;
-            continue;
+    for (const auto& [path, topicInfo] : ev->Get()->Topics) {
+        TVector<TString> originals{path};
+        if (secondaryPass) {
+            auto mapped = SecondaryToOriginal.find(path);
+            AFL_ENSURE(mapped != SecondaryToOriginal.end())("path", path);
+            originals = mapped->second;
         }
 
-        auto processResult = ProcessMetaCacheTopicResponse(entry);
-        if (processResult.IsFatal) {
+        for (const auto& original : originals) {
+            auto it = Topics.find(original);
+            AFL_ENSURE(it != Topics.end())("path", original);
+
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::Success) {
+                if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {
+                    return;
+                }
+                continue;
+            }
+
+            // Metacache looks up the legacy primary path first and, on a miss,
+            // retries the modern path under LbUserDatabaseRoot/account.
+            if (!secondaryPass && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
+                // The input converter is shared with the caller and must not be mutated.
+                auto converter = std::make_shared<NPersQueue::TDiscoveryConverter>(*it->second.DiscoveryConverter);
+                if (auto secondary = converter->TrySecondaryDiscoveryPath(lbRoot); secondary && *secondary != original) {
+                    it->second.DiscoveryConverter = std::move(converter);
+                    SecondaryToOriginal[*secondary].push_back(original);
+                    secondaryPaths.insert(*secondary);
+                    continue;
+                }
+            }
+
+            auto processResult = DescribeFailure(path, topicInfo.Status);
             Topics.erase(it);
-            if (Topics.empty()) {
+            if (Topics.empty() && secondaryPaths.empty()) {
                 TStringBuilder reason;
                 reason << "Discovery for all topics failed. The last error was: " << processResult.Reason;
                 return CloseSession(reason, processResult.ErrorCode, ctx);
-            } else {
-                continue;
             }
         }
-
-        if (!ProcessTopicSchemeCacheResponse(entry, it, ctx)) {
-            return;
-        }
     }
+
+    if (!secondaryPaths.empty()) {
+        SecondaryDescribe = true;
+        DescribePaths(std::move(secondaryPaths));
+        return;
+    }
+    SecondaryToOriginal.clear();
 
     if (Topics.empty()) {
         CloseSession("no topics found", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
-    }
-
-    if (reDescribe) {
-        return DescribeTopics(ctx, true);
     }
 
     // ToDo[migration] - separate option - ?
@@ -201,12 +281,12 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
 
 
 bool TReadInitAndAuthActor::CheckTopicACL(
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& topic, const TActorContext& ctx
+        const NPQ::NDescriber::TTopicInfo& topicInfo, const TString& topic, const TActorContext& ctx
 ) {
-    auto& pqDescr = entry.PQGroupInfo->Description;
+    auto& pqDescr = topicInfo.Info->Description;
     //ToDo[migration] - proper auth setup
     if (Token && !CheckACLPermissionsForNavigate(
-            entry.SecurityObject, topic, NACLib::EAccessRights::SelectRow,
+            topicInfo.SecurityObject, topic, NACLib::EAccessRights::SelectRow,
             "No ReadTopic permissions", ctx
     )) {
         return false;
@@ -295,7 +375,8 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
             holder.MeteringMode,
             holder.Partitions,
             holder.GetPartitionGraph(),
-            holder.IsAsyncReplication
+            holder.IsAsyncReplication,
+            holder.IsReplicationConsumer
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

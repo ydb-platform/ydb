@@ -40,6 +40,8 @@ class TestBackpressure(SolomonReadingTestBase):
         assert error is None
 
         query = """
+            PRAGMA ydb.MaxTasksPerStage = "1";
+
             SELECT value FROM local_solomon.backpressure_test WITH (
                 selectors = @@{cluster="backpressure_test", service="my_service", test_type="backpressure_test"}@@,
 
@@ -59,6 +61,8 @@ class TestBackpressure(SolomonReadingTestBase):
         ), "Solomon emulator received too many API calls, shouldn't be higher then 20, have {}".format(api_call_count)
 
         query = """
+            PRAGMA ydb.MaxTasksPerStage = "1";
+
             SELECT value FROM local_solomon.backpressure_test WITH (
                 selectors = @@{cluster="backpressure_test", service="my_service", test_type="backpressure_test"}@@,
 
@@ -92,6 +96,8 @@ class TestBackpressure(SolomonReadingTestBase):
         assert error is None
 
         query = """
+            PRAGMA ydb.MaxTasksPerStage = "1";
+
             SELECT value FROM local_monitoring.my_service WITH (
                 selectors = @@{test_type="backpressure_test"}@@,
 
@@ -111,6 +117,8 @@ class TestBackpressure(SolomonReadingTestBase):
         ), "Solomon emulator received too many API calls, shouldn't be higher then 20, have {}".format(api_call_count)
 
         query = """
+            PRAGMA ydb.MaxTasksPerStage = "1";
+
             SELECT value FROM local_monitoring.my_service WITH (
                 selectors = @@{test_type="backpressure_test"}@@,
 

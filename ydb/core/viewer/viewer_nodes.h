@@ -2989,7 +2989,9 @@ public:
                         if (TNode* node = FindNode(sample.GetNodeId())) {
                             auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
                             ddisk.CopyFrom(sample);
-                            ddisk.SetHasWhiteboardData(true);
+                            if (!ddisk.HasHasWhiteboardData()) {
+                                ddisk.SetHasWhiteboardData(true);
+                            }
                         }
                     }
                     for (const auto& pDiskState : pDiskResponse.GetPDiskStateInfo()) {
@@ -3009,7 +3011,9 @@ public:
                         for (const auto& sample : pDiskState.GetDDiskStateInfo()) {
                             auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
                             ddisk.CopyFrom(sample);
-                            ddisk.SetHasWhiteboardData(true);
+                            if (!ddisk.HasHasWhiteboardData()) {
+                                ddisk.SetHasWhiteboardData(true);
+                            }
                         }
                         node->HasPDiskWhiteboardResponse = true;
                         for (const auto& protoPDiskState : pDiskState.GetPDiskStateInfo()) {

@@ -125,6 +125,13 @@ public:
 
     const NYql::TPosition& Pos() const;
 
+    template <typename T>
+    NYql::TPosition Position(const T& node) const {
+        const auto range = GetTokenIndexRange(node);
+        const auto& token = Tokens_.at(range.Start);
+        return NYql::TPosition(token.LinePos + 1, token.Line, Settings.File);
+    }
+
     void PushCurrentBlocks(TBlocks* blocks);
     void PopCurrentBlocks();
     TBlocks& GetCurrentBlocks() const;
@@ -134,6 +141,12 @@ public:
     IOutputStream& Fatal();
     IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
     IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
+
+    template <typename T>
+    IOutputStream& Error(const T& node, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR) {
+        return Error(Position(node), code);
+    }
+
     bool Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
                  bool forceError = false);
     IOutputStream& Info(NYql::TPosition pos);

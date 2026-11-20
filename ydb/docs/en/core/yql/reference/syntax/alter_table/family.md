@@ -57,11 +57,23 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 
 ### Changing compression codec
 
-The code below changes the compression codec to `lz4` for the `default` column group in the `series_with_families` table:
+The `COMPRESSION` parameter accepts `"off"`, `"lz4"`, and `"zstd"`. The `COMPRESSION_LEVEL` parameter accepts values from `0` to `22` and is supported only for ZSTD. If the level is omitted, the existing level is retained, or `1` is used if no level was set. Explicitly setting `0` selects the ZSTD library default, which is `3`. Changing the codec to `"off"` or `"lz4"` clears the level.
+
+The code below enables ZSTD compression at level `5` for the `default` column group in the `series_with_families` table:
 
 ```yql
-ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
+ALTER TABLE series_with_families
+    ALTER FAMILY default SET COMPRESSION "zstd",
+    ALTER FAMILY default SET COMPRESSION_LEVEL 5;
 ```
+
+For a group already using ZSTD, you can change only the level:
+
+```yql
+ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 9;
+```
+
+For details, see [Compression in row-oriented tables](../../../../concepts/compression.md#row-oriented-tables).
 
 ### Changing cache mode
 
@@ -75,4 +87,4 @@ The code below changes the [cache mode](../../../../concepts/datamodel/table.md#
 ALTER TABLE series_with_families ALTER FAMILY default SET CACHE_MODE "in_memory";
 ```
 
-You can specify any column group parameters described in the [`CREATE TABLE`](../create_table/index.md) command.
+You can specify any column group parameters described in the [`CREATE TABLE`](../create_table/family.md) command.

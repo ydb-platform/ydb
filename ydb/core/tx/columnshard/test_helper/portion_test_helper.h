@@ -26,7 +26,7 @@ inline TIndexInfo MakePortionTestIndexInfo() {
 inline std::shared_ptr<arrow::RecordBatch> MakePortionTestPKBatch(const ui64 startKey, const ui64 endKey) {
     auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()) });
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues({ startKey, endKey }).ok());
+    YDB_LOG_VERIFY(builder.AppendValues({ startKey, endKey }).ok());
     auto array = builder.Finish().ValueOrDie();
     return arrow::RecordBatch::Make(schema, 2, { array });
 }
@@ -58,7 +58,7 @@ inline std::shared_ptr<TPortionInfo> MakeTestCompactedPortion(const TInternalPat
 
     TPortionMetaConstructor metaConstructor;
     TFakeGroupSelector groupSelector;
-    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
+    YDB_LOG_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
 
     TCompactedPortionInfoConstructor constructor(pathId, portionId);
     constructor.SetSchemaVersion(1);

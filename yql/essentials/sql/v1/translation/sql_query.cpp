@@ -108,6 +108,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "consistency_level",
         "commit_interval",
         "initial_scan",
+        "bootstrap",
         "availability_period",
     };
 
@@ -2624,10 +2625,16 @@ bool TSqlQuery::AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_co
         return false;
     }
 
+    TDefaultExpression defaultExpression{
+        .ContextPrefix = Context().ContextRecreationQuery(),
+        .ExprText = Context().QueryText(defaultValueRule.GetRule_expr2()),
+        .Expr = std::move(defaultExpr),
+    };
+
     params.AlterColumns.push_back({
         .Pos = std::move(pos),
         .Name = std::move(name),
-        .DefaultExpr = std::move(defaultExpr),
+        .Default = std::move(defaultExpression),
         .TypeOfChange = TColumnSchema::ETypeOfChange::SetDefault,
     });
     return true;

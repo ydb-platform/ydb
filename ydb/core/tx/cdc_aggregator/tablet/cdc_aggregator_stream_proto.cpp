@@ -96,6 +96,23 @@ TParseResult<TCdcAggregatorStreamPartitioningChange> TCdcAggregatorStreamProtoCo
     return {std::move(change), TString()};
 }
 
+TCdcAggregatorStreamHeartbeatsBatch TCdcAggregatorStreamProtoConverter::ParseHeartbeatsBatch(const NKikimrCdcAggregator::TEvWriteHeartbeats& proto) const {
+    TCdcAggregatorStreamHeartbeatsBatch batch;
+    for (const auto& sourceHeartbeat : proto.GetHeartbeats()) {
+        const ui64 sourceDataShardId = sourceHeartbeat.GetSourceDataShardId();
+        auto heartbeat = NPQ::THeartbeat::Parse(sourceHeartbeat.GetHeartbeat());
+        if (!heartbeat.Version.Step || heartbeat.Data.empty()) {
+            batch.InvalidSourceDataShardIds.insert(sourceDataShardId);
+            continue;
+        }
+        const auto [kept, inserted] = batch.HeartbeatsBySourceDataShardId.emplace(sourceDataShardId, heartbeat);
+        if (!inserted && kept->second.Version < heartbeat.Version) {
+            kept->second = std::move(heartbeat);
+        }
+    }
+    return batch;
+}
+
 TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorStreamTopic& topic) const {
     NKikimrCdcAggregator::TCdcAggregatorStreamTopic proto;
     topic.StreamPathId.ToProto(proto.MutableStreamPathId());
@@ -106,6 +123,53 @@ TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorS
         protoPartition.SetTabletId(partition.TabletId);
     }
     return proto.SerializeAsString();
+}
+
+NKikimrCdcAggregator::TEvWriteHeartbeatsResult TCdcAggregatorStreamProtoConverter::SerializeWriteHeartbeatsResult(
+    const TCdcAggregatorStreamHeartbeatsBatch& batch, const TCdcAggregatorStreamHeartbeatsDiff& diff) const
+{
+    using TResult = NKikimrCdcAggregator::TEvWriteHeartbeatsResult;
+
+    TResult proto;
+    proto.SetStatus(TResult::SUCCESS);
+    for (const auto& [sourceDataShardId, _] : batch.HeartbeatsBySourceDataShardId) {
+        auto& result = *proto.AddResults();
+        result.SetSourceDataShardId(sourceDataShardId);
+        if (const auto* lastHeartbeat = diff.LastHeartbeatsBySourceDataShardId.FindPtr(sourceDataShardId)) {
+            result.SetStatus(TResult::THeartbeatResult::SUCCESS);
+            lastHeartbeat->Version.ToProto(result.MutableWrittenVersion());
+        } else {
+            result.SetStatus(TResult::THeartbeatResult::UNKNOWN_SOURCE);
+        }
+    }
+    for (const auto sourceDataShardId : batch.InvalidSourceDataShardIds) {
+        auto& result = *proto.AddResults();
+        result.SetSourceDataShardId(sourceDataShardId);
+        result.SetStatus(TResult::THeartbeatResult::BAD_REQUEST);
+    }
+    return proto;
+}
+
+NKikimrCdcAggregator::TEvDescribeTrackingResult TCdcAggregatorStreamProtoConverter::SerializeDescribeTrackingResult(const TCdcAggregatorStream& stream) const {
+    NKikimrCdcAggregator::TEvDescribeTrackingResult proto;
+
+    TMap<ui64, std::optional<TRowVersion>> lastVersionsBySourceDataShardId;
+    for (const auto& [dataShardId, lastHeartbeat] : stream.GetLastHeartbeatsBySourceDataShardId()) {
+        lastVersionsBySourceDataShardId.emplace(dataShardId, lastHeartbeat ? std::optional(lastHeartbeat->Version) : std::nullopt);
+    }
+    for (const auto& [dataShardId, lastVersion] : lastVersionsBySourceDataShardId) {
+        auto& source = *proto.AddSources();
+        source.SetDataShardId(dataShardId);
+        if (lastVersion) {
+            lastVersion->ToProto(source.MutableLastHeartbeat());
+        }
+    }
+
+    if (const auto& currentHeartbeat = stream.GetCurrentHeartbeat()) {
+        currentHeartbeat->Version.ToProto(proto.MutableCurrentHeartbeat());
+    }
+
+    return proto;
 }
 
 } // namespace NKikimr::NCdcAggregator

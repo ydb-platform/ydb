@@ -34,18 +34,19 @@
 
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/strings/escaping.h"
 
 #include <grpc/grpc_security.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/json.h>
 #include <grpc/support/log.h>
+#include <grpc/support/string_util.h>
 #include <grpc/support/time.h>
 
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/json/json_reader.h"
 #include "src/core/lib/json/json_writer.h"
 #include "src/core/lib/security/util/json_util.h"
-#include "src/core/lib/slice/b64.h"
 
 using grpc_core::Json;
 
@@ -181,7 +182,7 @@ static char* encoded_jwt_header(const char* key_id, const char* algorithm) {
       {"kid", Json::FromString(key_id)},
   });
   TString json_str = grpc_core::JsonDump(json);
-  return grpc_base64_encode(json_str.c_str(), json_str.size(), 1, 0);
+  return gpr_strdup(y_absl::WebSafeBase64Escape(json_str).c_str());
 }
 
 static char* encoded_jwt_claim(const grpc_auth_json_key* json_key,
@@ -209,7 +210,7 @@ static char* encoded_jwt_claim(const grpc_auth_json_key* json_key,
 
   TString json_str =
       grpc_core::JsonDump(Json::FromObject(std::move(object)));
-  return grpc_base64_encode(json_str.c_str(), json_str.size(), 1, 0);
+  return gpr_strdup(y_absl::WebSafeBase64Escape(json_str).c_str());
 }
 
 static char* dot_concat_and_free_strings(char* str1, char* str2) {
@@ -281,7 +282,10 @@ char* compute_and_encode_signature(const grpc_auth_json_key* json_key,
     gpr_log(GPR_ERROR, "DigestFinal (signature compute) failed.");
     goto end;
   }
-  result = grpc_base64_encode(sig, sig_len, 1, 0);
+  result =
+      gpr_strdup(y_absl::WebSafeBase64Escape(
+                     y_absl::string_view(reinterpret_cast<char*>(sig), sig_len))
+                     .c_str());
 
 end:
 #if OPENSSL_VERSION_NUMBER < 0x30000000L

@@ -208,7 +208,9 @@ public:
                 if (sample.GetPDiskId() == PDiskId) {
                     auto& ddisk = ddisks[sample.GetDDiskSlotId()];
                     ddisk.CopyFrom(sample);
-                    ddisk.SetHasWhiteboardData(true);
+                    if (!ddisk.HasHasWhiteboardData()) {
+                        ddisk.SetHasWhiteboardData(true);
+                    }
                 }
             }
         }

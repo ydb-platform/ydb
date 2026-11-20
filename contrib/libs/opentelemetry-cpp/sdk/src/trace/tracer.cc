@@ -3,11 +3,8 @@
 
 #include <chrono>
 #include <cstdint>
-#include <mutex>
-#include <new>
 #include <utility>
 
-#include "opentelemetry/common/key_value_iterable.h"
 #include "opentelemetry/context/context.h"
 #include "opentelemetry/context/runtime_context.h"
 #include "opentelemetry/nostd/shared_ptr.h"
@@ -22,9 +19,7 @@
 #include "opentelemetry/sdk/trace/tracer_context.h"
 #include "opentelemetry/trace/context.h"
 #include "opentelemetry/trace/default_span.h"
-#include "opentelemetry/trace/span.h"
 #include "opentelemetry/trace/span_context.h"
-#include "opentelemetry/trace/span_context_kv_iterable.h"
 #include "opentelemetry/trace/span_id.h"
 #include "opentelemetry/trace/span_startoptions.h"
 #include "opentelemetry/trace/trace_flags.h"
@@ -34,88 +29,32 @@
 
 #include "src/trace/span.h"
 
-OPENTELEMETRY_BEGIN_NAMESPACE namespace sdk
+OPENTELEMETRY_BEGIN_NAMESPACE
+namespace sdk
 {
-  namespace trace
-  {
+namespace trace
+{
 
-  namespace
-  {
+Tracer::Tracer(std::shared_ptr<TracerContext> context,
+               std::unique_ptr<InstrumentationScope> instrumentation_scope)
+    : instrumentation_scope_{std::move(instrumentation_scope)},
+      context_{std::move(context)},
+      noop_span_{std::make_shared<opentelemetry::trace::DefaultSpan>(
+          opentelemetry::trace::SpanContext::GetInvalid())}
+{
+  UpdateTracerConfig(context_->GetTracerConfigurator().ComputeConfig(*instrumentation_scope_));
+}
 
-  nostd::shared_ptr<opentelemetry::trace::Span> MakeNonRecordingSpan(
-      opentelemetry::trace::SpanContext &&span_context) noexcept
-  {
+nostd::shared_ptr<opentelemetry::trace::Span> Tracer::StartSpan(
+    nostd::string_view name,
+    const opentelemetry::common::KeyValueIterable &attributes,
+    const opentelemetry::trace::SpanContextKeyValueIterable &links,
+    const opentelemetry::trace::StartSpanOptions &options) noexcept
+{
 #if OPENTELEMETRY_HAVE_EXCEPTIONS
-    try
-    {
-#endif
-      return {std::make_shared<opentelemetry::trace::DefaultSpan>(std::move(span_context))};
-#if OPENTELEMETRY_HAVE_EXCEPTIONS
-    }
-    catch (const std::bad_alloc &)
-    {
-      return {};
-    }
-#else
-    return nostd::shared_ptr<opentelemetry::trace::Span>{
-        new (std::nothrow) opentelemetry::trace::DefaultSpan(std::move(span_context))};
-#endif
-  }
-
-  nostd::shared_ptr<opentelemetry::trace::Span> MakeSpan(
-      std::shared_ptr<Tracer> &&tracer,
-      nostd::string_view name,
-      const opentelemetry::common::KeyValueIterable &attributes,
-      const opentelemetry::trace::SpanContextKeyValueIterable &links,
-      const opentelemetry::trace::StartSpanOptions &options,
-      const opentelemetry::sdk::trace::SamplingResult &sampling_result,
-      const opentelemetry::trace::SpanContext &parent_context,
-      opentelemetry::trace::SpanContext &&span_context) noexcept
+  try
   {
-#if OPENTELEMETRY_HAVE_EXCEPTIONS
-    try
-    {
 #endif
-      return {std::make_shared<Span>(std::move(tracer), name, attributes, links, options,
-                                     sampling_result, parent_context, std::move(span_context))};
-#if OPENTELEMETRY_HAVE_EXCEPTIONS
-    }
-    catch (const std::bad_alloc &)
-    {
-      return {};
-    }
-#else
-    return nostd::shared_ptr<opentelemetry::trace::Span>{
-        new (std::nothrow) Span{std::move(tracer), name, attributes, links, options,
-                                sampling_result, parent_context, std::move(span_context)}};
-#endif
-  }
-
-  }  // namespace
-
-  Tracer::Tracer(std::shared_ptr<TracerContext> context,
-                 std::unique_ptr<InstrumentationScope> instrumentation_scope) noexcept
-      : instrumentation_scope_{std::move(instrumentation_scope)},
-        context_{std::move(context)},
-        tracer_config_(context_->GetTracerConfigurator().ComputeConfig(*instrumentation_scope_)),
-        noop_span_{std::make_shared<opentelemetry::trace::DefaultSpan>(
-            opentelemetry::trace::SpanContext::GetInvalid())}
-  {
-    UpdateEnabled(tracer_config_.IsEnabled());
-  }
-
-  nostd::shared_ptr<opentelemetry::trace::Span> Tracer::StartSpan(
-      nostd::string_view name,
-      const opentelemetry::common::KeyValueIterable &attributes,
-      const opentelemetry::trace::SpanContextKeyValueIterable &links,
-      const opentelemetry::trace::StartSpanOptions &options) noexcept
-  {
-    // Check if the tracer is enabled using the API Tracer::Enabled() accessor if available.
-    if (!Enabled())
-    {
-      return noop_span_;
-    }
-
     // Resolve parent span context from options or fall back to the current runtime context.
     const auto parent_context = [&options]() noexcept -> opentelemetry::trace::SpanContext {
       // 1. If the parent is a valid SpanContext, use it directly.
@@ -147,6 +86,15 @@ OPENTELEMETRY_BEGIN_NAMESPACE namespace sdk
       return opentelemetry::trace::GetSpanContext(
           opentelemetry::context::RuntimeContext::GetCurrent());
     }();
+
+    if (!Enabled())
+    {
+      if (!parent_context.IsValid())
+      {
+        return noop_span_;
+      }
+      return {std::make_shared<opentelemetry::trace::DefaultSpan>(parent_context)};
+    }
 
     IdGenerator &generator                     = GetIdGenerator();
     const opentelemetry::trace::SpanId span_id = generator.GenerateSpanId();
@@ -200,56 +148,55 @@ OPENTELEMETRY_BEGIN_NAMESPACE namespace sdk
     opentelemetry::trace::SpanContext span_context(trace_id, span_id, trace_flags, false,
                                                    get_trace_state());
 
+    nostd::shared_ptr<opentelemetry::trace::Span> span;
+
     if (!sampling_result.IsRecording())
     {
-      auto non_recording_span = MakeNonRecordingSpan(std::move(span_context));
-
-      if (!non_recording_span)
-      {
-        return noop_span_;
-      }
-      return non_recording_span;
+      span = nostd::shared_ptr<opentelemetry::trace::Span>{
+          std::make_shared<opentelemetry::trace::DefaultSpan>(std::move(span_context))};
     }
-
-    auto span = MakeSpan(shared_from_this(), name, attributes, links, options, sampling_result,
-                         parent_context, std::move(span_context));
-    if (!span)
+    else
     {
-      return noop_span_;
+      span = nostd::shared_ptr<opentelemetry::trace::Span>{
+          std::make_shared<Span>(shared_from_this(), name, attributes, links, options,
+                                 sampling_result, parent_context, std::move(span_context))};
     }
+
     return span;
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
   }
-
-  void Tracer::ForceFlushWithMicroseconds(uint64_t timeout) noexcept
+  catch (...)
   {
-    if (context_)
-    {
-      context_->ForceFlush(
-          std::chrono::microseconds{static_cast<std::chrono::microseconds::rep>(timeout)});
-    }
+    return noop_span_;
   }
+#endif
+}
 
-  void Tracer::CloseWithMicroseconds(uint64_t timeout) noexcept
+void Tracer::ForceFlushWithMicroseconds(uint64_t timeout) noexcept
+{
+  if (context_)
   {
-    // Trace context is shared by many tracers.So we just call ForceFlush to flush all pending spans
-    // and do not shutdown it.
-    if (context_)
-    {
-      context_->ForceFlush(
-          std::chrono::microseconds{static_cast<std::chrono::microseconds::rep>(timeout)});
-    }
+    context_->ForceFlush(
+        std::chrono::microseconds{static_cast<std::chrono::microseconds::rep>(timeout)});
   }
+}
 
-  void Tracer::UpdateTracerConfig(TracerConfig config) noexcept
+void Tracer::CloseWithMicroseconds(uint64_t timeout) noexcept
+{
+  // Trace context is shared by many tracers.So we just call ForceFlush to flush all pending spans
+  // and do not shutdown it.
+  if (context_)
   {
-    const bool enabled = config.IsEnabled();
-    {
-      std::lock_guard<std::mutex> lock(tracer_config_mutex_);
-      tracer_config_ = config;
-    }
-    UpdateEnabled(enabled);
+    context_->ForceFlush(
+        std::chrono::microseconds{static_cast<std::chrono::microseconds::rep>(timeout)});
   }
+}
 
-  }  // namespace trace
+void Tracer::UpdateTracerConfig(TracerConfig config) noexcept
+{
+  UpdateEnabled(config.IsEnabled());
+}
+
+}  // namespace trace
 }  // namespace sdk
 OPENTELEMETRY_END_NAMESPACE

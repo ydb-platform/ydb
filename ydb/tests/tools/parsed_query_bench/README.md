@@ -16,7 +16,8 @@ Decode ExecuteQueryRequest
   antlr_ast      → SqlASTToYql(grammar tree, tokens) ──────────┤
   yql_ast        → restore translated TAstNode ─────────────────┴→ CompileExpr → host preparation → BuildKqlQuery ─┐
   kql_query_list → restore the expression DAG and bind its tables and parameters ────────────────────────────────┴→ TKqlQueryList
-TKqlQueryList → new RBO pipeline → PlanConverter::ConvertRoot → ComputeParents → stop before if (Roots.size() > 1)
+TKqlQueryList → new RBO pipeline → PlanConverter::ConvertRoot ─┐
+logical_plan → validate types, catalog bindings and operators → TOpRoot ─┴→ ComputeParents → stop before if (Roots.size() > 1)
 ```
 
 The shared grammar input carries the generated AST, lexer mode, leading directives and the complete numeric token stream, including comments, whitespace and EOF. Main converts tokens to the names expected by `SqlASTToYql` and reconstructs the SQL source for translation settings. NewParser restores its parser tree from the same wire. The common producer fingerprint covers the SQL grammar, lexer build definitions, parser generation templates and generated protobuf schema.
@@ -42,6 +43,14 @@ Omit `--catalog` for table-free queries. For table reads, use the NewParser benc
 `--export`, `--verify`, `--bench` and `--client` run equivalence checks before accepting a comparison. Verification regenerates each supplied protobuf from text, including source positions and query-list column hints. It also compares the lowered roots, ordered output column names and types. It also compares all request fields outside the query. Files can be passed in any order to `--verify` and `--bench`. All formats are local benchmark fixtures. The public Query Service accepts the text variant.
 
 `--verify-import TEXT.pb PARSED.pb [PARSED.pb ...]` checks independently constructed requests. It decodes each stage, invokes its real importer and compares its typed logical roots, result ordering, column names and types with the text control. Envelope fields must match. This mode accepts different source positions and alternative encodings when the resulting root signatures agree.
+
+For `logical_plan` (tag 7), supply the binary ExecuteQueryRequest produced by FDW or the NewParser benchmark. The receiver builds RBO operators directly, checks declared IU types against their definitions, derives LEFT JOIN nullability and links the roots' parent edges. The supported profile covers unit rows, reads, scalar maps, filters, ordinary equi-joins, cross joins, ungrouped COUNT and a single primary replicate port. Multiple read-only result roots retain their source order. Writes, materialization, ordered results and unsupported operators are rejected.
+
+```sh
+"$bench" --catalog "$catalog" --bench-import 30 300 "$dir/text.pb" "$dir/logical_plan.pb" > "$dir/server.csv"
+```
+
+`--bench-import` verifies the independently produced inputs before sampling. For LogicalPlan it compares the referenced scan columns, scalar expressions, relational operations and ordered output schema against the compiled SQL. The comparison resolves identity projections and compiler-generated IU names. For this stage, `parse_or_import` includes host setup and catalog binding. The runner enters its RBO transformer with the imported roots, computes their parent edges and invokes the same capture callback as the text path, before the multiple-root check.
 
 Structured exports carry their selected stage. `--check-request REQUEST.pb` prints the route that reached RBO. A missing or unsupported stage, incompatible grammar or wire version, or structural codec error rejects the request.
 

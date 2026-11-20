@@ -8,6 +8,8 @@
 
 #include <functional>
 
+namespace Ydb::Query { class LogicalPlan; }
+
 namespace NYql {
 struct TKikimrConfiguration;
 }
@@ -33,6 +35,7 @@ struct TLogicalResult {
     TMeasurementTime Done{};
     size_t RootCount = 0;
     TVector<TLogicalRoot> Roots;
+    TVector<TString> LogicalSignatures;
 };
 
 class TEngine {
@@ -42,11 +45,14 @@ public:
 
     const NYql::TKikimrConfiguration& TranslationConfig() const;
     void WithSession(std::function<void()> run) const;
-    TLogicalResult LowerText(const TString& text, const TParameterMap& parameters, bool verify, TMeasurementTime* imported = nullptr) const;
+    TLogicalResult LowerText(const TString& text, const TParameterMap& parameters, bool verify, TMeasurementTime* imported = nullptr, bool logicalSignature = false) const;
     TLogicalResult Lower(NYql::TAstParseResult ast, const TParameterMap& parameters, bool verify) const;
     void ExportKql(const TString& text, const TParameterMap& parameters, Ydb::Query::KqlQueryList& out) const;
     TLogicalResult LowerKql(const Ydb::Query::KqlQueryList& wire, const TParameterMap& parameters, bool verify,
         TMeasurementTime* imported) const;
+
+    TLogicalResult LowerLogical(const Ydb::Query::LogicalPlan& wire, const TParameterMap& parameters,
+        bool verify, TMeasurementTime* imported) const;
 
     TString Cluster = "benchmark";
     TString PathPrefix = "/Root";

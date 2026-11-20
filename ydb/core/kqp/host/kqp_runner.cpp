@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_inspection.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
@@ -500,6 +501,13 @@ private:
             //    .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             //    .Build(false);
 
+            auto rbo = CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
+                SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx);
+            if (dynamic_cast<TImportedRboInspection*>(OptimizeCtx->GetCompileTrace())) {
+                NewRBOTransformer = std::move(rbo);
+                return;
+            }
+
             auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
@@ -519,8 +527,7 @@ private:
 
                 .Add(traced(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "Rewrite select",
                     TCompileTraceLevels::Step), "RewriteSelect")
-                .Add(traced(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
-                    SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx),
+                .Add(traced(std::move(rbo),
                     "Run new RBO", TCompileTraceLevels::Step), "NewRBOTransformer")
                 .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
                 .Add(CreateCompileTraceEnd(getTrace, "Optimize query", &optimization),

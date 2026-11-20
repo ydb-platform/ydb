@@ -18,8 +18,8 @@
 namespace NKikimr::NKqp::NParsedQueryBench {
 namespace {
 
-enum class EStage { Text, AntlrAst, YqlAst, KqlQueryList };
-constexpr std::array<TStringBuf, 4> StageNames = {"text", "antlr_ast", "yql_ast", "kql_query_list"};
+enum class EStage { Text, AntlrAst, YqlAst, KqlQueryList, LogicalPlan };
+constexpr std::array<TStringBuf, 5> StageNames = {"text", "antlr_ast", "yql_ast", "kql_query_list", "logical_plan"};
 
 EStage GetStage(const TRequest& request) {
     Y_ENSURE(request.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, "Expected execute mode");
@@ -32,6 +32,7 @@ EStage GetStage(const TRequest& request) {
         case Ydb::Query::ParsedQuery::kAntlrAst: return EStage::AntlrAst;
         case Ydb::Query::ParsedQuery::kYqlAst: return EStage::YqlAst;
         case Ydb::Query::ParsedQuery::kKqlQueryList: return EStage::KqlQueryList;
+        case Ydb::Query::ParsedQuery::kLogicalPlan: return EStage::LogicalPlan;
         case Ydb::Query::ParsedQuery::STAGE_NOT_SET:
             ythrow yexception() << "Missing or unknown parsed query stage";
         default:
@@ -87,6 +88,8 @@ TString Prepare(EStage stage, const TString& text, const TRequest& envelope, con
             ExportAst(*ast.Root, *request.mutable_parsed_query()->mutable_yql_ast());
             break;
         }
+        case EStage::LogicalPlan:
+            ythrow yexception() << "Import LogicalPlan from an independent producer";
         case EStage::KqlQueryList:
             engine.ExportKql(text, envelope.parameters(),
                 *request.mutable_parsed_query()->mutable_kql_query_list());
@@ -202,6 +205,9 @@ TLogicalResult Dispatch(const TRequest& request, const TEngine& engine, bool ver
     if (stage == EStage::KqlQueryList) {
         return engine.LowerKql(request.parsed_query().kql_query_list(), request.parameters(), verify, imported);
     }
+    if (stage == EStage::LogicalPlan) {
+        return engine.LowerLogical(request.parsed_query().logical_plan(), request.parameters(), verify, imported);
+    }
     auto ast = ToAst(request, stage, engine);
     if (imported) {
         *imported = TMeasurementTime::Now();
@@ -213,9 +219,10 @@ TLogicalResult VerifyImported(const TVector<TInput>& inputs, const TEngine& engi
     Y_ENSURE(inputs.size() >= 2 && inputs[0].Stage == EStage::Text, "Provide the ordinary text request first");
     TRequest reference;
     DecodeRequest(inputs[0].Bytes, reference);
+    const bool compareLogical = std::ranges::any_of(inputs, [](const auto& input) { return input.Stage == EStage::LogicalPlan; });
     TLogicalResult baseline;
     engine.WithSession([&] {
-        baseline = engine.LowerText(reference.query_content().text(), reference.parameters(), true);
+        baseline = engine.LowerText(reference.query_content().text(), reference.parameters(), true, nullptr, compareLogical);
     });
     reference.clear_query();
     std::array<bool, StageNames.size()> seen{true};
@@ -235,6 +242,16 @@ TLogicalResult VerifyImported(const TVector<TInput>& inputs, const TEngine& engi
             TStringBuf route;
             imported = Dispatch(request, engine, true, route, nullptr);
         });
+        if (stage == EStage::LogicalPlan) {
+            Y_ENSURE(imported.RootCount == baseline.RootCount, "LogicalPlan result root count differs");
+            for (size_t j = 0; j < imported.Roots.size(); ++j) {
+                const auto& actual = imported.Roots[j];
+                const auto& expected = baseline.Roots[j];
+                Y_ENSURE(actual.ResultIndex == expected.ResultIndex && actual.Columns == expected.Columns
+                    && imported.LogicalSignatures[j] == baseline.LogicalSignatures[j], "LogicalPlan relations, values or result columns differ");
+            }
+            continue;
+        }
         Y_ENSURE(imported.RootCount == baseline.RootCount && imported.Roots == baseline.Roots,
             "Imported logical roots, typed plan, or ordered results differ for " << StageNames[index]);
     }
@@ -332,7 +349,7 @@ void Client(const TString& sql, const TRequest& envelope, const TEngine& engine,
     size_t warmup, size_t repeats)
 {
     const bool hasKql = std::find(stages.begin(), stages.end(), EStage::KqlQueryList) != stages.end();
-    Verify(MakeInputs(sql, envelope, engine, hasKql ? StageNames.size() : StageNames.size() - 1), engine);
+    Verify(MakeInputs(sql, envelope, engine, hasKql ? 4 : 3), engine);
     std::cout << "stage,iteration,bytes,client_wall_ns,client_cpu_ns\n";
     RunRounds(stages, warmup, repeats, [&](EStage stage) {
         TClientSample sample;
@@ -448,16 +465,20 @@ int Run(int argc, const char** argv) {
         std::cout << args << "-stage logical equivalence verified\n";
         return 0;
     }
-    if (mode == "--verify-import" && args >= 2 && args <= 4) {
+    if (mode == "--verify-import" && args >= 2 && args <= 5) {
         const auto result = VerifyImported(ReadInputs(args, argv + first + 1), engine);
         std::cout << "BENCH_RESULT_COLUMNS=" << ResultColumns(result).c_str() << '\n';
         std::cout << args - 1 << " independent input(s) matched the text logical roots\n";
         return 0;
     }
-    if (mode == "--bench" && (args == 5 || args == 6)) {
+    if ((mode == "--bench" && (args == 5 || args == 6)) || (mode == "--bench-import" && args >= 4 && args <= 7)) {
         const auto [warmup, repeats] = Iterations(argv[first + 1], argv[first + 2]);
         auto inputs = ReadInputs(args - 2, argv + first + 3);
-        Verify(inputs, engine);
+        if (mode == "--bench-import") {
+            VerifyImported(inputs, engine);
+        } else {
+            Verify(inputs, engine);
+        }
         TVector<TString> requests;
         for (auto& input : inputs) {
             requests.push_back(std::move(input.Bytes));
@@ -478,6 +499,7 @@ int Run(int argc, const char** argv) {
         << "  --verify TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"
         << "  --verify-import TEXT.pb PARSED.pb [PARSED.pb ...]\n"
         << "  --bench WARMUP REPEATS TEXT.pb ANTLR_AST.pb YQL_AST.pb [KQL.pb]\n"
+        << "  --bench-import WARMUP REPEATS TEXT.pb PARSED.pb [PARSED.pb ...]\n"
         << "  --client-ready WARMUP REPEATS REQUEST.pb...\n"
         << "  --client WARMUP REPEATS QUERY.sql STAGE...\n";
     return 2;

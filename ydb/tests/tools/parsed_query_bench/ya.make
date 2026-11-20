@@ -3,6 +3,8 @@ PROGRAM(parsed_query_legacy_bench)
 SRCS(
     engine.cpp
     kql_codec.cpp
+    logical_plan.cpp
+    logical_signature.cpp
     main.cpp
     syntax.cpp
 )

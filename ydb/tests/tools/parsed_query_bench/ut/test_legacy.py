@@ -182,3 +182,60 @@ def test_shared_antlr_ast_ansi(tmp_path):
     subprocess.run([tool, "--export", sql, *inputs], check=True)
     output = subprocess.check_output([tool, "--check-request", inputs[1]], text=True)
     assert "BENCH_ROUTE=antlr_ast" in output.splitlines()
+
+
+def test_logical_plan_results(tmp_path):
+    from google.protobuf.internal.encoder import _VarintBytes as varint
+
+    def integer(tag, value):
+        return varint(tag << 3) + varint(value)
+
+    def field(tag, value):
+        return varint(tag << 3 | 2) + varint(len(value)) + value
+
+    tool = yatest.common.binary_path(TOOL)
+    columns = [dict(id=i, name=name, type="Int32", not_null=True) for i, name in enumerate(("id", "value"), 1)]
+    table = dict(path="/Root/items", owner_id=1, table_id=1, schema_version=1, storage="row",
+                 key_columns=["id"], columns=columns)
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps(dict(format_version=1, cluster="benchmark", database="/Root",
+                                       table_path_prefix="/Root", tables=[table])))
+    sql = tmp_path / "query.sql"
+    sql.write_text("SELECT id FROM items; SELECT id FROM items;")
+    paths = [tmp_path / (stage + ".pb") for stage in STAGES]
+    cmd = [tool, "--catalog", catalog]
+    subprocess.run([*cmd, "--export", sql, *paths], check=True)
+    template = ydb_query_pb2.ExecuteQueryRequest.FromString(paths[0].read_bytes())
+    template.ClearField("query_content")
+    fixture = tmp_path / "logical.pb"
+
+    def plan(source=b"id", version=1, destination=5, defined_type=1):
+        scalar = integer(1, 1) + field(10, field(1, b"Int32"))
+        column = field(1, source) + integer(2, 1)
+        scan = field(1, b"/Root/items") + field(2, column)
+        op = integer(1, 1) + field(11, scan)
+        iu = integer(1, 1) + integer(2, defined_type)
+        graph = integer(1, 1) + field(2, op) + field(4, iu)
+        projection = integer(1, 1) + field(2, b"id")
+        result = integer(1, version) + field(3, scalar)
+        for index in range(2):
+            target = integer(5, index) if destination == 5 else field(destination, b"")
+            root = integer(1, index + 1) + integer(2, index) + field(3, graph) + field(4, projection) + target
+            result += field(6, root)
+        fixture.write_bytes(template.SerializeToString() + field(5, field(7, result)))
+
+    plan()
+    run = subprocess.check_output([*cmd, "--bench-import", "0", "1", paths[0], fixture], text=True)
+    assert [row["stage"] for row in csv.DictReader(io.StringIO(run))] == ["text", "logical_plan"]
+
+    for invalid, error in [
+        (dict(source=b"value"), "LogicalPlan relations, values or result columns differ"),
+        (dict(version=2), "Unsupported LogicalPlan version or features"),
+        (dict(destination=6), "read-only result roots"),
+        (dict(defined_type=2), "Invalid LogicalPlan IU definition"),
+    ]:
+        plan(**invalid)
+        failure = subprocess.run([*cmd, "--bench-import", "0", "1", paths[0], fixture],
+                                 text=True, capture_output=True)
+        assert failure.returncode == 1 and error in failure.stderr
+        assert not failure.stdout

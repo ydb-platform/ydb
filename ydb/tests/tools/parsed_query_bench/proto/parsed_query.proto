@@ -8,6 +8,7 @@ import "ydb/tests/tools/parsed_query_bench/proto/antlr_cst.proto";
 import "ydb/tests/tools/parsed_query_bench/proto/syntax_script.proto";
 import "ydb/tests/tools/parsed_query_bench/proto/native_query.proto";
 import "ydb/tests/tools/parsed_query_bench/proto/main_stages.proto";
+import "ydb/tests/tools/parsed_query_bench/proto/logical_plan.proto";
 
 message ParsedQuery {
   oneof stage {
@@ -19,5 +20,6 @@ message ParsedQuery {
     // main
     YqlAst yql_ast = 5;
     KqlQueryList kql_query_list = 6;
+    LogicalPlan logical_plan = 7;
   }
 }

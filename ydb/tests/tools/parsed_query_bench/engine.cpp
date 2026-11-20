@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "kql_codec.h"
+#include "logical_plan.h"
 
 #include <ydb/core/kqp/common/simple/query_ref.h>
 #include <ydb/core/kqp/common/simple/user_request_context.h>
@@ -7,6 +8,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_inspection.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <yql/essentials/ast/yql_type_string.h>
@@ -110,14 +112,24 @@ public:
                 const auto* entry = Tables.FindPtr(path);
                 Y_ENSURE(entry && table.PathId().Value() == (*entry)->PathId.ToString() && table.SysView().Value().empty()
                     && table.Version().Value() == ToString((*entry)->SchemaVersion), "Catalog identity mismatch: " << path);
-                auto& desc = session.Tables().GetOrAddTable((*entry)->Cluster, Database, path);
-                if (!desc.Metadata) {
-                    desc.Metadata = *entry;
-                    Y_ENSURE(desc.Load(ctx, session.Config().SystemColumnsEnabled()), "Invalid catalog table: " << path);
-                }
+                Bind(*entry, session, ctx);
             }
             return true;
         });
+    }
+
+    void Bind(const TKikimrTableMetadataPtr& metadata, TKikimrSessionContext& session, TExprContext& ctx) const {
+        auto& desc = session.Tables().GetOrAddTable(metadata->Cluster, Database, metadata->Name);
+        if (!desc.Metadata) {
+            desc.Metadata = metadata;
+            Y_ENSURE(desc.Load(ctx, session.Config().SystemColumnsEnabled()), "Invalid catalog table: " << metadata->Name);
+        }
+    }
+
+    TKikimrTableMetadataPtr Resolve(const TString& path) const {
+        const auto* entry = Tables.FindPtr(path);
+        Y_ENSURE(entry, "Table outside benchmark catalog: " << path);
+        return *entry;
     }
 
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
@@ -128,9 +140,12 @@ private:
     THashMap<TString, TKikimrTableMetadataPtr> Tables;
 };
 
-void CapturePlan(TLogicalResult& result, const TVector<TIntrusivePtr<TOpRoot>>& roots, TExprContext& ctx) {
+void CapturePlan(TLogicalResult& result, const TVector<TIntrusivePtr<TOpRoot>>& roots, TExprContext& ctx, bool logicalSignature) {
     for (const auto& root : roots) {
         auto& signature = result.Roots.emplace_back();
+        if (logicalSignature) {
+            result.LogicalSignatures.push_back(LogicalSignature(*root));
+        }
         signature.Plan = root->PlanToString(ctx);
         signature.TypedExpression = ConvertToAst(*root->Node, ctx, TExprAnnotationFlags::Types, true).Root->ToString();
         signature.QueryColumns = root->GetQueryColumns();
@@ -214,11 +229,11 @@ void TEngine::WithSession(std::function<void()> run) const {
 
 namespace {
 
-IKqpHost::TPrepareSettings CaptureRoots(TLogicalResult& result, bool verify, std::thread::id caller) {
+IKqpHost::TPrepareSettings CaptureRoots(TLogicalResult& result, bool verify, std::thread::id caller, bool logicalSignature = false) {
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
     settings.CompileTrace = MakeIntrusive<TCompileTrace>(NWilson::TTraceId{}, nullptr);
-    settings.CompileTrace->CaptureRboRoots = [&, verify, caller](const auto& roots, const TExprNode&, TExprContext& ctx) {
+    settings.CompileTrace->CaptureRboRoots = [&, verify, caller, logicalSignature](const auto& roots, const TExprNode&, TExprContext& ctx) {
         result.Done = TMeasurementTime::Now();
         Y_ENSURE(std::this_thread::get_id() == caller, "Compiler moved between thread CPU clocks");
         Y_ENSURE(!roots.empty(), "Expected at least one RBO root");
@@ -226,7 +241,7 @@ IKqpHost::TPrepareSettings CaptureRoots(TLogicalResult& result, bool verify, std
             Y_ENSURE(!root->PlanProps.WithEffects, "Offline benchmark requires read-only queries");
         }
         if (verify) {
-            CapturePlan(result, roots, ctx);
+            CapturePlan(result, roots, ctx, logicalSignature);
         }
         result.RootCount = roots.size();
     };
@@ -286,9 +301,9 @@ void CheckParameterTypes(const TExprNode::TPtr& query, const TParameterMap& para
 
 } // namespace
 
-TLogicalResult TEngine::LowerText(const TString& text, const TParameterMap& parameters, bool verify, TMeasurementTime* imported) const {
+TLogicalResult TEngine::LowerText(const TString& text, const TParameterMap& parameters, bool verify, TMeasurementTime* imported, bool logicalSignature) const {
     TLogicalResult result;
-    auto settings = CaptureRoots(result, verify, Impl->Caller);
+    auto settings = CaptureRoots(result, verify, Impl->Caller, logicalSignature);
     if (imported) {
         settings.CompileTrace->OnSqlTranslated = [imported] { *imported = TMeasurementTime::Now(); };
     }
@@ -335,6 +350,50 @@ TLogicalResult TEngine::LowerKql(const Ydb::Query::KqlQueryList& wire, const TPa
         return query;
     });
     RunUntil(compilation, [&] { return result.RootCount != 0; }, "RBO root conversion");
+    return result;
+}
+
+TLogicalResult TEngine::LowerLogical(const Ydb::Query::LogicalPlan& wire, const TParameterMap& parameters,
+    bool verify, TMeasurementTime* imported) const
+{
+    TLogicalResult result;
+    TImportedPlan plan;
+    auto settings = CaptureRoots(result, false, Impl->Caller);
+    auto trace = MakeIntrusive<TImportedRboInspection>(NWilson::TTraceId{}, nullptr);
+    auto capture = std::move(settings.CompileTrace->CaptureRboRoots);
+    trace->CaptureRboRoots = [&, capture = std::move(capture)](const auto& roots, const TExprNode& input, TExprContext& ctx) {
+        capture(roots, input, ctx);
+        if (!verify) {
+            return;
+        }
+        Y_ENSURE(roots == plan.Roots, "RBO did not capture the imported roots in order");
+        for (size_t i = 0; i < roots.size(); ++i) {
+            auto& root = *roots[i];
+            auto& signature = result.Roots.emplace_back();
+            result.LogicalSignatures.push_back(LogicalSignature(root));
+            signature.ResultIndex = root.PlanProps.ResultIndex.value();
+            signature.UnorderedResult = root.PlanProps.UnorderedResult;
+            signature.PhysicalTxGroup = root.PlanProps.PhysicalTxGroup;
+            size_t column = 0;
+            for (const auto& [id, name] : root.GetColumns().Items()) {
+                signature.Columns.emplace_back(name, FormatType(plan.ColumnTypes[i][column++]));
+            }
+        }
+    };
+    settings.CompileTrace = trace;
+    auto compilation = Impl->Host->InspectKqlQuery(settings, [&](TExprContext& ctx, TKikimrSessionContext& session, TTypeAnnotationContext&) {
+        plan = ImportLogicalPlan(wire, ctx, [&](const TString& path) {
+            auto metadata = Impl->Catalog->Resolve(path);
+            Impl->Catalog->Bind(metadata, session, ctx);
+            return metadata;
+        }, parameters);
+        trace->Roots = plan.Roots;
+        if (imported) {
+            *imported = TMeasurementTime::Now();
+        }
+        return NNodes::Build<NNodes::TKqlQueryList>(ctx, TPositionHandle()).Done().Ptr();
+    });
+    RunUntil(compilation, [&] { return result.RootCount != 0; }, "imported RBO roots");
     return result;
 }
 

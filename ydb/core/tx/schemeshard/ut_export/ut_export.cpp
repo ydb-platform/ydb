@@ -1609,7 +1609,7 @@ namespace {
             const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
             const auto& config = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
             UNIT_ASSERT(config.HasWriteMode());
-            UNIT_ASSERT_VALUES_EQUAL(config.GetWriteMode(), mode);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetWriteMode()), static_cast<int>(mode));
         }
 
         void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {

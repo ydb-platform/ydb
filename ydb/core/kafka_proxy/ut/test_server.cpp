@@ -105,7 +105,7 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
 
     KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr,
         [&settings](TServerSettings& serverSettings) {
-            serverSettings.SetAuditLogBackendLines(settings.AuditLogBackendLines);
+            serverSettings.SetLoggerInitializer(settings.LoggerInitializer);
         }, 0));
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);

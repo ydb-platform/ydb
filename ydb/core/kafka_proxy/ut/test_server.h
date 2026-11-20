@@ -50,7 +50,7 @@ struct TTestServerSettings {
     TString AuthRefreshTime;
     ui32 ACLRetryTimeoutSec = 0;
     bool EnableMtls = false;
-    std::shared_ptr<std::vector<std::string>> AuditLogBackendLines = nullptr;
+    NKikimr::Tests::TServerSettings::TLoggerInitializer LoggerInitializer = {};
 };
 
 template <class TKikimr, bool secure>

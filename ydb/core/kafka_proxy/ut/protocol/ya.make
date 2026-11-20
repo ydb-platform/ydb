@@ -26,12 +26,12 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/audit
     ydb/core/kafka_proxy
     ydb/core/security/certificate_check/test_utils
     ydb/core/persqueue/public/schema
     ydb/core/persqueue/ut/common
     ydb/core/testlib/actors
-    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils

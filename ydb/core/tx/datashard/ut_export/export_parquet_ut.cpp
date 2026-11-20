@@ -177,29 +177,6 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
             UNIT_ASSERT_VALUES_EQUAL(values->GetString(i), TStringBuilder() << "value_" << i);
         }
     }
-<<<<<<< HEAD
-=======
-
-    Y_UNIT_TEST(ShouldProduceValidParquetWithIntervalUuidDyNumber, EParquetExportSettings) {
-        const auto settings = Arg<0>();
-
-        const TString data = ExportIntervalUuidDyNumberToParquet(settings);
-        UNIT_ASSERT_C(!data.empty(), "Parquet export for Interval/Uuid/DyNumber produced empty data");
-
-        const auto table = NTestUtils::ReadParquet(data);
-        UNIT_ASSERT_VALUES_EQUAL(table->num_rows(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 4);
-
-        const auto ival = std::static_pointer_cast<arrow::Int64Array>(table->GetColumnByName("ival")->chunk(0));
-        UNIT_ASSERT_VALUES_EQUAL(ival->Value(0), 1000000);
-
-        const auto uid = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(table->GetColumnByName("uid")->chunk(0));
-        UNIT_ASSERT_VALUES_EQUAL(uid->byte_width(), 16);
-        UNIT_ASSERT_VALUES_EQUAL(TString(reinterpret_cast<const char*>(uid->GetValue(0)), 16).size(), 16);
-
-        const auto dyn = std::static_pointer_cast<arrow::BinaryArray>(table->GetColumnByName("dyn")->chunk(0));
-        UNIT_ASSERT_VALUES_EQUAL(dyn->GetString(0), ".314e1");
-    }
 
     // Fewer rows than the row group size, but more than 2 GiB of data in one column: arrow binary arrays
     // use 32-bit offsets, so the row group cannot be built. Collect() has to report the error (the export
@@ -261,7 +238,6 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         UNIT_ASSERT_STRING_CONTAINS(error, "array cannot contain more than");
         UNIT_ASSERT(!lastPartPrepared);
     }
->>>>>>> d3ea136cfaa (Verify fix (#59938))
 }
 
 } // namespace NKikimr::NDataShard

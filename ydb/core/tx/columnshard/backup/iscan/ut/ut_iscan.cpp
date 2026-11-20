@@ -5,12 +5,9 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/datashard/export_scan.h>
->>>>>>> d3ea136cfaa (Verify fix (#59938))
 
 #include <ydb/apps/ydbd/export/export.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
@@ -25,6 +22,9 @@
 namespace NKikimr {
 
 namespace {
+
+using EDataFormat = NDataShard::NBackupRestoreTraits::EDataFormat;
+using ECompressionCodec = NDataShard::NBackupRestoreTraits::ECompressionCodec;
 
 std::shared_ptr<arrow::RecordBatch> TestRecordBatch() {
     std::vector<std::string> keys = { "foo", "bar", "baz" };

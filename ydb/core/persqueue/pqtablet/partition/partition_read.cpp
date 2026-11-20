@@ -220,8 +220,6 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
-<<<<<<< HEAD
-=======
     if (InitDone && !record.GetSessionId().empty()) {
         auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
         if (!userInfo.NoConsumer) {
@@ -238,7 +236,6 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         }
     }
 
->>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp,
         TInstant::MilliSeconds(record.GetDeadline())};

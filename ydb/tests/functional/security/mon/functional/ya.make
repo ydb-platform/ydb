@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     conftest.py
+    test_grpc_disconnect.py
     test_mon_mtls_auth.py
     test_mon_tls_startup.py
     test_mon_viewer_access_controls.py
@@ -18,6 +19,9 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/grpcio
+    ydb/public/api/grpc
+    ydb/public/api/protos
     ydb/tests/functional/security/lib
     ydb/tests/library
     ydb/tests/library/fixtures

@@ -22,6 +22,7 @@
 #include "opentelemetry/sdk/logs/logger.h"
 #include "opentelemetry/sdk/logs/logger_config.h"
 #include "opentelemetry/sdk/logs/logger_context.h"
+#include "opentelemetry/sdk/logs/multi_recordable.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/recordable.h"
 #include "opentelemetry/trace/context.h"
@@ -96,10 +97,9 @@ void StampSpanContextFromVariant(
 
 opentelemetry::logs::NoopLogger Logger::kNoopLogger = opentelemetry::logs::NoopLogger();
 
-Logger::Logger(
-    opentelemetry::nostd::string_view name,
-    std::shared_ptr<LoggerContext> context,
-    std::unique_ptr<instrumentationscope::InstrumentationScope> instrumentation_scope) noexcept
+Logger::Logger(opentelemetry::nostd::string_view name,
+               std::shared_ptr<LoggerContext> context,
+               std::unique_ptr<instrumentationscope::InstrumentationScope> instrumentation_scope)
     : logger_name_(std::string(name)),
       instrumentation_scope_(std::move(instrumentation_scope)),
       context_(std::move(context))
@@ -134,7 +134,12 @@ opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord> Logger::CreateL
 {
   if (!logger_enabled_.load(std::memory_order_relaxed))
   {
-    return kNoopLogger.CreateLogRecord();
+    // Returns an empty MultiRecordable rather than a NoopLogRecord: the logger's enabled state
+    // can flip between this call and EmitLogRecord() (e.g. via UpdateLoggerConfig()), and
+    // MultiLogRecordProcessor::OnEmit() unconditionally static_casts whatever it receives to
+    // MultiRecordable. An empty one is a safe target either way, since every Set* call and
+    // ReleaseRecordable() loop over zero wrapped recordables.
+    return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(new MultiRecordable());
   }
 
   auto recordable = context_->GetProcessor().MakeRecordable();
@@ -160,7 +165,8 @@ opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord> Logger::CreateL
 {
   if (!logger_enabled_.load(std::memory_order_relaxed))
   {
-    return kNoopLogger.CreateLogRecord();
+    // See the matching comment in the no-argument CreateLogRecord() overload above.
+    return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(new MultiRecordable());
   }
 
   auto recordable = context_->GetProcessor().MakeRecordable();

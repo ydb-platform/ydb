@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexRejectsMismatchedDescription) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -465,9 +465,58 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
     }
 
-    void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
+    Y_UNIT_TEST(RebuildVectorIndexFeatureFlag) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        const ui64 schemeShard = TTestTxConfig::SchemeShard;
+        ui64 txId = 100;
+
+        auto setFlag = [&](bool enabled) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            request->Record.MutableConfig()->MutableFeatureFlags()->SetEnableRebuildIndex(enabled);
+            SetConfig(runtime, schemeShard, std::move(request));
+        };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteVectorTableRows(runtime, schemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
+
+        const ui64 buildTx = ++txId;
+        TestBuildVectorIndex(runtime, buildTx, schemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildTx);
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot", buildTx).GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestRebuildVectorIndex(runtime, ++txId, schemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"},
+            Ydb::StatusIds::PRECONDITION_FAILED);
+
+        setFlag(true);
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> initiateBlocker(runtime, [](const auto& ev) {
+            const auto& tx = ev->Get()->Record.GetTransaction(0);
+            return tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild
+                && tx.GetInitiateIndexBuild().GetIsRebuild();
+        });
+        const ui64 rebuildTx = ++txId;
+        TestRebuildVectorIndex(runtime, rebuildTx, schemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        runtime.WaitFor("rebuild initiation", [&] { return !initiateBlocker.empty(); });
+
+        setFlag(false);
+        initiateBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, rebuildTx);
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, schemeShard, "/MyRoot", rebuildTx).GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE);
+    }
+
+    void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -576,7 +625,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexPreservesDataColumns) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -643,7 +692,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexOverrideSettings) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -724,7 +773,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildPrefixedVectorIndex) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -817,7 +866,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     Y_UNIT_TEST(RebuildVectorIndexRejectVectorSettingsChange) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -902,7 +951,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST(RebuildNonExistentVectorIndex) {
         // Rebuilding an index that does not exist must be rejected at request creation time.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         ui64 tenantSchemeShard = 0;
@@ -940,14 +989,14 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT(event);
         UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
             "rebuild of a non-existent index must fail");
-        UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()), "REBUILD INDEX");
+        UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()), "no_such_index");
     }
 
     Y_UNIT_TEST(RebuildNonVectorIndex) {
         // REBUILD INDEX is only supported for vector indexes; rebuilding a
         // plain secondary index must be rejected on the schemeshard side too.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRebuildIndex(true));
         ui64 txId = 100;
 
         ui64 tenantSchemeShard = 0;

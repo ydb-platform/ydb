@@ -199,7 +199,6 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr ev) {
     if (isNewIdentity && !identity.IsServiceQuery) {
         const auto schedulerId = NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId());
         Send(schedulerId, new NKqp::NScheduler::TEvAddDatabase(schedulerPool->DatabaseId));
-        Send(schedulerId, new NKqp::NScheduler::TEvAddPool(schedulerPool->DatabaseId, schedulerPool->PoolId));
         auto addQuery = MakeHolder<NKqp::NScheduler::TEvAddQuery>();
         addQuery->DatabaseId = schedulerPool->DatabaseId;
         addQuery->PoolId = schedulerPool->PoolId;

@@ -363,6 +363,7 @@ private:
 
         const char* ConsumerPublic = R"(
             name: "Consumer_%d"
+            replicate_offsets: true
             read_from {
             }
             attributes {

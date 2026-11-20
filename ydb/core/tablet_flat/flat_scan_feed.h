@@ -40,7 +40,13 @@ namespace NTable {
         {
             if (OnPause) {
                 return EReady::Page;
-            } else if (Iter == nullptr) {
+            }
+            // A sleeping consumer may still reference the delivered cells.
+            // Release the completed key only when traversal resumes.
+            if (std::exchange(KeyConsumed, false)) {
+                CurrentEnv->ReleaseRowHistory();
+            }
+            if (Iter == nullptr) {
                 Lead.Clear();
 
                 if (Seeks == Max<ui64>()) {
@@ -150,6 +156,7 @@ namespace NTable {
                             if (!VersionScan) {
                                 Seen++;
                                 op = Scan->Feed(Iter->GetKey().Cells(), Iter->Row());
+                                KeyConsumed = true;
                             } else {
                                 Y_DEBUG_ABORT_UNLESS(!Conf.NoErased, "VersionScan with Conf.NoErased == true is unexpected");
                                 op = VersionScan->BeginKey(Iter->GetKey().Cells());
@@ -244,6 +251,7 @@ namespace NTable {
 
                         case EVersionState::EndKey:
                             op = VersionScan->EndKey();
+                            KeyConsumed = true;
                             VersionState = EVersionState::BeginKey;
                             break;
 
@@ -551,6 +559,7 @@ namespace NTable {
         };
 
         IVersionScan * const VersionScan;
+        bool KeyConsumed = false;
         EVersionState VersionState = EVersionState::BeginKey;
         TRowVersion NextRowVersion;
 

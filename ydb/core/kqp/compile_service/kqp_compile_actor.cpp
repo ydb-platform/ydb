@@ -24,6 +24,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/digest/md5/md5.h>
 
+#include <util/random/random.h>
 #include <util/string/escape.h>
 
 #include <ydb/core/base/cputime.h>
@@ -41,6 +42,24 @@ const TString YqlName = "CompileActor";
 
 inline TString GetQueryTextForLog(const TString& queryText) {
     return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+// Picks the optimizer for one compilation. NewRBORolloutRatio applies only when EnableNewRBO is set.
+bool ShouldUseNewRBO(const NKikimrConfig::TTableServiceConfig& config, const TKqpQueryId& queryId) {
+    // ANALYZE scans use UDAF factories unsupported by new RBO.
+    if (!config.GetEnableNewRBO() || queryId.Settings.IsAnalyze) {
+        return false;
+    }
+
+    const double ratio = config.GetNewRBORolloutRatio();
+    if (ratio >= 1.0) {
+        return true;
+    }
+    // A NaN ratio fails both this check and the draw below, so it selects the YQL optimizer.
+    if (ratio <= 0.0) {
+        return false;
+    }
+    return RandomNumber<double>() < ratio;
 }
 
 } // namespace
@@ -98,7 +117,8 @@ public:
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
-        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
+        // Drawn once per actor: fallback retries rebuild the config from this value.
+        , EnableNewRBO(ShouldUseNewRBO(tableServiceConfig, queryId))
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {

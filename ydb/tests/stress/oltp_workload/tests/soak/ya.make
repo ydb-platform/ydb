@@ -14,6 +14,7 @@ TIMEOUT(3600)
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/fixtures
     ydb/tests/library/stress
     ydb/tests/stress/oltp_workload/workload
     ydb/tests/stress/common

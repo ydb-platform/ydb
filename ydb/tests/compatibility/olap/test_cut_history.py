@@ -33,6 +33,9 @@ class TestCutHistoryDormant(RollingUpgradeAndDowngradeFixture):
 class TestCutHistoryUpgradeAndRollback(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True)
     def setup(self):
+        if self.versions[1] < (26, 4):
+            pytest.skip("ColumnShard cut history requires an upgrade target of 26.4 or newer")
+
         yield from self.setup_cluster(
             nodes=1, erasure=Erasure.NONE, hive_config=HIVE_CONFIG, table_service_config={"enable_olap_sink": True}
         )

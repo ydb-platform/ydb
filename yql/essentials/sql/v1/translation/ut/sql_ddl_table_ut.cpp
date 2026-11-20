@@ -225,7 +225,7 @@ Y_UNIT_TEST(CreateExternalTableWithBadArguments) {
                     DATA_SOURCE="/Root/mydatasource",
                     LOCATION="/folder1/*"
                 );
-            )sql", "<main>:8:30: Error: PRIMARY KEY is not supported for external table\n");
+            )sql", "<main>:5:33: Error: PRIMARY KEY is not supported for external table\n");
 }
 
 Y_UNIT_TEST(DropExternalTable) {
@@ -1344,3 +1344,85 @@ Y_UNIT_TEST(CreateTableGeneratedStringFunction) {
 }
 
 } // Y_UNIT_TEST_SUITE(GeneratedColumns)
+
+Y_UNIT_TEST_SUITE(ExplicitTablePositions) {
+
+Y_UNIT_TEST(TableSettingValue) {
+    const auto res = SqlToYql(R"sql(USE ydb;
+CREATE TABLE tbl (key Uint64, PRIMARY KEY (key)) WITH (
+    COMPACTION_POLICY =
+        42
+);
+)sql");
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:9: Error: COMPACTION_POLICY value should be a string literal\n");
+}
+
+Y_UNIT_TEST(ColumnFamilySettingValue) {
+    const auto res = SqlToYql(R"sql(USE ydb;
+CREATE TABLE tbl (
+    key Uint64,
+    PRIMARY KEY (key),
+    FAMILY default (COMPRESSION_LEVEL =
+        "lz4")
+);
+)sql");
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:9: Error: COMPRESSION_LEVEL value should be an integer\n");
+}
+
+Y_UNIT_TEST(DuplicatePrimaryKey) {
+    const auto res = SqlToYql(R"sql(USE ydb;
+CREATE TABLE tbl (
+    key Uint64,
+    PRIMARY KEY (key),
+    PRIMARY KEY (
+        key)
+);
+)sql");
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:5: Error: PRIMARY KEY statement must be specified only once\n");
+}
+
+Y_UNIT_TEST(CallableUnnamedArgument) {
+    const auto res = SqlToYql(R"sql(USE ydb;
+CREATE TABLE tbl (value Callable<(
+    named: Int64,
+    List<
+        Int64>
+) -> Int64>);
+)sql");
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:5: Error: Expected named argument, previous argument was named\n");
+}
+
+Y_UNIT_TEST(VariantMixedArguments) {
+    const auto res = SqlToYql(R"sql(USE ydb;
+CREATE TABLE tbl (value Variant<
+    Int64,
+    named: List<
+        Int64>
+>);
+)sql");
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:5: Error: Variant over struct and tuple mixture\n");
+}
+
+Y_UNIT_TEST(DictMixedEntries) {
+    const auto res = SqlToYql(R"sql(USE ydb;
+CREATE TABLE tbl (value Int64 DEFAULT {
+    1: 2,
+    3
+});
+)sql");
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:5: Error: Expected keys/values pair or keys, but got mix of them\n");
+}
+
+} // Y_UNIT_TEST_SUITE(ExplicitTablePositions)

@@ -1,0 +1,71 @@
+USE plato;
+
+PRAGMA config.flags('OptimizerFlags', 'FixMultiConstraintInference');
+
+$table = 'Input';
+
+$a = (
+    SELECT
+        Just(puid) AS puid,
+        order_id,
+    FROM
+        $table
+);
+
+$b = (
+    SELECT
+        Just(puid) AS puid,
+        order_id,
+        Nothing(timestamp?) AS x,
+    FROM
+        $table
+    LIMIT 0
+);
+
+$input_row_a = (SELECT TableRow() FROM $a);
+$input_row_b = (SELECT TableRow() FROM $b);
+
+$input_row_type_a = TypeOf(Unwrap($input_row_a));
+$input_row_type_b = TypeOf(Unwrap($input_row_b));
+
+$variant_row_type = variant<$input_row_type_b, $input_row_type_a>;
+
+$out_reduce_type = Struct<order_id: String?>;
+
+$script = @@#py
+def reducer(key, records):
+    yield 1, {
+        "order_id": key[1],
+    }
+@@;
+
+$reducer = Python3::reducer(
+    Callable<
+        (
+            Tuple<UInt64?, String?>,
+            Stream<$variant_row_type>
+        ) -> Stream<
+            Variant<$out_reduce_type, $out_reduce_type>
+        >
+    >,
+    $script,
+);
+
+$closed_graces, $open_graces = (
+    REDUCE $b, $a
+    ON
+        puid,
+        order_id
+    USING $reducer(TableRow())
+);
+
+SELECT
+    *
+FROM
+    $closed_graces
+UNION ALL
+SELECT
+    *
+FROM
+    $open_graces
+;

@@ -4,7 +4,6 @@
 #include "distributed_commit_helper.h"
 
 
-#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/persqueue/common/actor.h>
@@ -21,16 +20,13 @@ class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, 
                          , public NPQ::TLogPrefix {
     using TBase = TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>;
 
-    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
-    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
-
 public:
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
 
 public:
      TCommitOffsetActor(
              NKikimr::NGRpcService::TEvCommitOffsetRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
-             const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+             const NActors::TActorId& newSchemeCache,
              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
 
@@ -88,7 +84,6 @@ private:
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
 
 private:
-    TActorId SchemeCache;
     TActorId NewSchemeCache;
 
     TActorId AuthInitActor;

@@ -5,7 +5,7 @@
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/index/common.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/service/service.h>
+#include <ydb/core/statistics/service_id.h>
 
 #include <ydb/library/actors/core/log.h>
 

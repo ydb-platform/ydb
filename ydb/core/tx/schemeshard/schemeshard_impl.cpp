@@ -235,9 +235,6 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                 }
             }
 
-            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
-                continue;
-            }
 
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
             if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
@@ -2869,6 +2866,14 @@ void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPath
 
 void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    db.Table<Schema::DatabaseFreezes>().Key(pathId.LocalPathId).Delete();
+    DatabaseFreezeStates.erase(pathId);
+    DatabaseFreezeProgress.erase(pathId);
+    if (const auto worker = DatabaseFreezeWorkers.find(pathId); worker != DatabaseFreezeWorkers.end()) {
+        Send(worker->second, new TEvents::TEvPoisonPill);
+        DatabaseFreezeWorkers.erase(worker);
+    }
 
     auto it = SubDomains.find(pathId);
     if (it != SubDomains.end()) {
@@ -5954,6 +5959,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableBackgroundCompactionServerless = appData->FeatureFlags.GetEnableBackgroundCompactionServerless();
     EnableBorrowedSplitCompaction = appData->FeatureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
+    EnableRebuildIndex = appData->FeatureFlags.GetEnableRebuildIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
     EnableWasmCompileController = appData->FeatureFlags.GetEnableWasmCompileController();
@@ -6036,7 +6042,11 @@ void TSchemeShard::DefaultSignalTabletActive(const TActorContext &ctx) {
 }
 
 void TSchemeShard::Cleanup(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+    for (const auto& [_, worker] : DatabaseFreezeWorkers) {
+        ctx.Send(worker, new TEvents::TEvPoisonPill);
+    }
+    DatabaseFreezeWorkers.clear();
+    DatabaseFreezeProgress.clear();
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {
@@ -6198,6 +6208,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreeze, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreezeResult, Handle);
 
         HFuncTraced(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck, Handle);
 
@@ -9100,6 +9112,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableBackgroundCompactionServerless = featureFlags.GetEnableBackgroundCompactionServerless();
     EnableBorrowedSplitCompaction = featureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
+    EnableRebuildIndex = featureFlags.GetEnableRebuildIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnableStatistics = featureFlags.GetEnableStatistics();
     EnableWasmCompileController = featureFlags.GetEnableWasmCompileController();

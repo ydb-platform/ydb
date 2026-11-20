@@ -20,11 +20,8 @@
 
 #include "src/core/lib/config/config_vars.h"
 
-#include <vector>
-
 #include "y_absl/flags/flag.h"
 #include "y_absl/strings/escaping.h"
-#include "y_absl/strings/str_cat.h"
 
 #include "src/core/lib/config/load_config.h"
 
@@ -78,6 +75,8 @@ Y_ABSL_FLAG(y_absl::optional<bool>, grpc_not_use_system_ssl_roots, {},
           "Disable loading system root certificates.");
 Y_ABSL_FLAG(y_absl::optional<TString>, grpc_ssl_cipher_suites, {},
           "A colon separated list of cipher suites to use with OpenSSL");
+Y_ABSL_FLAG(y_absl::optional<bool>, grpc_absl_logging, {},
+          "Use y_absl logging from within gpr_log.");
 
 namespace grpc_core {
 
@@ -95,6 +94,8 @@ ConfigVars::ConfigVars(const Overrides& overrides)
       not_use_system_ssl_roots_(LoadConfig(
           FLAGS_grpc_not_use_system_ssl_roots, "GRPC_NOT_USE_SYSTEM_SSL_ROOTS",
           overrides.not_use_system_ssl_roots, false)),
+      absl_logging_(LoadConfig(FLAGS_grpc_absl_logging, "GRPC_ABSL_LOGGING",
+                               overrides.absl_logging, false)),
       dns_resolver_(LoadConfig(FLAGS_grpc_dns_resolver, "GRPC_DNS_RESOLVER",
                                overrides.dns_resolver, "")),
       verbosity_(LoadConfig(FLAGS_grpc_verbosity, "GRPC_VERBOSITY",
@@ -146,7 +147,8 @@ TString ConfigVars::ToString() const {
       "\"", ", default_ssl_roots_file_path: ", "\"",
       y_absl::CEscape(DefaultSslRootsFilePath()), "\"",
       ", not_use_system_ssl_roots: ", NotUseSystemSslRoots() ? "true" : "false",
-      ", ssl_cipher_suites: ", "\"", y_absl::CEscape(SslCipherSuites()), "\"");
+      ", ssl_cipher_suites: ", "\"", y_absl::CEscape(SslCipherSuites()), "\"",
+      ", absl_logging: ", AbslLogging() ? "true" : "false");
 }
 
 }  // namespace grpc_core

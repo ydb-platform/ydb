@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/protobuf/util
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
 )
 

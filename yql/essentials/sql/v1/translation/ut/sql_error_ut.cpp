@@ -8,6 +8,60 @@ using namespace NSQLTranslationV1;
 
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
+Y_UNIT_TEST(SecretSettingDiagnosticPositions) {
+    ExpectFailWithError(
+        "USE plato;\n"
+        "CREATE SECRET s WITH (\n"
+        "  UNKNOWN_OPTION =\n"
+        "    'value');",
+        "<main>:3:3: Error: Unknown parameter: UNKNOWN_OPTION\n");
+
+    ExpectFailWithError(
+        "USE plato;\n"
+        "CREATE SECRET s WITH (\n"
+        "  VALUE = 'first',\n"
+        "  VALUE =\n"
+        "    'second');",
+        "<main>:4:3: Error: Duplicate parameter: VALUE\n");
+
+    ExpectFailWithError(
+        "USE plato;\n"
+        "CREATE SECRET s WITH (\n"
+        "  INHERIT_PERMISSIONS =\n"
+        "    (1 + 2));",
+        "<main>:4:5: Error: Unsupported value for parameter: INHERIT_PERMISSIONS. Bool was expected\n");
+
+    ExpectFailWithError(
+        "USE plato;\n"
+        "CREATE SECRET s WITH (\n"
+        "  SOURCE =\n"
+        "    (1 + 2));",
+        "<main>:4:5: Error: Unsupported value for parameter: SOURCE. String literal was expected\n");
+
+    ExpectFailWithError(
+        "USE plato;\n"
+        "CREATE SECRET s WITH (\n"
+        "  VALUE =\n"
+        "    123);",
+        "<main>:4:5: Error: Unsupported type for parameter: VALUE. String was expected\n");
+}
+
+Y_UNIT_TEST(WindowDiagnosticPositions) {
+    ExpectFailWithError(
+        "SELECT SUM(x) OVER w FROM plato.Input\n"
+        "WINDOW w AS (\n"
+        "  missing_window\n"
+        "  ORDER BY key);",
+        "<main>:3:3: Error: Existing window name is not supported in window specification yet!\n");
+
+    ExpectFailWithError(
+        "SELECT SUM(x) OVER w FROM plato.Input\n"
+        "WINDOW w AS (\n"
+        "  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n"
+        "  EXCLUDE CURRENT ROW);",
+        "<main>:4:3: Error: Frame exclusion is not supported yet\n");
+}
+
 Y_UNIT_TEST(DottedCallWithoutExpression) {
     auto result = SqlToYql("SELECT COLUMN. JSON_EXISTS()");
     UNIT_ASSERT(!result.IsOk());
@@ -193,7 +247,7 @@ Y_UNIT_TEST(SelectInvalidSyntax) {
 Y_UNIT_TEST(SelectNoCluster) {
     NYql::TAstParseResult res = SqlToYql("select foo from bar");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: No cluster name given and no default cluster is selected\n");
 }
 
 Y_UNIT_TEST(SelectDuplicateColumns) {
@@ -803,7 +857,7 @@ Y_UNIT_TEST(ErrorColumnPosition) {
 Y_UNIT_TEST(PrimaryViewAbortMapReduce) {
     NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input VIEW PRIMARY KEY");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: primary view is not supported for yt tables\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:23: Error: primary view is not supported for yt tables\n");
 }
 
 Y_UNIT_TEST(InsertAbortMapReduce) {
@@ -1153,9 +1207,9 @@ Y_UNIT_TEST(BlockedInvalidFrameBounds) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res), err);
     };
 
-    check("ROWS UNBOUNDED FOLLOWING", "<main>:2:5: Error: Frame cannot start from UNBOUNDED FOLLOWING\n");
-    check("ROWS BETWEEN 5 PRECEDING AND UNBOUNDED PRECEDING", "<main>:2:29: Error: Frame cannot end with UNBOUNDED PRECEDING\n");
-    check("ROWS BETWEEN CURRENT ROW AND 5 PRECEDING", "<main>:2:13: Error: Frame cannot start from CURRENT ROW and end with PRECEDING\n");
+    check("ROWS UNBOUNDED FOLLOWING", "<main>:2:6: Error: Frame cannot start from UNBOUNDED FOLLOWING\n");
+    check("ROWS BETWEEN 5 PRECEDING AND UNBOUNDED PRECEDING", "<main>:2:30: Error: Frame cannot end with UNBOUNDED PRECEDING\n");
+    check("ROWS BETWEEN CURRENT ROW AND 5 PRECEDING", "<main>:2:14: Error: Frame cannot start from CURRENT ROW and end with PRECEDING\n");
     check("ROWS BETWEEN 5 FOLLOWING AND CURRENT ROW", "<main>:2:14: Error: Frame cannot start from FOLLOWING and end with CURRENT ROW\n");
     check("ROWS BETWEEN 5 FOLLOWING AND 5 PRECEDING", "<main>:2:14: Error: Frame cannot start from FOLLOWING and end with PRECEDING\n");
 }
@@ -1351,23 +1405,23 @@ Y_UNIT_TEST(KikimrCaseSensitive) {
 Y_UNIT_TEST(DiscoveryModeForbidden) {
     NYql::TAstParseResult res = SqlToYqlWithMode("insert into plato.Output select * from plato.range(\"\", Input1, Input4)", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: range is not allowed in Discovery mode, code: 4600\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: range is not allowed in Discovery mode, code: 4600\n");
 
     res = SqlToYqlWithMode(R"(insert into plato.Output select * from plato.like("", "Input%"))", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: like is not allowed in Discovery mode, code: 4600\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: like is not allowed in Discovery mode, code: 4600\n");
 
     res = SqlToYqlWithMode(R"(insert into plato.Output select * from plato.regexp("", "Input."))", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: regexp is not allowed in Discovery mode, code: 4600\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: regexp is not allowed in Discovery mode, code: 4600\n");
 
     res = SqlToYqlWithMode(R"(insert into plato.Output select * from plato.filter("", ($name) -> { return find($name, "Input") is not null; }))", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:40: Error: filter is not allowed in Discovery mode, code: 4600\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: filter is not allowed in Discovery mode, code: 4600\n");
 
     res = SqlToYqlWithMode(R"(select Path from plato.folder("") where Type == "table")", NSQLTranslation::ESqlMode::DISCOVERY);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:18: Error: folder is not allowed in Discovery mode, code: 4600\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:24: Error: folder is not allowed in Discovery mode, code: 4600\n");
 }
 
 Y_UNIT_TEST(YsonFuncWithoutArgs) {
@@ -1923,7 +1977,7 @@ Y_UNIT_TEST(ErrGroupByWithAggregationFunctionAndDistinctExpr) {
 Y_UNIT_TEST(ErrCollectPreaggregatedInListLiteralWithoutFrom) {
     ExpectFailWithError("SELECT([VARIANCE(DISTINCT[])])",
                         "<main>:1:1: Error: Column references are not allowed without FROM\n"
-                        "<main>:1:9: Error: Column reference '_yql_preagg_Variance0'\n");
+                        "<main>:1:26: Error: Column reference '_yql_preagg_Variance0'\n");
 }
 
 Y_UNIT_TEST(ErrGroupBySmartParenAsTuple) {

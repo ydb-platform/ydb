@@ -1,4 +1,5 @@
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -45,10 +46,10 @@ struct TTestSetup {
     static const THashSet<TString> ClusterPermissions;
 
     TTestSetup(const TString& userSid, const TString& dbPath, const std::vector<std::pair<TString, TString>>& userAttributes,
-        bool useRealThreads = true)
+        bool useRealThreads = true, std::shared_ptr<std::vector<std::string>> auditLines = {})
         : KikimrPort(PortManager.GetPort(2134))
         , AccessServiceEndpoint("localhost:" + ToString(PortManager.GetPort(4284)))
-        , Server(std::make_unique<TServer>(GetSettings(useRealThreads)))
+        , Server(std::make_unique<TServer>(GetSettings(useRealThreads, std::move(auditLines))))
         , UserSid(userSid)
         , DbPath(dbPath)
     {
@@ -61,7 +62,7 @@ struct TTestSetup {
         return Server->GetRuntime();
     }
 
-    TServerSettings GetSettings(bool useRealThreads) {
+    TServerSettings GetSettings(bool useRealThreads, std::shared_ptr<std::vector<std::string>> auditLines) {
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
         authConfig.SetUseAccessService(true);
@@ -73,6 +74,7 @@ struct TTestSetup {
 
         auto settings = TServerSettings(KikimrPort, authConfig);
         settings.SetUseRealThreads(useRealThreads);
+        settings.SetAuditLogBackendLines(std::move(auditLines));
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         return settings;
@@ -183,6 +185,37 @@ const THashSet<TString> TTestSetup::ClusterPermissions {
 };
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(ConnectionAuditSubject) {
+    Y_UNIT_TEST(RecordsAnonymousAndAuthenticatedSubjects) {
+        for (const bool authenticated : {false, true}) {
+            auto auditLines = std::make_shared<std::vector<std::string>>();
+            TTestSetup setup("user1", "/Root/db", {}, false, auditLines);
+            auto* runtime = setup.GetRuntime();
+            runtime->GetAppData().EnforceUserTokenRequirement = false;
+            runtime->GetAppData().DefaultUserSIDs.clear();
+            runtime->GetAppData().FeatureFlags.SetEnableGrpcAudit(true);
+            auto request = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
+                setup.DbPath, authenticated ? TMaybe<TString>("Bearer user1") : Nothing(),
+                setup.FakeMonActor, NGRpcService::TAuditMode::NonModifying(),
+                TTestSetup::PeerName, "connection-audit-subject-test");
+            setup.RequestCheckActor(std::move(request));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
+            runtime->WaitFor("grpc-conn audit record", [&] {
+                for (const auto& line : *auditLines) {
+                    if (line.contains("component=grpc-conn")) {
+                        return true;
+                    }
+                }
+                return false;
+            }, TDuration::Seconds(10));
+            const auto line = FindAuditLine(*auditLines, "component=grpc-conn");
+            UNIT_ASSERT_STRING_CONTAINS(line, authenticated ? "subject=user1@as," : "subject={none},");
+        }
+    }
+}
 
 Y_UNIT_TEST_SUITE(TestSetCloudPermissions) {
 

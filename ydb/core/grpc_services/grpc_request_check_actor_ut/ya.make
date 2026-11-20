@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/base
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
 )

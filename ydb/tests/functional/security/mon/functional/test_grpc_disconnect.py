@@ -45,7 +45,8 @@ async def check_disconnect(endpoint, database, path, urls):
                 ('POST', database, 'monitoring@builtin', 403),
                 ('GET', database, ADMIN, 405),
                 ('POST', None, ADMIN, 400),
-                ('POST', '/Root/other', ADMIN, 409),
+                ('POST', '/Root/other', ADMIN, 403),
+                ('POST', database + '/', ADMIN, 409),
             ):
                 response = request(method, url, db, token)
                 assert response.status_code == status, (method, db, response.status_code, response.text)

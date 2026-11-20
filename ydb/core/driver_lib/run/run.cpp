@@ -379,7 +379,8 @@ public:
             Send(ev->Sender, new NMon::TEvHttpInfoRes(response, 0, NMon::IEvHttpInfoRes::Custom), 0, ev->Cookie);
         };
         const auto* appData = AppData();
-        if (appData->AdministrationAllowedSIDs.empty() || request.UserToken.empty()
+        if (request.Request.GetHeader("Authorization").empty() || appData->AdministrationAllowedSIDs.empty()
+                || request.UserToken.empty()
                 || !IsAdministrator(appData, request.UserToken)) {
             return reply(NMonitoring::HTTPFORBIDDEN);
         }
@@ -2122,7 +2123,7 @@ void TKikimrRunner::InitializeActorSystem(
         if (servicesMask.EnableGRpcService) {
             Monitoring->RegisterActorPage(nullptr, "grpc", "GRPC", false, ActorSystem.Get(), NGRpcService::GrpcMonServiceId());
             if (ActorsMonPage && !runConfig.TenantName.empty()
-                    && runConfig.NodeId >= AppData->DynamicNameserviceConfig->MinDynamicNodeId) {
+                    && runConfig.NodeId > AppData->DynamicNameserviceConfig->MaxStaticNodeId) {
                 Monitoring->RegisterActorPage({
                     .Title = "Disconnect gRPC clients",
                     .RelPath = "grpc_disconnect",

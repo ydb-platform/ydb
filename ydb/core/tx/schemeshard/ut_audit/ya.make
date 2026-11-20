@@ -21,7 +21,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    ut_auditsettings.cpp
+    ut_audit.cpp
 )
 
 END()

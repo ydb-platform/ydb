@@ -23,12 +23,12 @@
 
 namespace NKikimr::NReplication::NService {
 
-Y_UNIT_TEST_SUITE(ServiceCredentials) {
+namespace {
     using namespace NTestHelpers;
 
     // Reader creation stays blocked: these tests exercise cache identity and
     // ownership without creating SDK sessions or contacting IAM services.
-    class TCredentialCacheEnv {
+    class TServiceWorkerEnv {
     public:
         TEnv<> Env{true, ERuntimeMode::Simulated};
         TTestActorRuntime& Runtime = Env.GetRuntime();
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         NActors::TBlockEvents<TEvYdbProxy::TEvCreateTopicReaderRequest> Blocked{Runtime};
         THashSet<TActorId> Poisoned;
 
-        TCredentialCacheEnv()
+        TServiceWorkerEnv()
             : PoisonObserver(Runtime.AddObserver<TEvents::TEvPoison>([this](TEvents::TEvPoison::TPtr& ev) {
                 Poisoned.insert(ev->GetRecipientRewrite());
             }))
@@ -52,7 +52,8 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvService::TEvStatus>(Edge, TDuration::Seconds(30)));
         }
 
-        TActorId Start(ui64 id, const NKikimrReplication::TConnectionParams& credentials) {
+        TActorId Start(ui64 id, const NKikimrReplication::TConnectionParams& credentials, ui64 intervalMs = 0,
+                bool indexBuild = false) {
             auto run = MakeHolder<TEvService::TEvRunWorker>();
             run->Record.MutableController()->SetTabletId(42);
             run->Record.MutableController()->SetGeneration(1);
@@ -62,6 +63,9 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             worker->SetWorkerId(id);
             auto* command = run->Record.MutableCommand();
             command->SetDatabase("/Root");
+            if (intervalMs) {
+                command->MutableConsistencySettings()->MutableGlobal()->SetCommitIntervalMilliSeconds(intervalMs);
+            }
             auto* reader = command->MutableRemoteTopicReader();
             auto* connection = reader->MutableConnectionParams();
             connection->CopyFrom(credentials);
@@ -71,6 +75,9 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             reader->SetConsumerName("consumer");
             reader->SetTopicPartitionId(0);
             Env.GetPathId("/Root/Table").ToProto(command->MutableLocalTableWriter()->MutablePathId());
+            if (indexBuild) {
+                command->MutableLocalTableWriter()->SetIndexBuild(true);
+            }
             const auto requestCount = Blocked.size();
             Runtime.Send(new IEventHandle(Service, Edge, run.Release()));
             RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
@@ -79,16 +86,20 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             return Blocked.back()->GetRecipientRewrite();
         }
 
-        void Stop(ui64 id) {
-            auto stop = MakeHolder<TEvService::TEvStopWorker>();
-            stop->Record.MutableController()->SetTabletId(42);
-            stop->Record.MutableController()->SetGeneration(1);
-            stop->Record.MutableWorker()->SetReplicationId(1);
-            stop->Record.MutableWorker()->SetTargetId(1);
-            stop->Record.MutableWorker()->SetWorkerId(id);
-            Runtime.Send(new IEventHandle(Service, Edge, stop.Release()));
-            RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+        void Stop(ui64 id, TActorId failedWorker = {}) {
             const auto reader = Workers.at(id);
+            if (failedWorker) {
+                Runtime.Send(new IEventHandle(failedWorker, reader, new TEvWorker::TEvGone(TEvWorker::TEvGone::SCHEME_ERROR)));
+            } else {
+                auto stop = MakeHolder<TEvService::TEvStopWorker>();
+                stop->Record.MutableController()->SetTabletId(42);
+                stop->Record.MutableController()->SetGeneration(1);
+                stop->Record.MutableWorker()->SetReplicationId(1);
+                stop->Record.MutableWorker()->SetTargetId(1);
+                stop->Record.MutableWorker()->SetWorkerId(id);
+                Runtime.Send(new IEventHandle(Service, Edge, stop.Release()));
+            }
+            RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
             Runtime.WaitFor("worker stopped its reader", [&] { return Poisoned.contains(reader); }, TDuration::Seconds(30));
             Workers.erase(id);
         }
@@ -147,8 +158,13 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         TTestActorRuntime::TEventObserverHolder PoisonObserver;
     };
 
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(ServiceCredentials) {
+    using namespace NTestHelpers;
+
     Y_UNIT_TEST(StaticCredentialsReuseProxyAndPreserveExistingUsers) {
-        TCredentialCacheEnv env;
+        TServiceWorkerEnv env;
         NKikimrReplication::TConnectionParams first;
         first.MutableStaticCredentials()->SetUser("user");
         first.MutableStaticCredentials()->SetPassword("password1");
@@ -169,7 +185,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
     }
 
     Y_UNIT_TEST(IamCredentialsReuseProxyByAccountAndResource) {
-        TCredentialCacheEnv env;
+        TServiceWorkerEnv env;
         NKikimrReplication::TConnectionParams credentials;
         credentials.MutableIamCredentials()->SetServiceAccountId("account1");
         credentials.MutableIamCredentials()->SetResourceId("resource1");
@@ -184,7 +200,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
     }
 
     Y_UNIT_TEST(OAuthCredentialsReuseProxyByToken) {
-        TCredentialCacheEnv env;
+        TServiceWorkerEnv env;
         NKikimrReplication::TConnectionParams credentials;
         credentials.MutableOAuthToken()->SetToken("token1");
         const auto original = env.Start(1, credentials);
@@ -195,7 +211,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
     }
 
     Y_UNIT_TEST(CredentialKindsUseSeparateProxies) {
-        TCredentialCacheEnv env;
+        TServiceWorkerEnv env;
         NKikimrReplication::TConnectionParams credentials;
         // Static and OAuth have equal identity/fingerprint payloads in the old
         // key representation, so their separation requires the credential kind.
@@ -396,6 +412,146 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             return true;
         }, TDuration::Seconds(30));
         observeShutdown.Remove();
+    }
+}
+
+Y_UNIT_TEST_SUITE(ServiceGlobalTxIds) {
+    void CheckRetiredGlobalWorker(bool readerFailure) {
+        TServiceWorkerEnv env;
+        auto& runtime = env.Runtime;
+        THashMap<TActorId, TActorId> owners;
+        auto handshakes = runtime.AddObserver<TEvWorker::TEvHandshake>([&](auto& ev) {
+            owners[ev->GetRecipientRewrite()] = ev->Sender;
+        });
+        auto start = [&](ui64 id) {
+            NKikimrReplication::TConnectionParams credentials;
+            credentials.MutableOAuthToken();
+            env.Start(id, credentials, 10);
+            return owners.at(env.Blocked.back()->Sender);
+        };
+        auto send = [&](TActorId sender, IEventBase* event) {
+            runtime.Send(new IEventHandle(env.Service, sender, event));
+        };
+        auto request = [&](TActorId worker, ui64 step) {
+            send(worker, new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(step, 0)}));
+        };
+        auto expectRequest = [&](ui64 step) {
+            auto ev = runtime.GrabEdgeEvent<TEvService::TEvGetTxId>(env.Edge, TDuration::Seconds(5));
+            UNIT_ASSERT_C(ev, "expected a controller request for " << step);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.VersionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetVersions(0).GetStep(), step);
+        };
+        auto assign = [&](ui64 end) {
+            auto reply = MakeHolder<TEvService::TEvTxIdResult>(42, 1);
+            auto* item = reply->Record.AddVersionTxIds();
+            TRowVersion(end, 0).ToProto(item->MutableVersion());
+            item->SetTxId(end + 1000);
+            send(env.Edge, reply.Release());
+        };
+        auto heartbeat = [&](TActorId worker, ui64 step) {
+            send(worker, new TEvService::TEvHeartbeat(TRowVersion(step, 0)));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvHeartbeat>(env.Edge, TDuration::Seconds(5)));
+        };
+
+        const auto slow = start(1);
+        const auto fast = start(2);
+        size_t forwarded = 0;
+        auto replies = runtime.AddObserver<TEvService::TEvTxIdResult>([&](auto& ev) {
+            if (ev->Sender == env.Service) {
+                ++forwarded;
+                ev.Reset();
+            }
+        });
+        request(fast, 25);
+        expectRequest(25);
+        assign(30);
+        runtime.WaitFor("initial cache reply", [&] { return forwarded == 1; }, TDuration::Seconds(5));
+        heartbeat(slow, 10);
+        heartbeat(fast, 40);
+        request(slow, 71);
+        expectRequest(71);
+        request(fast, 91);
+        expectRequest(91);
+
+        env.Stop(1, readerFailure ? slow : TActorId{});
+        heartbeat(fast, 50);
+        send(env.Edge, new TEvService::TEvHandshake(42, 1));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStatus>(env.Edge, TDuration::Seconds(5)));
+        expectRequest(91);
+        const auto replacement = start(1);
+        request(replacement, 25);
+        expectRequest(25);
+        assign(80);
+        request(replacement, 71);
+        expectRequest(71);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded, 1);
+        env.Finish();
+    }
+
+    Y_UNIT_TEST(RemovesStoppedWorkerFromHeartbeatAndTxIdWaiters) {
+        CheckRetiredGlobalWorker(false);
+    }
+
+    Y_UNIT_TEST(RemovesFailedWorkerFromHeartbeatAndTxIdWaiters) {
+        CheckRetiredGlobalWorker(true);
+    }
+
+    Y_UNIT_TEST(ReplacementIndexWorkerReceivesOnlyRequestedIntervals) {
+        TServiceWorkerEnv env;
+        auto& runtime = env.Runtime;
+        THashMap<TActorId, TActorId> owners;
+        auto handshakes = runtime.AddObserver<TEvWorker::TEvHandshake>([&](auto& ev) {
+            owners[ev->GetRecipientRewrite()] = ev->Sender;
+        });
+        auto start = [&] {
+            NKikimrReplication::TConnectionParams credentials;
+            credentials.MutableOAuthToken();
+            env.Start(1, credentials, 10, true);
+            return owners.at(env.Blocked.back()->Sender);
+        };
+        auto request = [&](TActorId actor, TVector<TRowVersion> versions) {
+            runtime.Send(new IEventHandle(env.Service, actor, new TEvService::TEvGetTxId(versions)));
+            const auto ev = runtime.GrabEdgeEvent<TEvService::TEvGetTxId>(env.Edge, TDuration::Seconds(5));
+            UNIT_ASSERT(ev && ev->Get()->Record.HasWorker());
+            return ev->Cookie;
+        };
+        auto reply = [&](std::initializer_list<std::pair<ui64, ui64>> intervals, ui64 cookie) {
+            auto ev = MakeHolder<TEvService::TEvTxIdResult>(42, 1);
+            TWorkerId{1, 1, 1}.Serialize(*ev->Record.MutableWorker());
+            for (auto [begin, end] : intervals) {
+                auto& item = *ev->Record.AddVersionTxIds();
+                TRowVersion(begin, 0).ToProto(item.MutableBegin());
+                TRowVersion(end, 0).ToProto(item.MutableVersion());
+                item.SetTxId(end + 100);
+            }
+            runtime.Send(new IEventHandle(env.Service, env.Edge, ev.Release(), 0, cookie));
+        };
+        TVector<ui64> received;
+        auto responses = runtime.AddObserver<TEvService::TEvTxIdResult>([&](auto& ev) {
+            if (ev->Sender == env.Service) {
+                for (const auto& item : ev->Get()->Record.GetVersionTxIds()) {
+                    received.push_back(item.GetVersion().GetStep());
+                }
+                ev.Reset();
+            }
+        });
+
+        const auto oldCookie = request(start(), {TRowVersion(5, 0)});
+        env.Stop(1);
+        const auto replacement = start();
+        reply({{0, 10}}, oldCookie);
+        const auto cookie = request(replacement, {TRowVersion(35, 0), TRowVersion(55, 0)});
+        UNIT_ASSERT(oldCookie && cookie && oldCookie != cookie);
+        reply({{0, 100}}, oldCookie);
+        reply({{30, 70}, {30, 40}, {80, 90}}, cookie);
+        reply({{30, 70}}, cookie);
+        request(replacement, {TRowVersion(95, 0)});
+        reply({{90, 100}}, cookie);
+        runtime.WaitFor("the replacement worker received its last assignment", [&] {
+            return !received.empty() && received.back() == 100;
+        }, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(received, (TVector<ui64>{70, 40, 100}));
+        env.Finish();
     }
 }
 
@@ -1630,6 +1786,127 @@ Y_UNIT_TEST_SUITE(Worker) {
 
     Y_UNIT_TEST(ReaderRetryBudgetResetsAfterData) {
         CheckReaderRetryLimit(3);
+    }
+
+    class TDataEndReader final : public TActor<TDataEndReader> {
+    public:
+        TDataEndReader(const TActorId& edge, TActorId& self)
+            : TActor(&TThis::StateWork)
+            , Edge(edge)
+            , Self(self)
+        {}
+
+    private:
+        void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
+            Self = SelfId();
+            Send(ev->Sender, new TEvWorker::TEvHandshake());
+            Send(ev->Sender, new TEvWorker::TEvReaderStarted(0));
+        }
+
+        void Handle(TEvWorker::TEvPoll::TPtr& ev) {
+            Send(Edge, new TEvWorker::TEvPoll(ev->Get()->SkipCommit));
+        }
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvWorker::TEvHandshake, Handle);
+                hFunc(TEvWorker::TEvPoll, Handle);
+                IgnoreFunc(TEvWorker::TEvCommit);
+            }
+        }
+
+        const TActorId Edge;
+        TActorId& Self;
+    };
+
+    class TDataEndWriter final : public TActor<TDataEndWriter> {
+    public:
+        TDataEndWriter(const TActorId& edge, TActorId& self)
+            : TActor(&TThis::StateWork)
+            , Edge(edge)
+            , Self(self)
+        {}
+
+    private:
+        void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
+            Self = SelfId();
+            Worker = ev->Sender;
+            Send(Worker, new TEvWorker::TEvHandshake());
+        }
+
+        void Handle(TEvWorker::TEvData::TPtr& ev) {
+            Send(Edge, new TEvWorker::TEvData(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records));
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            Send(Worker, new TEvWorker::TEvPoll());
+        }
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvWorker::TEvHandshake, Handle);
+                hFunc(TEvWorker::TEvData, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        const TActorId Edge;
+        TActorId& Self;
+        TActorId Worker;
+    };
+
+    struct TDataEndSetup {
+        TEnv<> Env{true, ERuntimeMode::Simulated};
+        TActorId Edge;
+        TActorId Reader;
+        TActorId Writer;
+        TActorId Worker;
+
+        TDataEndSetup() {
+            auto& runtime = Env.GetRuntime();
+            Edge = Env.GetSender();
+            Worker = runtime.Register(CreateWorker(Edge,
+                [this] { return new TDataEndReader(Edge, Reader); },
+                [this] { return new TDataEndWriter(Edge, Writer); }));
+            UNIT_ASSERT_C(runtime.GrabEdgeEventRethrow<TEvWorker::TEvPoll>(Edge, TDuration::Seconds(5)),
+                "Reader did not receive the first poll");
+
+            runtime.Send(new IEventHandle(Worker, Reader, new TEvWorker::TEvData(0, "source", {
+                TTopicMessage(0, "first"),
+            })));
+            UNIT_ASSERT_C(runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(Edge, TDuration::Seconds(5)),
+                "Writer did not receive the data batch");
+        }
+
+        void SendDataEnd() {
+            Env.GetRuntime().Send(new IEventHandle(Worker, Reader, new TEvWorker::TEvDataEnd(0, {}, {1, 2})));
+        }
+    };
+
+    Y_UNIT_TEST(ShouldDelayDataEndWhileWriterAppliesInFlightData) {
+        // given
+        TDataEndSetup s;
+
+        // when
+        s.SendDataEnd();
+
+        // then
+        UNIT_ASSERT(!s.Env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvDataEnd>(s.Edge, TDuration::Seconds(1)));
+    }
+
+    Y_UNIT_TEST(ShouldForwardDataEndWhenWriterPollsAfterInFlightData) {
+        // given
+        TDataEndSetup s;
+        s.SendDataEnd();
+
+        // when
+        s.Env.GetRuntime().Send(new IEventHandle(s.Writer, s.Edge, new TEvents::TEvWakeup()));
+
+        // then
+        const auto dataEnd = s.Env.GetRuntime().GrabEdgeEventRethrow<TEvWorker::TEvDataEnd>(s.Edge, TDuration::Seconds(5));
+        UNIT_ASSERT(dataEnd);
+        UNIT_ASSERT_VALUES_EQUAL(dataEnd->Get()->PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(dataEnd->Get()->ChildPartitionsIds.size(), 2);
     }
 }
 

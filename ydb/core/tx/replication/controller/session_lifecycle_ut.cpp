@@ -849,6 +849,155 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(runs, 1);
     }
 
+    TWorkerId EndWorkerWithChild(TSetup& s) {
+        auto& runtime = s.Env.GetRuntime();
+        const TWorkerId child(s.Worker.ReplicationId(), s.Worker.TargetId(), s.Worker.WorkerId() + 1);
+
+        auto dataEnd = MakeHolder<TEvService::TEvWorkerDataEnd>();
+        s.Worker.Serialize(*dataEnd->Record.MutableWorker());
+        dataEnd->Record.AddChildPartitionsIds(child.WorkerId());
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0], dataEnd.Release()));
+        s.Sync();
+        s.ProcessQueues();
+
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0]);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(run->Get()->Record.GetWorker()), child);
+        return child;
+    }
+
+    void SendHeartbeat(TSetup& s, const TWorkerId& worker, const TRowVersion& version) {
+        auto heartbeat = MakeHolder<TEvService::TEvHeartbeat>();
+        worker.Serialize(*heartbeat->Record.MutableWorker());
+        version.ToProto(heartbeat->Record.MutableVersion());
+        s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0], heartbeat.Release()));
+        s.Sync();
+    }
+
+    Y_UNIT_TEST(ShouldStopEndedWorkerWhenChildReportsHeartbeat) {
+        // given
+        TSetup s(1);
+        const auto child = EndWorkerWithChild(s);
+
+        // when
+        SendHeartbeat(s, child, TRowVersion(10, 1));
+
+        // then
+        s.ProcessQueues();
+        s.ExpectStop(0);
+        s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        UNIT_ASSERT(!s.HasWorkerRow());
+    }
+
+    Y_UNIT_TEST(ShouldKeepEndedWorkerWhenChildHasNoHeartbeat) {
+        // given
+        TSetup s(1);
+        ui32 stops = 0;
+        auto observer = s.Env.GetRuntime().AddObserver<TEvService::TEvStopWorker>([&](TEvService::TEvStopWorker::TPtr&) {
+            ++stops;
+        });
+
+        // when
+        EndWorkerWithChild(s);
+
+        // then
+        s.ProcessQueues(true);
+        UNIT_ASSERT_VALUES_EQUAL(stops, 0);
+        UNIT_ASSERT(s.HasWorkerRow());
+    }
+
+    bool HasExitedWorkerRow(TSetup& s, const TWorkerId& worker) {
+        NKikimrMiniKQL::TResult result;
+        const auto query = Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '%lu)) '('TargetId (Uint64 '%lu)) '('WorkerId (Uint64 '%lu))))
+            (return (AsList (SetResult 'Worker (SelectRow 'ExitedWorkers key '('WorkerId)))))
+        ))", worker.ReplicationId(), worker.TargetId(), worker.WorkerId());
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(s.Env.GetRuntime(), s.ControllerId, query, result), NKikimrProto::OK);
+        return result.GetValue().GetStruct(0).GetOptional().HasOptional();
+    }
+
+    void StopWorker(TSetup& s, const TWorkerId& worker) {
+        auto& runtime = s.Env.GetRuntime();
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(s.Edges[0]);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), worker);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+    }
+
+    TWorkerId ExitWorkerAfterChildHeartbeat(TSetup& s) {
+        const auto child = EndWorkerWithChild(s);
+        SendHeartbeat(s, child, TRowVersion(10, 1));
+        s.ProcessQueues();
+        StopWorker(s, s.Worker);
+        return child;
+    }
+
+    Y_UNIT_TEST(ShouldPersistExitedWorkerWhenEndedWorkerStops) {
+        // given
+        TSetup s(1);
+        const auto child = EndWorkerWithChild(s);
+        SendHeartbeat(s, child, TRowVersion(10, 1));
+        s.ProcessQueues();
+
+        // when
+        StopWorker(s, s.Worker);
+
+        // then
+        UNIT_ASSERT(!s.HasWorkerRow());
+        UNIT_ASSERT(HasExitedWorkerRow(s, s.Worker));
+    }
+
+    Y_UNIT_TEST(ShouldNotRunExitedWorkerWhenControllerRestarts) {
+        // given
+        TSetup s(1);
+        ExitWorkerAfterChildHeartbeat(s);
+        auto& runtime = s.Env.GetRuntime();
+        bool registered = false;
+        auto registration = runtime.AddObserver<TEvPrivate::TEvCompleteWorkerSet>([&](TEvPrivate::TEvCompleteWorkerSet::TPtr&) {
+            registered = true;
+        });
+        ui32 exitedRuns = 0;
+        auto runs = runtime.AddObserver<TEvService::TEvRunWorker>([&](TEvService::TEvRunWorker::TPtr& ev) {
+            if (ev->Get()->Record.HasController() && ev->GetRecipientRewrite() != s.Edges[0]
+                && TWorkerId::Parse(ev->Get()->Record.GetWorker()) == s.Worker) {
+                ++exitedRuns;
+            }
+        });
+
+        // when
+        s.Reboot();
+        s.Status(0, false);
+
+        // then
+        runtime.WaitFor("worker registration", [&] { return registered; }, TDuration::Seconds(30));
+        s.Sync();
+        s.ProcessQueues(true);
+        UNIT_ASSERT_VALUES_EQUAL(exitedRuns, 0);
+        UNIT_ASSERT(HasExitedWorkerRow(s, s.Worker));
+    }
+
+    Y_UNIT_TEST(ShouldRunExitedWorkerAgainWhenAnotherTargetWorkerIsRemoved) {
+        // given
+        TSetup s(1);
+        const auto child = ExitWorkerAfterChildHeartbeat(s);
+        s.Env.SendAsync(s.Controller, new TEvPrivate::TEvRemoveWorker(child.ReplicationId(), child.TargetId(), child.WorkerId()));
+        s.Sync();
+        s.ProcessQueues();
+        StopWorker(s, child);
+
+        // when
+        auto run = MakeHolder<TEvService::TEvRunWorker>();
+        s.Worker.Serialize(*run->Record.MutableWorker());
+        s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0], run.Release()));
+        s.Sync();
+
+        // then
+        UNIT_ASSERT(s.HasWorkerRow());
+        UNIT_ASSERT(!HasExitedWorkerRow(s, s.Worker));
+    }
+
     Y_UNIT_TEST(RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret) {
         RecoverWithSecret(true, false, false, true);
     }

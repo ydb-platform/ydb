@@ -20,13 +20,9 @@ bool IsOmittedFromBackup(const TAttributes& attributes) {
     return it != attributes.end() && it->second == OMIT_BACKUP_VALUE;
 }
 
-// Both existing and newly created replication feeds use this marker. Sources
-// additionally receive __omit_backup when enabled in replication_config.
-// This exclusion still applies after removal of __omit_backup: a restored
-// replication feed has no reader, so its important consumer could retain data
-// indefinitely.
 constexpr TStringBuf ASYNC_REPLICATION_ATTRIBUTE = "__async_replication";
 
-bool IsChangefeedOmittedFromBackup(const Ydb::Table::ChangefeedDescription& changefeed);
+bool IsKeyRangeReplicationBackup(const Ydb::Table::ChangefeedDescription& changefeed);
+bool IsChangefeedOmittedFromBackup(const Ydb::Table::ChangefeedDescription& changefeed, bool allowKeyRange);
 
 } // namespace NKikimr::NBackup

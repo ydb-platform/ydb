@@ -957,6 +957,15 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         UNIT_ASSERT(env.ReceiveHotWriteCredit(waiter, NKikimrProto::OK) >= 100);
     }
 
+    Y_UNIT_TEST(ZeroThrottleStartLimitsWritesOnEmptyDepot) {
+        TTestEnv env(TAsyncMode{.MaxPendingBytes = MaxWriteCreditBytes, .ThrottleStartBytes = 0});
+        const auto writer = env.Connect(0);
+        env.RequestHotWriteCredit(writer, true, MaxWriteCreditBytes);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceiveHotWriteCredit(writer, NKikimrProto::ERROR), 0);
+        env.RequestHotWriteCredit(writer);
+        UNIT_ASSERT(env.ReceiveHotWriteCredit(writer, NKikimrProto::OK) >= 100);
+    }
+
     Y_UNIT_TEST(HotWriteCreditQueueBoundsPendingPayloads) {
         TTestEnv env(TAsyncMode{.MaxPendingBytes = MaxWriteCreditBytes});
         const auto owner = env.Connect(1);

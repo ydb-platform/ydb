@@ -15,6 +15,7 @@ ELSE()
     )
     SRCS(
         aws.cpp
+        cancellable_request.h
     )
 ENDIF()
 

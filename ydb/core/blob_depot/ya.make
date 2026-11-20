@@ -9,6 +9,9 @@ LIBRARY()
             s3_router_stub.cpp
         )
     ELSE()
+        PEERDIR(
+            ydb/library/aws_init
+        )
         SRCS(
             s3.cpp
             s3_delete.cpp
@@ -23,6 +26,7 @@ LIBRARY()
     SRCS(
         blob_depot.cpp
         blob_depot.h
+        config.cpp
         config.h
         defs.h
         types.h

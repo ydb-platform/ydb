@@ -20,6 +20,8 @@ message TChannelProfile {
 
 message TS3BackendSettings {
     optional NKikimrSchemeOp.TS3Settings Settings = 1; // how to connect to S3 (mandatory field)
+    // BlobDepot PUTs have an end-to-end budget of at least 10 minutes. For slower transfers, increase
+    // Settings.HttpRequestTimeoutMs (up to one day). The budget includes balancer and SDK queue time.
 
     message TAsyncMode {
         // Acknowledged data starts on Data channels. The tablet then packs eligible data into S3 objects.
@@ -27,6 +29,8 @@ message TS3BackendSettings {
         optional uint64 MaxPendingBytes = 2;
 
         // Start throttling at this many charged bytes. Requires MaxPendingBytes.
+        // Zero rate-limits writes even when the depot is empty and cools all eligible data.
+        // Omit both throttle settings to use the byte limit without rate limiting.
         optional uint64 ThrottleStartBytes = 3;
 
         // Foreground write admission rate at ThrottleStartBytes. It drops linearly to zero at MaxPendingBytes.
@@ -50,11 +54,9 @@ message TS3BackendSettings {
         TSyncMode SyncMode = 3;
     }
 
-    // When set, the actual S3 endpoint is fetched periodically from this URL
-    // (HTTP GET to http://<BalancerHost>/, body is plain-text hostname).
-    // Existing Settings.Endpoint is used only as a fallback before the first
-    // balancer reply. S3 requests get re-routed through a per-node, per-tablet
-    // router actor managed by Node Warden.
+    // When set, the per-node BlobDepot router periodically fetches the S3 proxy
+    // host from this URL. Requests wait for the first successful balancer reply.
+    // The SDK uses Settings.Endpoint as the S3 endpoint through the selected proxy.
     optional string BalancerHost = 4;
     optional uint32 BalancerRefreshSecMin = 5 [default = 10];
     optional uint32 BalancerRefreshSecMax = 6 [default = 15];

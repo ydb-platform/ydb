@@ -5,13 +5,25 @@
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
 #include <optional>
 
+namespace NKikimrConfig {
+    class TAwsClientConfig;
+}
+
 namespace NKikimr::NBlobDepot {
+
+    // Includes time waiting for a balancer, an SDK worker, and the upload itself.
+    inline constexpr TDuration DefaultS3PutTimeout = TDuration::Minutes(10);
+    inline constexpr TDuration MaxS3PutTimeout = TDuration::Days(1);
+
+    TDuration GetS3PutTimeout(const NKikimrSchemeOp::TS3Settings& settings,
+        const NKikimrConfig::TAwsClientConfig& defaults);
 
     inline TString MakeS3BasePath(const NKikimrSchemeOp::TS3Settings& settings, TStringBuf name) {
         // The SDK drops empty segments in point requests. LIST and batch DELETE use literal keys.

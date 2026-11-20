@@ -58,6 +58,7 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDA06"},
             {"agentId", LogId},
             {"msg", msg});
+        ReleaseS3Wrapper();
         if (BlobDepotGeneration != msg.GetGeneration()) {
             // Expiry watermarks belong to one generation; the new tablet starts allocating from step 1 again.
             ExpiredSteps.clear();
@@ -147,8 +148,6 @@ namespace NKikimr::NBlobDepot {
         S3BackendSettings = msg.HasS3BackendSettings()
             ? std::make_optional(msg.GetS3BackendSettings())
             : std::nullopt;
-
-        ReleaseS3Wrapper();
 
 #ifndef KIKIMR_DISABLE_S3_OPS
         InitS3(msg.GetName());

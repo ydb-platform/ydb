@@ -715,7 +715,7 @@ namespace NKikimr::NStorage {
                 return std::nullopt; // the operator manages this config
             }
             NKikimrConfig::TStateStorageConfig generated;
-            GenerateStateStorageConfig(&generated, *config, usedNodes, pileNodes, *pb);
+            GenerateStateStorageConfig(&generated, *config, usedNodes, pileNodes, pb);
             for (auto& ringGroup : *generated.MutableRingGroups()) {
                 if (TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId) !=
                         pileId) {

@@ -26,11 +26,28 @@ TString TTargetTableBase::GetStreamPath() const {
 
 TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetTableBase(replication, ETargetKind::IndexTable, id, config)
+    , SrcIsImpl(config->GetSrcIsImpl())
 {
 }
 
+TString TTargetIndexTable::GetSrcIndexPath() const {
+    const auto srcParts = SplitPath(GetSrcPath());
+    const auto dstParts = SplitPath(GetDstPath());
+    if (SrcIsImpl) {
+        return CanonizePath(TString(ExtractParent(GetSrcPath())));
+    }
+    // src is the index itself, dst is the impl table
+    return CanonizePath(GetSrcPath());
+}
+
 TString TTargetIndexTable::BuildStreamPath() const {
-    return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
+    const auto srcParts = SplitPath(GetSrcPath());
+    const auto dstParts = SplitPath(GetDstPath());
+    if (SrcIsImpl) {
+        return CanonizePath(ChildPath(srcParts, {GetStreamName()}));
+    }
+    // src is the index itself, dst is the impl table
+    return CanonizePath(ChildPath(srcParts, {dstParts.back(), GetStreamName()}));
 }
 
 }

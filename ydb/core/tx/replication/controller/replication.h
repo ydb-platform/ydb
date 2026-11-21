@@ -77,6 +77,7 @@ public:
             virtual ETargetKind GetKind() const = 0;
             virtual const TString& GetSrcPath() const = 0;
             virtual const TString& GetDstPath() const = 0;
+            virtual bool GetSrcIsImpl() const = 0;
         };
 
         virtual ~ITarget() = default;
@@ -125,6 +126,8 @@ public:
         virtual void Shutdown(const TActorContext& ctx) = 0;
 
         virtual void UpdateConfig(const NKikimrReplication::TReplicationConfig&) = 0;
+
+        virtual TString GetSrcIndexPath() const = 0;
 
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;

@@ -66,6 +66,15 @@ public:
             return Error(Ydb::StatusIds::NOT_FOUND,
                          Sprintf("Database '%s' doesn't exist", path.data()), ctx);
 
+        if (Self->IsDatabaseFreezePending(Tenant)) {
+            return Error(Ydb::StatusIds::UNAVAILABLE, "Database freeze operation is in progress", ctx);
+        }
+        if (Tenant->FreezeEpoch) {
+            const auto& freeze = Self->DatabaseFreezeOperations.at(Tenant->FreezeEpoch);
+            if (freeze.GetFreeze() || freeze.GetStatus() != Ydb::StatusIds::SUCCESS) {
+                return Error(Ydb::StatusIds::PRECONDITION_FAILED, "Unfreeze the database before removing it", ctx);
+            }
+        }
         if (Tenant->IsRemoving()) {
             FillTenantResponse();
             // Set null to avoid removal actions trigger.

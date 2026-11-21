@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <map>
+#include <optional>
 
 namespace Ydb::Cms {
     class CreateDatabaseRequest;
@@ -210,6 +211,17 @@ struct TAlterDatabaseSettings : public TOperationRequestSettings<TAlterDatabaseS
 
     // Empty value drops the attribute.
     FLUENT_SETTING(TAttributes, AlterAttributes);
+
+    // Wait for a database row-table write fence and CDC delivery, or remove it.
+    // Cannot be combined with AlterAttributes or other database changes.
+    // Confirm cluster support before freeze or thaw; the SDK version is insufficient.
+    // Do not probe support with this call: an old Console may increment generation
+    // before UNSUPPORTED is returned.
+    // Before freezing a database served by a shared SchemeShard, wait until
+    // GetDatabaseStatus reports RUNNING after all prior quota changes.
+    // Prevent concurrent administrative changes during this check and freeze.
+    // With a dedicated SchemeShard, RUNNING does not confirm quota propagation.
+    FLUENT_SETTING_OPTIONAL(bool, Freeze);
 };
 
 class TCmsClient {

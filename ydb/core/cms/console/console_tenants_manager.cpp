@@ -1897,6 +1897,11 @@ void TTenantsManager::ClearState()
     Tenants.clear();
     TenantIdToName.clear();
     RemovedTenants.clear();
+    DatabaseFreezeOperations.clear();
+    DatabaseFreezeIdempotencyKeys.clear();
+    DatabaseFreezeProgress.clear();
+    DatabaseFreezeSubscribers.clear();
+    NextDatabaseFreezeEpoch = 1;
     SlotStats.Clear();
     DecommittedGroups.clear();
 }
@@ -1913,6 +1918,10 @@ void TTenantsManager::Bootstrap(const TActorContext &ctx)
 
 void TTenantsManager::Detach()
 {
+    for (const auto& [_, worker] : DatabaseFreezeWorkers) {
+        Send(worker, new TEvents::TEvPoisonPill);
+    }
+    DatabaseFreezeWorkers.clear();
     PassAway();
 }
 
@@ -2641,7 +2650,9 @@ void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorCon
 }
 
 TTenantsManager::TTenant::TPtr TTenantsManager::FillOperationStatus(const TString &id,
-                                                                    Ydb::Operations::Operation &operation)
+                                                                    const TString &token,
+                                                                    Ydb::Operations::Operation &operation,
+                                                                    const TActorContext &ctx)
 {
     operation.set_id(id);
 
@@ -2700,6 +2711,26 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FillOperationStatus(const TStrin
         } else {
             operation.set_ready(true);
             operation.set_status(Ydb::StatusIds::NOT_FOUND);
+        }
+    } else if (action == TTenant::SET_FREEZE) {
+        Ydb::StatusIds::StatusCode code;
+        TString error;
+        if (!CheckAccess(token, code, error, ctx)) {
+            operation.set_ready(true);
+            operation.set_status(code);
+            auto issue = operation.add_issues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(error);
+            return nullptr;
+        }
+
+        auto it = DatabaseFreezeOperations.find(txId);
+        if (it == DatabaseFreezeOperations.end() || it->second.GetPath() != path) {
+            operation.set_ready(true);
+            operation.set_status(Ydb::StatusIds::NOT_FOUND);
+        } else {
+            FillDatabaseFreezeOperation(txId, operation);
+            tenant = GetTenant(path);
         }
     } else if (action == TTenant::REMOVE) {
         tenant = GetTenant(path);
@@ -2988,6 +3019,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
     auto slotRowset = db.Table<Schema::TenantUnits>().Range().Select<Schema::TenantUnits::TColumns>();
     auto registeredRowset = db.Table<Schema::RegisteredUnits>().Range().Select<Schema::RegisteredUnits::TColumns>();
     auto decommitRowset = db.Table<Schema::DecommittedGroups>().Range().Select<Schema::DecommittedGroups::TColumns>();
+    auto freezeRowset = db.Table<Schema::DatabaseFreezeOperations>().Range().Select();
 
     if (!tenantRowset.IsReady()
         || !removedRowset.IsReady()
@@ -2995,6 +3027,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         || !slotRowset.IsReady()
         || !registeredRowset.IsReady()
         || !decommitRowset.IsReady()
+        || !freezeRowset.IsReady()
         )
         return false;
 
@@ -3083,6 +3116,25 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         auto sharedTenant = GetTenant(tenant->SharedDomainId);
         Y_ABORT_UNLESS(sharedTenant);
         sharedTenant->HostedTenants.emplace(tenant);
+    }
+
+    while (!freezeRowset.EndOfSet()) {
+        NKikimrConsole::TDatabaseFreezeOperation operation;
+        Y_ENSURE(operation.ParseFromString(freezeRowset.GetValue<Schema::DatabaseFreezeOperations::State>()));
+        const auto epoch = freezeRowset.GetValue<Schema::DatabaseFreezeOperations::Epoch>();
+        Y_ENSURE(operation.GetEpoch() == epoch && epoch < Max<ui64>());
+        NextDatabaseFreezeEpoch = Max(NextDatabaseFreezeEpoch, epoch + 1);
+        if (auto tenant = GetTenant(operation.GetPath()); tenant
+            && tenant->DomainId.OwnerId == operation.GetDomainOwnerId()
+            && tenant->DomainId.LocalPathId == operation.GetDomainLocalPathId())
+        {
+            tenant->FreezeEpoch = Max(tenant->FreezeEpoch, epoch);
+        }
+        IndexDatabaseFreezeOperation(operation);
+        DatabaseFreezeOperations[epoch] = std::move(operation);
+        if (!freezeRowset.Next()) {
+            return false;
+        }
     }
 
     while (!removedRowset.EndOfSet()) {
@@ -3596,7 +3648,11 @@ void TTenantsManager::DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
 void TTenantsManager::Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_ALTER_REQUESTS);
-    ProcessOrDelayTx(CreateTxAlterTenant(ev), ctx);
+    if (ev->Get()->Record.GetRequest().has_freeze()) {
+        TxProcessor->ProcessTx(CreateTxFreezeTenant(ev), ctx);
+    } else {
+        ProcessOrDelayTx(CreateTxAlterTenant(ev), ctx);
+    }
 }
 
 void TTenantsManager::Handle(TEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx)
@@ -3674,7 +3730,8 @@ void TTenantsManager::Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const
 
     auto resp = MakeHolder<TEvConsole::TEvGetOperationResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
-    FillOperationStatus(ev->Get()->Record.GetRequest().id(), operation);
+    const auto &rec = ev->Get()->Record;
+    FillOperationStatus(rec.GetRequest().id(), rec.GetUserToken(), operation, ctx);
 
     if (operation.status())
         Counters.Inc(operation.status(), COUNTER_CREATE_RESPONSES);
@@ -3754,7 +3811,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
 {
     auto &rec = ev->Get()->Record;
     Ydb::Operations::Operation operation;
-    auto tenant = FillOperationStatus(rec.GetRequest().id(), operation);
+    auto tenant = FillOperationStatus(rec.GetRequest().id(), rec.GetUserToken(), operation, ctx);
 
     if (operation.ready() && operation.status() != Ydb::StatusIds::NOT_FOUND) {
         auto resp = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
@@ -3768,7 +3825,14 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
             YDB_LOG_DEBUG_CTX(ctx, "Add subscription",
                 {"tenantPath", tenant->Path},
                 {"sender", ev->Sender});
-            tenant->Subscribers.push_back(ev->Sender);
+            TOperationId operationId(rec.GetRequest().id());
+            const auto& actions = operationId.GetValue("action");
+            if (actions.size() == 1 && *actions[0] == ToString(ui32(TTenant::SET_FREEZE))) {
+                const auto& ids = operationId.GetValue("txid");
+                DatabaseFreezeSubscribers[FromString<ui64>(*ids[0])].push_back(ev->Sender);
+            } else {
+                tenant->Subscribers.push_back(ev->Sender);
+            }
         }
 
         auto resp = MakeHolder<TEvConsole::TEvNotifyOperationCompletionResponse>();
@@ -3908,6 +3972,11 @@ void TTenantsManager::Handle(TEvPrivate::TEvStateLoaded::TPtr &/*ev*/, const TAc
 {
     for (auto &pr : Tenants)
         ProcessTenantActions(pr.second, ctx);
+    for (const auto& [epoch, operation] : DatabaseFreezeOperations) {
+        if (!operation.GetReady()) {
+            StartDatabaseFreeze(epoch, ctx);
+        }
+    }
 }
 
 void TTenantsManager::Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TActorContext &ctx)

@@ -1,3 +1,6 @@
+
+* Added `TAlterDatabaseSettings::Freeze(bool)` to fence database row-table writes and wait for CDC delivery, or resume writes. `OperationTimeout` limits the wait without cancelling the accepted operation.
+
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 
 * Added `TOperation::HasMetadata()` to check whether operation metadata is available.

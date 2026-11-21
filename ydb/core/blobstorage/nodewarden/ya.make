@@ -49,6 +49,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/xxhash
+    library/cpp/containers/absl
     library/cpp/json
     library/cpp/openssl/crypto
     ydb/core/base

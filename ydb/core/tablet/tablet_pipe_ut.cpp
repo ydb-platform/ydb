@@ -5,6 +5,8 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/tx/tx.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <deque>
+#include <set>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -1264,6 +1266,334 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
         Y_UNUSED(client);
     }
+
+    struct TGenerationHintPipe {
+        static constexpr ui64 TabletId = 12345;
+        TTestBasicRuntime Runtime;
+        TActorId Owner;
+        TActorId Stranger;
+        TActorId Server;
+        TActorId ResolvedTabletActor;
+        TActorId Client;
+        TTestActorRuntimeBase::TEventObserverHolder ResolverObserver;
+        TTestActorRuntimeBase::TEventObserverHolder EventObserver;
+        TTestActorRuntimeBase::TEventObserverHolder RetryObserver;
+        TTestActorRuntimeBase::TEventObserverHolder NodeObserver;
+        std::deque<TEvTabletPipe::TEvClientRetry::TPtr> Retries;
+        std::deque<TEvTabletResolver::TEvForward::TPtr> HeldLookups;
+        std::deque<TEvInterconnect::TEvNodeConnected::TPtr> HeldConnections;
+        std::vector<std::pair<NKikimrProto::EReplyStatus, ui64>> Connections;
+        std::set<ui64> ConnectCookies;
+        size_t Lookups = 0;
+        size_t Connects = 0;
+        size_t Payloads = 0;
+        size_t PeerCloses = 0;
+        size_t Destroyed = 0;
+        bool HoldLookups = false;
+        bool HoldNodeConnections = false;
+        const ui32 ServerNode;
+
+        explicit TGenerationHintPipe(bool instantRetry = false, bool remote = false, bool knownActor = true)
+            : Runtime(remote ? 2 : 1)
+            , HoldNodeConnections(remote)
+            , ServerNode(remote ? 1 : 0)
+        {
+            SetupTabletServices(Runtime);
+            Owner = Runtime.AllocateEdgeActor();
+            Stranger = Runtime.AllocateEdgeActor();
+            Server = Runtime.AllocateEdgeActor(ServerNode);
+            ResolvedTabletActor = Server;
+            ResolverObserver = Runtime.AddObserver<TEvTabletResolver::TEvForward>([&](auto& ev) {
+                if (ev->Sender == Client) {
+                    ++Lookups;
+                    if (HoldLookups) {
+                        HeldLookups.emplace_back(ev.Release());
+                    } else {
+                        ReplyLookup(ev->GetRecipientRewrite(), ResolvedTabletActor);
+                        ev.Reset();
+                    }
+                }
+            });
+            EventObserver = Runtime.AddObserver<IEventHandle>([&](auto& ev) {
+                if (ev->GetRecipientRewrite() == Server) {
+                    if (ev->GetTypeRewrite() == TEvTabletPipe::EvConnect) {
+                        ConnectCookies.insert(ev->Cookie);
+                        Connects = ConnectCookies.size();
+                    } else if (ev->GetTypeRewrite() == TEvTabletPipe::EvPeerClosed) {
+                        ++PeerCloses;
+                        ev.Reset();
+                    } else if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
+                            && ev->Type == TEvents::TEvPing::EventType) {
+                        ++Payloads;
+                        ev.Reset();
+                    } else if (ev->GetTypeRewrite() == TEvTabletPipe::EvPush
+                            && ev->template Get<TEvTabletPipe::TEvPush>()->Record.GetType() == TEvents::TEvPing::EventType) {
+                        ++Payloads;
+                        ev.Reset();
+                    }
+                } else if (ev->GetRecipientRewrite() == Owner) {
+                    if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                        const auto* msg = ev->template Get<TEvTabletPipe::TEvClientConnected>();
+                        UNIT_ASSERT_VALUES_EQUAL(msg->ClientId, Client);
+                        Connections.emplace_back(msg->Status, msg->Generation);
+                        ev.Reset();
+                    } else if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientDestroyed) {
+                        ++Destroyed;
+                        ev.Reset();
+                    }
+                }
+            });
+            // Withhold real retry timers until a test explicitly releases them.
+            // A held timer must not be mistaken for an immediate retry.
+            RetryObserver = Runtime.AddObserver<TEvTabletPipe::TEvClientRetry>([&](auto& ev) {
+                if (ev->GetRecipientRewrite() == Client) {
+                    Retries.emplace_back(ev.Release());
+                }
+            });
+            NodeObserver = Runtime.AddObserver<TEvInterconnect::TEvNodeConnected>([&](auto& ev) {
+                if (HoldNodeConnections && ev->GetRecipientRewrite() == Client) {
+                    HeldConnections.emplace_back(ev.Release());
+                }
+            });
+            NTabletPipe::TClientConfig config;
+            config.HintTablet = Server;
+            config.HintTabletActor = knownActor ? ResolvedTabletActor : TActorId{};
+            config.RetryPolicy = {
+                .MinRetryTime = TDuration::MilliSeconds(100),
+                .MaxRetryTime = TDuration::MilliSeconds(100),
+                .BackoffMultiplier = 1,
+                .DoFirstRetryInstantly = instantRetry,
+            };
+            Client = Runtime.Register(NTabletPipe::CreateClient(Owner, TabletId, config));
+            Runtime.EnableScheduleForActor(Client);
+        }
+
+        template <typename TCondition>
+        void Wait(const char* description, TCondition condition) {
+            const auto deadline = Runtime.GetCurrentTime() + TDuration::Seconds(10);
+            while (!condition() && Runtime.GetCurrentTime() < deadline) {
+                Runtime.SimulateSleep(TDuration::MilliSeconds(10));
+            }
+            UNIT_ASSERT_C(condition(), description);
+        }
+
+        ui64 NextConnect() {
+            auto request = Runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvConnect>(Server, TDuration::Seconds(10));
+            UNIT_ASSERT_C(request, "pipe did not send a connection request");
+            UNIT_ASSERT_VALUES_EQUAL(request->Sender, Client);
+            return request->Cookie;
+        }
+
+        void Reply(ui64 cookie, ui64 generation, NKikimrProto::EReplyStatus status = NKikimrProto::OK) {
+            Runtime.Send(new IEventHandle(Client, Server,
+                new TEvTabletPipe::TEvConnectResult(status, TabletId, Client,
+                    status == NKikimrProto::OK ? Server : TActorId{}, true, generation, {}), 0, cookie),
+                ServerNode, true);
+        }
+
+        void Accept(ui64 cookie, ui64 generation) {
+            const auto count = Connections.size();
+            Reply(cookie, generation);
+            Wait("successful pipe connection", [&] { return Connections.size() > count; });
+            UNIT_ASSERT_VALUES_EQUAL(Connections.back().first, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(Connections.back().second, generation);
+        }
+
+        void Hint(ui64 generation, bool fromOwner = true, TActorId tabletActor = {}) {
+            Runtime.Send(new IEventHandle(Client, fromOwner ? Owner : Stranger,
+                new TEvTabletPipe::TEvClientUpdateGeneration(generation,
+                    tabletActor ? tabletActor : ResolvedTabletActor)), 0, true);
+        }
+
+        void ReplyLookup(TActorId resolver, TActorId tabletActor) {
+            Runtime.Send(new IEventHandle(Client, resolver,
+                new TEvTabletResolver::TEvForwardResult(TabletId, tabletActor, Server, Lookups)));
+        }
+
+        void ReleaseLookup(size_t index, TActorId tabletActor) {
+            auto request = std::move(HeldLookups.at(index));
+            ReplyLookup(request->GetRecipientRewrite(), tabletActor);
+        }
+
+        void QueuePayload() {
+            auto event = MakeHolder<IEventHandle>(Client, Owner, new TEvents::TEvPing());
+            event->Rewrite(TEvTabletPipe::EvSend, Client);
+            Runtime.Send(event.Release(), 0, true);
+        }
+
+        void Tick() {
+            Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        void WaitForRetries(size_t count) {
+            Wait("scheduled retry timer", [&] { return Retries.size() >= count; });
+        }
+
+        void ReleaseRetry(size_t index) {
+            RetryObserver.Remove();
+            Runtime.Send(Retries.at(index).Release(), 0, true);
+        }
+    };
+
+    Y_UNIT_TEST(TestGenerationHintPreservesInFlightConnection) {
+        TGenerationHintPipe f;
+        const ui64 request = f.NextConnect();
+        f.QueuePayload();
+        f.Hint(2);
+        f.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 1);
+        UNIT_ASSERT(f.Connections.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.Destroyed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.PeerCloses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Payloads, 0);
+        f.Accept(request, 2);
+        f.Wait("payload after preserved handshake", [&] { return f.Payloads == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Destroyed, 0);
+    }
+
+    Y_UNIT_TEST(TestGenerationHintPreservesUnknownActorInFlight) {
+        TGenerationHintPipe f(false, false, false);
+        const ui64 request = f.NextConnect();
+        f.QueuePayload();
+        f.Hint(2);
+        f.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 1);
+        UNIT_ASSERT(f.Connections.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.PeerCloses, 0);
+        f.Accept(request, 2);
+        f.Wait("payload after unknown-identity handshake", [&] { return f.Payloads == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Destroyed, 0);
+    }
+
+    Y_UNIT_TEST(TestGenerationHintRejectsOldHandshakeBeforePayload) {
+        TGenerationHintPipe f;
+        const ui64 request = f.NextConnect();
+        f.QueuePayload();
+        f.Hint(2);
+        f.Tick();
+        f.Reply(request, 1);
+        f.WaitForRetries(1);
+        UNIT_ASSERT(f.Connections.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.Payloads, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.PeerCloses, 1);
+        // A new hint wakes the retry while the genuine scheduled timer remains held.
+        f.Hint(3);
+        f.Accept(f.NextConnect(), 3);
+        f.Wait("queued payload after rejecting the old generation", [&] { return f.Payloads == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Connections.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Destroyed, 0);
+    }
+
+    Y_UNIT_TEST(TestGenerationHintWakesRetryAndIgnoresOldTimer) {
+        TGenerationHintPipe f;
+        const ui64 first = f.NextConnect();
+        f.QueuePayload();
+        f.Reply(first, 1, NKikimrProto::TRYLATER);
+        f.WaitForRetries(1);
+        f.Hint(2);
+        const ui64 second = f.NextConnect();
+        f.Reply(second, 1, NKikimrProto::TRYLATER);
+        f.WaitForRetries(2);
+        const auto lookups = f.Lookups;
+        f.Hint(2);
+        f.Hint(1);
+        f.Hint(0);
+        f.Hint(9, false);
+        f.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups, lookups);
+        f.ReleaseRetry(0);
+        f.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(f.Lookups, lookups);
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 2);
+        UNIT_ASSERT(f.Connections.empty());
+        f.ReleaseRetry(1);
+        f.Accept(f.NextConnect(), 2);
+        f.Wait("payload after the current retry timer", [&] { return f.Payloads == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 3);
+    }
+
+    Y_UNIT_TEST(TestGenerationHintKeepsCurrentWorkingPipe) {
+        TGenerationHintPipe f;
+        f.Accept(f.NextConnect(), 5);
+        f.Hint(3, true, f.Runtime.AllocateEdgeActor());
+        f.Hint(3);
+        f.Hint(2);
+        f.Hint(0);
+        f.Hint(9, false);
+        f.Hint(5);
+        f.QueuePayload();
+        f.Wait("payload through the current working pipe", [&] { return f.Payloads == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Connections.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.PeerCloses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Destroyed, 0);
+    }
+
+    Y_UNIT_TEST(TestGenerationHintClosesObsoleteWorkingPipe) {
+        TGenerationHintPipe f;
+        f.Accept(f.NextConnect(), 1);
+        f.Hint(2);
+        f.QueuePayload();
+        f.Wait("ordinary owner disconnect notifications", [&] { return f.Destroyed == 1 && f.PeerCloses == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.PeerCloses, 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Payloads, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Connections.size(), 1);
+    }
+
+    void CheckGenerationHintReplacesOldAttempt(bool remote) {
+        TGenerationHintPipe f(true, remote);
+        if (remote) {
+            f.Wait("old interconnect notification", [&] { return !f.HeldConnections.empty(); });
+        } else {
+            f.NextConnect(); // The old target never answers this request.
+        }
+        const auto newActor = f.Runtime.AllocateEdgeActor(f.ServerNode);
+        f.ResolvedTabletActor = newActor;
+        f.HoldNodeConnections = false;
+        f.QueuePayload();
+        f.Hint(2);
+        f.Accept(f.NextConnect(), 2);
+        f.Wait("payload after abandoning the old attempt", [&] { return f.Payloads == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Connections.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Destroyed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, remote ? 1 : 2);
+        UNIT_ASSERT(f.Retries.empty());
+    }
+
+    Y_UNIT_TEST(TestGenerationHintReplacesOldInFlightAttempt) {
+        CheckGenerationHintReplacesOldAttempt(false);
+    }
+
+    Y_UNIT_TEST(TestGenerationHintReplacesPendingInterconnectOnSameNode) {
+        CheckGenerationHintReplacesOldAttempt(true);
+    }
+
+    Y_UNIT_TEST(TestGenerationHintDoesNotPinResolvedIncarnation) {
+        TGenerationHintPipe f(true);
+        const auto first = f.NextConnect();
+        // Leave the next lookup in flight before learning about generation 3.
+        f.HoldLookups = true;
+        f.Reply(first, 1, NKikimrProto::TRYLATER);
+        f.Wait("lookup before the generation hint", [&] { return !f.HeldLookups.empty(); });
+        const auto actor3 = f.Runtime.AllocateEdgeActor();
+        f.Hint(3, true, actor3);
+        f.Tick();
+        // Generation 4 may have replaced the hinted actor before that lookup
+        // completes. Refresh once, then accept the newer incarnation.
+        const auto actor4 = f.Runtime.AllocateEdgeActor();
+        f.ResolvedTabletActor = actor4;
+        f.HoldLookups = false;
+        f.ReleaseLookup(0, actor4);
+        f.Accept(f.NextConnect(), 4);
+        f.QueuePayload();
+        f.Wait("payload through the newer resolved incarnation", [&] { return f.Payloads == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Connections.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Destroyed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Connects, 2);
+    }
+
 
     class TTabletStuckOnStop
         : public TActor<TTabletStuckOnStop>

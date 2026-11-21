@@ -13,6 +13,8 @@ namespace NKikimr {
         , ScrubCtx(std::move(scrubCtx))
         , VCtx(ScrubCtx->VCtx)
         , Info(ScrubCtx->Info)
+        , GroupGeneration(Info->GroupGeneration)
+        , IsBridgePart(Info->GetBridgeProxyGroupId().has_value())
         , LogPrefix(VCtx->VDiskLogPrefix)
         , Counters(VCtx->VDiskCounters->GetSubgroup("subsystem", "scrub"))
         , MonGroup(Counters)
@@ -26,7 +28,7 @@ namespace NKikimr {
         switch (const ui32 type = ev->GetTypeRewrite()) {
             hFunc(NMon::TEvHttpInfo, Handle);
             fFunc(TEvBlobStorage::EvScrubAwait, HandleScrubAwait);
-            fFunc(TEvBlobStorage::EvVGenerationChange, ForwardToBlobRecoveryActor);
+            fFunc(TEvBlobStorage::EvVGenerationChange, HandleGenerationChange);
             fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToBlobRecoveryActor);
             hFunc(TEvRestoreCorruptedBlobResult, Handle);
             hFunc(TEvNonrestoredCorruptedBlobNotify, Handle);
@@ -44,6 +46,13 @@ namespace NKikimr {
 
     void TScrubCoroImpl::HandleScrubAwait(TAutoPtr<IEventHandle> ev) {
         ScrubAwaitQueue.emplace(ScrubIterationCounter + 1, std::make_pair(ev->Sender, ev->Cookie));
+    }
+
+    void TScrubCoroImpl::HandleGenerationChange(TAutoPtr<IEventHandle> ev) {
+        const auto& newInfo = ev->Get<TEvVGenerationChange>()->NewInfo;
+        GroupGeneration = newInfo->GroupGeneration;
+        IsBridgePart = newInfo->GetBridgeProxyGroupId().has_value();
+        ForwardToBlobRecoveryActor(ev);
     }
 
     void TScrubCoroImpl::ForwardToBlobRecoveryActor(TAutoPtr<IEventHandle> ev) {
@@ -263,9 +272,15 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::CheckIntegrity(const TLogoBlobID& blobId, bool isHuge) {
-        SendToBSProxy(SelfActorId, Info->GroupID, new TEvBlobStorage::TEvCheckIntegrity(blobId, TInstant::Max(),
+        auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(blobId, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::LowRead,
-                /*singleLine*/ true, /*omitDataInfoUnlessError*/ true));
+                /*singleLine*/ true, /*omitDataInfoUnlessError*/ true);
+        if (IsBridgePart) {
+            // the part of bridged group is reached with its generation only; the inline pile would be checked through
+            // its bridge proxy along with the other parts otherwise
+            ev->ForceGroupGeneration = GroupGeneration;
+        }
+        SendToBSProxy(SelfActorId, Info->GroupID, ev.release());
         auto res = WaitForPDiskEvent<TEvBlobStorage::TEvCheckIntegrityResult>();
 
         TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();

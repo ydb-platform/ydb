@@ -1,8 +1,12 @@
+#include "bridge_common.h"
+
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(BSCMovePDisk) {
+
+    using TPDisk = std::pair<ui32, ui32>;
 
     void WaitForPDiskStop(TEnvironmentSetup& env) {
         TInstant barrier = env.Runtime->GetClock() + TDuration::Seconds(30);
@@ -28,6 +32,119 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
             }
         });
         UNIT_ASSERT(gotPdiskRestart);
+    }
+
+    void StopPDisk(TEnvironmentSetup& env, TPDisk pdisk) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *id = request.AddCommand()->MutableStopPDisk()->MutableTargetPDiskId();
+        id->SetNodeId(pdisk.first);
+        id->SetPDiskId(pdisk.second);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitForPDiskStop(env);
+    }
+
+    NKikimrBlobStorage::TConfigResponse InvokeMovePDisk(TEnvironmentSetup& env, TPDisk source, TPDisk destination) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupFailModelChecks(true);
+        auto *cmd = request.AddCommand()->MutableMovePDisk();
+        auto *sourceId = cmd->MutableSourcePDisk()->MutableTargetPDiskId();
+        sourceId->SetNodeId(source.first);
+        sourceId->SetPDiskId(source.second);
+        auto *destinationId = cmd->MutableDestinationPDisk()->MutableTargetPDiskId();
+        destinationId->SetNodeId(destination.first);
+        destinationId->SetPDiskId(destination.second);
+        request.AddCommand()->MutableQueryBaseConfig(); // the config as the move makes it
+        return env.Invoke(request);
+    }
+
+    // the config reported by QueryBaseConfig in the request moving the PDisk has the generations the groups get when
+    // this request is committed, so they are usable in further commands
+    void CheckGenerationsReported(TEnvironmentSetup& env, const NKikimrBlobStorage::TConfigResponse& response,
+            TPDisk destination) {
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 2);
+        const auto& reported = response.GetStatus(1).GetBaseConfig();
+        const auto committed = env.FetchBaseConfig();
+
+        std::map<ui32, ui32> groupGenerations;
+        for (const auto& group : committed.GetGroup()) {
+            groupGenerations.emplace(group.GetGroupId(), group.GetGroupGeneration());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(reported.GroupSize(), committed.GroupSize());
+        for (const auto& group : reported.GetGroup()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(group.GetGroupGeneration(), groupGenerations.at(group.GetGroupId()),
+                "GroupId# " << group.GetGroupId());
+        }
+
+        std::map<std::tuple<ui32, ui32, ui32>, ui32> vslotGenerations;
+        for (const auto& vslot : committed.GetVSlot()) {
+            const auto& id = vslot.GetVSlotId();
+            vslotGenerations.emplace(std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()),
+                vslot.GetGroupGeneration());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(reported.VSlotSize(), committed.VSlotSize());
+        size_t numMoved = 0;
+        for (const auto& vslot : reported.GetVSlot()) {
+            const auto& id = vslot.GetVSlotId();
+            const auto key = std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
+            UNIT_ASSERT_C(vslotGenerations.contains(key), id.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(vslot.GetGroupGeneration(), vslotGenerations.at(key), id.ShortDebugString());
+            numMoved += id.GetNodeId() == destination.first && id.GetPDiskId() == destination.second;
+        }
+        UNIT_ASSERT_C(numMoved, "the config reported doesn't show VSlots on the destination PDisk");
+    }
+
+    void RestartPDisk(TEnvironmentSetup& env, TPDisk pdisk) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupFailModelChecks(true);
+        auto *id = request.AddCommand()->MutableRestartPDisk()->MutableTargetPDiskId();
+        id->SetNodeId(pdisk.first);
+        id->SetPDiskId(pdisk.second);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    TPDisk FindGroupPDisk(TEnvironmentSetup& env, ui32 groupId) {
+        const auto config = env.FetchBaseConfig();
+        for (const auto& vslot : config.GetVSlot()) {
+            if (vslot.GetGroupId() == groupId) {
+                return {vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId()};
+            }
+        }
+        UNIT_FAIL("no PDisk found for GroupId# " << groupId);
+        Y_UNREACHABLE();
+    }
+
+    TPDisk PrepareDestinationPDisk(TEnvironmentSetup& env, ui32 nodeId) {
+        const auto config = env.FetchBaseConfig();
+        std::optional<TPDisk> destination;
+        for (const auto& pdisk : config.GetPDisk()) {
+            if (pdisk.GetNodeId() == nodeId) {
+                destination.emplace(nodeId, pdisk.GetPDiskId());
+                break;
+            }
+        }
+        UNIT_ASSERT_C(destination, "no PDisk found on NodeId# " << nodeId);
+
+        for (const auto& vslot : config.GetVSlot()) {
+            if (vslot.GetVSlotId().GetNodeId() != destination->first ||
+                    vslot.GetVSlotId().GetPDiskId() != destination->second) {
+                continue;
+            }
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreGroupFailModelChecks(true);
+            auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
+            cmd->SetGroupId(vslot.GetGroupId());
+            cmd->SetGroupGeneration(vslot.GetGroupGeneration());
+            cmd->SetFailRealmIdx(vslot.GetFailRealmIdx());
+            cmd->SetFailDomainIdx(vslot.GetFailDomainIdx());
+            cmd->SetVDiskIdx(vslot.GetVDiskIdx());
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+        return *destination;
     }
 
     void PDiskMoveBasic(TBlobStorageGroupType::EErasureSpecies erasure, ui32 nodeCount, std::pair<ui32, ui32> newDiskId, ui32 numDrivesPerNode = 1) {
@@ -101,21 +218,9 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
         TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
         env.PutBlob(groupId, id, data);
 
-        {
-            // Stop destination PDisk.
-            NKikimrBlobStorage::TConfigRequest request;
-
-            NKikimrBlobStorage::TStopPDisk* cmd = request.AddCommand()->MutableStopPDisk();
-            auto* pdiskId = cmd->MutableTargetPDiskId();
-            pdiskId->SetNodeId(destinationNodeId);
-            pdiskId->SetPDiskId(destinationPDiskId);
-
-            auto response = env.Invoke(request);
-
-            UNIT_ASSERT_C(response.GetSuccess(), "Should've stopped");
-
-            WaitForPDiskStop(env);
-        }
+        const TPDisk source{sourceNodeId, sourcePDiskId};
+        const TPDisk destination{destinationNodeId, destinationPDiskId};
+        StopPDisk(env, destination);
 
         auto srcPDiskState = env.PDiskMockStates[std::make_pair(sourceNodeId, sourcePDiskId)];
 
@@ -128,43 +233,14 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
             env.Runtime->Send(new IEventHandle(destinationPDiskActorId, edge, evChangeState), destinationNodeId);
         }
 
-        {
-            // Execute the move PDisk command.
-            // This command will remove source PDisk.
-            NKikimrBlobStorage::TConfigRequest request;
-
-            NKikimrBlobStorage::TMovePDisk* cmd = request.AddCommand()->MutableMovePDisk();
-            request.SetIgnoreGroupFailModelChecks(true);
-
-            auto* sourcePdiskId = cmd->MutableSourcePDisk()->MutableTargetPDiskId();
-            sourcePdiskId->SetNodeId(sourceNodeId);
-            sourcePdiskId->SetPDiskId(sourcePDiskId);
-
-            auto* destinationPdiskId = cmd->MutableDestinationPDisk()->MutableTargetPDiskId();
-            destinationPdiskId->SetNodeId(destinationNodeId);
-            destinationPdiskId->SetPDiskId(destinationPDiskId);
-
-            auto response = env.Invoke(request);
-
-            UNIT_ASSERT(response.GetSuccess());
-        }
+        // Execute the move PDisk command. This command will remove source PDisk.
+        const auto response = InvokeMovePDisk(env, source, destination);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
         // Wait until destination PDisk is restarted.
         WaitForPDiskRestart(env);
-
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            request.SetIgnoreGroupFailModelChecks(true);
-
-            NKikimrBlobStorage::TRestartPDisk* cmd = request.AddCommand()->MutableRestartPDisk();
-            auto pdiskId = cmd->MutableTargetPDiskId();
-            pdiskId->SetNodeId(destinationNodeId);
-            pdiskId->SetPDiskId(destinationPDiskId);
-
-            auto response = env.Invoke(request);
-
-            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        }
+        CheckGenerationsReported(env, response, destination);
+        RestartPDisk(env, destination);
 
         // Wait and read the data back from the destination PDisk.
         env.Sim(TDuration::Seconds(30));
@@ -197,6 +273,82 @@ Y_UNIT_TEST_SUITE(BSCMovePDisk) {
 
     Y_UNIT_TEST(PDiskMove_Mirror3dc3Nodes) {
         PDiskMoveBasic(TBlobStorageGroupType::EErasureSpecies::ErasureMirror3dc, 3, {1, 1003}, 4);
+    }
+
+    TEnvironmentSetup::TSettings MakeBridgeSettings() {
+        return {
+            .NodeCount = 18,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = [](ui32 nodeId) {
+                NActorsInterconnect::TNodeLocation location;
+                location.SetBridgePileName(TStringBuilder() << "pile_" << (nodeId - 1) / 9 + 1);
+                location.SetDataCenter("my_dc");
+                location.SetRack(TStringBuilder() << "rack_" << nodeId);
+                location.SetUnit(TStringBuilder() << "unit_" << nodeId);
+                return TNodeLocation(location);
+            },
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        };
+    }
+
+    Y_UNIT_TEST(PDiskMove_Bridge) {
+        TEnvironmentSetup env(MakeBridgeSettings());
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto parts = NBridgeTest::GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 2);
+
+        const TPDisk destination = PrepareDestinationPDisk(env, 18);
+        const TPDisk source = FindGroupPDisk(env, parts[1]);
+        const auto proxyBefore = NBridgeTest::GetGroupInfo(env, groupId);
+        std::vector<ui32> generationsBefore;
+        for (ui32 partId : parts) {
+            generationsBefore.push_back(NBridgeTest::GetGroupInfo(env, partId).GetGroupGeneration());
+        }
+
+        NBridgeTest::TDataChecker checker(env);
+        checker.Write(groupId);
+        StopPDisk(env, destination);
+        auto srcPDiskState = env.PDiskMockStates[std::make_pair(source.first, source.second)];
+        TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
+        auto *evChangeState = new TEvMoveDrive(srcPDiskState);
+        TActorId destinationPDiskActorId = MakeBlobStoragePDiskID(destination.first, destination.second);
+        env.Runtime->Send(new IEventHandle(destinationPDiskActorId, edge, evChangeState), destination.first);
+        const auto response = InvokeMovePDisk(env, source, destination);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitForPDiskRestart(env);
+        CheckGenerationsReported(env, response, destination);
+        RestartPDisk(env, destination);
+        env.Sim(TDuration::Seconds(30));
+
+        const auto proxyAfter = NBridgeTest::GetGroupInfo(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(proxyAfter.GetGroupGeneration(), proxyBefore.GetGroupGeneration() + 1);
+        for (size_t i = 0; i < parts.size(); ++i) {
+            const auto partAfter = NBridgeTest::GetGroupInfo(env, parts[i]);
+            UNIT_ASSERT_VALUES_EQUAL(partAfter.GetGroupGeneration(), generationsBefore[i] + 1);
+            UNIT_ASSERT_VALUES_EQUAL(proxyAfter.GetBridgeGroupState().GetPile(i).GetGroupGeneration(),
+                partAfter.GetGroupGeneration());
+        }
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
+    Y_UNIT_TEST(PDiskMove_RejectCrossPileDestination) {
+        TEnvironmentSetup env(MakeBridgeSettings());
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto parts = NBridgeTest::GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 2);
+
+        const TPDisk destination = PrepareDestinationPDisk(env, 18);
+        const TPDisk source = FindGroupPDisk(env, parts[0]);
+        const auto proxyBefore = NBridgeTest::GetGroupInfo(env, groupId);
+        StopPDisk(env, destination);
+        const auto response = InvokeMovePDisk(env, source, destination);
+        UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "outside its pile");
+        const auto proxyAfter = NBridgeTest::GetGroupInfo(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(proxyAfter.GetGroupGeneration(), proxyBefore.GetGroupGeneration());
     }
 
 }

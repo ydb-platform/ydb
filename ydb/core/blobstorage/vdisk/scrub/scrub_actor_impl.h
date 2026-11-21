@@ -19,6 +19,8 @@ namespace NKikimr {
         const TScrubContext::TPtr ScrubCtx;
         const TIntrusivePtr<TVDiskContext> VCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
+        ui32 GroupGeneration; // the current one, Info keeps the generation the VDisk has started with
+        bool IsBridgePart; // the current one too: the group may become an inline pile of bridged group while running
         const TString LogPrefix;
 
         std::optional<NKikimrVDiskData::TScrubState> State;
@@ -81,6 +83,7 @@ namespace NKikimr {
             ui64 scrubEntrypointLsn);
         void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev);
         void Handle(NMon::TEvHttpInfo::TPtr ev);
+        void HandleGenerationChange(TAutoPtr<IEventHandle> ev);
         void ForwardToBlobRecoveryActor(TAutoPtr<IEventHandle> ev);
 
         TString RenderHtml(ui32 maxUnreadableBlobs) const;

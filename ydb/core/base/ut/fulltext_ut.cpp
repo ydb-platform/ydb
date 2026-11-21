@@ -543,6 +543,11 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_C(ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
+        columnAnalyzers->set_use_filter_stopwords(true);
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Unsupported use_filter_stopwords setting");
+        columnAnalyzers->clear_use_filter_stopwords();
+
         columnAnalyzers->set_use_filter_length(false);
         UNIT_ASSERT_C(ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
@@ -976,15 +981,18 @@ Y_UNIT_TEST_SUITE(NFulltext) {
                                  (TVector<TString>{"def"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
-        analyzers.set_use_filter_stopwords(true);
+        // Exercise whole-token filtering with the length filter supported by this stable branch.
+        analyzers.set_use_filter_length(true);
+        analyzers.set_filter_length_min(4);
         UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%the% cats", analyzers, '!'),
                                  (TVector<TString>{"cat", "ats"}));
         UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("the cats", analyzers, '!'),
                                  (TVector<TString>{"cat", "ats"}));
-        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("foo !_%the cats", analyzers, '!'),
-                                 (TVector<TString>{"foo", "cat", "ats"}));
+        UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("food !_%the cats", analyzers, '!'),
+                                 (TVector<TString>{"foo", "ood", "cat", "ats"}));
 
-        analyzers.set_use_filter_stopwords(false);
+        analyzers.set_use_filter_length(false);
+        analyzers.clear_filter_length_min();
         analyzers.set_use_filter_ngram(false);
         analyzers.set_use_filter_edge_ngram(true);
         UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("!%Abc%", analyzers, '!'),
@@ -1062,7 +1070,8 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_use_filter_ngram(true);
         analyzers.set_filter_ngram_min_length(3);
         analyzers.set_filter_ngram_max_length(3);
-        analyzers.set_use_filter_stopwords(true);
+        analyzers.set_use_filter_length(true);
+        analyzers.set_filter_length_max(4);
         UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%her%", analyzers, std::nullopt),
                                  (TVector<TString>{}));
         UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("%learn%", analyzers, std::nullopt),
@@ -1072,8 +1081,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("foo there", analyzers, std::nullopt),
                                  (TVector<TString>{"foo"}));
 
-        analyzers.set_use_filter_stopwords(false);
-        analyzers.set_use_filter_length(true);
+        analyzers.clear_filter_length_max();
         analyzers.set_filter_length_min(4);
         UNIT_ASSERT_VALUES_EQUAL(BuildLikeSearchTerms("cat food", analyzers, std::nullopt),
                                  (TVector<TString>{"foo", "ood"}));

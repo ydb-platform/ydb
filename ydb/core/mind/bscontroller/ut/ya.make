@@ -1,9 +1,11 @@
 UNITTEST_FOR(ydb/core/mind/bscontroller)
 
 SRCS(
+    bridge_storage_ut.cpp
     grouper_ut.cpp
     group_mapper_ut.cpp
     mv_object_map_ut.cpp
+    storage_pool_stat_ut.cpp
 )
 
 FORK_SUBTESTS()

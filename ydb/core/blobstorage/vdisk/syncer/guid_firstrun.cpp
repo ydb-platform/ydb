@@ -108,15 +108,19 @@ namespace NKikimr {
         TVDiskGuidFirstRunState(const TString& logPrefix,
                                 const TVDiskIdShort &self,
                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+                                EFirstRunMode mode,
                                 EFirstRunStep step,
                                 TVDiskEternalGuid guid)
             : VDiskLogPrefix(logPrefix)
             , Neighbors(self, top)
             , QuorumTracker(self, top, true)
+            , Mode(mode)
             , Step(step)
             , Guid(guid)
         {
             Y_VERIFY_S(IsAction(Step), VDiskLogPrefix);
+            Y_VERIFY_S(Mode != EFirstRunMode::PublishOnly || Step == EFirstRunStep::ACTION_WriteFinalToQuorum,
+                VDiskLogPrefix);
         }
 
         void GenerateGuid() {
@@ -165,7 +169,9 @@ namespace NKikimr {
             return SetResult(vdisk,
                              abandonProxy,
                              EFirstRunStep::STATE__WaitFinalWrittenToQuorum,
-                             EFirstRunStep::ACTION_WriteFinalLocally);
+                             Mode == EFirstRunMode::PublishOnly
+                                 ? EFirstRunStep::STATE__Terminated
+                                 : EFirstRunStep::ACTION_WriteFinalLocally);
         }
 
         void RunWriteFinalLocally() {
@@ -204,6 +210,7 @@ namespace NKikimr {
         const TString VDiskLogPrefix;
         NSync::TVDiskNeighbors<TVDiskState> Neighbors;
         NSync::TQuorumTracker QuorumTracker;
+        const EFirstRunMode Mode;
         EFirstRunStep Step;
         TVDiskEternalGuid Guid;
 
@@ -440,7 +447,11 @@ namespace NKikimr {
             auto msg = ev->Get();
             bool enough = FirstRunState.SetResultForWriteFinal(msg->VDiskId, abandonProxy);
             if (enough) {
-                WriteFinalLocally(ctx);
+                if (FirstRunState.GetStep() == EFirstRunStep::STATE__Terminated) {
+                    Finish(ctx);
+                } else {
+                    WriteFinalLocally(ctx);
+                }
             }
         }
 
@@ -549,6 +560,7 @@ namespace NKikimr {
                                 TIntrusivePtr<TBlobStorageGroupInfo> info,
                                 const TActorId &committerId,
                                 const TActorId &notifyId,
+                                EFirstRunMode mode,
                                 EFirstRunStep startStep,
                                 TVDiskEternalGuid guid)
             : TActorBootstrapped<TVDiskGuidFirstRunActor>()
@@ -556,7 +568,7 @@ namespace NKikimr {
             , GInfo(std::move(info))
             , CommitterId(committerId)
             , NotifyId(notifyId)
-            , FirstRunState(VCtx->VDiskLogPrefix, VCtx->ShortSelfVDisk, GInfo->PickTopology(), startStep, guid)
+            , FirstRunState(VCtx->VDiskLogPrefix, VCtx->ShortSelfVDisk, GInfo->PickTopology(), mode, startStep, guid)
         {}
     };
 
@@ -564,9 +576,10 @@ namespace NKikimr {
                                          TIntrusivePtr<TBlobStorageGroupInfo> info,
                                          const TActorId &committerId,
                                          const TActorId &notifyId,
+                                         EFirstRunMode mode,
                                          EFirstRunStep startStep,
                                          TVDiskEternalGuid guid) {
-        return new TVDiskGuidFirstRunActor(std::move(vctx), std::move(info), committerId, notifyId, startStep, guid);
+        return new TVDiskGuidFirstRunActor(std::move(vctx), std::move(info), committerId, notifyId, mode, startStep, guid);
     }
 
 } // NKikimr

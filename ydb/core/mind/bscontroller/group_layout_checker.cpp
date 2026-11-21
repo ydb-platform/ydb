@@ -23,6 +23,9 @@ TPDiskLayoutPosition::TPDiskLayoutPosition(TDomainMapper& mapper, const TNodeLoc
         }
     };
     for (const auto& [key, value] : location.GetItems()) {
+        if (geom.GetIgnoreBridgePile() && key == TNodeLocation::TKeys::BridgePileName) {
+            continue; // ordinary pools use physical DC/rack geometry across logical bridge piles
+        }
         addLevel(key, value);
     }
     if (diskScope) {

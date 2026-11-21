@@ -84,6 +84,7 @@ public:
     bool IsExpectedStreamCreator(const TActorId& actorId) const override;
 
     TString GetStreamPath() const override;
+    TString BuildStreamConsumerName() const override;
 
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;

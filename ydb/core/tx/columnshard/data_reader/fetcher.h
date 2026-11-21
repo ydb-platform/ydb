@@ -87,16 +87,18 @@ public:
         , Environment(environment)
         , ConveyorCategory(conveyorCategory)
     {
-        AFL_VERIFY(Environment);
-        AFL_VERIFY(Callback);
+        YDB_LOG_VERIFY(Environment);
+        YDB_LOG_VERIFY(Callback);
     }
 
     ~TPortionsDataFetcher() {
         if (NActors::TActorSystem::IsStopped() || Callback->IsAborted()) {
             CurrentContext.Abort();
         }
-        AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
-            || Callback->IsAborted())("stage", Guard.GetStage())("class_name", Callback->GetClassName());
+        YDB_LOG_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
+            || Callback->IsAborted(),
+            {"stage", Guard.GetStage()},
+            {"className", Callback->GetClassName()});
     }
 
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,
@@ -148,7 +150,7 @@ public:
             {"consumer", Input.GetConsumer()},
             {"taskId", Input.GetExternalTaskId()},
             {"script", Script.GetScriptClassName()});
-        AFL_VERIFY(!IsFinishedFlag);
+        YDB_LOG_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Error);
         Callback->OnError(errMessage);
@@ -160,7 +162,7 @@ public:
             {"consumer", Input.GetConsumer()},
             {"taskId", Input.GetExternalTaskId()},
             {"script", Script.GetScriptClassName()});
-        AFL_VERIFY(!IsFinishedFlag);
+        YDB_LOG_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Finished);
         Callback->OnFinished(std::move(CurrentContext));

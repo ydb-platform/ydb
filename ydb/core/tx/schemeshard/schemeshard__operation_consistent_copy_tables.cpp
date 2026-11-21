@@ -56,7 +56,7 @@ static NKikimrSchemeOp::TModifyScheme CopyAnyTableTask(NKikimr::NSchemeShard::TP
     return scheme;
 }
 
-static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst, bool isBackupCopy) {
+static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -93,17 +93,19 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
                 Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
-            if (!isBackupCopy) {
-                return {};
-            }
-            *operation->MutableHnswIndexDescription() =
-                std::get<NKikimrSchemeOp::THnswIndexDescription>(indexInfo->SpecializedIndexDescription);
-            break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *operation->MutableVectorIndexKmeansTreeDescription() =
                 std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+            const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+                &indexInfo->SpecializedIndexDescription);
+            if (!description) {
+                return {}; // Reject inconsistent index metadata.
+            }
+            *operation->MutableHnswIndexDescription() = *description;
+            break;
+        }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -347,7 +349,7 @@ bool CreateConsistentCopyTables(
                 {"name", name},
             );
 
-            auto scheme = CreateIndexTask(indexInfo, dstIndexPath, descr.GetIsBackup() && tx.GetInternal());
+            auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
             if (!scheme) {
                 result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
                                        TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};

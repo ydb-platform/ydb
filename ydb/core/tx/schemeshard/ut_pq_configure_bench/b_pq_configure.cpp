@@ -130,22 +130,15 @@ static TFixture MakeFixture(ui32 shards, ui32 partsPerTablet) {
 }
 
 // The cdc bootstrap: one ExplicitMessageGroup per source-table datashard
-// (id = encoded tablet id, key-range bounds) — the ~2-5 MB term of the
-// incident at 35k datashards.
+// (id = encoded tablet id) — the ~2-5 MB term of the incident at 35k
+// datashards. Production emits id-only groups: the key ranges were dropped
+// (nothing reads them).
 static NKikimrPQ::TBootstrapConfig MakeBootstrapConfig(ui64 entries) {
     Y_ABORT_UNLESS(entries > 0);
     NKikimrPQ::TBootstrapConfig bootstrapConfig;
     for (ui64 i = 0; i < entries; ++i) {
         auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
         mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(FIRST_TABLET_ID + i)));
-
-        if (i != entries - 1) {
-            mg.MutableKeyRange()->SetToBound(MakeBound(48));
-        }
-
-        if (i) {
-            mg.MutableKeyRange()->SetFromBound(MakeBound(48));
-        }
     }
     return bootstrapConfig;
 }

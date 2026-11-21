@@ -15,6 +15,392 @@ Increment the:
 
 ## [Unreleased]
 
+## [1.30.0] 2026-10-22
+
+This release contains:
+
+* Important changes
+* Breaking changes
+* Security fixes
+
+Please check the full release notes.
+
+Changes:
+
+* [RELEASE] Bump main branch to 1.30.0-dev
+  [#4563](https://github.com/open-telemetry/opentelemetry-cpp/pull/4563)
+
+* [BENCHMARK] Add probability and composite sampler benchmarks
+  [#4569](https://github.com/open-telemetry/opentelemetry-cpp/pull/4569)
+
+* [API] Remove regex from trace_state.h
+  [#4570](https://github.com/open-telemetry/opentelemetry-cpp/pull/4570)
+
+* [SDK] Fix span-limit compilation on 32-bit platforms
+  [#4573](https://github.com/open-telemetry/opentelemetry-cpp/pull/4573)
+
+* [CODE HEALTH] Fix typos in comments and docs
+  [#4572](https://github.com/open-telemetry/opentelemetry-cpp/pull/4572)
+
+* Bump curl from 8.21.0.bcr.1 to 8.21.0.bcr.2
+  [#4578](https://github.com/open-telemetry/opentelemetry-cpp/pull/4578)
+
+* Bump github/codeql-action/init from 4.37.9 to 4.38.0
+  [#4577](https://github.com/open-telemetry/opentelemetry-cpp/pull/4577)
+
+* [BENCHMARK] Add cases for nested samplers and multiple tracestate keys
+  [#4576](https://github.com/open-telemetry/opentelemetry-cpp/pull/4576)
+
+* [SDK] Add missing cstdint include to predicate_factory.h
+  [#4574](https://github.com/open-telemetry/opentelemetry-cpp/pull/4574)
+
+* [BUG] Fix random attribute selection in metrics foo example
+  [#4585](https://github.com/open-telemetry/opentelemetry-cpp/pull/4585)
+
+* [CODE HEALTH] Add missing include in aggregation_config.h
+  [#4567](https://github.com/open-telemetry/opentelemetry-cpp/pull/4567)
+
+* [CI] Add renovate configuration
+  [#4568](https://github.com/open-telemetry/opentelemetry-cpp/pull/4568)
+
+* Pin otel/cpp_format_tools Docker tag to 45d4342
+  [#4588](https://github.com/open-telemetry/opentelemetry-cpp/pull/4588)
+
+* Update dependency rules_cc to v0.2.25
+  [#4590](https://github.com/open-telemetry/opentelemetry-cpp/pull/4590)
+
+* [CI] finish switch to renovate
+  [#4593](https://github.com/open-telemetry/opentelemetry-cpp/pull/4593)
+
+* pin runner images
+  [#4594](https://github.com/open-telemetry/opentelemetry-cpp/pull/4594)
+
+* Update dependency rules_foreign_cc to v0.16.0
+  [#4592](https://github.com/open-telemetry/opentelemetry-cpp/pull/4592)
+
+* Update all [patches]
+  [#4591](https://github.com/open-telemetry/opentelemetry-cpp/pull/4591)
+
+* [DEVCONTAINER] Pin to the ubuntu 24.04 base image and pin cmake
+  [#4595](https://github.com/open-telemetry/opentelemetry-cpp/pull/4595)
+
+* [DOCKER] specify image versions
+  [#4599](https://github.com/open-telemetry/opentelemetry-cpp/pull/4599)
+
+* Update infra [minor]
+  [#4597](https://github.com/open-telemetry/opentelemetry-cpp/pull/4597)
+
+* [CI] Require approval for major 'docker' updates
+  [#4598](https://github.com/open-telemetry/opentelemetry-cpp/pull/4598)
+
+* Update dependency bazel to v8.8.0
+  [#4605](https://github.com/open-telemetry/opentelemetry-cpp/pull/4605)
+
+* Update all [patches]
+  [#4607](https://github.com/open-telemetry/opentelemetry-cpp/pull/4607)
+
+* [BAZEL] use default bazel version
+  [#4606](https://github.com/open-telemetry/opentelemetry-cpp/pull/4606)
+
+* Update dependency abseil-cpp to v20260526
+  [#4602](https://github.com/open-telemetry/opentelemetry-cpp/pull/4602)
+
+* [BUILD] Build break with bazel for configuration examples
+  [#4611](https://github.com/open-telemetry/opentelemetry-cpp/pull/4611)
+
+* Update dependency grpc to v1.84.0
+  [#4612](https://github.com/open-telemetry/opentelemetry-cpp/pull/4612)
+
+* Update dependency googletest to v1.18.0.bcr.1
+  [#4601](https://github.com/open-telemetry/opentelemetry-cpp/pull/4601)
+
+* [API] TraceState::Set overwrites an entry with the same key
+  [#4586](https://github.com/open-telemetry/opentelemetry-cpp/pull/4586)
+
+* Update dependency abseil-cpp to v20260817
+  [#4613](https://github.com/open-telemetry/opentelemetry-cpp/pull/4613)
+
+* Update dependency protobuf to v36
+  [#4615](https://github.com/open-telemetry/opentelemetry-cpp/pull/4615)
+
+* Update actions/upload-artifact action to v7
+  [#4620](https://github.com/open-telemetry/opentelemetry-cpp/pull/4620)
+
+* Update otel/opentelemetry-collector Docker tag to v0.161.0
+  [#4623](https://github.com/open-telemetry/opentelemetry-cpp/pull/4623)
+
+* [CI] Reset ignorePaths in Renovate configuration
+  [#4626](https://github.com/open-telemetry/opentelemetry-cpp/pull/4626)
+
+* Update open-telemetry/shared-workflows action to v0.16.0
+  [#4628](https://github.com/open-telemetry/opentelemetry-cpp/pull/4628)
+
+* Pin python Docker tag to be8ccd0
+  [#4627](https://github.com/open-telemetry/opentelemetry-cpp/pull/4627)
+
+* chore: fix inconsistent format in bug template
+  [#4633](https://github.com/open-telemetry/opentelemetry-cpp/pull/4633)
+
+* [LOGS] Fix Logger::EmitLogRecord unsafe static_cast to Recordable
+  [#4624](https://github.com/open-telemetry/opentelemetry-cpp/pull/4624)
+
+* [BUG] Send one request per curl session
+  [#4431](https://github.com/open-telemetry/opentelemetry-cpp/pull/4431)
+
+* [BUG] Compare the curl seek offset before narrowing it to size_t
+  [#4630](https://github.com/open-telemetry/opentelemetry-cpp/pull/4630)
+
+* [BUG] Do not queue a curl session closed by the Retry-After cap
+  [#4632](https://github.com/open-telemetry/opentelemetry-cpp/pull/4632)
+
+* Update all [patches]
+  [#4640](https://github.com/open-telemetry/opentelemetry-cpp/pull/4640)
+
+* [BUG] Fix a data race on the curl operation's last result code
+  [#4618](https://github.com/open-telemetry/opentelemetry-cpp/pull/4618)
+
+* [BUG] Do not busy-spin the curl background thread while a retry is queued at shutdown
+  [#4637](https://github.com/open-telemetry/opentelemetry-cpp/pull/4637)
+
+* chore: fix duplicated and incorrect SpinLockMutex comments
+  [#4641](https://github.com/open-telemetry/opentelemetry-cpp/pull/4641)
+
+* Update dependency curl to v8.22.0
+  [#4645](https://github.com/open-telemetry/opentelemetry-cpp/pull/4645)
+
+* chore: Move Tom Tan from maintainer to approver
+  [#4644](https://github.com/open-telemetry/opentelemetry-cpp/pull/4644)
+
+* [METRICS SDK] Enforce a runtime minimum scale for Base2ExponentialHistogramAggregation
+  [#4353](https://github.com/open-telemetry/opentelemetry-cpp/pull/4353)
+
+* [Metrics SDK] Fix spatial re-aggregation for asynchronous instruments
+  [#4635](https://github.com/open-telemetry/opentelemetry-cpp/pull/4635)
+
+* Update dependency windows to v2025
+  [#4648](https://github.com/open-telemetry/opentelemetry-cpp/pull/4648)
+
+* [EXAMPLE] Remove duplicate global propagator setup in gRPC client example
+  [#4654](https://github.com/open-telemetry/opentelemetry-cpp/pull/4654)
+
+* [BUG] Keep the curl retry deadline stable within an attempt
+  [#4452](https://github.com/open-telemetry/opentelemetry-cpp/pull/4452)
+
+* [SDK] Handle instrumentation object construction failures safely
+  [#4469](https://github.com/open-telemetry/opentelemetry-cpp/pull/4469)
+
+* [METRICS SDK] Drop aggregation behaves as a no-op
+  [#4515](https://github.com/open-telemetry/opentelemetry-cpp/pull/4515)
+
+* Update all [patches]
+  [#4657](https://github.com/open-telemetry/opentelemetry-cpp/pull/4657)
+
+* Update infra [minor]
+  [#4667](https://github.com/open-telemetry/opentelemetry-cpp/pull/4667)
+
+* Update all [patches]
+  [#4674](https://github.com/open-telemetry/opentelemetry-cpp/pull/4674)
+
+* [REMOVAL] Remove WITH_OTLP_RETRY_PREVIEW
+  [#4668](https://github.com/open-telemetry/opentelemetry-cpp/pull/4668)
+
+* [API] Remove opentelemetry::plugin
+  [#4660](https://github.com/open-telemetry/opentelemetry-cpp/pull/4660)
+
+* Add dependencies labels to Renovate pr’s
+  [#4675](https://github.com/open-telemetry/opentelemetry-cpp/pull/4675)
+
+* Update all [patches]
+  [#4676](https://github.com/open-telemetry/opentelemetry-cpp/pull/4676)
+
+* [CODE HEALTH] Prevent std::out_of_range escaping noexcept substr callers
+  [#4562](https://github.com/open-telemetry/opentelemetry-cpp/pull/4562)
+
+* Update Python base image in Dockerfile
+  [#4677](https://github.com/open-telemetry/opentelemetry-cpp/pull/4677)
+
+* [REMOVAL] Remove WITH_OTLP_GRPC_SSL_MTLS_PREVIEW
+  [#4666](https://github.com/open-telemetry/opentelemetry-cpp/pull/4666)
+
+* [CMAKE] Clean up pkg-config install methods and add tests
+  [#4528](https://github.com/open-telemetry/opentelemetry-cpp/pull/4528)
+
+* [CODE HEALTH] Fix clang-tidy bugprone-exception-escape in lastvalue_aggregation.cc
+  [#4564](https://github.com/open-telemetry/opentelemetry-cpp/pull/4564)
+
+* [EXPORTER ETW] Fix PropertyValue string conversions that
+  doubled length and ignored string_view size
+  [#4656](https://github.com/open-telemetry/opentelemetry-cpp/pull/4656)
+
+* [SDK] Preserve unlimited batch processor shutdown timeout
+  [#4686](https://github.com/open-telemetry/opentelemetry-cpp/pull/4686)
+
+* Update all [patches]
+  [#4679](https://github.com/open-telemetry/opentelemetry-cpp/pull/4679)
+
+* [CODE HEALTH] Fix bugprone-exception-escape in NoopTracer::StartSpan()
+  [#4673](https://github.com/open-telemetry/opentelemetry-cpp/pull/4673)
+
+* [SDK] Move predicate_factory code from header file (#1429)
+  [#4688](https://github.com/open-telemetry/opentelemetry-cpp/pull/4688)
+
+* [CI] enable the `bugprone-unhandled-exception-at-new` check
+  [#4689](https://github.com/open-telemetry/opentelemetry-cpp/pull/4689)
+
+* [SDK] remove false warning from metric reader collect
+  [#4687](https://github.com/open-telemetry/opentelemetry-cpp/pull/4687)
+
+* Update python:3.14.8 Docker digest to b9767f5
+  [#4690](https://github.com/open-telemetry/opentelemetry-cpp/pull/4690)
+
+* Update infra [minor]
+  [#4691](https://github.com/open-telemetry/opentelemetry-cpp/pull/4691)
+
+* [CODE HEALTH] Fix bugprone-exception-escape in Tracer::StartSpan()
+  [#4672](https://github.com/open-telemetry/opentelemetry-cpp/pull/4672)
+
+* [API/BENCHMARK] Trace Propagator Benchmark
+  [#4692](https://github.com/open-telemetry/opentelemetry-cpp/pull/4692)
+
+* [CI] Add help for IWYU and clang-tidy.
+  [#4698](https://github.com/open-telemetry/opentelemetry-cpp/pull/4698)
+
+* [SDK] Release provider locks before construction-failure diagnostics
+  [#4702](https://github.com/open-telemetry/opentelemetry-cpp/pull/4702)
+
+* Update python:3.14.8 Docker digest to 12d187a
+  [#4705](https://github.com/open-telemetry/opentelemetry-cpp/pull/4705)
+
+* [ADMIN] Add Mateen Anjum as approver
+  [#4699](https://github.com/open-telemetry/opentelemetry-cpp/pull/4699)
+
+* [SDK] Allow context construction failures to propagate
+  [#4703](https://github.com/open-telemetry/opentelemetry-cpp/pull/4703)
+
+* Update infra [minor]
+  [#4708](https://github.com/open-telemetry/opentelemetry-cpp/pull/4708)
+
+* [API] Optimize trace propagators
+  [#4696](https://github.com/open-telemetry/opentelemetry-cpp/pull/4696)
+
+* [SDK] BatchSpanProcessor: wait for a full batch instead of draining partial batches
+  [#4466](https://github.com/open-telemetry/opentelemetry-cpp/pull/4466)
+
+* [SDK] Fix disabled Tracer StartSpan noop behavior
+  [#4710](https://github.com/open-telemetry/opentelemetry-cpp/pull/4710)
+
+* [SDK] Remove TracerConfig copy from Tracer
+  [#4712](https://github.com/open-telemetry/opentelemetry-cpp/pull/4712)
+
+* Update infra [minor]
+  [#4714](https://github.com/open-telemetry/opentelemetry-cpp/pull/4714)
+
+* Update all [patches]
+  [#4716](https://github.com/open-telemetry/opentelemetry-cpp/pull/4716)
+
+* [API] Preserve parent SpanContext in NoopTracer spans
+  [#4717](https://github.com/open-telemetry/opentelemetry-cpp/pull/4717)
+
+* [API/SDK] Add ASCII helpers and remove regex from InstrumentMetaDataValidator
+  [#4715](https://github.com/open-telemetry/opentelemetry-cpp/pull/4715)
+
+* [SDK] Support MeterConfigurator updates and example
+  [#4313](https://github.com/open-telemetry/opentelemetry-cpp/pull/4313)
+
+* Update step-security/harden-runner action to v2.22.2
+  [#4720](https://github.com/open-telemetry/opentelemetry-cpp/pull/4720)
+
+* Update all [patches]
+  [#4723](https://github.com/open-telemetry/opentelemetry-cpp/pull/4723)
+
+* [CODE HEALTH] Fix misc-use-internal-linkage warning
+  [#4724](https://github.com/open-telemetry/opentelemetry-cpp/pull/4724)
+
+* [SECURITY] Fix baggage metadata injection and reject unsafe curl headers
+  [GHSA-j5cq-83xw-rx48](https://github.com/open-telemetry/opentelemetry-cpp/security/advisories/GHSA-j5cq-83xw-rx48)
+
+* [RELEASE] Release opentelemetry-cpp 1.30.0
+  [#4722](https://github.com/open-telemetry/opentelemetry-cpp/pull/4722)
+
+Important changes:
+
+* [API] Preserve parent SpanContext in NoopTracer spans
+  [#4717](https://github.com/open-telemetry/opentelemetry-cpp/pull/4717)
+  * When a valid parent span context is present, StartSpan() now
+    returns a non recording span referencing the parent,
+    instead of a NoopSpan as before.
+  * This is the behavior required by the specification,
+    to avoid breaking traces when code is instrumented but traces
+    are disabled.
+  * Because this fix is in the header only API,
+    instrumented code must be compiled again using API headers
+    from opentelemetry-cpp 1.30.0 (or later), so see the benefits of this fix.
+  * Instrumentation compiled with older API headers and linked with
+    the SDK from opentelemetry-cpp 1.30 (or later) will not see the fix,
+    causing traces to break.
+
+Breaking changes:
+
+* [SDK] Allow context construction failures to propagate
+  [#4703](https://github.com/open-telemetry/opentelemetry-cpp/pull/4703)
+  * Remove `noexcept` from the public `TracerContext`, `LoggerContext`,
+    and `MeterContext` constructors so allocation failures propagate
+    to provider initialization callers instead of terminating.
+  * This changes their exception contract and may affect
+    code relying on nothrow construction.
+
+* [SDK] Handle instrumentation object construction failures safely
+  [#4469](https://github.com/open-telemetry/opentelemetry-cpp/pull/4469)
+  * Removed `noexcept` from the public SDK `TracerProvider`,
+    `LoggerProvider`, `MeterProvider`, `Tracer`, `Logger`, and `Meter`
+    constructors so initialization failures can propagate to callers.
+  * `GetTracer`, `GetLogger`, and `GetMeter` remain `noexcept` and return a
+    pre-allocated noop object if constructing a new instrumentation object
+    fails.
+  * After the first failure, later uncached `Get*` calls return the same
+    noop immediately without retrying construction. Existing cached objects
+    continue to be returned.
+
+* [REMOVAL] Remove WITH_OTLP_RETRY_PREVIEW
+  [#4668](https://github.com/open-telemetry/opentelemetry-cpp/pull/4668)
+  * CMake flags WITH_OTLP_RETRY_PREVIEW is removed,
+    the feature is no longer in preview status.
+
+* [API] Remove opentelemetry::plugin
+  [#4660](https://github.com/open-telemetry/opentelemetry-cpp/pull/4660)
+  * The unused opentelemetry::plugin framework is removed.
+
+* [REMOVAL] Remove WITH_OTLP_GRPC_SSL_MTLS_PREVIEW
+  [#4666](https://github.com/open-telemetry/opentelemetry-cpp/pull/4666)
+  * CMake flags WITH_OTLP_GRPC_SSL_MTLS_PREVIEW is removed,
+    the feature is no longer in preview status.
+
+* [CODE HEALTH] Fix bugprone-exception-escape in NoopTracer::StartSpan()
+  [#4673](https://github.com/open-telemetry/opentelemetry-cpp/pull/4673)
+  * The NoopSpan class in the API has changed.
+  * For applications only instrumenting code, this has no impact,
+    as this class is not used for instrumentation.
+  * For applications implementing a custom trace exporter,
+    the exporter implementation needs to be adjusted,
+    when using the NoopSpan.
+
+Security fixes:
+
+* [SECURITY] Fix baggage metadata injection and reject unsafe curl headers
+  [GHSA-j5cq-83xw-rx48](https://github.com/open-telemetry/opentelemetry-cpp/security/advisories/GHSA-j5cq-83xw-rx48)
+  * Reject invalid baggage metadata during extraction and injection.
+  * After the existing trimming of leading and trailing whitespace, members
+    containing raw control bytes other than permitted HTAB are dropped.
+  * Members with empty metadata properties (`;;` or a trailing `;`), non-token
+    property keys, or non-ASCII metadata are also dropped.
+  * `Baggage::Set()` rejects invalid metadata without replacing
+     existing entries or adding new ones.
+  * The curl client now fails the whole request for non-token header names or
+    header values containing control bytes other than HTAB, or DEL.
+  * This includes configured exporter headers.
+  * Applications must recompile to receive the header-only baggage fix,
+    using API headers from opentelemetry-cpp 1.30.0 (or later)
+
 ## [1.29.0] 2026-09-13
 
 * [RELEASE] Bump main branch to 1.29.0-dev (#4259)

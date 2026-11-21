@@ -95,6 +95,32 @@ class TimerForkCallbackMethods {
   static void PostforkChild() { g_timer_fork_manager->PostforkChild(); }
 };
 
+grpc_core::NoDestruct<ObjectGroupForkHandler> g_poll_loop_fork_manager;
+
+class PollLoopForkCallbackMethods {
+ public:
+  static void Prefork() { g_poll_loop_fork_manager->Prefork(); }
+  static void PostforkParent() { g_poll_loop_fork_manager->PostforkParent(); }
+  static void PostforkChild() { g_poll_loop_fork_manager->PostforkChild(); }
+};
+
+// The poller's PrepareFork() kicks the poll loop, which then stops without
+// rescheduling itself, and the poller's PostforkParent() does nothing. Restart
+// the loop in the parent once the thread pool is running again; otherwise the
+// EventEngine never polls again (e.g. EventEngine listeners stop accepting).
+// The child is left as is: it shares the epoll set with the parent.
+class PollLoopForkHandler : public Forkable {
+ public:
+  explicit PollLoopForkHandler(y_absl::AnyInvocable<void()> restart_poll_loop)
+      : restart_poll_loop_(std::move(restart_poll_loop)) {}
+  void PrepareFork() override {}
+  void PostforkParent() override { restart_poll_loop_(); }
+  void PostforkChild() override {}
+
+ private:
+  y_absl::AnyInvocable<void()> restart_poll_loop_;
+};
+
 bool ShouldUseAresDnsResolver() {
 #if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
   auto resolver_env = grpc_core::ConfigVars::Get().DnsResolver();
@@ -400,6 +426,22 @@ PosixEventEngine::PosixEventEngine()
     executor_->Run([poller_manager = poller_manager_]() {
       PollerWorkInternal(poller_manager);
     });
+    poll_loop_fork_handler_ = std::make_shared<PollLoopForkHandler>(
+        [weak_poller_manager = std::weak_ptr<PosixEnginePollerManager>(
+             poller_manager_)]() {
+          auto poller_manager = weak_poller_manager.lock();
+          if (poller_manager == nullptr || poller_manager->IsShuttingDown() ||
+              !poller_manager->ResetPollLoopStopped()) {
+            return;
+          }
+          poller_manager->Executor()->Run([poller_manager]() {
+            PollerWorkInternal(poller_manager);
+          });
+        });
+    g_poll_loop_fork_manager->RegisterForkable(
+        poll_loop_fork_handler_, PollLoopForkCallbackMethods::Prefork,
+        PollLoopForkCallbackMethods::PostforkParent,
+        PollLoopForkCallbackMethods::PostforkChild);
   }
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
 }
@@ -421,6 +463,11 @@ void PosixEventEngine::PollerWorkInternal(
     executor->Run([poller_manager = std::move(poller_manager)]() {
       PollerWorkInternal(poller_manager);
     });
+  } else if (result == Poller::WorkResult::kKicked &&
+             !poller_manager->IsShuttingDown()) {
+    // Kicked by the poller's PrepareFork(): the loop stops here and is
+    // restarted after fork by PollLoopForkHandler.
+    poller_manager->SetPollLoopStopped();
   } else if (result == Poller::WorkResult::kKicked &&
              poller_manager->IsShuttingDown()) {
     // The Poller Got Kicked and poller_state_ is set to
@@ -570,8 +617,7 @@ PosixEventEngine::GetDNSResolver(
   }
   GRPC_EVENT_ENGINE_DNS_TRACE(
       "PosixEventEngine:%p creating NativePosixDNSResolver", this);
-  return std::make_unique<PosixEventEngine::PosixDNSResolver>(
-      grpc_core::MakeOrphanable<NativePosixDNSResolver>(shared_from_this()));
+  return std::make_unique<NativePosixDNSResolver>(shared_from_this());
 #endif  // GRPC_POSIX_SOCKET_RESOLVE_ADDRESS
 }
 
@@ -655,7 +701,7 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
 }
 
-std::unique_ptr<PosixEndpointWithFdSupport>
+std::unique_ptr<EventEngine::Endpoint>
 PosixEventEngine::CreatePosixEndpointFromFd(int fd,
                                             const EndpointConfig& config,
                                             MemoryAllocator memory_allocator) {
@@ -699,7 +745,7 @@ PosixEventEngine::CreateListener(
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
 }
 
-y_absl::StatusOr<std::unique_ptr<PosixListenerWithFdSupport>>
+y_absl::StatusOr<std::unique_ptr<EventEngine::Listener>>
 PosixEventEngine::CreatePosixListener(
     PosixEventEngineWithFdSupport::PosixAcceptCallback on_accept,
     y_absl::AnyInvocable<void(y_absl::Status)> on_shutdown,

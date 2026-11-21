@@ -41,13 +41,13 @@
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/gprpp/validation_errors.h"
-#include "src/core/lib/load_balancing/lb_policy_registry.h"
+#include "src/core/load_balancing/lb_policy_registry.h"
 
 namespace grpc_core {
 
 namespace {
 
-class RoundRobinLbPolicyConfigFactory
+class RoundRobinLbPolicyConfigFactory final
     : public XdsLbPolicyRegistry::ConfigFactory {
  public:
   Json::Object ConvertXdsLbPolicyConfig(
@@ -65,7 +65,7 @@ class RoundRobinLbPolicyConfigFactory
   }
 };
 
-class ClientSideWeightedRoundRobinLbPolicyConfigFactory
+class ClientSideWeightedRoundRobinLbPolicyConfigFactory final
     : public XdsLbPolicyRegistry::ConfigFactory {
  public:
   Json::Object ConvertXdsLbPolicyConfig(
@@ -152,7 +152,7 @@ class ClientSideWeightedRoundRobinLbPolicyConfigFactory
   }
 };
 
-class RingHashLbPolicyConfigFactory
+class RingHashLbPolicyConfigFactory final
     : public XdsLbPolicyRegistry::ConfigFactory {
  public:
   Json::Object ConvertXdsLbPolicyConfig(
@@ -217,7 +217,7 @@ class RingHashLbPolicyConfigFactory
   }
 };
 
-class WrrLocalityLbPolicyConfigFactory
+class WrrLocalityLbPolicyConfigFactory final
     : public XdsLbPolicyRegistry::ConfigFactory {
  public:
   Json::Object ConvertXdsLbPolicyConfig(
@@ -256,7 +256,7 @@ class WrrLocalityLbPolicyConfigFactory
   }
 };
 
-class PickFirstLbPolicyConfigFactory
+class PickFirstLbPolicyConfigFactory final
     : public XdsLbPolicyRegistry::ConfigFactory {
  public:
   Json::Object ConvertXdsLbPolicyConfig(

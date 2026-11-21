@@ -144,17 +144,17 @@ public:
     }
 
     TTestHelper& GetTestHelper() {
-        AFL_VERIFY(TestHelper);
+        YDB_LOG_VERIFY(TestHelper);
         return *TestHelper;
     }
 
     TLocalHelper& GetOlapHelper() {
-        AFL_VERIFY(OlapHelper);
+        YDB_LOG_VERIFY(OlapHelper);
         return *OlapHelper;
     }
 
     TCtrlGuard& GetCsController() {
-        AFL_VERIFY(CsController);
+        YDB_LOG_VERIFY(CsController);
         return *CsController;
     }
 
@@ -990,7 +990,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         
         {
             auto alterQuery =
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=MAX,
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=MIN_MAX,
                     FEATURES=`{"inherit_portion_storage" : true, "column_name" : "level"}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();

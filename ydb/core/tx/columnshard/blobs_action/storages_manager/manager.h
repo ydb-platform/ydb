@@ -20,7 +20,7 @@ protected:
     virtual bool DoLoadIdempotency(NTable::TDatabase& database) override;
 
     virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& DoGetSharedBlobsManager() const override {
-        AFL_VERIFY(SharedBlobsManager);
+        YDB_LOG_VERIFY(SharedBlobsManager);
         return SharedBlobsManager;
     }
 

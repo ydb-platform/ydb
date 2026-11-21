@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             .SetDatabase("/" + serverSettings.DomainName);
         auto driver = NYdb::TDriver(driverConfig);
 
-        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
+        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database("/" + databaseName));
 
         // add consumer
         const TString consumerName{"user"};

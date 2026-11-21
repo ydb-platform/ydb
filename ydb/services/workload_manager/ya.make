@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/cms/console/events
     ydb/core/kqp/common
+    ydb/core/kqp/common/simple
     ydb/core/kqp/query_data
     ydb/core/mind
     ydb/core/protos

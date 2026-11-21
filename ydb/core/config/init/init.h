@@ -31,6 +31,8 @@ struct TConfigItemInfo {
         LoadYamlConfigFromFile,
         SetExplicitly,
         UpdateExplicitly,
+        NameserviceNodesFromConsoleYaml,
+        NameserviceNodesFromNodeRegistration,
     };
 
     struct TUpdate {

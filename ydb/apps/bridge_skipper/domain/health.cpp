@@ -465,22 +465,24 @@ THealthEvaluation EvaluatePiles(
         } else {
             state.CleanSince.erase(pile);
         }
+        // The storage proof can override own node quorum only for the BSC host.
+        const bool storageFailure = bscHost && pile == *bscHost && allStorageFailed;
         if (!participation) {
             verdict.Reasons.push_back("participation unknown");
         } else if (participating && allRed) {
             verdict.Verdict = EPileVerdict::Failed;
             verdict.NewestEvidenceSentAt = newestBsc;
             verdict.Reasons.push_back("Every BSC-mode reply reports a RED group part");
-        } else if (bscHost && pile == *bscHost && bsc.empty() && outsideFallback && allFallbackRed
-            && (!verdict.SelfQuorum || allStorageFailed))
+        } else if (participating && bsc.empty() && outsideFallback && allFallbackRed
+            && (!verdict.SelfQuorum || storageFailure))
         {
             // A retained settled report can keep Lost evidence frozen while
             // newer reports are binding. Prefer the independently qualified
             // fallback failure so fresh samples can advance its confirmation.
             verdict.Verdict = EPileVerdict::Failed;
-            verdict.FailureEvidence = allStorageFailed ? EFailureEvidence::Storage : EFailureEvidence::Fallback;
+            verdict.FailureEvidence = storageFailure ? EFailureEvidence::Storage : EFailureEvidence::Fallback;
             verdict.NewestEvidenceSentAt = newestFallback;
-            verdict.Reasons.push_back(allStorageFailed
+            verdict.Reasons.push_back(storageFailure
                 ? "Every current outside fallback reply proves a RED static group caused by PDisk DeviceIoError"
                 : "Every current outside fallback reply reports a decisive RED static group part");
         } else if (outside && outsideLost && !verdict.SelfQuorum) {

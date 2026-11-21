@@ -30,6 +30,9 @@ PEERDIR(
     ydb/core/client/minikql_compile
     ydb/core/formats
     ydb/core/kqp/common
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/common/stats
     ydb/core/kqp/compute_actor
     ydb/core/kqp/executer_actor/shards_resolver
     ydb/core/kqp/federated_query/actors
@@ -40,6 +43,7 @@ PEERDIR(
     ydb/core/kqp/topics
     ydb/core/kqp/tracing
     ydb/core/protos
+    ydb/core/scheme/mkql
     ydb/core/sys_view/common
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert

@@ -123,7 +123,9 @@ public:
                 && !(internal && parentPath.IsResolved() && parentPath.IsBackupTable()
                     && tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexStateReady)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "HNSW index implementation is not available yet");
+                context.SS->EnableHnswIndex
+                    ? "HNSW index implementation is not available yet (SQL support)"
+                    : "HNSW index support is disabled (EnableHnswIndex)");
             return result;
         }
 

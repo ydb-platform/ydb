@@ -40,6 +40,25 @@ Y_UNIT_TEST(IsLeapYear) {
     UNIT_ASSERT(IsLeapYear(2400));
 }
 
+Y_UNIT_TEST(Date32InvalidMonth) {
+    UNIT_ASSERT(!ValueFromString(NUdf::EDataSlot::Date32, "0101-31-01"));
+}
+
+Y_UNIT_TEST(ExtendedDateMonthRange) {
+    for (const TStringBuf year : {"0101", "-0101"}) {
+        for (ui32 month = 0; month < 100; ++month) {
+            TStringStream date;
+            date << year << '-' << LeftPad(month, 2, '0') << "-01";
+            const bool validMonth = month >= 1 && month <= 12;
+            UNIT_ASSERT_VALUES_EQUAL(bool(ValueFromString(NUdf::EDataSlot::Date32, date.Str())), validMonth);
+            date << "T00:00:00Z";
+            for (const auto slot : {NUdf::EDataSlot::Datetime64, NUdf::EDataSlot::Timestamp64}) {
+                UNIT_ASSERT_VALUES_EQUAL(bool(ValueFromString(slot, date.Str())), validMonth);
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST(Date16vs32) {
     for (ui16 value16 = 0; value16 < NUdf::MAX_DATE; ++value16) {
         const NUdf::TUnboxedValue& strDate16 = ValueToString(NUdf::EDataSlot::Date, NUdf::TUnboxedValuePod(value16));

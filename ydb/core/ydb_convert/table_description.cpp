@@ -2698,6 +2698,42 @@ void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescriptio
     }
 }
 
+namespace {
+
+// Mirrors NSchemeShard::NIndex::IsSingleIntegerPrimaryKey: a fulltext index over a table with such
+// a primary key uses the key itself as the document id.
+bool IsSingleIntegerPrimaryKey(const Ydb::Table::CreateTableRequest& in) {
+    if (in.primary_key_size() != 1) {
+        return false;
+    }
+
+    const auto& keyName = in.primary_key(0);
+    for (const auto& column : in.columns()) {
+        if (column.name() != keyName) {
+            continue;
+        }
+
+        const auto& type = column.type().has_optional_type() ? column.type().optional_type().item() : column.type();
+        if (!type.has_type_id()) {
+            return false;
+        }
+
+        switch (type.type_id()) {
+        case Ydb::Type::UINT64:
+        case Ydb::Type::INT64:
+        case Ydb::Type::UINT32:
+        case Ydb::Type::INT32:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    return false;
+}
+
+} // anonymous
+
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error) {
 
@@ -2706,6 +2742,12 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         error = msg;
         return false;
     };
+
+    // A fulltext index over a table whose primary key is not a single integer column keeps its doc
+    // ids in the synthetic __ydb_row_id column. The mode is not a part of the SDK index description,
+    // so it is restored from the primary key (the same rule the create path uses) when the schema is
+    // re-created from a description (replication, restore) rather than from a user request.
+    const bool rowIdMode = !IsSingleIntegerPrimaryKey(in);
 
     for (const auto& index : in.indexes()) {
         auto indexDesc = out.MutableIndexDescription()->Add();
@@ -2758,6 +2800,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
                 ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact
                 : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
+            if (rowIdMode) {
+                indexDesc->MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+            }
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
@@ -2765,6 +2810,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
                 ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance
                 : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
+            if (rowIdMode) {
+                indexDesc->MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+            }
             break;
 
         case Ydb::Table::TableIndex::kGlobalJsonIndex:
@@ -2774,8 +2822,17 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
 
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+            // A local index has no impl tables: the datashard keeps the filter inside the table, so
+            // only the settings are carried over a describe -> create round trip.
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter);
+            if (index.local_bloom_filter_index().has_false_positive_probability()) {
+                indexDesc->MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                    index.local_bloom_filter_index().false_positive_probability());
+            }
+            break;
+
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
-            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom_ngram_filter index is not supported in indexed table creation config");
         case Ydb::Table::TableIndex::kLocalMinMaxIndex:
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Local min_max index is not supported in indexed table creation config");
         case Ydb::Table::TableIndex::TYPE_NOT_SET:

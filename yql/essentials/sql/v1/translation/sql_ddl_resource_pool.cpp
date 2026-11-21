@@ -14,7 +14,7 @@ bool StoreInt(const TRule_table_setting_value& from, TDeferredAtom& to, TContext
             break;
         }
         default:
-            ctx.Error() << errorPrefix << " value should be an integer";
+            ctx.Error(from) << errorPrefix << " value should be an integer";
             return false;
     }
     return true;
@@ -27,7 +27,7 @@ bool TResourcePoolTranslation::StoreResourcePoolSettingsEntry(const TIdentifier&
 
     const TString key = to_lower(id.Name);
     if (result.find(key) != result.end()) {
-        Ctx_.Error() << to_upper(key) << " duplicate keys";
+        Ctx_.Error(id.Pos) << to_upper(key) << " duplicate keys";
         return false;
     }
 
@@ -39,7 +39,7 @@ bool TResourcePoolTranslation::StoreResourcePoolSettingsEntry(const TIdentifier&
             return StoreInt(*value, result[key], Ctx_, to_upper(key));
 
         default:
-            Ctx_.Error() << to_upper(key) << " value should be a string literal or integer";
+            Ctx_.Error(*value) << to_upper(key) << " value should be a string literal or integer";
             return false;
     }
 
@@ -98,7 +98,7 @@ bool TResourcePoolTranslation::StoreResourcePoolClassifierSettingsEntry(const TI
 
     const TString key = to_lower(id.Name);
     if (result.find(key) != result.end()) {
-        Ctx_.Error() << to_upper(key) << " duplicate keys";
+        Ctx_.Error(id.Pos) << to_upper(key) << " duplicate keys";
         return false;
     }
 
@@ -110,7 +110,7 @@ bool TResourcePoolTranslation::StoreResourcePoolClassifierSettingsEntry(const TI
             return StoreInt(*value, result[key], Ctx_, to_upper(key));
 
         default:
-            Ctx_.Error() << to_upper(key) << " value should be a string literal or integer";
+            Ctx_.Error(*value) << to_upper(key) << " value should be a string literal or integer";
             return false;
     }
 
@@ -177,7 +177,7 @@ TNodePtr TResourcePoolTranslation::Build(const TRule_create_resource_pool_stmt& 
         return {};
     }
 
-    return BuildCreateResourcePool(Ctx_.Pos(), *objectId, new TObjectFeatureNode(Ctx_.Pos(), kv), context);
+    return BuildCreateResourcePool(Ctx_.Position(node), *objectId, new TObjectFeatureNode(Ctx_.Position(node.GetRule_with_table_settings5()), kv), context);
 }
 
 TNodePtr TResourcePoolTranslation::Build(const TRule_alter_resource_pool_stmt& node) {
@@ -202,7 +202,7 @@ TNodePtr TResourcePoolTranslation::Build(const TRule_alter_resource_pool_stmt& n
         }
     }
 
-    return BuildAlterResourcePool(Ctx_.Pos(), *objectId, new TObjectFeatureNode(Ctx_.Pos(), kv), std::move(toReset), context);
+    return BuildAlterResourcePool(Ctx_.Position(node), *objectId, new TObjectFeatureNode(Ctx_.Position(node.GetRule_alter_resource_pool_action5()), kv), std::move(toReset), context);
 }
 
 TNodePtr TResourcePoolTranslation::Build(const TRule_drop_resource_pool_stmt& node) {
@@ -213,7 +213,7 @@ TNodePtr TResourcePoolTranslation::Build(const TRule_drop_resource_pool_stmt& no
         return {};
     }
 
-    return BuildDropResourcePool(Ctx_.Pos(), *objectId, context);
+    return BuildDropResourcePool(Ctx_.Position(node), *objectId, context);
 }
 
 TNodePtr TResourcePoolTranslation::Build(const TRule_create_resource_pool_classifier_stmt& node) {
@@ -229,7 +229,7 @@ TNodePtr TResourcePoolTranslation::Build(const TRule_create_resource_pool_classi
         return {};
     }
 
-    return BuildCreateResourcePoolClassifier(Ctx_.Pos(), *objectId, new TObjectFeatureNode(Ctx_.Pos(), kv), context);
+    return BuildCreateResourcePoolClassifier(Ctx_.Position(node), *objectId, new TObjectFeatureNode(Ctx_.Position(node.GetRule_with_table_settings6()), kv), context);
 }
 
 TNodePtr TResourcePoolTranslation::Build(const TRule_alter_resource_pool_classifier_stmt& node) {
@@ -254,7 +254,7 @@ TNodePtr TResourcePoolTranslation::Build(const TRule_alter_resource_pool_classif
         }
     }
 
-    return BuildAlterResourcePoolClassifier(Ctx_.Pos(), *objectId, new TObjectFeatureNode(Ctx_.Pos(), kv), std::move(toReset), context);
+    return BuildAlterResourcePoolClassifier(Ctx_.Position(node), *objectId, new TObjectFeatureNode(Ctx_.Position(node.GetRule_alter_resource_pool_classifier_action6()), kv), std::move(toReset), context);
 }
 
 TNodePtr TResourcePoolTranslation::Build(const TRule_drop_resource_pool_classifier_stmt& node) {
@@ -265,7 +265,7 @@ TNodePtr TResourcePoolTranslation::Build(const TRule_drop_resource_pool_classifi
         return {};
     }
 
-    return BuildDropResourcePoolClassifier(Ctx_.Pos(), *objectId, context);
+    return BuildDropResourcePoolClassifier(Ctx_.Position(node), *objectId, context);
 }
 
 } // namespace NSQLTranslationV1

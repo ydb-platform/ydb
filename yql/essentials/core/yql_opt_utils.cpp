@@ -162,6 +162,17 @@ TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) 
     // clang-format on
 }
 
+TExprNode::TPtr ExpandTraitsDefaultLambda(const TExprNode& lambda, TExprNode::TPtr finishType, TExprContext& ctx) {
+    YQL_ENSURE(lambda.IsLambda());
+    YQL_ENSURE(lambda.Head().ChildrenSize() <= 1, "Traits default lambda accepts at most one type argument");
+
+    if (lambda.Head().ChildrenSize() == 0) {
+        return lambda.TailPtr();
+    }
+
+    return ctx.ReplaceNode(lambda.TailPtr(), lambda.Head().Head(), std::move(finishType));
+}
+
 bool IsJustOrSingleAsList(const TExprNode& node) {
     return node.ChildrenSize() == 1U && node.IsCallable({"Just", "AsList"});
 }
@@ -1668,6 +1679,19 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
     auto optionals = node->ChildrenList();
     optionals.resize(optionals.size() - 2U);
     const auto& lambda = *node->Child(optionals.size());
+    bool requiresEvaluation = false;
+    for (const auto& optional : optionals) {
+        requiresEvaluation = requiresEvaluation || optional->HasSideEffects() || optional->GetWorldLinks();
+        if (optional->GetConstraint<TEmptyConstraintNode>() || optional->IsCallable({"Nothing", "EmptyFrom"})) {
+            // Inputs after the first empty optional are not evaluated.
+            if (requiresEvaluation) {
+                return node;
+            }
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << optional->Content();
+            return node->TailPtr();
+        }
+    }
+
     if (lambda.Tail().GetDependencyScope()->second != &lambda) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " where then branch isn't depended on optional";
         if (1U == optionals.size()) {
@@ -1697,11 +1721,6 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
                 .Add(2, node->TailPtr())
             .Seal().Build();
         // clang-format on
-    }
-
-    if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable({"Nothing", "EmptyFrom"}); })) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over Nothing.";
-        return node->TailPtr();
     }
 
     if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable("Just"); })) {
@@ -2977,7 +2996,7 @@ bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types)
 {
     YQL_ENSURE(types);
     static const char OptName[] = "PushdownFiltersOverWindow";
-    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
+    return !IsOptimizerDisabled<OptName>(*types);
 }
 
 } // namespace NYql

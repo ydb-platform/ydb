@@ -18,6 +18,7 @@
   - capi.h
   - cet.h
   - cfg.h
+  - cguid.h
   - combaseapi.h
   - comdef.h
   - commctrl.h
@@ -54,6 +55,7 @@
   - dos.h
   - downloadmgr.h
   - driverspecs.h
+  - dsgetdc.h
   - dshow.h
   - dsound.h
   - dsparse.h
@@ -122,11 +124,15 @@
   - kernelspecs.h
   - ksmedia.h
   - ktmtypes.h
+  - ktmw32.h
   - libloaderapi.h
   - lm.h
   - lmcons.h
   - lmerr.h
+  - lmshare.h
   - lmstats.h
+  - lmuseflg.h
+  - lzexpand.h
   - mbctype.h
   - mbstring.h
   - mcx.h
@@ -153,6 +159,7 @@
   - mtx.h
   - namedpipeapi.h
   - namespaceapi.h
+  - nb30.h
   - netioapi.h
   - new.h
   - npapi.h
@@ -160,6 +167,7 @@
   - ntddk.h
   - ntddndis.h
   - ntdef.h
+  - ntdsapi.h
   - ntsecapi.h
   - ntstatus.h
   - ntverp.h
@@ -201,6 +209,7 @@
   - pshpack4.h
   - pshpack8.h
   - qos.h
+  - raserror.h
   - ratings.h
   - realtimeapiset.h
   - reason.h
@@ -241,6 +250,7 @@
   - stralign.h
   - stringapiset.h
   - strsafe.h
+  - subauth.h
   - suppress.h
   - swdevice.h
   - synchapi.h
@@ -278,6 +288,7 @@
   - winbase.h
   - winber.h
   - wincon.h
+  - wincred.h
   - wincrypt.h
   - windef.h
   - windns.h
@@ -298,6 +309,7 @@
   - windows.ui.xaml.media.dxinterop.h
   - windowsx.h
   - winerror.h
+  - winefs.h
   - wingdi.h
   - winhttp.h
   - wininet.h
@@ -315,6 +327,7 @@
   - winsock2.h
   - winstring.h
   - winsvc.h
+  - winspool.h
   - winternl.h
   - winuser.h
   - winver.h
@@ -339,6 +352,10 @@
   source_filter: "^(?!contrib/libs/nvidia/nccl/)"
   includes:
     - p2p.h
+    # nccl has its own ras.h (NVIDIA RAS reliability); the Windows SDK
+    # ras.h (Remote Access Service, needed by contrib/python/pywin32) must
+    # not claim the name inside the nccl subtree
+    - ras.h
 
 # These headers are Microsoft Visual C specific.
 - case_sensitive: false

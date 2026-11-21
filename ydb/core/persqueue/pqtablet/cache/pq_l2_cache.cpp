@@ -90,12 +90,16 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         AFL_ENSURE(blob.Value->GetDataSize())("d", "Trying to place empty blob into L2 cache");
 
         TKey key(tabletId, blob);
-        // PQ tablet could send some data twice (if it's restored after die)
-        if (Cache.FindWithoutPromote(key) != Cache.End()) {
+        // PQ tablet could send some data twice (if it's restored after die) or rewrite
+        // the blob. L1 keeps the new value, so L2 has to keep the same one.
+        auto existing = Cache.FindWithoutPromote(key);
+        if (existing != Cache.End()) {
             LOG_W("PQ Cache (L2). Same blob insertion. size",
                 {"key", key},
+                {"oldSize", (*existing)->GetDataSize()},
                 {"valueDataSize", blob.Value->GetDataSize()});
-            continue;
+            CurrentSize -= (*existing)->GetDataSize();
+            Cache.Erase(existing);
         }
 
         AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE)
@@ -193,14 +197,26 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
             continue;
         }
 
-        TKey newKey(tabletId, newBlob);
-        Cache.Insert(newKey, *it);
+        TCacheValue::TPtr value = *it;
         Cache.Erase(it);
+
+        // The renamed body replaces whatever is cached under newKey.
+        TKey newKey(tabletId, newBlob);
+        auto dest = Cache.FindWithoutPromote(newKey);
+        if (dest != Cache.End()) {
+            CurrentSize -= (*dest)->GetDataSize();
+            Cache.Erase(dest);
+        }
+
+        Cache.Insert(newKey, std::move(value));
 
         LOG_D("PQ Cache (L2). Renamed. old new",
             {"oldKey", oldKey},
             {"newKey", newKey});
     }
+
+    (*Counters.TotalSize) = CurrentSize;
+    (*Counters.TotalCount) = Cache.Size();
 }
 
 void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit)

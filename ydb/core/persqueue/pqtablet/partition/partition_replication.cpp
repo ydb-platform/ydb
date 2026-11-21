@@ -2,6 +2,14 @@
 
 namespace NKikimr::NPQ {
 
+namespace {
+
+ui64 GetEffectiveReplicationOffset(ui64 offset, ui64 startOffset, const TUserInfoBase& userInfo) {
+    return ImporantOrExtendedAvailabilityPeriod(userInfo) ? Max(offset, startOffset) : offset;
+}
+
+} // namespace
+
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
         LOG_W("Replication is disabled for topic");
@@ -17,9 +25,8 @@ void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext
             if (offset > static_cast<ui64>(Max<i64>())) {
                 continue;
             }
-            auto& pendingOffset = pending.OffsetsByConsumers[consumer];
-            // An invalid offset in the earlier payload must not hide a valid update.
-            pendingOffset = pendingOffset > static_cast<ui64>(Max<i64>()) ? offset : Max(pendingOffset, offset);
+
+            pending.OffsetsByConsumers[consumer] = offset;
         }
         if (const auto& mirroredOffset = ev->Get()->MirroredOffset; mirroredOffset.Defined()) {
             pending.MirroredOffset = pending.MirroredOffset.Defined()
@@ -50,7 +57,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
 
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
         auto* consumerConfig = GetConsumer(config, consumer);
-        if (!consumerConfig || offset > static_cast<ui64>(Max<i64>())) {
+        if (!consumerConfig || !consumerConfig->GetReplicateOffsets() || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
 
@@ -67,10 +74,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
         }
 
         auto& userInfo = GetOrCreatePendingUser(consumer);
-        if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
-            userInfo.Offset = Max(userInfo.Offset, committed->Offset);
-        }
-        userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
+        userInfo.Offset = static_cast<i64>(GetEffectiveReplicationOffset(offset, GetStartOffset(), userInfo));
     }
 }
 
@@ -80,7 +84,7 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext&) {
     }
 
     // Updates merged during the KV write have not been applied yet. In
-    // particular, MLP offsets are not checked by expectedOffsets below.
+    // particular, MLP offsets are not checked below.
     if (ReplicationDataNeedsApply) {
         UpdatePendingUsersFromReplicationData();
         return; // OnHandleWriteResponse starts the next persist cycle.
@@ -96,24 +100,22 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext&) {
 
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
 
-    // Replication may replay older snapshots; acknowledge the greatest valid offset.
-    y_absl::flat_hash_map<TString, ui64> expectedOffsets;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
         const auto* consumerConfig = GetConsumer(config, consumer);
         // Replication consumers are excluded from applying incoming offsets above.
         // MLP progress is applied by TEvMLPPurgeRequest, not by the streaming commit offset.
         if (!consumerConfig
+            || !consumerConfig->GetReplicateOffsets()
             || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
             || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP
             || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
-        auto& expected = expectedOffsets[consumer];
-        expected = Max(expected, offset);
-    }
-    for (const auto& [consumer, offset] : expectedOffsets) {
+
         const auto* userInfo = UsersInfoStorage->GetIfExists(consumer);
-        if (!userInfo || userInfo->Offset < 0 || static_cast<ui64>(userInfo->Offset) < offset) {
+        if (!userInfo || userInfo->Offset < 0
+            || static_cast<ui64>(userInfo->Offset) != GetEffectiveReplicationOffset(offset, GetStartOffset(), *userInfo))
+        {
             UpdatePendingUsersFromReplicationData();
             return; // OnHandleWriteResponse starts the next persist cycle.
         }

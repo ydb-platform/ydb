@@ -165,6 +165,7 @@ public:
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
     NCommon::TConfSetting<bool, Static> QueryCacheReportProgress;
+    NCommon::TConfSetting<bool, Static> EnableProgressDataStatistics;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
@@ -315,6 +316,7 @@ public:
     NCommon::TConfSetting<double, Static> JoinMergeUnsortedFactor; // (>=0.0)
     NCommon::TConfSetting<bool, Static> JoinMergeForce;
     NCommon::TConfSetting<NSize::TSize, Static> MapJoinLimit;
+    NCommon::TConfSetting<NSize::TSize, Static> BlockMapJoinLimit;
     NCommon::TConfSetting<ui64, Static> MapJoinShardMinRows;
     NCommon::TConfSetting<ui64, Static> MapJoinShardCount; // [1-10]
     NCommon::TConfSetting<bool, Static> MapJoinUseFlow;
@@ -323,12 +325,15 @@ public:
     NCommon::TConfSetting<ui64, Static> LookupJoinMaxRows;
     NCommon::TConfSetting<EConvertDynamicTablesToStatic, Static> ConvertDynamicTablesToStatic;
     NCommon::TConfSetting<bool, Static> KeepMergeWithDynamicInput;
+    NCommon::TConfSetting<bool, Static> BypassMergeWithInputSettings;
+    NCommon::TConfSetting<bool, Static> BypassIdentityMapWithSysColumns;
     NCommon::TConfSetting<NSize::TSize, Static> EvaluationTableSizeLimit;
     NCommon::TConfSetting<TSet<TString>, Static> DisableOptimizers;
     NCommon::TConfSetting<ui32, Static> MaxInputTables;
     NCommon::TConfSetting<ui32, Static> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, Static> MaxOutputTables;
     NCommon::TConfSetting<bool, Static> DisableFuseOperations;
+    NCommon::TConfSetting<bool, Static> LateFuseOperations;
     NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce; // Deprecated. Use FuseMapToMapReduceMode
     NCommon::TConfSetting<EFuseMapToMapReduceMode, Static> FuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, Static> MaxExtraJobMemoryToFuseOperations;

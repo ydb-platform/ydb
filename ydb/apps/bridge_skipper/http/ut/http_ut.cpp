@@ -561,6 +561,23 @@ Y_UNIT_TEST_SUITE(TReadOnlyHttp) {
         UNIT_ASSERT(check("unavailable", true).GetBoolean());
     }
 
+    Y_UNIT_TEST(HotStandbyIsNotAssessedOrReportedAsAnIncident) {
+        auto snapshot = Full();
+        snapshot.PersistentState.PendingMutation.reset();
+        snapshot.Decision.Plan.reset();
+        snapshot.Decision.Kind = EDecisionKind::Stable;
+        snapshot.Selection.View->Piles["b"] = EPileState::HotStandby;
+        snapshot.LastKnownPiles = snapshot.Piles;
+        snapshot.Piles.erase("b");
+        const auto state = BuildPresentation(snapshot, TMonotonic::Seconds(100), TInstant::Seconds(100));
+        const auto& card = state["cards"][1];
+        UNIT_ASSERT_VALUES_EQUAL(card["state"].GetString(), "HOT_STANDBY");
+        UNIT_ASSERT(!card["participating"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(card["assessment"].GetString(), "not_assessed");
+        UNIT_ASSERT(!card["incident"].GetBoolean());
+        UNIT_ASSERT(!state["incident"]["active"].GetBoolean());
+    }
+
     Y_UNIT_TEST(ExpiryBoundaryAndKnownAssessmentExclusion) {
         auto snapshot = Full();
         const auto expired = BuildPresentation(snapshot, TMonotonic::Seconds(128), TInstant::Seconds(128));

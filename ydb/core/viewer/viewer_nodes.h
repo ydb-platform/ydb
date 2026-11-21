@@ -2989,7 +2989,9 @@ public:
                         if (TNode* node = FindNode(sample.GetNodeId())) {
                             auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
                             ddisk.CopyFrom(sample);
-                            ddisk.SetHasWhiteboardData(true);
+                            if (!ddisk.HasHasWhiteboardData()) {
+                                ddisk.SetHasWhiteboardData(true);
+                            }
                         }
                     }
                     for (const auto& pDiskState : pDiskResponse.GetPDiskStateInfo()) {
@@ -3009,7 +3011,9 @@ public:
                         for (const auto& sample : pDiskState.GetDDiskStateInfo()) {
                             auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
                             ddisk.CopyFrom(sample);
-                            ddisk.SetHasWhiteboardData(true);
+                            if (!ddisk.HasHasWhiteboardData()) {
+                                ddisk.SetHasWhiteboardData(true);
+                            }
                         }
                         node->HasPDiskWhiteboardResponse = true;
                         for (const auto& protoPDiskState : pDiskState.GetPDiskStateInfo()) {
@@ -3719,16 +3723,18 @@ public:
                 if (FieldsAvailable.test(+ENodeFields::ReceiveThroughput) && FieldsRequested.test(+ENodeFields::ReceiveThroughput)) {
                     jsonNode.SetReceiveThroughput(node->ReceiveThroughput);
                 }
+                if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
+                    // GetPileName reads SystemState; capture it before SystemState is moved into jsonNode below.
+                    const TString pileName = node->GetPileName();
+                    if (pileName) {
+                        jsonNode.SetPileName(pileName);
+                    }
+                }
                 if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
                     if (IsStrictDatabaseOnlyRequest()) {
                         // Hide identities of peers outside the database; metadata of its own nodes remains visible.
                         jsonNode.MutableSystemState()->ClearMaxClockSkewPeerId();
-                    }
-                }
-                if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
-                    if (node->GetPileName()) {
-                        jsonNode.SetPileName(node->GetPileName());
                     }
                 }
                 if (IsNodeFieldRequestedForResponse(ENodeFields::PDisks)) {

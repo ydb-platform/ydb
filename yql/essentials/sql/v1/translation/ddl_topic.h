@@ -23,6 +23,7 @@ struct TTopicConsumerSettings {
     };
 
     TNodePtr Important;
+    TNodePtr ReplicateOffsets;
     NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
     NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
     NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;

@@ -995,14 +995,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
 
         void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            const TCgiParameters paths("database=/alias&path=/alias/a,/alias/b&topic=relative");
             const auto normalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
                 [normalizer = AppData()->GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("path"), "/Root/a,/alias/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer, true).Get("path"), "/Root/a,/Root/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("topic"), "relative");
             NJson::TJsonValue jsonPaths;
-            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"/alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
             NormalizePathParameters(jsonPaths, normalizer);
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         TStringStream relativeResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=/alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         headers["Content-Type"] = "application/json";
@@ -1095,7 +1095,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         headers["Content-Type"] = "application/x-www-form-urlencoded";
         TStringStream formResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=/alias&path=/alias", &formResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         TStringStream directoryResponse;
@@ -1892,6 +1892,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool DatabaseCountsBridgedRoot = false;
         bool DatabaseCountsUnavailable = false;
         bool DatabaseCountsLegacyResponse = false;
+        bool DatabaseCountsLegacyPileCounts = false;
         bool DatabaseCountsMissingPile = false;
         bool ProvidePileMap = true;
         bool DropNodesInfo = false;
@@ -2121,6 +2122,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         // Shared storage contributes one owner, regardless of its serverless databases.
                         const ui64 owners = 3 + options.DatabaseCountsBridgedRoot - options.DatabaseCountsMixedOwner;
                         snapshot->set_bridge_databases(owners);
+                        auto* global = snapshot->mutable_bridge_databases_by_sync_status();
+                        global->set_total(owners);
+                        global->set_synced(1 + options.DatabaseCountsBridgedRoot);
+                        global->set_syncing(options.DatabaseCountsMixedOwner ? 0 : 1);
+                        global->set_pending(1);
                         for (ui32 pile : {0, 2, 3}) {
                             if (options.DatabaseCountsMissingPile && pile == 2) {
                                 continue;
@@ -2142,6 +2148,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                             row->mutable_databases()->CopyFrom(*counts);
                             row->mutable_databases()->set_total(owners + 2);
                             row->mutable_databases()->set_not_required(counts->not_required() + 2);
+                        }
+                        if (options.DatabaseCountsLegacyResponse || options.DatabaseCountsLegacyPileCounts) {
+                            snapshot->clear_bridge_databases_by_sync_status();
                         }
                         if (options.DatabaseCountsLegacyResponse) {
                             snapshot->clear_bridge_databases();
@@ -2325,7 +2334,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
         const auto& bridgeInfo = json["BridgeInfo"];
         const auto& piles = bridgeInfo["Piles"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(json["Version"].GetUInteger(), 11);
         UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
+        for (const auto& pile : piles) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
         AssertBridgePileCounts(piles[0], 2, 2);
         AssertBridgePileAliveCounts(piles[0], 2, 1);
         AssertBridgePileCounts(piles[1], 1, 1);
@@ -2333,23 +2346,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(piles[1]["Sync"]["SecondsLeft"].GetStringRobust(), "12");
         if (staleGeneration) {
             UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+            UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
             UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
             UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-            for (const auto& pile : piles) {
-                UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
-            }
         } else {
             UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
             UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
-            UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
-            const auto& counts = piles[1]["DatabaseCountsBySyncStatus"];
+            const auto& counts = bridgeInfo["DatabaseCountsBySyncStatus"];
             for (const char* status : {"SYNCED", "PENDING"}) {
                 UNIT_ASSERT_VALUES_EQUAL(counts[status].GetStringRobust(), "1");
             }
             UNIT_ASSERT_VALUES_EQUAL(counts["SYNCING"].GetStringRobust(), "1");
             UNIT_ASSERT_VALUES_EQUAL(counts["UNKNOWN"].GetStringRobust(), "0");
             UNIT_ASSERT_VALUES_EQUAL(counts["NOT_REQUIRED"].GetStringRobust(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "3");
         }
     }
 
@@ -2362,7 +2371,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
         UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
         UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "1");
     }
 
     Y_UNIT_TEST(ClusterBridgeDatabaseCountsMixedOwner) {
@@ -2373,7 +2382,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "2");
         UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "0");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "0");
     }
 
     Y_UNIT_TEST(ClusterBridgeDatabaseCountsIncludesRoot) {
@@ -2384,7 +2393,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
         UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "2");
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeDatabaseCountsUnavailable, legacyResponse) {
@@ -2395,6 +2404,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+        UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
         UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
         UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
         for (const auto& pile : bridgeInfo["Piles"].GetArraySafe()) {
@@ -2410,12 +2420,24 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& bridgeInfo = json["BridgeInfo"];
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
         UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
-        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
         const auto& piles = bridgeInfo["Piles"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
-        UNIT_ASSERT(!piles[1].Has("DatabaseCountsBySyncStatus"));
-        UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "1");
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsLegacyPileCounts) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsLegacyPileCounts = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
+        for (const auto& pile : bridgeInfo["Piles"].GetArraySafe()) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeNoAliveNodes, offloadMerge) {
@@ -2786,6 +2808,146 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
     {
         CheckStorageLimitWithGroupSizeInUnits(true, true);
+    }
+
+    // Returns the only tenant of /viewer/tenantinfo?storage=true, with the domain description patched by `fill`
+    NJson::TJsonValue GetTenantInfoWithDomainDescription(std::function<void(NKikimrSubDomains::TDomainDescription&)> fill) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
+                auto* response = ev->Get<TEvSchemeShard::TEvDescribeSchemeResult>();
+                auto* domain = response->MutableRecord()->MutablePathDescription()->MutableDomainDescription();
+                domain->ClearStoragePools();
+                domain->ClearDiskSpaceUsage();
+                domain->ClearDiskSpaceQuotaUsage();
+                domain->ClearDomainState();
+                domain->ClearDatabaseQuotas();
+                fill(*domain);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/tenantinfo?storage=true&use_cache=false HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Response->Status, "200", result->Response->Body);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const auto& tenants = json["TenantInfo"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+        return tenants[0];
+    }
+
+    void AddStoragePools(NKikimrSubDomains::TDomainDescription& domain, std::initializer_list<TString> kinds) {
+        for (const auto& kind : kinds) {
+            auto* pool = domain.AddStoragePools();
+            pool->SetName("/Root:" + kind);
+            pool->SetKind(kind);
+        }
+    }
+
+    void AddPoolUsage(NKikimrSubDomains::TDomainDescription& domain, const TString& kind, ui64 size) {
+        auto* poolUsage = domain.MutableDiskSpaceUsage()->AddStoragePoolsUsage();
+        poolUsage->SetPoolKind(kind);
+        poolUsage->SetTotalSize(size);
+    }
+
+    // soft or hard quota equal to 0 means that the field must be absent
+    void CheckTablesStorage(const NJson::TJsonValue& tenant, const TString& type, ui64 size, ui64 soft, ui64 hard) {
+        const NJson::TJsonValue* found = nullptr;
+        for (const auto& tablesStorage : tenant["TablesStorage"].GetArray()) {
+            if (tablesStorage["Type"].GetString() == type) {
+                UNIT_ASSERT_C(!found, "duplicate TablesStorage " << type);
+                found = &tablesStorage;
+            }
+        }
+        UNIT_ASSERT_C(found, "no TablesStorage " << type << " in " << tenant["TablesStorage"].GetStringRobust());
+        const auto& tablesStorage = *found;
+        UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["Size"].GetString(), ToString(size), type);
+        if (soft) {
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["SoftQuota"].GetString(), ToString(soft), type);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["Limit"].GetString(), ToString(soft), type);
+        } else {
+            UNIT_ASSERT_C(!tablesStorage.Has("SoftQuota"), tablesStorage.GetStringRobust());
+            UNIT_ASSERT_C(!tablesStorage.Has("Limit"), tablesStorage.GetStringRobust());
+        }
+        if (hard) {
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["HardQuota"].GetString(), ToString(hard), type);
+        } else {
+            UNIT_ASSERT_C(!tablesStorage.Has("HardQuota"), tablesStorage.GetStringRobust());
+        }
+    }
+
+    Y_UNIT_TEST(TenantInfoDomainStateAndDiskSpaceQuotaUsage)
+    {
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "hdd"});
+            AddPoolUsage(domain, "ssd", 100);
+            AddPoolUsage(domain, "hdd", 50);
+            domain.MutableDiskSpaceUsage()->MutableTopics()->SetDataSize(30);
+            // only the hard quota is configured, the effective soft quota is equal to it
+            domain.MutableDatabaseQuotas()->set_data_size_hard_quota(1000);
+            auto& quotaUsage = *domain.MutableDiskSpaceQuotaUsage();
+            quotaUsage.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_OVERALL);
+            auto* entry = quotaUsage.AddEntries();
+            entry->SetPoolKind("");
+            entry->SetUsage(180);
+            entry->SetSoftQuota(1000);
+            entry->SetHardQuota(1000);
+            domain.MutableDomainState()->SetDiskQuotaExceeded(true);
+            domain.MutableDomainState()->SetStorageSpaceExhausted(true);
+        });
+
+        // both are copied from the SchemeShard description as is
+        const auto& domainState = tenant["DomainState"];
+        UNIT_ASSERT_C(domainState.IsMap(), tenant.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(domainState["DiskQuotaExceeded"].GetBoolean(), true);
+        UNIT_ASSERT_VALUES_EQUAL(domainState["StorageSpaceExhausted"].GetBoolean(), true);
+        UNIT_ASSERT_C(!domainState.Has("SmallBlobsQuotaExceeded"), domainState.GetStringRobust());
+        const auto& quotaUsage = tenant["DiskSpaceQuotaUsage"];
+        UNIT_ASSERT_C(quotaUsage.IsMap(), tenant.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["Mode"].GetString(), "MODE_OVERALL");
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["Entries"].GetArray().size(), 1);
+        const auto& entry = quotaUsage["Entries"][0];
+        UNIT_ASSERT_VALUES_EQUAL(entry["PoolKind"].GetString(), "");
+        UNIT_ASSERT_VALUES_EQUAL(entry["Usage"].GetString(), "180");
+        UNIT_ASSERT_VALUES_EQUAL(entry["SoftQuota"].GetString(), "1000");
+        UNIT_ASSERT_VALUES_EQUAL(entry["HardQuota"].GetString(), "1000");
+
+        // TablesStorage keeps the raw configured database quotas on the main storage type
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 2);
+        CheckTablesStorage(tenant, "SSD", 130, 0, 1000);
+        CheckTablesStorage(tenant, "HDD", 50, 0, 0);
+    }
+
+    Y_UNIT_TEST(TenantInfoWithoutDomainStateAndDiskSpaceQuotaUsage)
+    {
+        // e.g. an older SchemeShard that doesn't report DiskSpaceQuotaUsage, and no flag of DomainState is set
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "hdd"});
+            AddPoolUsage(domain, "ssd", 100);
+            domain.MutableDatabaseQuotas()->set_data_size_soft_quota(800);
+            domain.MutableDatabaseQuotas()->set_data_size_hard_quota(1000);
+        });
+
+        UNIT_ASSERT_C(!tenant.Has("DomainState"), tenant.GetStringRobust());
+        UNIT_ASSERT_C(!tenant.Has("DiskSpaceQuotaUsage"), tenant.GetStringRobust());
+
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 1);
+        CheckTablesStorage(tenant, "SSD", 100, 800, 1000);
     }
 
     Y_UNIT_TEST(StorageLimitsCappedByUserChunkPool) {
@@ -3342,6 +3504,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         auto* sample = record.AddDDiskStateInfo();
                         sample->SetPDiskId(pdisk);
                         sample->SetDDiskSlotId(slot);
+                        if (slot == 1012) {
+                            sample->SetHasWhiteboardData(false);
+                            sample->SetDDiskStatus(NKikimrWhiteboard::TDDiskStateInfo::Initializing);
+                            continue;
+                        }
                         sample->SetDDiskOccupancy(0.25);
                         sample->SetPersistentBufferOccupancy(0.5);
                         sample->SetAllocatedSize(1024);
@@ -3392,6 +3559,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 sample ? TString("whiteboard-buffer-id") : MakeBlobStoragePersistentBufferId(runtime.GetNodeId(0), 1, 1010).ToString());
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("DDiskOccupancy"), sample);
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("AllocatedSize"), sample);
+            const auto& healthOnly = ddisks[2];
+            UNIT_ASSERT(healthOnly.Has("HasWhiteboardData"));
+            UNIT_ASSERT(!healthOnly["HasWhiteboardData"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(healthOnly.Has("DDiskStatus"), sample);
+            UNIT_ASSERT(!healthOnly.Has("DDiskOccupancy"));
+            UNIT_ASSERT(!healthOnly.Has("AllocatedSize"));
         };
         for (const TString& mode : {TString(), TString("false"), TString("true")}) {
             includeDDisks = mode == "true";

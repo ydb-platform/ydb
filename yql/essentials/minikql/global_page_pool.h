@@ -43,7 +43,7 @@ public:
 
     void PushPage(void* addr) {
         NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
-        if (Y_UNLIKELY(TAlignedPagePool::IsDefaultAllocatorUsed())) {
+        if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
             UnmapPage(addr);
             return;
         }

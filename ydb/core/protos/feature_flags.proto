@@ -435,7 +435,7 @@ message TFeatureFlags {
     optional bool EnableLocalDBBtreeIndexV2 = 353 [default = false];
     // Only a leading '/' makes a client path absolute. Otherwise prepend the
     // cluster root for database names, or the database for schema-object paths.
-    optional bool EnableRelativePaths = 354 [default = false];
+    optional bool EnableRelativePaths = 354 [default = true];
     optional bool EnableKillSession = 355 [default = false];
     // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
     optional bool EnableSavepoints = 356 [default = false];
@@ -488,4 +488,15 @@ message TFeatureFlags {
     optional bool EnableRowTableZstdCompression = 388 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     optional bool EnableCsDefaultValues = 390 [default = false];
+    optional bool EnableTopicWriteSessionsInitQuoting = 391 [default = false];
+    optional bool EnableAsyncReplicationChecksumCheck = 392 [default = false];
+    optional bool EnableIndexShadowDataRepair = 393 [default = false];
+    // (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
+    optional bool EnableColumnShardStats = 395 [default = false];
+    optional bool EnableTopicReplication = 396 [default = false];
+    optional bool EnableRebuildIndex = 397 [default = false];
+    optional bool EnableDefaultFromExpression = 398 [default = false];
 }

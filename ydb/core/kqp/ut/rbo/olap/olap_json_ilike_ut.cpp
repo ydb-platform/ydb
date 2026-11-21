@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -57,7 +58,28 @@ public:
         return TStringBuilder() << "read " << columns << ", output " << (extractMembers ? PrintColumns(*extractMembers->GetChild(2)) : columns);
     }
 
+    // Whether column shards compute an aggregate in the program of a read.
+    bool HasOlapAggregate() const {
+        return FindCallable(*Ast.Root, "TKqpOlapAgg");
+    }
+
+    // The number of column reads, so a test can tell a read its consumers share from a read copied for each of them.
+    size_t CountReads() const {
+        return CountCallables(*Ast.Root, "KqpBlockReadOlapTableRanges") + CountCallables(*Ast.Root, "KqpReadOlapTableRanges");
+    }
+
 private:
+    static size_t CountCallables(const NYql::TAstNode& node, TStringBuf name) {
+        if (!node.IsList()) {
+            return 0;
+        }
+        size_t count = node.GetChildrenCount() > 0 && IsAtom(*node.GetChild(0), name) ? 1 : 0;
+        for (ui32 i = 0; i < node.GetChildrenCount(); ++i) {
+            count += CountCallables(*node.GetChild(i), name);
+        }
+        return count;
+    }
+
     static bool IsAtom(const NYql::TAstNode& node, TStringBuf content) {
         return node.IsAtom() && node.GetContent() == content;
     }
@@ -205,7 +227,9 @@ std::vector<TString> CanonicalRows(const TResultSet& resultSet) {
 struct TQueryOutcome {
     TString Program;
     TString ReadColumns;
+    bool OlapAggregate = false;
     std::vector<TString> Rows;
+    size_t ReadCount = 0;
 };
 
 std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries,
@@ -227,14 +251,16 @@ std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKik
             .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), (newRbo ? "new" : "old") << " optimizer, " << query << ": " << result.GetIssues().ToString());
         TOlapProgramPrinter printer(TString{*result.GetStats()->GetAst()});
-        outcomes.push_back({printer.Print(withProjections), printer.PrintReadColumns(), CanonicalRows(result.GetResultSet(0))});
+        outcomes.push_back({printer.Print(withProjections), printer.PrintReadColumns(), printer.HasOlapAggregate(),
+                            CanonicalRows(result.GetResultSet(0)), printer.CountReads()});
     }
     return outcomes;
 }
 
 // The new optimizer gives the column shard the same program as the old one, the read fetches and returns the same
-// columns, and the query returns the same rows. The projections are compared only with `withProjections`: the new
-// optimizer pushes some projections the old one does not.
+// columns, an aggregate is pushed to column shards when the old one pushes it, and the query returns the same rows.
+// The projections are compared only with `withProjections`: the new optimizer pushes some projections the old one does
+// not.
 void CheckSameAsOldOptimizer(const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries,
                              bool withProjections = false) {
     const auto oldOutcomes = RunQueries(false, prepare, queries, withProjections);
@@ -242,6 +268,7 @@ void CheckSameAsOldOptimizer(const std::function<void(TKikimrRunner&)>& prepare,
     for (size_t i = 0; i < queries.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].Program, oldOutcomes[i].Program, queries[i]);
         UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].ReadColumns, oldOutcomes[i].ReadColumns, queries[i]);
+        UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].OlapAggregate, oldOutcomes[i].OlapAggregate, queries[i]);
         UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq("\n", newOutcomes[i].Rows), JoinSeq("\n", oldOutcomes[i].Rows), queries[i]);
     }
 }
@@ -523,6 +550,136 @@ Y_UNIT_TEST_SUITE(KqpRboOlapCompat) {
             // A filter column under a projection.
             R"q(SELECT JSON_VALUE(payload, "$.a") AS a FROM `/Root/foo` WHERE level > 1 ORDER BY a)q",
         }, /*withProjections=*/true);
+    }
+
+    // As in the old optimizer, column shards compute MIN and MAX of floating-point values, ignoring NaN, the sum of a
+    // Float column without keys and the sum of an Interval column.
+    Y_UNIT_TEST(FloatAggregatesSameAsOldOptimizer) {
+        CheckSameAsOldOptimizer([](TKikimrRunner& kikimr) {
+            ExecuteSchemeQueries(kikimr, {R"(
+                CREATE TABLE `/Root/foo` (
+                    id Uint64 NOT NULL, k Int32, f Float, d Double, g Float, iv Interval, v Int64,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )"});
+            // In Float, 2^24 + 1 rounds back to 2^24, so the Float sum depends on how it is computed.
+            const double nan = std::numeric_limits<double>::quiet_NaN();
+            TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id = 1; id <= 12; ++id) {
+                const double d = id <= 2 ? 1.0 : id <= 4 ? nan : id <= 6 ? 3.0 : 2.0;
+                rows.AddListItem().BeginStruct().AddMember("id").Uint64(id).AddMember("k").OptionalInt32(id % 2)
+                    .AddMember("f").OptionalFloat(id <= 2 ? 16777216.f : 1.f).AddMember("d").OptionalDouble(d)
+                    .AddMember("g").OptionalFloat(static_cast<float>(d)).AddMember("iv").OptionalInterval(id * 1000000)
+                    .AddMember("v").OptionalInt64(id).EndStruct();
+            }
+            rows.EndList();
+            const auto result = kikimr.GetTableClient().BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }, {
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SUM(f) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(d) AS mn, MAX(d) AS mx FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MIN(d) AS mn, MAX(d) AS mx FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(g) AS mn, MAX(g) AS mx FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MIN(g) AS mn, MAX(g) AS mx FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SUM(iv) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, SUM(iv) AS s FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(d) AS mn, SUM(v) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MAX(g) AS mx, SUM(v) AS s FROM `/Root/foo` GROUP BY k)q",
+        });
+    }
+
+    // With channel spilling, which the test runner enables, the consumers of a subquery share its read. When no other
+    // consumer reads the column, the new optimizer pushes the JSON_VALUE projection into the shared read, as into an
+    // unshared one. The old optimizer computes it in the read stage, so only the rows are compared with it. Both branch
+    // orders, to push the projection through the first port and through another one, and a join of the two consumers.
+    Y_UNIT_TEST(JsonProjectionIntoSharedRead) {
+        const auto prepare = [](TKikimrRunner& kikimr) {
+            ExecuteSchemeQueries(kikimr, {CreateColumnTable, UseSubColumns});
+            BulkUpsertJson(kikimr, {{1, R"({"host":"constant"})"}, {2, R"({"host":"other"})"}, {3, R"({"dc":"x"})"},
+                                    {4, R"({"host":"constant"})"}, {5, std::nullopt}});
+        };
+        const std::vector<TString> queries = {
+            R"q(SELECT JSON_VALUE(Col2, "$.host") AS value FROM `/Root/ColumnTable`)q",
+            R"q($rows = SELECT Col2 FROM `/Root/ColumnTable`;
+                SELECT JSON_VALUE(Col2, "$.host") AS value FROM $rows
+                UNION ALL
+                SELECT CAST("constant" AS Utf8) AS value FROM $rows)q",
+            R"q($rows = SELECT Col2 FROM `/Root/ColumnTable`;
+                SELECT CAST("constant" AS Utf8) AS value FROM $rows
+                UNION ALL
+                SELECT JSON_VALUE(Col2, "$.host") AS value FROM $rows)q",
+            R"q($rows = SELECT Col2 FROM `/Root/ColumnTable`;
+                $hosts = SELECT JSON_VALUE(Col2, "$.host") AS key FROM $rows;
+                $constants = SELECT CAST("constant" AS Utf8) AS key FROM $rows;
+                SELECT COUNT(*) AS matches FROM $hosts AS h INNER JOIN $constants AS c ON h.key = c.key)q",
+        };
+        const auto oldOutcomes = RunQueries(false, prepare, queries, /*withProjections=*/true);
+        const auto newOutcomes = RunQueries(true, prepare, queries, /*withProjections=*/true);
+        // The program of the unshared read, which every shared read must get.
+        UNIT_ASSERT_C(!newOutcomes[0].Program.empty(), queries[0]);
+        for (size_t i = 0; i < queries.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].ReadCount, size_t(1), queries[i]);
+            UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].Program, newOutcomes[0].Program, queries[i]);
+            UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq("\n", newOutcomes[i].Rows), JoinSeq("\n", oldOutcomes[i].Rows), queries[i]);
+        }
+    }
+
+    // The projection overwrites its column in the shared read, so it stays in compute when another consumer of the read
+    // reads the column as well: with a projection of its own or as it is stored.
+    Y_UNIT_TEST(NoJsonProjectionIntoSharedReadOtherConsumerReadsColumn) {
+        const auto prepare = [](TKikimrRunner& kikimr) {
+            ExecuteSchemeQueries(kikimr, {CreateColumnTable, UseSubColumns});
+            BulkUpsertJson(kikimr, {{1, R"({"host":"h1","dc":"d1"})"}, {2, R"({"host":"h2"})"}, {3, std::nullopt}});
+        };
+        const std::vector<TString> queries = {
+            R"q($rows = SELECT Col2 FROM `/Root/ColumnTable`;
+                SELECT JSON_VALUE(Col2, "$.host") AS value FROM $rows
+                UNION ALL
+                SELECT JSON_VALUE(Col2, "$.dc") AS value FROM $rows)q",
+            R"q($rows = SELECT Col2 FROM `/Root/ColumnTable`;
+                SELECT JSON_VALUE(Col2, "$.host") AS value FROM $rows
+                UNION ALL
+                SELECT CAST(Col2 IS NULL AS Utf8) AS value FROM $rows)q",
+        };
+        const auto oldOutcomes = RunQueries(false, prepare, queries, /*withProjections=*/true);
+        const auto newOutcomes = RunQueries(true, prepare, queries, /*withProjections=*/true);
+        for (size_t i = 0; i < queries.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].ReadCount, size_t(1), queries[i]);
+            UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].Program, "", queries[i]);
+            UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq("\n", newOutcomes[i].Rows), JoinSeq("\n", oldOutcomes[i].Rows), queries[i]);
+        }
+    }
+
+    // The projection overwrites its column, so it stays in compute when the expression with the JSON_VALUE also reads the
+    // column, in an unshared read and in a shared one. The old optimizer pushes the unshared query and returns "none" for the
+    // document without the path, so the rows are checked against the expected ones instead.
+    Y_UNIT_TEST(NoJsonProjectionWhenSameExpressionReadsColumn) {
+        const auto prepare = [](TKikimrRunner& kikimr) {
+            ExecuteSchemeQueries(kikimr, {CreateColumnTable, UseSubColumns});
+            BulkUpsertJson(kikimr, {{1, R"({"host":"h1"})"}, {2, R"({"dc":"x"})"}, {3, std::nullopt}});
+        };
+        const std::vector<std::pair<TString, std::vector<TString>>> cases = {
+            {R"q(SELECT Col1, IF(Col2 IS NULL, CAST("none" AS Utf8), JSON_VALUE(Col2, "$.host")) AS v FROM `/Root/ColumnTable`)q",
+             {R"(Col1=1u;v=["h1"])", R"(Col1=2u;v=#)", R"(Col1=3u;v=["none"])"}},
+            {R"q($rows = SELECT Col1, Col2 FROM `/Root/ColumnTable`;
+                SELECT Col1, IF(Col2 IS NULL, CAST("none" AS Utf8), JSON_VALUE(Col2, "$.host")) AS v FROM $rows
+                UNION ALL
+                SELECT Col1, CAST("c" AS Utf8) AS v FROM $rows)q",
+             {R"(Col1=1u;v=["c"])", R"(Col1=1u;v=["h1"])", R"(Col1=2u;v=#)", R"(Col1=2u;v=["c"])", R"(Col1=3u;v=["c"])",
+              R"(Col1=3u;v=["none"])"}},
+        };
+        std::vector<TString> queries;
+        for (const auto& [query, rows] : cases) {
+            queries.push_back(query);
+        }
+        const auto outcomes = RunQueries(true, prepare, queries, /*withProjections=*/true);
+        for (size_t i = 0; i < cases.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(outcomes[i].Program, "", queries[i]);
+            UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq("\n", outcomes[i].Rows), JoinSeq("\n", cases[i].second), queries[i]);
+        }
     }
 }
 

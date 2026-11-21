@@ -96,6 +96,7 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -118,6 +119,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     auto takeKeyColumns = index.KeyColumns.size();
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -161,6 +163,35 @@ NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexAlteringCo
 
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
     return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
+}
+
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(NYdb::NTable::EIndexType type, bool enableCompactFulltext) {
+    switch (type) {
+        case NYdb::NTable::EIndexType::GlobalSync:
+            return NKikimrSchemeOp::EIndexTypeGlobal;
+        case NYdb::NTable::EIndexType::GlobalAsync:
+            return NKikimrSchemeOp::EIndexTypeGlobalAsync;
+        case NYdb::NTable::EIndexType::GlobalUnique:
+            return NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        case NYdb::NTable::EIndexType::GlobalVectorKMeansTree:
+            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        case NYdb::NTable::EIndexType::GlobalHnsw:
+            return NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+        case NYdb::NTable::EIndexType::GlobalFulltextPlain:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        case NYdb::NTable::EIndexType::GlobalFulltextRelevance:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        case NYdb::NTable::EIndexType::GlobalJson:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson;
+        default:
+            return std::nullopt;
+    }
 }
 
 std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact) {
@@ -292,6 +323,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     } else {
         // Vector and fulltext indexes allow to add all columns both to index & data
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -338,6 +370,7 @@ std::span<const std::string_view> GetImplTables(
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return GlobalSecondaryImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
             if (indexKeys.size() == 1) {
                 return GlobalKMeansTreeImplTables;
             } else {
@@ -368,6 +401,19 @@ bool IsBuildImplTable(std::string_view tableName) {
         || tableName.ends_with(NKMeans::BuildSuffix1)
         // transient compact-fulltext rowid-mode source table - dropped on apply like the *build tables
         || tableName.ends_with(NFulltext::RowIdSrcBuildSuffix);
+}
+
+bool HasReplicatedImplTables(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+    case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+    case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+    case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+    case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+        return false;
+    default:
+        return true;
+    }
 }
 
 namespace NFulltext {

@@ -1,5 +1,7 @@
 #include "topic_parser.h"
 
+#include "counters.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/library/actors/core/log.h>
@@ -119,6 +121,9 @@ TDiscoveryConverterPtr TDiscoveryConverter::ForFstClass(const TString& topic, co
     res->Database = database;
     res->OriginalTopic = topic;
     res->BuildFstClassNames(enableRelativePaths);
+    if (res->IsValid()) {
+        CountTopicPathWithDatabasePrefix(database, topic, res->PrimaryPath);
+    }
     return TDiscoveryConverterPtr(res);
 }
 
@@ -149,6 +154,9 @@ TDiscoveryConverterPtr TDiscoveryConverter::ForFederation(
     dbBuf.ChopSuffix("/");
 
     res->BuildForFederation(dbBuf, topicBuf);
+    if (res->IsValid()) {
+        CountTopicPathWithDatabasePrefix(database, topic, res->PrimaryPath);
+    }
     return NPersQueue::TDiscoveryConverterPtr(res);
 }
 
@@ -597,6 +605,14 @@ const TMaybe<TString>& TDiscoveryConverter::GetSecondaryPath(const TString& data
 
 const TMaybe<TString>& TDiscoveryConverter::GetAccount_() const {
     return Account_;
+}
+
+TMaybe<TString> TDiscoveryConverter::TrySecondaryDiscoveryPath(const TString& lbRoot) {
+    if (lbRoot.empty() || !Account_.Defined() || Account_->empty() || FullModernName.empty()) {
+        return {};
+    }
+    SetDatabase(NKikimr::JoinPath({lbRoot, *Account_}));
+    return SecondaryPath;
 }
 
 void TDiscoveryConverter::SetDatabase(const TString& database) {

@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/context/propagation/text_map_propagator.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/version.h"
@@ -135,17 +136,13 @@ private:
     std::string result(key);
     for (auto &c : result)
     {
-      unsigned char uc = static_cast<unsigned char>(c);
-      if (uc >= 'a' && uc <= 'z')
-      {
-        c = static_cast<char>(uc - ('a' - 'A'));
-      }
-      else if (!((uc >= 'A' && uc <= 'Z') || (uc >= '0' && uc <= '9') || uc == '_'))
+      c = common::detail::ToAsciiUpper(c);
+      if (!common::detail::IsAsciiUpper(c) && !common::detail::IsAsciiDigit(c) && c != '_')
       {
         c = '_';
       }
     }
-    if (result[0] >= '0' && result[0] <= '9')
+    if (common::detail::IsAsciiDigit(result[0]))
     {
       result.insert(result.begin(), '_');
     }

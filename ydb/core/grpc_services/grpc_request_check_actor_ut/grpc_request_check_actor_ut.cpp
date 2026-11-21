@@ -184,6 +184,51 @@ const THashSet<TString> TTestSetup::ClusterPermissions {
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(RequestAuditSubject) {
+    Y_UNIT_TEST(PreservesAssignedSubjectsWithoutAnonymousRootFallback) {
+        struct TCase {
+            TString DefaultSID;
+            TMaybe<TString> Token;
+            TString ExpectedSID;
+        };
+        for (const auto& test : TVector<TCase>{
+            {{}, Nothing(), {}},
+            {"defaultUser", Nothing(), "defaultUser"},
+            {"root@builtin", Nothing(), "root@builtin"},
+            {{}, TString("Bearer user1"), "user1@as"},
+        }) {
+            TTestSetup setup(test.DefaultSID.empty() ? "user1" : test.DefaultSID, "/Root/db", {}, false);
+            auto* runtime = setup.GetRuntime();
+            runtime->GetAppData().EnforceUserTokenRequirement = false;
+            runtime->GetAppData().DefaultUserSIDs.clear();
+            if (!test.DefaultSID.empty()) {
+                runtime->GetAppData().DefaultUserSIDs = {test.DefaultSID};
+            }
+            NKikimrConfig::TAuditConfig auditConfig;
+            auto* logClass = auditConfig.AddLogClassConfig();
+            logClass->SetLogClass(NKikimrConfig::TAuditConfig::TLogClassConfig::Default);
+            logClass->SetEnableLogging(true);
+            runtime->GetAppData().AuditConfig = auditConfig;
+            auto request = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
+                setup.DbPath, test.Token, setup.FakeMonActor,
+                NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::Default),
+                TTestSetup::PeerName, "audit-subject-test");
+            setup.RequestCheckActor(std::move(request));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
+            ui32 subjects = 0;
+            for (const auto& [name, value] : response->AuditLogParts) {
+                if (name == "subject") {
+                    UNIT_ASSERT_VALUES_EQUAL(value, test.ExpectedSID);
+                    ++subjects;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(subjects, 1);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(TestSetCloudPermissions) {
 
 Y_UNIT_TEST(CanSetAllPermissions) {

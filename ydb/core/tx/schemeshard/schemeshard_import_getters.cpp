@@ -7,6 +7,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
+#include <ydb/core/backup/common/index_metadata.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
@@ -217,9 +218,14 @@ protected:
     }
 
     bool MaybeDecrypt(const TString& content, TString& result, NBackup::EBackupFileType fileType, ui32 shardNumber = 0) {
-        if (Key && IV) {
+        return MaybeDecryptWithIV(content, result, fileType, IV, shardNumber);
+    }
+
+    bool MaybeDecryptWithIV(const TString& content, TString& result, NBackup::EBackupFileType fileType,
+            const TMaybe<NBackup::TEncryptionIV>& itemIV, ui32 shardNumber = 0) {
+        if (Key && itemIV) {
             try {
-                NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, shardNumber);
+                NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(*itemIV, fileType, 0 /* backupItemNumber: already combined */, shardNumber);
                 auto buffer = NBackup::TEncryptedFileDeserializer::DecryptFullFile(*Key, expectedIV, TBuffer(content.data(), content.size()));
                 result.assign(buffer.Data(), buffer.Size());
                 return true;
@@ -544,13 +550,37 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         );
 
         const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
-        if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
+        auto skipMaterializedIndexes = [&]() {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
             item.MaterializedIndexes.clear();
-            return StartDownloadingChangefeeds();
+            StartDownloadingChangefeeds();
+        };
+
+        if (NoObjectFound(result.GetError().GetErrorType())) {
+            if (canSkip) {
+                return skipMaterializedIndexes();
+            }
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << CurrentMaterializedIndexSchemeKey()
+                    << ": materialized index data is missing from the backup. IMPORT mode requires exported index data. "
+                    << "Use BUILD or AUTO to rebuild indexes from table data, or export with include_index_data=true");
         } else if (!CheckResult(result, "HeadObject")) {
             return;
+        }
+
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        if (Key && !IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].IV) {
+            // Index data cannot be decrypted without its IV
+            if (canSkip) {
+                YDB_LOG_NOTICE("No index IV in schema mapping, indexes will be built",
+                    {"self", SelfId()},
+                    {"key", CurrentMaterializedIndexSchemeKey()},
+                );
+                return skipMaterializedIndexes();
+            }
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": no index IV in schema mapping");
         }
 
         GetObject(CurrentMaterializedIndexSchemeKey(), result.GetResult().GetContentLength());
@@ -896,8 +926,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        const auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
+
         TString content;
-        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema, IndexCheckedMaterializedIndexImplTable)) {
+        if (!MaybeDecryptWithIV(msg.Body, content, NBackup::EBackupFileType::TableSchema, indexImplTablePrefix.IV)) {
             return;
         }
 
@@ -915,8 +948,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": cannot parse index");
         }
 
-        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
-        const auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
         item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
 
         auto nextStep = [this]() {
@@ -1133,21 +1164,36 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         IndexCheckedMaterializedIndexImplTable = 0;
         item.MaterializedIndexes.clear();
 
-        // Older backups may contain async index data inconsistent with the base table.
-        // Leave these indexes out of the materialized items so import builds them instead.
-        AsyncIndexes.clear();
+        // Async data may lag behind the table and HNSW has no supported payload format.
+        IndexesToRebuild.clear();
         if (item.Table) {
             for (const auto& index : item.Table->indexes()) {
-                if (index.has_global_async_index()) {
-                    AsyncIndexes.insert(index.name());
+                if (index.has_global_async_index() || index.has_global_hnsw_index()) {
+                    IndexesToRebuild.insert(index.name());
                 }
             }
         }
 
         if (const auto& indexes = item.Metadata.GetIndexes()) {
+            if (item.Table) {
+                if (const auto missing = NBackup::FindMissingIndexImplTable(item.Table->indexes(), *indexes)) {
+                    if (IndexPopulationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT) {
+                        return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << MetadataKey
+                            << ": materialized index data is missing from the backup: " << missing);
+                    }
+                    // Older DataShards may also have numbered the remaining tables differently.
+                    return StartDownloadingChangefeeds();
+                }
+            }
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
-                IndexImplTablePrefixes.push_back(index);
+                auto& indexMetadata = IndexImplTablePrefixes.emplace_back(index);
+                // The IV of a separate index impl-table item is stored only in the
+                // authenticated schema mapping of its parent table
+                const auto& indexIVs = item.ExportIndexIVs.GetIVs();
+                if (const auto it = indexIVs.find(index.ImplTablePrefix); it != indexIVs.end()) {
+                    indexMetadata.IV = NBackup::TEncryptionIV::FromBinaryString(it->second);
+                }
             }
 
             DownloadMaterializedIndexes();
@@ -1157,7 +1203,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                     IndexImplTablePrefixes.reserve(item.Table->indexes_size());
 
                     for (const auto& index : item.Table->indexes()) {
-                        if (index.has_global_async_index()) {
+                        if (index.has_local_bloom_filter_index() || IndexesToRebuild.contains(index.name())) {
                             continue;
                         }
                         const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
@@ -1187,7 +1233,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
         while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
             const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
-            if (!AsyncIndexes.contains(prefix.substr(0, prefix.find('/')))) {
+            if (!IndexesToRebuild.contains(prefix.substr(0, prefix.find('/')))) {
                 break;
             }
             ++IndexCheckedMaterializedIndexImplTable;
@@ -1376,7 +1422,7 @@ private:
     ui64 IndexDownloadedChangefeed = 0;
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
-    THashSet<TString> AsyncIndexes;
+    THashSet<TString> IndexesToRebuild;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 

@@ -4089,6 +4089,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString Issue;
         TPathId StreamImplPathId;
         TMaybe<NBackup::TEncryptionIV> ExportItemIV;
+        NKikimrSchemeOp::TExportIndexIVs ExportIndexIVs;
 
         ui32 ParentIdx = Max<ui32>();
         TVector<ui32> ChildItems;
@@ -4274,7 +4275,8 @@ public:
 
     void AddNotifySubscriber(const TActorId& actorId);
 
-    struct TFillItemsFromSchemaMappingResult {
+    struct TResolveItemsFromSchemaMappingResult {
+        TVector<TItem> Items;
         bool Success = true;
         TString ErrorMessage;
         size_t ErrorsCount = 0;
@@ -4299,9 +4301,8 @@ public:
     // - if user specified no items, fills all from schema mapping;
     // - if user specified explicit filtering, takes from schema mapping only those allowed by filter.
     //
-    // Replaces current items list with a new list of items.
     // Generates an error if there are no item explicitly specified by filter.
-    TFillItemsFromSchemaMappingResult FillItemsFromSchemaMapping(TSchemeShard* ss);
+    TResolveItemsFromSchemaMappingResult ResolveItemsFromSchemaMapping(TSchemeShard* ss);
 }; // TImportInfo
 // } // NImport
 

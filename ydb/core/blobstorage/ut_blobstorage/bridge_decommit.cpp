@@ -549,6 +549,46 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         RunDecommission(env, chain, checker, groupId, {}, {.InProgress = expectRefused, .Done = expectRefused});
     }
 
+    // Full BlobDepot recommissioning is not implemented. Refusing it after BlobDepot has started keeps the group in a
+    // supported decommission state, which can finish and no longer block a later bridge conversion.
+    Y_UNIT_TEST(RecommissionUnbridgedGroupRefused) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        env.CreatePool(2);
+        env.Sim(TDuration::Seconds(30));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+        checker.CheckAll();
+
+        auto expectRefused = [&] {
+            const auto response = RecommissionGroup(env, groupId);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(),
+                "recommissioning after BlobDepot has started is not supported");
+        };
+        {
+            TFilterChain chain(env);
+            RunDecommission(env, chain, checker, groupId, {}, {
+                .InProgress = expectRefused,
+                .Done = expectRefused,
+            });
+        }
+
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+        const auto response = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(response.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            response.GetErrorReason());
+        WaitUntil(env, [&] {
+            return !QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending();
+        }, "BSC bridge conversion finished");
+        checker.CheckAll();
+    }
+
     // the node that has no info of the inline pile being decommitted starts its DS proxy without configuration, and the
     // requests queued there go to the BlobDepot agent, which is in front of the group then, not to the bridge proxy
     // behind the agent: the blob written through the agent resides in the channels of the BlobDepot only

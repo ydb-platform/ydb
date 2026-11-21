@@ -294,10 +294,6 @@ namespace NKikimr::NBsController {
                 continue; // recommissioning is not required -- group has no virtual part in it
             }
 
-            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING) {
-                continue; // recommissioning is already underway
-            }
-
             if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE &&
                     group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::DELETING) {
                 continue; // tablet is already being deleted
@@ -315,41 +311,17 @@ namespace NKikimr::NBsController {
                     throw TExError() << "virtual group is not in WORKING state" << TErrorParams::GroupId(groupId);
                 }
                 // bridged group keeps its VDisks in its piles, and the one decommitted completely would get VDisks
-                // allocated outside of any pile
+                // allocated outside of any pile; keep the specific error for bridge mode
                 if (group->BridgeGroupInfo || (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE &&
                         StoragePools.Get().at(group->StoragePoolId).BridgeMode)) {
                     throw TExError() << "recommissioning of groups in bridge mode is not supported"
                         << TErrorParams::GroupId(groupId);
                 }
 
-                switch (group->DecommitStatus) {
-                    case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
-                        Y_DEBUG_ABORT_UNLESS(!group->VDisksInGroup.empty());
-                        if (!group->VDisksInGroup) {
-                            throw TExError() << "group contains no VDisks despite IN_PROGRESS decommission state"
-                                << TErrorParams::GroupId(groupId);
-                        }
-                        break;
-
-                    case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
-                        Y_DEBUG_ABORT_UNLESS(group->VDisksInGroup.empty());
-                        if (group->VDisksInGroup) {
-                            throw TExError() << "group contains VDisks despite DONE decommission state"
-                                << TErrorParams::GroupId(groupId);
-                        }
-                        // kindly ask futher logic to allocate a group here
-                        Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
-                        Fit.GroupsToAllocate.insert(group->ID);
-                        break;
-
-                    default:
-                        Y_DEBUG_ABORT("group is not in IN_PROGRESS/DONE decommission state");
-                        throw TExError() << "group is not in IN_PROGRESS/DONE decommission state"
-                            << TErrorParams::GroupId(groupId);
-                }
-
-                // switch group to recommissioning state, start machinery accordingly
-                group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
+                // Full BlobDepot recommissioning is not implemented. Do not leave the group in a state which has no
+                // terminal transition and blocks a later bridge conversion forever.
+                throw TExError() << "recommissioning after BlobDepot has started is not supported"
+                    << TErrorParams::GroupId(groupId);
             }
 
             // update state with the agents

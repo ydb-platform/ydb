@@ -386,8 +386,7 @@ private:
         return TConclusionStatus::Success();
     }
 
-    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable) {
-        Y_UNUSED(ctx);
+    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable, Ydb::StatusIds::StatusCode& errorStatus) {
         Y_ABORT_UNLESS(ResolveNamesResult);
         AFL_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
 
@@ -403,6 +402,8 @@ private:
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
+        const bool disablePgCompatibility = DerivedActivityType == NKikimrServices::TActivity::GRPC_REQ
+            && AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
         const bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
         const bool isPublicBulkUpsert = !AllowWriteToPrivateTable && !AllowWriteToIndexImplTable;
 
@@ -490,9 +491,18 @@ private:
                     << "Column " << name << " is a virtual generated column and its value cannot be set explicitly");
             }
 
-            TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
-
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
+            if (disablePgCompatibility && (typeInProto.has_pg_type() || ci.PType.GetTypeId() == NScheme::NTypeIds::Pg)) {
+                TString errorMessage;
+                if (!CheckAccess(errorMessage)) {
+                    errorStatus = Ydb::StatusIds::UNAUTHORIZED;
+                    return TConclusionStatus::Fail(errorMessage);
+                }
+                errorStatus = Ydb::StatusIds::BAD_REQUEST;
+                return TConclusionStatus::Fail("PostgreSQL compatibility is disabled");
+            }
+
+            TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
@@ -788,9 +798,10 @@ private:
 
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         {
-            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable);
+            auto errorStatus = Ydb::StatusIds::SCHEME_ERROR;
+            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable, errorStatus);
             if (conclusion.IsFail()) {
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, conclusion.GetErrorMessage(), ctx);
+                return ReplyWithError(errorStatus, conclusion.GetErrorMessage(), ctx);
             }
         }
 

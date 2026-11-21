@@ -3083,6 +3083,46 @@ tx_meta {
         }
     }
 
+    Y_UNIT_TEST(BulkUpsertPgCompatibility) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableTablePgTypes(true);
+        appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        TTableClient client(driver);
+        auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Mixed` (
+                id Uint64 NOT NULL,
+                legacy PgInt4,
+                PRIMARY KEY (id)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+
+        auto& appData = server.Server_->GetRuntime()->GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        appData.UpdateRuntimeFlags(flags);
+
+        auto rows = TValueBuilder()
+                        .BeginList()
+                        .AddListItem()
+                        .BeginStruct()
+                        .AddMember("id")
+                        .Uint64(2)
+                        .AddMember("legacy")
+                        .Pg(TPgValue(TPgValue::VK_TEXT, "42", TPgType("pgint4")))
+                        .EndStruct()
+                        .EndList()
+                        .Build();
+        const auto bulk = client.BulkUpsert("/Root/Mixed", std::move(rows)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(bulk.GetStatus(), EStatus::BAD_REQUEST, bulk.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(bulk.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+    }
+
     Y_UNIT_TEST(ReadTable) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);

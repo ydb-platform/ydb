@@ -51,6 +51,7 @@
 #include <ydb/library/actors/util/affinity.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/channel_profiles.h>
@@ -375,6 +376,46 @@ public:
         CheckAndExecuteStop();
     }
 
+    void HandleDisconnectClients(NMon::TEvHttpInfo::TPtr& ev) {
+        const auto& request = *ev->Get();
+        auto reply = [&](const TString& response) {
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(response, 0, NMon::IEvHttpInfoRes::Custom), 0, ev->Cookie);
+        };
+        const auto* appData = AppData();
+        if (request.Request.GetHeader("Authorization").empty() || appData->AdministrationAllowedSIDs.empty()
+                || request.UserToken.empty()
+                || !IsAdministrator(appData, request.UserToken)) {
+            return reply(NMonitoring::HTTPFORBIDDEN);
+        }
+        if (request.Request.GetMethod() != HTTP_METHOD_POST) {
+            return reply("HTTP/1.1 405 Method Not Allowed\r\nAllow: POST\r\n\r\n");
+        }
+        const auto& database = request.Request.GetParams().Get("database");
+        if (database.empty()) {
+            return reply("HTTP/1.1 400 Bad Request\r\n\r\nExpected database path");
+        }
+        if (database != appData->TenantName) {
+            return reply("HTTP/1.1 409 Conflict\r\n\r\nDatabase does not match this node");
+        }
+
+        auto wrapper = GRpcServersWrapper.lock();
+        if (!wrapper || !Started) {
+            return reply("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+        }
+        {
+            TGuard<TMutex> guard = wrapper->Guard();
+            if (wrapper->IsDisabled.load(std::memory_order_acquire) || wrapper->Servers.empty()) {
+                return reply("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+            }
+            for (const auto& [_, server] : wrapper->Servers) {
+                if (server) {
+                    server->DisconnectClients();
+                }
+            }
+        }
+        reply(TString(NMonitoring::HTTPOKJSON) + R"({"status":"OK"})");
+    }
+
     void HandleWarmupComplete(NKqp::TEvKqpWarmupComplete::TPtr&) {
         if (!WarmupReceived) {
             WarmupReceived = true;
@@ -493,6 +534,7 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvNodeWardenStorageConfig, Handle)
         hFunc(TEvStop, HandleStop)
+        hFunc(NMon::TEvHttpInfo, HandleDisconnectClients)
         hFunc(TEvGRpcServersManager::TEvDisconnectRequestStarted, Handle)
         hFunc(TEvGRpcServersManager::TEvDisconnectRequestFinished, Handle)
         hFunc(NKqp::TEvKqpWarmupComplete, HandleWarmupComplete)
@@ -2083,6 +2125,18 @@ void TKikimrRunner::InitializeActorSystem(
 
         if (servicesMask.EnableGRpcService) {
             Monitoring->RegisterActorPage(nullptr, "grpc", "GRPC", false, ActorSystem.Get(), NGRpcService::GrpcMonServiceId());
+            if (ActorsMonPage && !runConfig.TenantName.empty()
+                    && runConfig.NodeId > AppData->DynamicNameserviceConfig->MaxStaticNodeId) {
+                Monitoring->RegisterActorPage({
+                    .Title = "Disconnect gRPC clients",
+                    .RelPath = "grpc_disconnect",
+                    .ActorSystem = ActorSystem.Get(),
+                    .Index = ActorsMonPage,
+                    .ActorId = MakeGRpcServersManagerId(runConfig.NodeId),
+                    .AuthMode = TMon::EAuthMode::Enforce,
+                    .AllowedSIDs = AppData->AdministrationAllowedSIDs,
+                });
+            }
         }
     }
 

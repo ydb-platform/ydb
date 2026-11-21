@@ -383,6 +383,8 @@ public:
 
     void AddService(IGRpcServicePtr service);
     void Start();
+    // Disconnect the currently attached transports while continuing to accept new connections.
+    void DisconnectClients();
     // Send stop to registred services and call Shutdown on grpc server
     // This method MUST be called before destroying TGRpcServer
     void Stop();

@@ -209,7 +209,7 @@ class Server : public ServerInterface,
 
   void StopListening();
 
-  void CancelAllCalls() Y_ABSL_LOCKS_EXCLUDED(mu_global_);
+  void DisconnectClients(grpc_error_handle error) Y_ABSL_LOCKS_EXCLUDED(mu_global_);
 
   void SendGoaways() Y_ABSL_LOCKS_EXCLUDED(mu_global_, mu_call_);
 

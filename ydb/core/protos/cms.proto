@@ -555,6 +555,10 @@ message TResetMarkerResponse {
     optional TStatus Status = 1;
 }
 
+message TVersionInfo {
+    optional bool SupportWalleDrainData = 1;
+}
+
 message TGetConfigRequest {
 }
 

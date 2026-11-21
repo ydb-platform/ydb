@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -17,6 +18,7 @@
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
+using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 namespace {
@@ -1340,6 +1342,207 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
 
     YQL_CLOG(TRACE, ProviderKqp) << "[OLAP PROJECTION] After rewrite: " << KqpExprToPrettyString(newFlatmap, ctx);
     return newFlatmap;
+}
+
+namespace {
+
+struct TReplicateJsonValueCandidate {
+    TMaybeNode<TCoJsonValue> JsonValue;
+    TString SourceColumn;
+    TString Path;
+    TNodeOnNodeOwnedMap Replacements;
+};
+
+bool UsesBranchInputOutsideOperator(const TCoLambda& branch, const TCoInputBase& input) {
+    const auto* branchInput = branch.Args().Arg(0).Raw();
+    const auto extract = input.Input().Maybe<TCoExtractMembers>();
+    const auto* inputConsumer = extract ? extract.Raw() : input.Raw();
+    return !!FindNode(branch.Body().Ptr(), [&](const TExprNode::TPtr& node) {
+        for (const auto& child : node->Children()) {
+            if ((child.Get() == branchInput && node.Get() != inputConsumer) ||
+                (extract && child.Get() == extract.Raw() && node.Get() != input.Raw())) {
+                return true;
+            }
+        }
+        return false;
+    });
+}
+
+// Ensure that there are no possible transformations between the Replicate input and the JsonValue node
+// that could reassign the column name - JsonValue is inside a lambda that either consumes the Replicate input directly
+// or through ExtractMembers.
+bool IsRowArgumentOfSupportedBranchInputOperator(const TCoLambda& branch, const TExprNode& rowArg) {
+    return !!FindNode(branch.Body().Ptr(), [&](const TExprNode::TPtr& candidate) {
+        // Accept only a whitelist of operators because an unknown shape may access whole row in some unaccounted way.
+        if (!TCoMap::Match(candidate.Get()) && !TCoFlatMap::Match(candidate.Get()) &&
+            !TCoCombineByKey::Match(candidate.Get())) {
+            return false;
+        }
+        const auto input = TMaybeNode<TCoInputBase>(candidate);
+        const auto inputLambda = TMaybeNode<TCoLambda>(candidate->ChildPtr(1));
+        if (!inputLambda || inputLambda.Cast().Args().Size() != 1 || inputLambda.Cast().Args().Arg(0).Raw() != &rowArg) {
+            return false;
+        }
+        const auto rows = input.Cast().Input();
+        // lambda operates on untransformed input
+        if (rows.Raw() == branch.Args().Arg(0).Raw()) {
+            return !UsesBranchInputOutsideOperator(branch, input.Cast());
+        }
+        // lambda operates on selected input fields
+        const auto extract = rows.Maybe<TCoExtractMembers>();
+        return extract && extract.Cast().Input().Raw() == branch.Args().Arg(0).Raw() &&
+               !UsesBranchInputOutsideOperator(branch, input.Cast());
+    });
+}
+
+bool UsesColumnOutsideJsonValue(const TExprNode::TPtr& node, TStringBuf column) {
+    return !!FindNode(node,
+                      [](const TExprNode::TPtr& current) { return !TCoJsonValue::Match(current.Get()); },
+                      [column](const TExprNode::TPtr& current) {
+            const auto member = TMaybeNode<TCoMember>(current);
+            return member && member.Cast().Name().StringValue() == column; });
+}
+
+bool UsesWholeRow(const TCoLambda& branch, const TExprNode& rowArg) {
+    const auto lambdas = FindNodes(branch.Ptr(), [](const TExprNode::TPtr& node) {
+        return TCoLambda::Match(node.Get());
+    });
+    for (const auto& node : lambdas) {
+        const auto lambda = TCoLambda(node);
+        for (const auto& arg : lambda.Args()) {
+            if (arg.Ref().GetTypeAnn() != rowArg.GetTypeAnn()) {
+                continue;
+            }
+            if (FindNode(lambda.Body().Ptr(), [&arg](const TExprNode::TPtr& current) {
+                    const auto member = TMaybeNode<TCoMember>(current);
+                    return !member || member.Cast().Struct().Raw() != arg.Raw();
+                }, [&arg](const TExprNode::TPtr& current) {
+                    return current.Get() == arg.Raw();
+                })) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Handle only a single JSON_VALUE in each branch for now
+std::optional<TReplicateJsonValueCandidate> CollectReplicateJsonValueCandidate(const TDqReplicate& replicate) {
+    TReplicateJsonValueCandidate candidate;
+    for (const auto& branch : replicate.FreeArgs()) {
+        const auto lambda = branch.Maybe<TCoLambda>();
+        if (!lambda || lambda.Cast().Args().Size() != 1) {
+            return std::nullopt;
+        }
+        const auto jsonValues = FindNodes(branch.Ptr(), [](const TExprNode::TPtr& item) {
+            return TCoJsonValue::Match(item.Get());
+        });
+        if (jsonValues.size() != 1) {
+            return std::nullopt;
+        }
+
+        const auto jsonValue = TCoJsonValue(jsonValues.front());
+        const auto member = jsonValue.Json().Maybe<TCoMember>();
+        if (!member || !CanBePushedAsOlapJsonValue(jsonValue, member.Cast().Struct().Raw())) {
+            return std::nullopt;
+        }
+
+        const auto& rowArg = member.Cast().Struct().Ref();
+        if (!IsRowArgumentOfSupportedBranchInputOperator(lambda.Cast(), rowArg)) {
+            return std::nullopt;
+        }
+
+        const TString currentColumn(member.Cast().Name().StringValue());
+        const TString currentPath(jsonValue.JsonPath().Cast<TCoUtf8>().Literal().Value());
+        if (candidate.JsonValue.IsValid()) {
+            if (currentColumn != candidate.SourceColumn || currentPath != candidate.Path) {
+                return std::nullopt;
+            }
+        } else {
+            candidate.JsonValue = jsonValue;
+            candidate.SourceColumn = currentColumn;
+            candidate.Path = currentPath;
+        }
+
+        if (UsesColumnOutsideJsonValue(branch.Ptr(), candidate.SourceColumn) || UsesWholeRow(lambda.Cast(), rowArg)) {
+            return std::nullopt;
+        }
+        // Cannot replace if the whole source column is in output
+        const auto* outputItemType = GetSeqItemType(lambda.Cast().Body().Ref().GetTypeAnn());
+        if (outputItemType->GetKind() == ETypeAnnotationKind::Struct &&
+            outputItemType->Cast<TStructExprType>()->FindItem(candidate.SourceColumn)) {
+            return std::nullopt;
+        }
+
+        candidate.Replacements.emplace(jsonValue.Raw(), member.Cast().Ptr());
+    }
+    return candidate;
+}
+
+TKqpReadOlapTableRanges BuildReadWithJsonValueProjection(
+    const TKqpReadOlapTableRanges& read, const TCoJsonValue& jsonValue, const TString& sourceColumn, TExprContext& ctx, TPositionHandle pos) {
+    const auto olapOperation =
+        BuildOlapJsonValue(jsonValue, jsonValue.Json().Cast<TCoMember>().Struct().Ref(), ctx, pos, TPushdownOptions(false, false, false));
+    // clang-format off
+    return Build<TKqpReadOlapTableRanges>(ctx, pos)
+        .Table(read.Table())
+        .Ranges(read.Ranges())
+        .Columns(read.Columns())
+        .Settings(read.Settings())
+        .ExplainPrompt(read.ExplainPrompt())
+        .Process()
+            .Args({"arg"})
+            .Body<TKqpOlapProjections>()
+                .Input("arg")
+                .Projections()
+                    .Add<TKqpOlapProjection>()
+                        .OlapOperation(olapOperation)
+                        .ColumnName().Build(sourceColumn)
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
+    // clang-format on
+}
+
+}   // anonymous namespace
+
+// Move a JSON_VALUE shared by all branches of a replicated OLAP read into the
+// read's projection program. This computes the value once per row before fan-out
+// and sends the scalar in place of the raw JSON column.
+// Replacing the column is valid only if all branches extract the same path and
+// none uses the raw JSON column for anything else.
+// For example, before: DqReplicate(Read(labels),
+//                     CombineByKey(ExtractMembers(row), JSON_VALUE(row.labels, path)),
+//                     FlatMap(row, JSON_VALUE(row.labels, path)))
+// After:  DqReplicate(Read(Process=KqpOlapProjections(labels := JSON_VALUE(labels, path))),
+//                     CombineByKey(ExtractMembers(row), row.labels),
+//                     FlatMap(row, row.labels))
+TExprBase KqpPushOlapReplicateJsonValue(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!(kqpCtx.Config->HasOptEnableOlapPushdown() && kqpCtx.Config->GetEnableOlapPushdownProjections())) {
+        return node;
+    }
+
+    const auto replicate = node.Cast<TDqReplicate>();
+    // The read can be shared only when all consumers use the same projection.
+    if (!replicate.Input().Maybe<TKqpReadOlapTableRanges>()) {
+        return node;
+    }
+
+    const auto read = replicate.Input().Cast<TKqpReadOlapTableRanges>();
+    if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
+        return node;
+    }
+
+    auto candidate = CollectReplicateJsonValueCandidate(replicate);
+    if (!candidate) {
+        return node;
+    }
+
+    const auto newRead = BuildReadWithJsonValueProjection(read, candidate->JsonValue.Cast(), candidate->SourceColumn, ctx, node.Pos());
+    candidate->Replacements.emplace(read.Raw(), newRead.Ptr());
+    return TExprBase(ctx.ReplaceNodes(replicate.Ptr(), candidate->Replacements));
 }
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx) {

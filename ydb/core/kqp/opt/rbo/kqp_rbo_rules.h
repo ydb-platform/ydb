@@ -490,6 +490,17 @@ class TPushOlapProjectionRule : public ISimplifiedRule {
       virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
+class TPushOlapReplicateJsonValueRule : public IRule {
+  public:
+    TPushOlapReplicateJsonValueRule()
+        : IRule("Push shared olap JSON_VALUE projection",
+                ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireLiveness)
+    {}
+
+    bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 /**
  * Push down an intermediate aggregate to the column table read in its stage.
  */

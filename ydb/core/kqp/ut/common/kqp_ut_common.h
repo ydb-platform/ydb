@@ -22,6 +22,7 @@
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 

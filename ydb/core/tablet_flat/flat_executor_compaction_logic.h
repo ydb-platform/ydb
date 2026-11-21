@@ -103,6 +103,7 @@ struct TCompactionLogicState {
         ui64 LastStartedFullCompactionId = 0;
 
         bool ChangesRequested = false;
+        bool MemCompactionRetryRequested = false;
 
         bool AllowBorrowedGarbageCompaction = false;
 
@@ -213,6 +214,8 @@ public:
 
     // Strategy of this table wants to apply some changes
     void RequestChanges(ui32 tableId);
+    void RequestMemCompactionRetry(ui32 tableId);
+    bool TryReserveCompaction(NTable::TCompactionParams& params);
     TVector<TTableCompactionChanges> ApplyChanges();
 
     //

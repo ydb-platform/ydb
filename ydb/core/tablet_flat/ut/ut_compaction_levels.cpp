@@ -106,6 +106,44 @@ Y_UNIT_TEST_SUITE(TCompactionLevelPersistenceTest) {
         UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(Label(3)), 255);
     }
 
+    Y_UNIT_TEST(AllTierFinalLevelsSurviveSnapshotsAndAtomicSwitches) {
+        NKikimrExecutorFlat::TLogTableSnap snap;
+        snap.SetTable(TableId);
+        snap.SetCompactionLevel(255);
+        AddBundle(snap, 1);
+        AddBundle(snap, 2, 254);
+        AddBundle(snap, 3, 253);
+
+        NBoot::TSwitch snapshot;
+        snapshot.Init(RoundTrip(snap));
+        NTable::TCompactionState state;
+        snapshot.ApplyPartLevels(state.PartLevels);
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(Label(1)), 255);
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(Label(2)), 254);
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(Label(3)), 253);
+
+        NKikimrExecutorFlat::TTablePartSwitch turn;
+        turn.SetTableId(TableId);
+        LogoBlobIDFromLogoBlobID(Label(2), turn.AddLeavingBundles());
+        LogoBlobIDFromLogoBlobID(Label(3), turn.AddLeavingBundles());
+        auto* introduced = turn.MutableIntroducedParts();
+        introduced->SetTable(TableId);
+        introduced->SetCompactionLevel(255);
+        AddBundle(*introduced, 4, 254);
+        AddBundle(*introduced, 5, 253);
+
+        NBoot::TSwitch restored;
+        restored.Init(RoundTrip(turn));
+        restored.ApplyPartLevels(state.PartLevels);
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.size(), 3);
+        UNIT_ASSERT(!state.PartLevels.contains(Label(2)));
+        UNIT_ASSERT(!state.PartLevels.contains(Label(3)));
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(Label(1)), 255);
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(Label(4)), 254);
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(Label(5)), 253);
+    }
+
     Y_UNIT_TEST(MissingCommonLevelDefaultsToFinalParts) {
         NKikimrExecutorFlat::TLogTableSnap snap;
         snap.SetTable(TableId);

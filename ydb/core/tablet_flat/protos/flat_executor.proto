@@ -52,7 +52,9 @@ message TBundle {
 
     // Overrides the common TLogTableSnap.CompactionLevel for this bundle.
     // When absent, the bundle inherits the common level.
-    // Allows one atomic part switch to introduce outputs in different generations.
+    // Allows one atomic part switch to introduce outputs at different levels.
+    // Ordinary levels are generations; 255 minus the stable tier slot denotes
+    // that tier's final parts. Slot 0 is default.
     optional uint32 CompactionLevel = 6;
 }
 
@@ -210,6 +212,10 @@ message TTablePartSwitch {
 
     repeated NKikimrProto.TLogoBlobID LeavingTxStatus = 16;
     optional TLogTxStatusSnap IntroducedTxStatus = 17;
+
+    // This compaction cut the log at TableSnapshoted.Head and replaced only
+    // disk inputs with epochs below TableSnapshoted.Head - 1.
+    optional bool DiskOnlyCompaction = 18;
 }
 
 message TExternalGcEntry {

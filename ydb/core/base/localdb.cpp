@@ -222,6 +222,49 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     return userPolicy;
 }
 
+TVector<ui32> TCompactionPolicy::GetTierIds() const {
+    TVector<ui32> tiers{0};
+    THashSet<ui32> seen{0};
+    for (const auto& generation : Generations) {
+        const ui32 tierId = generation.TierId.value_or(0);
+        if (seen.insert(tierId).second) {
+            tiers.push_back(tierId);
+        }
+    }
+    return tiers;
+}
+
+ui32 TCompactionPolicy::GetFinalLevel(ui32 tierId) const {
+    const auto tiers = GetTierIds();
+    for (size_t slot = 0; slot < tiers.size(); ++slot) {
+        if (tiers[slot] == tierId) {
+            Y_ENSURE(slot < DefaultFinalLevel, "Too many compaction tier slots");
+            const ui32 level = DefaultFinalLevel - static_cast<ui32>(slot);
+            Y_ENSURE(level > Generations.size(), "Compaction final level overlaps a generation");
+            return level;
+        }
+    }
+    ythrow yexception() << "Unknown compaction tier " << tierId;
+}
+
+bool TCompactionPolicy::IsFinalLevel(ui32 level) const {
+    return level > Generations.size() && level <= DefaultFinalLevel
+        && DefaultFinalLevel - level < GetTierIds().size();
+}
+
+ui32 TCompactionPolicy::GetTierForLevel(ui32 level) const {
+    if (level == 0) {
+        return 0;
+    }
+    if (level <= Generations.size()) {
+        return Generations[level - 1].TierId.value_or(0);
+    }
+    const auto tiers = GetTierIds();
+    Y_ENSURE(level <= DefaultFinalLevel && DefaultFinalLevel - level < tiers.size(),
+        "Unknown compaction level " << level);
+    return tiers[DefaultFinalLevel - level];
+}
+
 bool ValidateCompactionPolicy(const TCompactionPolicy& policy, TString& err) {
     THashSet<ui32> seenTiers;
     std::optional<ui32> previousTier;
@@ -237,6 +280,10 @@ bool ValidateCompactionPolicy(const TCompactionPolicy& policy, TString& err) {
         }
         previousTier = tierId;
     }
+    if (policy.Generations.size() + policy.GetTierIds().size() > TCompactionPolicy::DefaultFinalLevel) {
+        err = "Compaction generations and tier final levels must fit into levels 1..255";
+        return false;
+    }
     return true;
 }
 
@@ -246,7 +293,27 @@ bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TC
            (ui32)oldPolicy.Generations.size(), (ui32)newPolicy.Generations.size());
         return false;
     }
-    return ValidateCompactionPolicy(newPolicy, err);
+    if (!ValidateCompactionPolicy(newPolicy, err)) {
+        return false;
+    }
+    const auto oldTiers = oldPolicy.GetTierIds();
+    const auto newTiers = newPolicy.GetTierIds();
+    for (size_t slot = 0; slot < oldTiers.size(); ++slot) {
+        if (slot >= newTiers.size() || oldTiers[slot] != newTiers[slot]) {
+            err = "Existing compaction tier slots must not be removed or reordered";
+            return false;
+        }
+    }
+    for (size_t index = 0; index < oldPolicy.Generations.size(); ++index) {
+        const ui32 oldTier = oldPolicy.Generations[index].TierId.value_or(0);
+        const ui32 newTier = newPolicy.Generations[index].TierId.value_or(0);
+        if (oldTier != newTier) {
+            err = Sprintf("Changing TierId of existing generation %u is not supported: old TierId %u, new TierId %u",
+                (ui32)index + 1, oldTier, newTier);
+            return false;
+        }
+    }
+    return true;
 }
 
 TString LegacyQueueIdToTaskName(ui32 id)

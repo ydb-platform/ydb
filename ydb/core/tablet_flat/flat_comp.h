@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_broker.h"
+#include "flat_compaction_context.h"
 #include "flat_page_conf.h"
 #include "flat_part_iface.h"
 #include "flat_row_versions.h"
@@ -8,14 +9,40 @@
 #include "flat_dbase_scheme.h"
 #include <ydb/core/base/memory_controller_iface.h>
 
+#include <memory>
+
 namespace NKikimr {
 namespace NTable {
+
+    struct TTieringCompaction {
+        // Placement before the operation, used to resolve every input and to
+        // validate the remaining sources before publication.
+        THashMap<TLogoBlobID, ui32> PartLevels;
+        std::shared_ptr<const TScheme::TTableInfo> Schema;
+        TIntrusiveConstPtr<TRowScheme> RowScheme;
+        TVector<ui32> TierOrder;
+        TInstant Now;
+        bool AllowCooling = false;
+        THashMap<ui32, ui32> OutputTiers;
+        // Preserve erase markers when a parallel memory compaction has keys
+        // that are absent from this operation's captured underlay mask.
+        bool HasUnknownRemaining = false;
+        bool HasMemoryInputs = false;
+        // Executor-thread validation state, advanced only by known successful
+        // publications. Context keeps the original metadata for scan masks.
+        TVector<TCompactionPartInfo> ExpectedInventory;
+    };
 
     /**
      * Compaction params specify which parts of the table to compact
      */
     class TCompactionParams {
     public:
+        enum class EMode {
+            Regular,
+            TierAware,
+        };
+
         TCompactionParams() = default;
 
         virtual ~TCompactionParams() = default;
@@ -26,7 +53,21 @@ namespace NTable {
     public:
         ui32 Table = Max<ui32>();
 
-        // Broker task id used for compaction. Once BeginCompaction is called
+        EMode Mode = EMode::Regular;
+
+        // Tier of the inputs and of the sole regular output (family id).
+        // Tier-aware compaction also prepares this output to retain keys.
+        ui32 TierId = 0;
+
+        // Prepared inputs and remaining sources. The strategy must protect and
+        // revalidate this context before publishing the compaction.
+        TIntrusiveConstPtr<TCompactionContext> Context;
+
+        // Non-null for the tier-managed strategy path. The backend
+        // closes the interval using the actual frozen-memory snapshot.
+        THolder<TTieringCompaction> Tiering;
+
+        // Broker task id used for compaction. Once BeginCompaction succeeds
         // task ownership is moved to the backend, which will call FinishTask
         // as appropriate. It is possible to leave this as zero, in which
         // case FinishTask will not be called.
@@ -108,7 +149,7 @@ namespace NTable {
      * working on.
      */
     struct TCompactionChanges {
-        // Legacy level where just compacted parts are placed
+        // Placement code: ordinary generation or 255 - the tier's stable slot.
         ui32 NewPartsLevel = 255;
 
         // State changes to save in the log (binary data unique to strategy)
@@ -131,7 +172,7 @@ namespace NTable {
      * Generic state for compactions
      */
     struct TCompactionState {
-        // Legacy part level for each known part
+        // Placement code for each known part: ordinary generation or the tier's final level.
         // It is ok to leave this empty, missing labels will get level 255.
         // This map is implicitly cleared on every strategy change.
         THashMap<TLogoBlobID, ui32> PartLevels;
@@ -193,8 +234,16 @@ namespace NTable {
          */
         virtual const TRowVersionRanges& TableRemovedRowVersions(ui32 table) = 0;
 
+        virtual bool IsDataTieringEnabled() const {
+            return false;
+        }
+
+        virtual void RequestMemCompactionRetry(ui32) {
+        }
+
         /**
-         * Begins compaction with the specified params
+         * Begins compaction with the specified params. Returns zero if the
+         * prepared inputs cannot be reserved; the caller still owns TaskId.
          */
         virtual ui64 BeginCompaction(THolder<TCompactionParams> params) = 0;
 
@@ -238,6 +287,15 @@ namespace NTable {
          */
         virtual void ReflectSchema() = 0;
 
+        // Called by the backend after preparing the actual snapshot, before
+        // starting a scan. A failed reservation has no publication side effects.
+        virtual bool TryReserveCompaction(TCompactionParams&) {
+            return true;
+        }
+
+        virtual void CompactionCancelled(ui64, const TCompactionParams&) {
+        }
+
         /**
          * Called after the table changes its removed row versions
          *
@@ -271,8 +329,9 @@ namespace NTable {
         /**
          * Called when backend needs to compact in-memory data
          *
-         * Strategy is required to start compaction with the specified task id
-         * and snapshot edge, then return the resulting compaction id. Strategy
+         * Strategy starts compaction with the specified task id and snapshot
+         * edge, then returns its id, or zero to defer a conflicting request.
+         * A deferred request retains its steps, snapshot and forced ids. Strategy
          * may choose to compact some parts in addition to in-memory data, as
          * long as consistency guarantees are not broken.
          *

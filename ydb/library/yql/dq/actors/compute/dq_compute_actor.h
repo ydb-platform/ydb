@@ -233,6 +233,8 @@ struct TReportStatsSettings {
     TDuration MinInterval;
     // Max interval to sent stats in case of no activity.
     TDuration MaxInterval;
+    // Do not send stats right after the start: the first message is sent after MinInterval.
+    bool DelayFirstReport = false;
 };
 
 inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode statsMode) {

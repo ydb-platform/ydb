@@ -429,6 +429,20 @@ bool TActiveTransaction::BuildSchemeTx()
         count++;
     }
 
+    const bool activatesCdc = SchemeTx->HasAlterTable()
+        && SchemeTx->GetAlterTable().ActivateCdcStreamsSize();
+    if (activatesCdc != (GetKind() == EOperationKind::CdcHandoff)) {
+        return false;
+    }
+    if (activatesCdc) {
+        const auto& alter = SchemeTx->GetAlterTable();
+        if (!alter.HasReplicationConfig()
+            || alter.GetReplicationConfig().GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
+        {
+            return false;
+        }
+    }
+
     return count == 1;
 }
 

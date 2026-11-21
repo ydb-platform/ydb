@@ -3405,6 +3405,7 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
         ProposeTransaction(std::move(ev), ctx);
         return;
     case NKikimrTxDataShard::TX_KIND_SCHEME:
+    case NKikimrTxDataShard::TX_KIND_CDC_HANDOFF:
         ProposeTransaction(std::move(ev), ctx);
         return;
     default:

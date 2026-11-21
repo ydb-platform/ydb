@@ -146,6 +146,8 @@ items:
       href: workload-fulltext.md
     - name: Vector load
       href: workload-vector.md
+    - name: Split/Merge load
+      href: workload-splitmerge.md
   - name: Managing configuration
     href: configs.md
     include:

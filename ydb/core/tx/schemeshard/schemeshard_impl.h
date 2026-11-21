@@ -1265,6 +1265,7 @@ public:
     bool ContinueBackgroundCleaning(const TPathId& pathId);
     void OnBackgroundCleaningTimeout(const TPathId& pathId);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext& ctx);
     bool CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev);
     void RetryNodeSubscribe(ui32 nodeId);
     void Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext& ctx);

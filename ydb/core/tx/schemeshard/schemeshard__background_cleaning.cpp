@@ -299,6 +299,20 @@ void TSchemeShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const 
     RetryNodeSubscribe(ev->Get()->NodeId);
 }
 
+void TSchemeShard::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext&) {
+    // The subscription to the node of the owners is back, so the retries end here. Without the reset, separate
+    // network flaps add up to the retry limit, and the temp dirs of live owners get removed.
+    auto& nodeStates = TempDirsState.NodeStates;
+    auto it = nodeStates.find(ev->Get()->NodeId);
+    if (it == nodeStates.end()) {
+        return;
+    }
+
+    auto& retryState = it->second.RetryState;
+    retryState.RetryNumber = 0;
+    retryState.CurrentDelay = TDuration::MilliSeconds(BackgroundCleaningRetrySettings.GetStartDelayMs());
+}
+
 void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
     auto& nodeStates = TempDirsState.NodeStates;
     auto it = nodeStates.find(nodeId);

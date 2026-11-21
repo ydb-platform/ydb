@@ -2744,18 +2744,16 @@ public:
             Y_ENSURE(!userTableInfo->IsBackup);
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
-            if (record.GetTableId().HasSchemaVersion()) {
-                if (state.SchemaVersion != 0 &&
-                    state.SchemaVersion != record.GetTableId().GetSchemaVersion())
-                {
-                    SetStatusError(
-                        Result->Record,
-                        Ydb::StatusIds::SCHEME_ERROR,
-                        TStringBuilder() << "Wrong schemaversion " << record.GetTableId().GetSchemaVersion()
-                            << " requested, table schemaversion " << state.SchemaVersion
-                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
-                    return;
-                 }
+            if (record.GetTableId().HasSchemaVersion() &&
+                !userTableInfo->IsReadSchemaVersionCompatible(record.GetTableId().GetSchemaVersion()))
+            {
+                SetStatusError(
+                    Result->Record,
+                    Ydb::StatusIds::SCHEME_ERROR,
+                    TStringBuilder() << "Wrong schemaversion " << record.GetTableId().GetSchemaVersion()
+                        << " requested, table schemaversion " << state.SchemaVersion
+                        << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
+                return;
             }
 
             userTableInfo->Stats.AccessTime = TAppData::TimeProvider->Now();

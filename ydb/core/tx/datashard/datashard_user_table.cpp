@@ -68,14 +68,58 @@ void TUserTable::SetPath(const TString &path)
     AlterSchema();
 }
 
-void TUserTable::SetTableSchemaVersion(ui64 schemaVersion)
+ui64 TUserTable::GetMinReadSchemaVersion(const NKikimrSchemeOp::TTableDescription& schema)
+{
+    const ui64 version = schema.GetTableSchemaVersion();
+    const auto& range = schema.GetReadSchemaVersionRange();
+    if (range.GetTableVersion() == version && range.GetMinVersion() > 0 && range.GetMinVersion() < version) {
+        return range.GetMinVersion();
+    }
+    return version;
+}
+
+void TUserTable::SetReadSchemaVersionRange(NKikimrSchemeOp::TTableDescription& schema, ui64 minVersion)
+{
+    const ui64 version = schema.GetTableSchemaVersion();
+    if (minVersion > 0 && minVersion < version) {
+        auto& range = *schema.MutableReadSchemaVersionRange();
+        range.SetMinVersion(minVersion);
+        range.SetTableVersion(version);
+    } else {
+        schema.ClearReadSchemaVersionRange();
+    }
+}
+
+void TUserTable::SetTableSchemaVersion(ui64 schemaVersion, bool cdcOnly)
 {
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
     schema.SetTableSchemaVersion(schemaVersion);
+    // Only an observed, consecutive CDC change proves the previous row schema is still readable.
+    const bool preserveRange = cdcOnly && TableSchemaVersion > 0 &&
+        schemaVersion > TableSchemaVersion && schemaVersion - TableSchemaVersion == 1;
+    SetReadSchemaVersionRange(schema, preserveRange ? MinReadSchemaVersion : schemaVersion);
     SetSchema(schema);
 
     TableSchemaVersion = schemaVersion;
+}
+
+bool TUserTable::RestoreReadSchemaVersionRange(
+    const NKikimrSchemeOp::TTableDescription& source, bool firstSource)
+{
+    const ui64 sourceMinVersion = source.GetTableSchemaVersion() == TableSchemaVersion
+        ? GetMinReadSchemaVersion(source)
+        : TableSchemaVersion;
+    // A merge is compatible only with versions accepted by every source shard.
+    const ui64 minVersion = firstSource ? sourceMinVersion : Max(sourceMinVersion, MinReadSchemaVersion);
+    if (minVersion != MinReadSchemaVersion) {
+        NKikimrSchemeOp::TTableDescription schema;
+        GetSchema(schema);
+        SetReadSchemaVersionRange(schema, minVersion);
+        SetSchema(schema);
+        return true;
+    }
+    return false;
 }
 
 bool TUserTable::ResetTableSchemaVersion()
@@ -85,6 +129,7 @@ bool TUserTable::ResetTableSchemaVersion()
         GetSchema(schema);
 
         schema.ClearTableSchemaVersion();
+        schema.ClearReadSchemaVersionRange();
         TableSchemaVersion = 0;
 
         SetSchema(schema);
@@ -372,6 +417,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     }
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
+    MinReadSchemaVersion = GetMinReadSchemaVersion(descr);
     IsBackup = descr.GetIsBackup();
     // On the alter path descr is a delta, but the schemeshard always resends the
     // current detailed metrics settings in it, so an absent Configured status
@@ -804,6 +850,7 @@ void TUserTable::ApplyAlter(
     }
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
+    schema.ClearReadSchemaVersionRange();
 
     // Local graphs have their own metadata; TableIndexes only describes logical
     // child indexes maintained by this table (including CDC/change collection).

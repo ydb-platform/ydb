@@ -596,6 +596,7 @@ class KikimrConfigGenerator(object):
         if pg_compatible_expirement:
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config["feature_flags"]['disable_pg_compatibility'] = False
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
 
         if generic_connector_config:

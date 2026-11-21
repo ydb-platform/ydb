@@ -1307,6 +1307,7 @@ public:
         const TStructExprType* PointsItemType = nullptr;
         TVector<TString> Columns; // Storage fields of the points tuple.
         TLookupKeys Equalities;
+        TMaybe<size_t> ExpectedMaxPoints;
     };
 
     TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
@@ -1381,6 +1382,7 @@ public:
     virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
     virtual TString GetExplainName() const override { return "IndexLookupJoin"; }
+    void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TOpTableLookup& GetTableLookup() Y_LIFETIME_BOUND;
     const TOpTableLookup& GetTableLookup() const Y_LIFETIME_BOUND;

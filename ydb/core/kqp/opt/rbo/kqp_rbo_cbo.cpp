@@ -312,8 +312,7 @@ TOptimizerStatistics TRBOProviderContext::ComputeJoinStats(
         return stats;
     }
 
-    // The right side is probed, not read: its cost is replaced by the lookups of every left row
-    stats.Cost = ComputeJoinCost(leftStats, rightStats, stats.Nrows, stats.ByteSize, joinAlgo) + leftStats.Cost + leftStats.Nrows * it->second;
+    stats.Cost = EstimateLookupJoinCost(*this, leftStats, rightStats, stats.Nrows, stats.ByteSize, it->second);
     return stats;
 }
 }

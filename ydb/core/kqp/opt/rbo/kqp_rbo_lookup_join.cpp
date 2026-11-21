@@ -193,6 +193,13 @@ double EstimateLookupCostPerLeftRow(const TKikimrTableMetadata& target, const TK
     return cost;
 }
 
+double EstimateLookupJoinCost(const NOpt::TKqpProviderContext& joinCostModel, const TOptimizerStatistics& leftStats,
+                              const TOptimizerStatistics& rightStats, double outputRows, double outputByteSize, double costPerLeftRow) {
+    // The right side is probed, not read: its cost is replaced by the lookups of every left row
+    return joinCostModel.ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, EJoinAlgoType::LookupJoin) + leftStats.Cost
+        + leftStats.Nrows * costPerLeftRow;
+}
+
 std::optional<TLookupJoinRightSide> MatchLookupJoinRightSide(const TIntrusivePtr<IOperator>& input) {
     auto op = input;
     TIntrusivePtr<TOpTableLookup> sourceLookup;

@@ -260,6 +260,7 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         TOpTableLookup::TLookupKeyPrefix keyPrefix;
         keyPrefix.Points = points->List;
         keyPrefix.PointsItemType = points->ItemType;
+        keyPrefix.ExpectedMaxPoints = points->ExpectedMaxPoints;
         keyPrefix.Columns = pointPrefix->Columns;
         for (const auto& key : keys->PrefixKeys) {
             keyPrefix.Equalities.Append(key.LeftIU, key.Column);

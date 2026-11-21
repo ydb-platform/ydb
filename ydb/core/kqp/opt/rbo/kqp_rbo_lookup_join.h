@@ -47,6 +47,11 @@ std::optional<THashSet<TString>> GetLookupJoinKeyColumns(const TOpRead& read, co
 // With cost-based lookup join enabled the cheapest target per left row wins instead, which does not depend on the left
 // side, so the CBO and the rule still agree. The choice is cost-based where index selection is; typeCtx gives the column
 // statistics of the costs, if any.
+// The cost of a lookup join which probes its target for every left row at costPerLeftRow, instead of reading the right
+// side; joinCostModel gives the cost of the join itself.
+double EstimateLookupJoinCost(const NOpt::TKqpProviderContext& joinCostModel, const TOptimizerStatistics& leftStats,
+                              const TOptimizerStatistics& rightStats, double outputRows, double outputByteSize, double costPerLeftRow);
+
 std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, const TVector<TString>& readColumns,
                                                         const THashSet<TString>& joinKeyColumns, bool innerJoin,
                                                         const NOpt::TKqpOptimizeContext& kqpCtx,

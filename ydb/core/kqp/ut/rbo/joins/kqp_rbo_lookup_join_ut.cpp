@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/rbo/kqp_rbo_yql_plan_helpers.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -682,6 +683,14 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
         UNIT_ASSERT_VALUES_EQUAL_C(mainLookups.size(), 1, ast);
         UNIT_ASSERT_C(mainLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows"))"), "expected a lookup join into t1, ast:\n" << ast);
         UNIT_ASSERT_C(!ast.Contains("/Root/t1/idx_c_x/indexImplTable"), "expected no read of idx_c_x, ast:\n" << ast);
+
+        // The lookup join has statistics of its own, not those of its left input, and costs the lookups of both left
+        // rows, at least a probe each.
+        const auto plan = NYqlTests::GetSimplifiedPlan(TString{*explained.GetStats()->GetPlan()});
+        const auto* lookupJoin = NYqlTests::FindOperatorByStringField(plan, "JoinAlgo", "Lookup");
+        UNIT_ASSERT_C(lookupJoin, plan);
+        UNIT_ASSERT_C(lookupJoin->GetMapSafe().contains("E-Rows"), plan);
+        UNIT_ASSERT_C(lookupJoin->GetMapSafe().at("E-Cost").GetDoubleSafe() >= 2 * 1000.0, plan); // the default probe cost
     }
 
     Y_UNIT_TEST(LookupJoinByNonCoveringIndexNullablePk) {

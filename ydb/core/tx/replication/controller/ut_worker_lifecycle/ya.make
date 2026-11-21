@@ -14,6 +14,7 @@ PEERDIR(
 )
 
 SRCS(
+    cdc_live_mirroring_ut.cpp
     session_lifecycle_ut.cpp
     worker_lifecycle_ut.cpp
 )

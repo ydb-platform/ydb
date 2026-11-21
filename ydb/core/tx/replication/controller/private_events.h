@@ -50,11 +50,22 @@ struct TEvPrivate {
         EvCancelCreateStream,
         EvCancelDropStream,
         EvExpireWorkerLag,
+        EvCdcTrimVerified,
 
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvCdcTrimVerified: public TEventLocal<TEvCdcTrimVerified, EvCdcTrimVerified> {
+        const bool Success;
+        const TString Error;
+
+        explicit TEvCdcTrimVerified(TString error = {})
+            : Success(error.empty())
+            , Error(std::move(error))
+        {}
+    };
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {

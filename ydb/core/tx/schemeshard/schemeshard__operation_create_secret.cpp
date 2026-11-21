@@ -276,6 +276,9 @@ public:
         NKikimrSchemeOp::TSecretDescription secretDescription;
         secretDescription.SetName(createSecretProto.GetName());
         secretDescription.SetValue(createSecretProto.GetValue());
+        secretDescription.SetMode(
+            createSecretProto.HasMode() ? createSecretProto.GetMode() : NKikimrSchemeOp::TSecretDescription::NONE
+        );
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
         context.SS->Secrets.Set(secretPathId, secretInfo);
@@ -369,6 +372,9 @@ ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, T
             }
             if (createSecretProto.HasInheritPermissions()) {
                 alterSecret->SetInheritPermissions(createSecretProto.GetInheritPermissions());
+            }
+            if (createSecretProto.HasMode()) {
+                alterSecret->SetMode(createSecretProto.GetMode());
             }
             return CreateAlterSecret(id, alterTx);
         }

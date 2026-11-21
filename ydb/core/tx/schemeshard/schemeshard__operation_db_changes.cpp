@@ -174,6 +174,15 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& pId : TestShardSets) {
         ss->PersistTestShardSet(db, pId);
     }
+
+    for (const auto& pId : TableSchemeSnapshots) {
+        if (const auto* tableInfo = ss->Tables.FindPtr(pId)) {
+            ss->PersistTableSchemeSnapshot(db, pId, (*tableInfo)->BackupSettings);
+        } else {
+            const auto& columnTableInfo = ss->ColumnTables.GetVerified(pId);
+            ss->PersistTableSchemeSnapshot(db, pId, columnTableInfo.GetPtr()->BackupSettings);
+        }
+    }
 }
 
 }

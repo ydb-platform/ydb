@@ -27,6 +27,7 @@ static NKikimrSchemeOp::TModifyScheme CopyAnyTableTask(NKikimr::NSchemeShard::TP
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), src->IsTable() ? NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable : NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
     scheme.SetFailOnExist(true);
+    scheme.SetCaptureTableSchemeSnapshot(descr.GetCaptureTableSchemeSnapshot());
 
     if (src->IsTable()) {
         auto operation = scheme.MutableCreateTable();
@@ -388,6 +389,7 @@ bool CreateConsistentCopyTables(
 
                 indexDescr.SetOmitFollowers(descr.GetOmitFollowers());
                 indexDescr.SetIsBackup(descr.GetIsBackup());
+                indexDescr.SetCaptureTableSchemeSnapshot(descr.GetCaptureTableSchemeSnapshot());
                 indexDescr.SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
 
                 if (descr.HasTargetPathTargetState()) {

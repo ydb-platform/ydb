@@ -921,6 +921,33 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
+    using TTableSchemeSnapshotRec = std::tuple<TPathId, TString, TString>;
+    using TTableSchemeSnapshotRows = TDeque<TTableSchemeSnapshotRec>;
+
+    bool LoadTableSchemeSnapshots(NIceDb::TNiceDb& db, TTableSchemeSnapshotRows& snapshots) const {
+        auto rowSet = db.Table<Schema::TableSchemeSnapshots>().Range().Select();
+        if (!rowSet.IsReady()) {
+            return false;
+        }
+
+        while (!rowSet.EndOfSet()) {
+            const TPathId pathId(
+                rowSet.GetValue<Schema::TableSchemeSnapshots::OwnerPathId>(),
+                rowSet.GetValue<Schema::TableSchemeSnapshots::LocalPathId>());
+
+            snapshots.emplace_back(
+                pathId,
+                rowSet.GetValue<Schema::TableSchemeSnapshots::TableDescription>(),
+                rowSet.GetValueOrDefault<Schema::TableSchemeSnapshots::ChangefeedUnderlyingTopics>(""));
+
+            if (!rowSet.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     typedef std::tuple<TPathId, TTxId, ui64, ui32, ui32, ui64, ui64, ui8> TCompletedBackupRestoreRec;
     typedef TDeque<TCompletedBackupRestoreRec> TCompletedBackupRestoreRows;
 
@@ -4637,6 +4664,68 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        THashMap<TPathId, TString> tableSchemeSnapshotErrors;
+
+        // Read structural table scheme snapshots captured together with table copies
+        {
+            TTableSchemeSnapshotRows snapshots;
+            if (!LoadTableSchemeSnapshots(db, snapshots)) {
+                return false;
+            }
+
+            YDB_LOG_NOTICE_CTX(ctx, "TTxInit for TableSchemeSnapshots",
+                {"read_records", snapshots.size()},
+                {"schemeshard", Self->TabletID()},
+            );
+
+            for (auto& [pathId, tableDesc, changefeedUnderlyingTopics] : snapshots) {
+                NKikimrSchemeOp::TBackupTask* backupSettings = nullptr;
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    backupSettings = &it->second->BackupSettings;
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    backupSettings = &Self->ColumnTables.at(pathId).GetPtr()->BackupSettings;
+                }
+
+                if (!backupSettings) {
+                    // Old binaries ignore this additive table and may remove the private copy
+                    // while leaving its snapshot behind
+                    Self->RemoveTableSchemeSnapshot(db, pathId);
+                    YDB_LOG_WARN_CTX(ctx, "Removed obsolete table scheme snapshot",
+                        {"pathId", pathId},
+                    );
+                    continue;
+                }
+
+                NKikimrSchemeOp::TPathDescription description;
+                NKikimrSchemeOp::TChangefeedUnderlyingTopics topics;
+                TString error;
+                if (!ParseFromStringNoSizeLimit(description, tableDesc)) {
+                    error = "Cannot parse persisted table scheme snapshot";
+                } else if (changefeedUnderlyingTopics && !ParseFromStringNoSizeLimit(topics, changefeedUnderlyingTopics)) {
+                    error = "Cannot parse changefeed topics in persisted table scheme snapshot";
+                }
+
+                if (error) {
+                    tableSchemeSnapshotErrors.emplace(pathId, error);
+                    YDB_LOG_ERROR_CTX(ctx, "Cannot restore table scheme snapshot",
+                        {"pathId", pathId},
+                        {"error", error},
+                    );
+                    continue;
+                }
+
+                const bool restored = !backupSettings->HasTable();
+                if (restored) {
+                    *backupSettings->MutableTable() = std::move(description);
+                    *backupSettings->MutableChangefeedUnderlyingTopics() = std::move(*topics.MutableChangefeedUnderlyingTopics());
+                }
+
+                YDB_LOG_DEBUG_CTX(ctx, (restored ? "Loaded table scheme snapshot" : "Retained table scheme snapshot"),
+                    {"pathId", pathId},
+                );
+            }
+        }
+
         // Read restore tasks
         {
             auto rowSet = db.Table<Schema::RestoreTasks>().Range().Select();
@@ -5209,6 +5298,32 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (!rowset.Next()) {
                         return false;
                     }
+                }
+            }
+        }
+
+        if (!tableSchemeSnapshotErrors.empty()) {
+            THashMap<TPathId, TExportInfo::TPtr> exportsByPath;
+            for (const auto& [id, exportInfo] : Self->Exports) {
+                if (exportInfo->IsPreparing() || (exportInfo->IsWorking() && !AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone))) {
+                    exportsByPath.emplace(exportInfo->ExportPathId, exportInfo);
+                }
+            }
+
+            for (const auto& [pathId, error] : tableSchemeSnapshotErrors) {
+                auto currentPathId = pathId;
+                while (currentPathId) {
+                    if (auto* exportInfo = exportsByPath.FindPtr(currentPathId)) {
+                        (*exportInfo)->RecoveryError = TStringBuilder() << error << ": " << pathId;
+                        break;
+                    }
+
+                    const auto* path = Self->PathsById.FindPtr(currentPathId);
+                    if (!path || (*path)->ParentPathId == currentPathId) {
+                        break;
+                    }
+
+                    currentPathId = (*path)->ParentPathId;
                 }
             }
         }

@@ -479,7 +479,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         YDB_LOG_DEBUG("TExport::TTxProgress: DoExecute");
 
         if (AllocateResult) {
-            OnAllocateResult();
+            OnAllocateResult(txc);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
@@ -491,7 +491,8 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
-            Resume(txc, ctx);
+            Y_ABORT_UNLESS(Self->Exports.contains(Id));
+            Resume(Self->Exports.at(Id), txc, ctx);
         }
 
         return true;
@@ -522,20 +523,31 @@ private:
         Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
     }
 
-    void TransferData(TExportInfo& exportInfo, ui32 itemIdx, TTxId txId) {
-        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
-        auto& item = exportInfo.Items[itemIdx];
+    bool TransferData(const TExportInfo::TPtr& exportInfo, ui32 itemIdx, TTxId txId, NIceDb::TNiceDb& db) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+        auto& item = exportInfo->Items[itemIdx];
+
+        TString error;
+        auto propose = BackupPropose(Self, txId, *exportInfo, itemIdx, error);
+        if (!propose) {
+            item.State = EState::Cancelled;
+            item.Issue = error;
+            Self->PersistExportItemState(db, *exportInfo, itemIdx);
+            CancelAndPersistExport(exportInfo, itemIdx, "failed to prepare table scheme snapshot", db);
+            return false;
+        }
 
         item.SubState = ESubState::Proposed;
 
         YDB_LOG_INFO("TExport::TTxProgress: Backup propose",
-            {"info", exportInfo.ToString()},
+            {"info", exportInfo->ToString()},
             {"item", item.ToString(itemIdx)},
             {"txId", txId},
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     template <typename Func>
@@ -1097,15 +1109,17 @@ private:
         return output;
     }
 
-    void Resume(TTransactionContext& txc, const TActorContext& ctx) {
-        Y_ABORT_UNLESS(Self->Exports.contains(Id));
-        TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
-
+    void Resume(TExportInfo::TPtr exportInfo, TTransactionContext& txc, const TActorContext& ctx) {
         YDB_LOG_DEBUG("TExport::TTxProgress: Resume",
-            {"id", Id},
+            {"id", exportInfo->Id},
         );
 
         NIceDb::TNiceDb db(txc.DB);
+
+        if (exportInfo->RecoveryError && exportInfo->IsWorking()) {
+            exportInfo->Issue = exportInfo->RecoveryError;
+            exportInfo->State = EState::Cancellation;
+        }
 
         switch (exportInfo->State) {
         case EState::CreateExportDir:
@@ -1222,7 +1236,7 @@ private:
         AuditLogExportEnd(*exportInfo, Self);
     }
 
-    void OnAllocateResult() {
+    void OnAllocateResult(TTransactionContext& txc) {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -1242,6 +1256,7 @@ private:
 
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         ui32 itemIdx = Max<ui32>();
+        NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {
         case EState::CreateExportDir:
@@ -1258,7 +1273,9 @@ private:
             }
             itemIdx = PopFront(exportInfo->PendingItems);
             if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
-                TransferData(*exportInfo, itemIdx, txId);
+                if (!TransferData(exportInfo, itemIdx, txId, db)) {
+                    return;
+                }
             } else {
                 YDB_LOG_WARN("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring",
                     {"id", id},
@@ -1719,6 +1736,11 @@ private:
 
             exportInfo->State = EState::Transferring;
             exportInfo->WaitTxId = InvalidTxId;
+            if (exportInfo->RecoveryError) {
+                // Let an in-flight consistent copy finish before cancelling its export.
+                Resume(exportInfo, txc, ctx);
+                return;
+            }
             TDeque<ui32> tables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items[itemIdx];

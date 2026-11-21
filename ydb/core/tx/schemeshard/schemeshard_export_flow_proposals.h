@@ -23,7 +23,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(

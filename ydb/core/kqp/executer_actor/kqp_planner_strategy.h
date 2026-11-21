@@ -23,7 +23,14 @@ public:
         TVector<ui64> TaskIds;
     };
 
-    virtual TVector<TResult> Plan(const TVector<const NKikimrKqp::TKqpNodeResources*>& nodeResources,
+    struct TNodeResources {
+        ui32 NodeId;
+        NActors::TActorId ResourceManager;
+        ui64 AvailableMemory;
+        ui32 ExecutionUnits;
+    };
+
+    virtual TVector<TResult> Plan(const TVector<TNodeResources>& nodeResources,
         const TVector<TTaskResourceEstimation>& estimatedResources) = 0;
 
 protected:

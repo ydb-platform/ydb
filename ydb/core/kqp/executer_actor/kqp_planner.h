@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_planner_strategy.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
@@ -87,8 +89,13 @@ public:
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isShutdown = false);
-    std::unique_ptr<IEventHandle> PlanExecution();
-    std::unique_ptr<IEventHandle> AssignTasksToNodes();
+    struct TPlacementResult {
+        std::unique_ptr<IEventHandle> Error;
+        bool CanRefreshSnapshot = false;
+    };
+
+    TPlacementResult AssignTasksToNodes();
+    std::unique_ptr<IEventHandle> PrepareExecution();
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
     bool CompletedCA(ui64 taskId, TActorId computeActor);
     void TaskNotStarted(ui64 taskId);
@@ -121,7 +128,7 @@ private:
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
-    void LogMemoryStatistics(const TLogFunc& logFunc);
+    void LogMemoryStatistics(const TVector<IKqpPlannerStrategy::TNodeResources>& nodes, const TLogFunc& logFunc);
     void PrepareCheckpoints();
     void SendReadyState();
 

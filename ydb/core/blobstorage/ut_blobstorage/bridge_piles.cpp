@@ -381,4 +381,19 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
         }
     }
 
+    // The fetch asks for the config with explicit sections for a requestor that is not in the cluster yet. The fetch
+    // waiting for the requestor would end with the stored YAML only, so it must be refused instead of succeeding.
+    Y_UNIT_TEST(FetchWithTransformForUnknownRequestorIsRefused) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.Sim(TDuration::Seconds(30));
+        const auto res = InvokeDistconf(env, [](auto& record) {
+            auto *cmd = record.MutableFetchStorageConfig();
+            cmd->SetMainConfig(true);
+            cmd->SetAddExplicitConfigs(true);
+            cmd->AddRequestorHost("host-not-in-the-cluster");
+            cmd->SetRequestorPort(19001);
+        });
+        UNIT_ASSERT_C(res.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.DebugString());
+    }
+
 }

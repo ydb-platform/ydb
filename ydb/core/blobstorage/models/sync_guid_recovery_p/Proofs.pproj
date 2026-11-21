@@ -1,0 +1,9 @@
+<Project>
+  <ProjectName>SyncGuidRecoveryProofs</ProjectName>
+  <InputFiles>
+    <PFile>./PSrc/</PFile>
+    <PFile>./PSpec/</PFile>
+    <PFile>./Proofs/</PFile>
+  </InputFiles>
+  <OutputDir>./PGeneratedProofs/</OutputDir>
+</Project>

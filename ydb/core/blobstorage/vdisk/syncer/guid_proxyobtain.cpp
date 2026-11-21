@@ -13,9 +13,12 @@ namespace NKikimr {
     // TObtainVDiskGuidProxy
     ////////////////////////////////////////////////////////////////////////////
     class TObtainVDiskGuidProxy : public TVDiskGuidProxyBase {
+        const bool ReadHistory;
     protected:
         virtual std::unique_ptr<TEvBlobStorage::TEvVSyncGuid> GenerateRequest() override {
-            return std::make_unique<TEvBlobStorage::TEvVSyncGuid>(SelfVDiskId, TargetVDiskId);
+            auto request = std::make_unique<TEvBlobStorage::TEvVSyncGuid>(SelfVDiskId, TargetVDiskId);
+            request->Record.SetReadGuidHistory(ReadHistory);
+            return request;
         }
 
         virtual void HandleReply(const TActorContext &ctx,
@@ -28,7 +31,7 @@ namespace NKikimr {
             auto state = guidInfo.GetState();
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TObtainVDiskGuidProxy: SUCCESS; vdisk# %s guid# %" PRIu64, fromVDisk.ToString().data(), guid));
 
-            ctx.Send(NotifyId, new TEvVDiskGuidObtained(fromVDisk, guid, state));
+            ctx.Send(NotifyId, new TEvVDiskGuidObtained(fromVDisk, guid, state, record));
 
         }
 
@@ -37,8 +40,9 @@ namespace NKikimr {
                               const TVDiskID &selfVDiskId,
                               const TVDiskID &targetVDiskId,
                               const TActorId &targetServiceId,
-                              const TActorId &notifyId)
+                              const TActorId &notifyId, bool readHistory)
             : TVDiskGuidProxyBase(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId, notifyId)
+            , ReadHistory(readHistory)
         {}
     };
 
@@ -50,9 +54,9 @@ namespace NKikimr {
                                              const TVDiskID &selfVDiskId,
                                              const TVDiskID &targetVDiskId,
                                              const TActorId &targetServiceId,
-                                             const TActorId &notifyId) {
+                                             const TActorId &notifyId, bool readHistory) {
         return new TObtainVDiskGuidProxy(std::move(vctx), selfVDiskId, targetVDiskId,
-                                         targetServiceId, notifyId);
+                                         targetServiceId, notifyId, readHistory);
     }
 
 } // NKikimr

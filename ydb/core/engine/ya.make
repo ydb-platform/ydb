@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     library/cpp/containers/stack_vector
     library/cpp/deprecated/enum_codegen
     library/cpp/random_provider
@@ -32,6 +33,7 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE(
+    benchmark
     minikql
 )
 

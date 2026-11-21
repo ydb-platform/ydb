@@ -514,11 +514,5 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 // Whether the mode promises that all reads of a transaction observe the same state.
 bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
 
-bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
-bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-
 }  // namespace NKikimr::NKqp
 

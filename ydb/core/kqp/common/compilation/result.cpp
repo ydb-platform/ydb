@@ -19,19 +19,15 @@ void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std:
     }
     SetDuration(CompilationDuration, *to->MutableCompilationDuration());
     if (Query.Defined()) {
-        if (Query->Text.size() > QUERY_TEXT_LIMIT) {
-            TString truncatedText = Query->Text.substr(0, QUERY_TEXT_LIMIT);
-            to->SetQuery(truncatedText);
-            to->SetIsTruncated(true);
-        } else {
-            to->SetQuery(Query->Text);
-            to->SetIsTruncated(false);
-        }
+        const TStringBuf text = Query->Text();
+        const TStringBuf prefix = text.Head(QUERY_TEXT_LIMIT);
+        to->SetQuery(prefix.data(), prefix.size());
+        to->SetIsTruncated(prefix.size() < text.size());
 
-        to->SetUserSID(Query->UserSid);
-        to->SetDatabase(Query->Database);
-        to->SetQueryType(NKikimrKqp::EQueryType_Name(Query->Settings.QueryType));
-        to->SetSyntax(Ydb::Query::Syntax_Name(Query->Settings.Syntax));
+        to->SetUserSID(TString(Query->UserSid()));
+        to->SetDatabase(TString(Query->Database()));
+        to->SetQueryType(NKikimrKqp::EQueryType_Name(Query->Settings().QueryType));
+        to->SetSyntax(Ydb::Query::Syntax_Name(Query->Settings().Syntax));
     }
 
 }

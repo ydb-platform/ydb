@@ -459,7 +459,7 @@ class TPeepholePredicate : public ISimplifiedRule {
 class TPushRangesRule: public ISimplifiedRule {
 public:
     TPushRangesRule(NYql::EStorageType applicableTableType)
-        : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes)
+        : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata)
         , ApplicableTableType(applicableTableType) {
     }
 

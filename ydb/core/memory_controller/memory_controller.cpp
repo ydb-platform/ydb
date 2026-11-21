@@ -727,7 +727,8 @@ private:
         const ui64 pendingLimit = TScanAdmissionControl::CalculatePendingByteLimit(indexBuildLimit,
             AppData()->DataShardConfig.GetBuildIndexPendingBytesLimit());
         Counters->GetCounter("Consumer/IndexBuild/Limit")->Set(indexBuildLimit);
-        const ui64 pendingBytes = AppData()->BuildIndexScanAdmission->GetUsage().Bytes;
+        auto& admission = *AppData()->BuildIndexScanAdmission;
+        const ui64 pendingBytes = admission.ShrinkPendingBudget(indexBuildLimit);
         Counters->GetCounter("Consumer/IndexBuildPending/Consumption")->Set(pendingBytes);
         if (!pendingBytes) {
             PendingIndexBuildCharge = 0;
@@ -738,21 +739,22 @@ private:
             const ui64 bytes = Min(pendingBytes, activitiesLimitBytes);
             const ui64 rounded = bytes + Min(activitiesLimitBytes - bytes, (8_MB - bytes % 8_MB) % 8_MB);
             PendingIndexBuildCharge = Min(activitiesLimitBytes,
-                Max(PendingIndexBuildCharge, Max(bytes, Min(pendingLimit, rounded))));
+                Max(bytes, Min(pendingLimit, Max(PendingIndexBuildCharge, rounded))));
         }
         Counters->GetCounter("Consumer/IndexBuildPending/Reserved")->Set(PendingIndexBuildCharge);
         TResourceBrokerConfig config{
             // Idle index builds return the entire charge to other queues.
             .LimitBytes = activitiesLimitBytes - PendingIndexBuildCharge,
             .QueueLimits = {
-                {"queue_build_index", indexBuildLimit - pendingLimit},
                 {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionIndexationQueue, GetColumnTablesCompactionIndexationQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionTtlQueue, GetColumnTablesTtlQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionGeneralQueue, GetColumnTablesGeneralQueueQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionNormalizerQueue, GetColumnTablesNormalizerQueueLimitBytes(Config, hardLimitBytes)},
-            }
+            },
+            .IndexBuildQueue = ResourceBrokerSelfConfig.IndexBuildQueue,
         };
+        config.QueueLimits.try_emplace(config.IndexBuildQueue, Max<ui64>());
 
         for (auto &[name, limitBytes] : ResourceBrokerSelfConfig.QueueLimits) {
             if (config.QueueLimits.contains(name)) {
@@ -760,9 +762,10 @@ private:
             }
         }
         // The index budget is a combined bound on active and pending scans.
-        auto& activeIndexLimit = config.QueueLimits["queue_build_index"];
-        activeIndexLimit = Min(activeIndexLimit, indexBuildLimit - pendingLimit);
-        AppData()->BuildIndexScanAdmission->SetTotalLimit(indexBuildLimit, Min(activeIndexLimit, config.LimitBytes),
+        const ui64 pendingBudget = Max(pendingLimit, pendingBytes);
+        auto& activeIndexLimit = config.QueueLimits.at(config.IndexBuildQueue);
+        activeIndexLimit = Min(activeIndexLimit, indexBuildLimit - Min(indexBuildLimit, pendingBudget));
+        admission.SetTotalLimit(indexBuildLimit, Min(activeIndexLimit, config.LimitBytes),
             config != CurrentResourceBrokerConfig);
 
         // TODO: counters and logs for all column table queues
@@ -793,6 +796,7 @@ private:
 
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;
+        configure->ExpectedIndexBuildQueue = config.IndexBuildQueue;
 
         auto& record = configure->Record;
         record.MutableResourceLimit()->SetMemory(config.LimitBytes);
@@ -801,11 +805,14 @@ private:
             auto queue = record.AddQueues();
             queue->SetName(name);
             queue->MutableLimit()->SetMemory(limitBytes);
+            if (name == config.IndexBuildQueue) {
+                queue->SetStrictMemoryLimit(true);
+            }
         }
 
         const ui64 cookie = ++NextBrokerConfig;
         PendingIndexBuildLimits.clear(); // Only the latest configuration can supersede a rejection hint.
-        PendingIndexBuildLimits[cookie] = Min(config.QueueLimits.at("queue_build_index"), config.LimitBytes);
+        PendingIndexBuildLimits[cookie] = Min(config.QueueLimits.at(config.IndexBuildQueue), config.LimitBytes);
         Send(MakeResourceBrokerID(), configure.Release(), 0, cookie);
 
         CurrentResourceBrokerConfig.emplace(std::move(config));

@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/driver_lib/run
     yql/essentials/sql/pg_dummy
     ydb/core/testlib
     ydb/core/tx/datashard/ut_common

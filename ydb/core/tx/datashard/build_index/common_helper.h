@@ -430,16 +430,33 @@ private:
         Y_ENSURE(!UploaderId);
         Y_ENSURE(Owner);
 
+        // Queued pipe requests may outlive a child. Bound the number of
+        // attempts retaining copies of a batch before allocating another.
+        if (WaitForPreviousAttempt()) {
+            return;
+        }
+
         if (Uploading.Kind == EDestinationKind::Erase) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row erase",
                 {"debug", Debug()});
 
             Y_ENSURE(!Uploading.EraseBuffer.IsEmpty());
+            std::shared_ptr<void> attempt;
+            if (ResourceReservation) {
+                const auto keys = Uploading.EraseBuffer.GetKeysData();
+                ui64 bytes = 3 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * 256 + 4_KB
+                    + (keys->capacity() - keys->size()) * sizeof(NTxProxy::TEraseKeys::value_type);
+                for (const auto& key : *keys) {
+                    bytes += key.GetCells().size() * sizeof(TCell) * 2;
+                }
+                bytes += 2 * (Database.size() + Uploading.Table.size());
+                attempt = RetainAttempt(bytes);
+            }
             auto actor = NTxProxy::CreateEraseRowsInternal(
                 Owner, Database, Uploading.Table, Uploading.EraseBuffer.GetKeysData(),
                 true /*writeToTableShadow*/,
                 true /*writeToPrivateTable*/,
-                true /*writeToIndexImplTable*/);
+                true /*writeToIndexImplTable*/, 0, TBackoff(0), std::move(attempt));
             UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
         } else {
             StartUploadRowsInternal();
@@ -454,27 +471,21 @@ private:
         Y_ENSURE(!Uploading.Buffer.IsEmpty());
         Y_ENSURE(!UploaderId);
         Y_ENSURE(Owner);
-        // A timed-out child may leave a protobuf request in a local mailbox.
-        // Wait for its allocation owners before making another payload copy.
-        if (WaitForPreviousAttempt()) {
-            return;
-        }
         std::shared_ptr<void> attempt;
         if (ResourceReservation) {
             // Include the canonical rows, protobuf payload, and row/container
             // overhead still owned by this attempt after the scan stops.
-            ui64 bytes = 2 * Uploading.Buffer.GetBufferBytes()
-                + Uploading.Buffer.GetRows() * 256 + 4_KB;
-            for (const auto& [key, _] : *Uploading.Buffer.GetRowsData()) {
+            const auto rows = Uploading.Buffer.GetRowsData();
+            ui64 bytes = 2 * Uploading.Buffer.GetBufferBytes() + rows->size() * 256 + 4_KB
+                + (rows->capacity() - rows->size()) * sizeof(NTxProxy::TUploadRows::value_type);
+            for (const auto& [key, _] : *rows) {
                 bytes += key.GetCells().size() * sizeof(TCell) * 2;
             }
             for (const auto& [name, type] : *Uploading.Types) {
                 bytes += 2 * (name.size() + type.SpaceUsedLong() + 64);
             }
             bytes += 2 * (Database.size() + Uploading.Table.size());
-            auto token = std::make_shared<TUploadAttempt>(RetainResource ? RetainResource(bytes) : ResourceReservation);
-            PreviousAttempt = token;
-            attempt = std::move(token);
+            attempt = RetainAttempt(bytes);
         }
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
@@ -483,6 +494,12 @@ private:
             true /*writeToIndexImplTable*/, false, 0, TBackoff(0), std::move(attempt));
 
         UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+    }
+
+    std::shared_ptr<void> RetainAttempt(ui64 bytes) {
+        auto attempt = std::make_shared<TUploadAttempt>(RetainResource ? RetainResource(bytes) : ResourceReservation);
+        PreviousAttempt = attempt;
+        return attempt;
     }
 
     bool WaitForPreviousAttempt() {

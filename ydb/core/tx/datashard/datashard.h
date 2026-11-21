@@ -9,6 +9,7 @@
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
@@ -976,12 +977,7 @@ namespace TEvDataShard {
         }
     };
 
-    // First base is destroyed last, after protobuf/arena payload storage.
-    struct TMemoryReservation {
-        std::shared_ptr<void> MemoryReservation;
-    };
-
-    struct TEvUploadRowsRequest : public TMemoryReservation, public TEventPBWithArena<TEvUploadRowsRequest,
+    struct TEvUploadRowsRequest : public NTabletPipe::TEventMemoryReservation, public TEventPBWithArena<TEvUploadRowsRequest,
                                                         NKikimrTxDataShard::TEvUploadRowsRequest,
                                                         TEvDataShard::EvUploadRowsRequest,
                                                         16*1024, 32*1024> {
@@ -1684,7 +1680,8 @@ namespace TEvDataShard {
     };
 
     struct TEvEraseRowsRequest
-        : public TEventPB<TEvEraseRowsRequest,
+        : public NTabletPipe::TEventMemoryReservation
+        , public TEventPB<TEvEraseRowsRequest,
                           NKikimrTxDataShard::TEvEraseRowsRequest,
                           TEvDataShard::EvEraseRowsRequest>
     {

@@ -222,6 +222,7 @@ struct TEvResourceBroker {
                                           NKikimrResourceBroker::TResourceBrokerConfig,
                                           EvConfigure> {
         bool Merge = false;
+        TString ExpectedIndexBuildQueue;
     };
 
     struct TEvConfigureResult : public TEventPB<TEvConfigureResult,

@@ -1693,6 +1693,41 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
     }
 
+    Y_UNIT_TEST_TWIN(DeferredScanUsesSnapshotSelectedDuringAdmission, SelectInFactory) {
+        TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
+        ui64 snapshotId = 0;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+            snapshotId = executor->MakeScanSnapshot(TRowsModel::TableId);
+            ctx.Send(env.Edge, new TEvents::TEvWakeup);
+        }));
+        env.WaitForWakeUp();
+        env.SendSync(env.Rows.MakeRows(1));
+
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            if (!SelectInFactory) {
+                options.OnAdmissionReady = [&](TScanOptions& admitted, std::unique_ptr<IEventHandle>) {
+                    admitted.SetSnapshotId(snapshotId);
+                    return true;
+                };
+            }
+            options.Factory = [&, tablet = ctx.SelfID](TScanOptions& admitted) -> TAutoPtr<NTable::IScan> {
+                if (SelectInFactory) {
+                    admitted.SetSnapshotId(snapshotId);
+                }
+                return new TDummyScan(tablet, false, NTable::EStatus::Done, 1);
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, TTestFlatTablet::ScanCookie, options);
+        }));
+        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
+    }
+
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
         TMyEnvScans env;
         env.SendSync(env.Rows.MakeRows(1));

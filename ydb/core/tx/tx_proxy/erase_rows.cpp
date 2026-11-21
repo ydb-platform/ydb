@@ -106,8 +106,10 @@ namespace {
                 bool writeToPrivateTable,
                 bool writeToIndexImplTable,
                 ui64 cookie,
-                TBackoff backoff)
-            : Sender(sender)
+                TBackoff backoff,
+                std::shared_ptr<void> memoryReservation)
+            : MemoryReservation(std::move(memoryReservation))
+            , Sender(sender)
             , SchemeCache(MakeSchemeCacheID())
             , LeaderPipeCache(MakePipePerNodeCacheID(false))
             , Database(database)
@@ -290,6 +292,7 @@ namespace {
             Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
             auto ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
+            ev->MemoryReservation = MemoryReservation;
             ev->Record = state->Headers;
             for (const auto& key : state->Keys) {
                 ev->Record.AddKeyColumns(key.GetBuffer());
@@ -330,6 +333,7 @@ namespace {
                 auto& ev = shardRequests[shardIdx];
                 if (!ev) {
                     ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
+                    ev->MemoryReservation = MemoryReservation;
                     ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                     if (keyRange->TableId.SchemaVersion) {
                         ev->Record.SetSchemaVersion(keyRange->TableId.SchemaVersion);
@@ -550,6 +554,7 @@ namespace {
         }
 
     private:
+        const std::shared_ptr<void> MemoryReservation;
         const TActorId Sender;
         const TActorId SchemeCache;
         const TActorId LeaderPipeCache;
@@ -594,10 +599,11 @@ IActor* CreateEraseRowsInternal(
     bool writeToPrivateTable,
     bool writeToIndexImplTable,
     ui64 cookie,
-    TBackoff backoff)
+    TBackoff backoff,
+    std::shared_ptr<void> memoryReservation)
 {
     return new TEraseRowsInternal(sender, database, table, std::move(keys),
-        writeToTableShadow, writeToPrivateTable, writeToIndexImplTable, cookie, backoff);
+        writeToTableShadow, writeToPrivateTable, writeToIndexImplTable, cookie, backoff, std::move(memoryReservation));
 }
 
 } // namespace NTxProxy

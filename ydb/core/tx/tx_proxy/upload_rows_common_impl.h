@@ -1522,7 +1522,6 @@ private:
             }
             Rows.reset();
             Batch.reset();
-            MemoryReservation.reset();
         }
         SendResult(ctx, status.GetCode());
 

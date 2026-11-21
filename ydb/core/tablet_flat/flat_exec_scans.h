@@ -168,6 +168,9 @@ namespace NTabletFlatExecutor {
             }
 
             std::shared_ptr<void> Retain(ui64 bytes) {
+                if (!bytes) {
+                    return {};
+                }
                 auto payload = std::make_shared<TPayload>(State, bytes);
                 with_lock(State->Lock) {
                     // The payload already exists, including when retained from
@@ -222,6 +225,7 @@ namespace NTabletFlatExecutor {
             std::shared_ptr<TTaskLease> Lease;
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
+            std::optional<ui64> PreparedSnapshotId;
             EState State = EState::None;
             bool NeedsReadmission = false;
             // Owns expiry of the readiness state chosen at a broker grant.
@@ -272,7 +276,8 @@ namespace NTabletFlatExecutor {
          */
         TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter,
                     ITablet *owner, const TActorId& ownerActorId,
-                    const TActorId& brokerClient, TActorSystem* actorSystem, const ui32& followerId)
+                    const TActorId& brokerClient, TActorSystem* actorSystem, const ui32& followerId,
+                    std::function<void(THolder<TScanSnapshot>)> releaseSnapshot)
             : Logger(logger)
             , Ops(ops)
             , Owner(owner)
@@ -282,6 +287,7 @@ namespace NTabletFlatExecutor {
             , Tablet(Owner->TabletID())
             , FollowerId(followerId)
             , Emitter(std::move(emitter))
+            , ReleaseSnapshot(std::move(releaseSnapshot))
         {
 
         }
@@ -311,14 +317,27 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        static void ValidateOptions(const TScanOptions& options) {
+            const auto* broker = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker);
+            if (options.Factory) {
+                Y_ENSURE(!options.IsResourceBrokerDisabled(), "Deferred scans require broker admission");
+                Y_ENSURE(broker && broker->Memory, "Deferred scans must declare memory before construction");
+            } else {
+                Y_ENSURE(!broker || !broker->Memory || options.OnAdmissionFailure,
+                    "Eager scans declaring memory require an admission failure callback");
+            }
+        }
+
         ui64 Queue(ui32 table, TAutoPtr<IScan> scan, ui64 cookie, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
         {
             auto &one = Make(table, scan, EType::Client, options, std::move(snapshot));
 
             one.Cookie = cookie;
+            if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
+                one.PreparedSnapshotId = byId->SnapshotId;
+            }
 
             if (options.IsResourceBrokerDisabled()) {
-                Y_ENSURE(!options.Factory, "Deferred scans require broker admission");
                 // A call to Start is expected now
                 one.State = EState::Ready;
                 one.TaskId = 0;
@@ -332,7 +351,6 @@ namespace NTabletFlatExecutor {
                 auto cookie = MakeIntrusive<TCookie>(one.Serial);
                 const ui64 memory = overrides ? overrides->Memory : 0;
                 if (options.Factory) {
-                    Y_ENSURE(memory, "Deferred scans must declare memory before construction");
                     one.Lease = std::make_shared<TTaskLease>(ActorSystem, BrokerClient, one.TaskId,
                         overrides ? overrides->Type : Tables[table].Type,
                         overrides ? overrides->Prio : Tables[table].Prio, memory);
@@ -441,31 +459,39 @@ namespace NTabletFlatExecutor {
         }
 
         bool NeedsSnapshot(ui64 serial) {
-            return !Lookup(serial, true)->Snapshot;
+            const auto& one = *Lookup(serial, true);
+            if (one.PreparedSnapshotId) {
+                const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&one.Options.Snapshot);
+                Y_ENSURE(byId && byId->SnapshotId == *one.PreparedSnapshotId,
+                    "Cannot replace a prepared scan snapshot during admission");
+            }
+            return !one.Snapshot;
         }
 
         void SetSnapshot(ui64 serial, THolder<TScanSnapshot> snapshot) {
             Lookup(serial, true)->Snapshot = std::move(snapshot);
         }
 
-        TCancelled AdmissionFailed(ui64 serial, const TString& reason, bool retry = true) {
+        void AdmissionFailed(ui64 serial, const TString& reason, std::optional<ui64> memoryLimit = {}) {
             auto* one = Lookup(serial, false);
             if (!one || one->State > EState::Ready) {
-                return {};
+                return;
             }
-            auto callback = std::move(one->Options.OnAdmissionFailure);
             auto cancelled = Cancel(serial);
-            if (callback) {
-                callback(reason, retry);
+            ReleaseSnapshot(std::move(cancelled.Snapshot));
+            if (memoryLimit && cancelled.Options.OnMemoryLimitExceeded) {
+                cancelled.Options.OnMemoryLimitExceeded(*memoryLimit);
             }
-            return cancelled;
+            if (cancelled.Options.OnAdmissionFailure) {
+                cancelled.Options.OnAdmissionFailure(reason, true);
+            }
         }
 
-        TCancelled AdmissionTimedOut(ui64 serial, ui64 generation) {
+        void AdmissionTimedOut(ui64 serial, ui64 generation) {
             auto* one = Lookup(serial, false);
             if (!one || (one->State != EState::Task && one->State != EState::Ready) ||
                 one->TimeoutGeneration != generation) {
-                return {};
+                return;
             }
             if (one->State == EState::Ready && one->ReadinessDeadline &&
                 TActivationContext::Now() >= one->ReadinessDeadline) {
@@ -478,12 +504,12 @@ namespace NTabletFlatExecutor {
                 // A heartbeat must not cancel and reinsert a queued task: that
                 // would lose its FIFO position under a sustained backlog.
                 ScheduleAdmissionTimeout(*one);
-                return {};
+                return;
             }
             return AdmissionFailed(serial, "Timed out waiting for scan admission");
         }
 
-        TCancelled Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
+        void Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
             if (error.Status.Code == TEvResourceBroker::TStatus::UNKNOWN_TASK) {
                 // UpdateTask errors have no cookie. Match the live deferred
                 // task by id, ignoring errors for running or unrelated work.
@@ -503,17 +529,16 @@ namespace NTabletFlatExecutor {
                     if (auto* one = Lookup(serial, false)) {
                         if (one->Lease) {
                             one->Lease->Rejected();
-                        }
-                        if (error.Status.MemoryLimit && one->Options.OnMemoryLimitExceeded) {
-                            one->Options.OnMemoryLimitExceeded(*error.Status.MemoryLimit);
+                        } else {
+                            // The broker already removed the eager task.
+                            one->TaskId = 0;
                         }
                     }
                     // Limits may be applied asynchronously. Teach admission the
                     // actual capacity, then retry fitting against that value.
-                    return AdmissionFailed(serial, error.Status.Message);
+                    return AdmissionFailed(serial, error.Status.Message, error.Status.MemoryLimit);
                 }
             }
-            return {};
         }
 
         void Start(ui64 serial)
@@ -805,6 +830,7 @@ namespace NTabletFlatExecutor {
         ui64 Serial = 0;
 
         const TIntrusivePtr<TIdEmitter> Emitter;
+        const std::function<void(THolder<TScanSnapshot>)> ReleaseSnapshot;
         ui32 CounterAlive = 0;
         THashMap<ui64, TOne> Scans;
         THashMap<ui32, TTable> Tables;  /* only alive scans */

@@ -266,12 +266,26 @@ namespace NKikimrConfigHelpers {
 NMemory::TResourceBrokerConfig CreateMemoryControllerResourceBrokerConfig(const NKikimrConfig::TAppConfig& config) {
     NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
     auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
-        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
-            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
+        const auto memoryLimit = [](const NKikimrResourceBroker::TResources& resources) -> std::optional<ui64> {
+            if (resources.HasMemory()) {
+                return resources.GetMemory();
+            }
+            if (resources.ResourceSize() > NKikimrResourceBroker::MEMORY) {
+                return resources.GetResource(NKikimrResourceBroker::MEMORY);
+            }
+            return std::nullopt;
+        };
+        if (const auto memory = memoryLimit(resourceBrokerConfig.GetResourceLimit())) {
+            resourceBrokerSelfConfig.LimitBytes = *memory;
         }
         for (const auto& queue : resourceBrokerConfig.GetQueues()) {
-            if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
-                resourceBrokerSelfConfig.QueueLimits[queue.GetName()] = queue.GetLimit().GetMemory();
+            if (const auto memory = memoryLimit(queue.GetLimit())) {
+                resourceBrokerSelfConfig.QueueLimits[queue.GetName()] = *memory;
+            }
+        }
+        for (const auto& task : resourceBrokerConfig.GetTasks()) {
+            if (task.GetName() == "build_index" && task.HasQueueName()) {
+                resourceBrokerSelfConfig.IndexBuildQueue = task.GetQueueName();
             }
         }
     };

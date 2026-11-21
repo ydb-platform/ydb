@@ -193,7 +193,8 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
     Broker = new TBroker(this, Emitter, Owner->TabletID(), FollowerId);
-    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, SelfId(), sys, FollowerId);
+    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, SelfId(), sys, FollowerId,
+        [this](THolder<TScanSnapshot> snapshot) { ReleaseScanLocks(std::move(snapshot)); });
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     auto& icb = *AppData()->Icb;
@@ -3669,13 +3670,13 @@ void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
 
 void TExecutor::Handle(TEvResourceBroker::TEvTaskOperationError::TPtr& ev) {
     if (Scans) {
-        ReleaseScanLocks(Scans->Rejected(*ev->Get()).Snapshot);
+        Scans->Rejected(*ev->Get());
     }
 }
 
 void TExecutor::Handle(NOps::TEvAdmissionTimeout::TPtr& ev) {
     if (Scans) {
-        ReleaseScanLocks(Scans->AdmissionTimedOut(ev->Get()->Serial, ev->Get()->Generation).Snapshot);
+        Scans->AdmissionTimedOut(ev->Get()->Serial, ev->Get()->Generation);
     }
 }
 
@@ -3771,24 +3772,20 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
             if (readiness == TScans::EReadiness::TimedOut || readiness == TScans::EReadiness::RetryLimitExceeded) {
                 const char* reason = readiness == TScans::EReadiness::TimedOut
                     ? "Timed out waiting for scan readiness" : "Scan readiness retry limit exceeded";
-                ReleaseScanLocks(Scans->AdmissionFailed(serial, reason).Snapshot);
+                Scans->AdmissionFailed(serial, reason);
             }
             return;
         }
         if (!Scans->Initialize(serial)) {
-            ReleaseScanLocks(Scans->AdmissionFailed(serial, "Deferred scan factory returned no scan").Snapshot);
+            Scans->AdmissionFailed(serial, "Deferred scan factory returned no scan");
             return;
         }
         if (Scans->NeedsSnapshot(serial)) {
-            const auto& options = Scans->GetOptions(serial);
-            const auto* byVersion = std::get_if<TScanOptions::TSnapshotByRowVersion>(&options.Snapshot);
-            Scans->SetSnapshot(serial, PrepareScanSnapshot(table, nullptr,
-                byVersion ? byVersion->RowVersion : TRowVersion::Max()));
+            Scans->SetSnapshot(serial, ResolveScanSnapshot(table, Scans->GetOptions(serial)));
         }
         Scans->Start(serial);
     } catch (const std::exception& exc) {
-        ReleaseScanLocks(Scans->AdmissionFailed(serial,
-            TStringBuilder() << "Cannot initialize admitted scan: " << exc.what()).Snapshot);
+        Scans->AdmissionFailed(serial, TStringBuilder() << "Cannot initialize admitted scan: " << exc.what());
     }
 }
 
@@ -4613,27 +4610,27 @@ void TExecutor::DropScanSnapshot(ui64 snap)
     }
 }
 
+THolder<TScanSnapshot> TExecutor::ResolveScanSnapshot(ui32 tableId, const TScanOptions& options)
+{
+    if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
+        auto it = ScanSnapshots.find(byId->SnapshotId);
+        Y_ENSURE(it != ScanSnapshots.end() && it->second->Table == tableId,
+            NFmt::Do(*this) << " Unknown scan snapshot " << byId->SnapshotId << " for table " << tableId);
+        auto snapshot = std::move(it->second);
+        ScanSnapshots.erase(it);
+        return snapshot;
+    }
+
+    const auto* byVersion = std::get_if<TScanOptions::TSnapshotByRowVersion>(&options.Snapshot);
+    return PrepareScanSnapshot(tableId, nullptr, byVersion ? byVersion->RowVersion : TRowVersion::Max());
+}
+
 ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options)
 {
+    TScans::ValidateOptions(options);
     THolder<TScanSnapshot> snapshot;
-
-    if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
-        auto snapshotId = byId->SnapshotId;
-        auto it = ScanSnapshots.find(snapshotId);
-        Y_ENSURE(it != ScanSnapshots.end(),
-            NFmt::Do(*this)
-                << " QueueScan on table " << tableId
-                << " with unknown snapshot " << snapshotId);
-        snapshot = std::move(it->second);
-        ScanSnapshots.erase(it);
-    } else if (!options.Factory) {
-        TRowVersion rowVersion;
-        if (const auto* byVersion = std::get_if<TScanOptions::TSnapshotByRowVersion>(&options.Snapshot)) {
-            rowVersion = byVersion->RowVersion;
-        } else {
-            rowVersion = TRowVersion::Max();
-        }
-        snapshot = PrepareScanSnapshot(tableId, nullptr, rowVersion);
+    if (!options.Factory || std::holds_alternative<TScanOptions::TSnapshotById>(options.Snapshot)) {
+        snapshot = ResolveScanSnapshot(tableId, options);
     }
 
     ui64 serial = Scans->Queue(tableId, scan, cookie, options, std::move(snapshot));

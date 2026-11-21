@@ -4,6 +4,7 @@
 #include <memory_controller_config.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/scan_admission.h>
+#include <ydb/core/driver_lib/run/config_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -105,17 +106,8 @@ private:
         ProcessMemoryInfoProvider = MakeIntrusive<TFixedProcessMemoryInfoProvider>();
         ProcessMemoryInfo = &ProcessMemoryInfoProvider->ProcessMemoryInfo;
 
-        // copy-paste from TMemoryControllerInitializer::InitializeServices
-        NMemory::TResourceBrokerConfig resourceBrokerSelfConfig;
-        const auto& resourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
-        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
-            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
-        }
-        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
-            if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
-                resourceBrokerSelfConfig.QueueLimits[queue.GetName()] = queue.GetLimit().GetMemory();
-            }
-        }
+        const auto resourceBrokerSelfConfig =
+            NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(*Settings->AppConfig);
         Cerr << "ResourceBrokerSelfConfig: " << resourceBrokerSelfConfig.ToString() << Endl;
 
         for (ui32 nodeIndex = 0; nodeIndex < Runtime->GetNodeCount(); ++nodeIndex) {
@@ -522,7 +514,6 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     auto lease = quota.TryAcquire(initialPending, 128, 64_MB);
     UNIT_ASSERT(lease);
     UNIT_ASSERT(!quota.TryAcquire(1, 128, 64_MB));
-    lease.reset();
 
     auto broker = fixture.Runtime.Register(NResourceBroker::CreateResourceBrokerActor(
         NResourceBroker::MakeDefaultConfig(), MakeIntrusive<::NMonitoring::TDynamicCounters>()));
@@ -543,11 +534,14 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     // the pending slice to require a fresh update observable by this test.
     fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
     fixture.Tick();
-    UNIT_ASSERT_GT(activeLimit, 0);
-    UNIT_ASSERT_VALUES_EQUAL(activeLimit + 32_MB, total);
-    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), activeLimit);
-    UNIT_ASSERT_VALUES_EQUAL(quota.GetUsage().Bytes, 0);
     const ui64 activities = GetResourceBrokerLimitBytes(config, 16_GB, false);
+    UNIT_ASSERT_GT(activeLimit, 0);
+    UNIT_ASSERT_VALUES_EQUAL(activeLimit + initialPending, total);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), activeLimit);
+    UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities - initialPending);
+    lease.reset();
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(activeLimit + 32_MB, total);
     UNIT_ASSERT_VALUES_EQUAL(brokerLimit, activities);
     lease = quota.TryAcquire(1_MB, 128, 32_MB);
     UNIT_ASSERT(lease);
@@ -646,6 +640,14 @@ Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
     auto queue = resourceBrokerConfig->AddQueues();
     queue->SetName("queue_cs_scan_read");
     queue->MutableLimit()->SetMemory(13_MB);
+    auto* indexQueue = resourceBrokerConfig->AddQueues();
+    indexQueue->SetName("queue_custom_build_index");
+    indexQueue->SetWeight(10);
+    indexQueue->MutableLimit()->AddResource(2);
+    indexQueue->MutableLimit()->AddResource(17_MB);
+    auto* indexTask = resourceBrokerConfig->AddTasks();
+    indexTask->SetName("build_index");
+    indexTask->SetQueueName(indexQueue->GetName());
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
@@ -683,6 +685,13 @@ Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
 
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(senderSubscriber);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
+
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender,
+        new TEvResourceBroker::TEvConfigRequest("queue_custom_build_index")));
+    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 17_MB);
+    UNIT_ASSERT(config->Get()->QueueConfig->GetStrictMemoryLimit());
+    UNIT_ASSERT_VALUES_EQUAL(runtime.GetAppData().BuildIndexScanAdmission->GetActiveByteLimit(64_MB), 17_MB);
 
     // ensure that other settings are not affected:
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest("queue_cs_scan_read")));

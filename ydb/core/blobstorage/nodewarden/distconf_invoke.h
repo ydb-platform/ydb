@@ -256,6 +256,7 @@ namespace NKikimr::NStorage {
         void SendDataCenterSnapshot();
         void ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command);
         void QueryConfig(const TQuery::TQueryConfig& request);
+        void RequireNoPendingBridgeConfigs() const;
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
         void StartRecoveryProposition(TProcessCollectConfigsResult& result);
         void CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, std::function<void()> callback);

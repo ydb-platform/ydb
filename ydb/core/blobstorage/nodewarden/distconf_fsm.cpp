@@ -19,6 +19,7 @@ namespace NKikimr::NStorage {
         bool IsBootstrapProposition(const NKikimrBlobStorage::TStorageConfig& config) {
             return config.GetGeneration() == 1 && config.HasPrevConfig() && !config.GetPrevConfig().GetGeneration();
         }
+
     }
 
     void TDistributedConfigKeeper::UpdateQuorums() {
@@ -248,8 +249,10 @@ namespace NKikimr::NStorage {
             if (Cfg->BridgeConfig) {
                 Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvNodeWardenStorageConfig(
                     StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
-                Send(MakeDistconfBridgeConnectionCheckerActorId(),
-                    new TEvPrivate::TEvUpdateBridgeFeatureRequirement(std::nullopt));
+                if (!Cfg->UseBridgeSessionAdmission) {
+                    Send(MakeDistconfBridgeConnectionCheckerActorId(),
+                        new TEvPrivate::TEvUpdateBridgeFeatureRequirement(std::nullopt));
+                }
             }
             for (const auto& node : proposition.AddedOrChangedNodeIdentifiers) {
                 UnsubscribeQueue.insert(node.NodeId());
@@ -269,6 +272,9 @@ namespace NKikimr::NStorage {
 
         switch (res->GetResponseCase()) {
             case TEvGather::kCollectConfigs:
+                if (res->GetAborted()) {
+                    return SwitchToError("configuration recovery is incompatible with the requesting root");
+                }
                 Y_DEBUG_ABORT();
                 break;
 
@@ -1188,6 +1194,10 @@ namespace NKikimr::NStorage {
         SelfNode.Serialize(self->AddNodeIds());
 
         const bool metadataOnly = request.GetMetadataOnly();
+        const auto *parent = std::get_if<TBinding>(&task.Origin);
+        const auto maySendConfig = [&](const NKikimrBlobStorage::TStorageConfig& config) {
+            return metadataOnly || !parent || CanSendConfigToPeer(parent->BridgeFeatureLevel, config);
+        };
         response->SetMetadataOnly(metadataOnly);
         auto copyConfig = [metadataOnly](auto *target, const auto& config) {
             if (metadataOnly) {
@@ -1204,6 +1214,9 @@ namespace NKikimr::NStorage {
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposedConfigs;
         auto addBaseConfig = [&](const TEvGather::TCollectConfigs::TNode& item, auto *nodesToIgnore) {
             const auto& config = item.GetBaseConfig();
+            if (!maySendConfig(config)) {
+                return;
+            }
             auto& ptr = baseConfigs[config];
             for (const auto& nodeId : item.GetNodeIds()) {
                 TNodeIdentifier n(nodeId);
@@ -1220,29 +1233,66 @@ namespace NKikimr::NStorage {
         };
 
         auto addPerDiskConfig = [&](const TEvGather::TCollectConfigs::TPersistentConfig& item, auto addFunc, auto& set,
-                const auto& nodesToIgnore, bool configValidated) {
+                const auto& nodesToIgnore, const auto& hiddenDisks, bool configValidated) {
             const auto& config = item.GetConfig();
-            if (metadataOnly && !configValidated && !CheckFingerprint(config)) {
-                for (const auto& disk : item.GetDisks()) {
-                    if (!nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
+            const bool incompatible = !maySendConfig(config);
+            for (const auto& disk : item.GetDisks()) {
+                if (nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
+                    continue;
+                }
+                const auto diskId = std::make_pair(TNodeIdentifier(disk.GetNodeId()), disk.GetPath());
+                if (hiddenDisks.contains(diskId)) {
+                    if (incompatible) {
                         response->AddErrors()->CopyFrom(disk);
                     }
-                }
-                return;
-            }
-            auto& ptr = set[config];
-            for (const auto& disk : item.GetDisks()) {
-                if (!nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
-                    if (!ptr) {
-                        ptr = (response->*addFunc)();
-                        copyConfig(ptr->MutableConfig(), config);
+                } else if (!incompatible) {
+                    if (metadataOnly && !configValidated && !CheckFingerprint(config)) {
+                        response->AddErrors()->CopyFrom(disk);
+                    } else {
+                        auto& ptr = set[config];
+                        if (!ptr) {
+                            ptr = (response->*addFunc)();
+                            copyConfig(ptr->MutableConfig(), config);
+                        }
+                        ptr->AddDisks()->CopyFrom(disk);
                     }
-                    ptr->AddDisks()->CopyFrom(disk);
                 }
             }
         };
 
         auto addResponse = [&](const TEvGather::TCollectConfigs& cc, bool localConfigsValidated) {
+            THashSet<std::pair<TNodeIdentifier, TString>> hiddenDisks;
+            const auto hasSupersedingRollback = [&](const auto& config, const auto& disk) {
+                for (const auto& item : cc.GetCommittedConfigs()) {
+                    if (!IsBridgeProposalSupersededByRollback(item.GetConfig(), config)) {
+                        continue;
+                    }
+                    for (const auto& other : item.GetDisks()) {
+                        if (other.GetNodeId().GetNodeId() == disk.GetNodeId().GetNodeId() &&
+                                other.GetPath() == disk.GetPath()) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            const auto collectHidden = [&](const auto& item) {
+                if (maySendConfig(item.GetConfig())) {
+                    return;
+                }
+                for (const auto& disk : item.GetDisks()) {
+                    if (!hasSupersedingRollback(item.GetConfig(), disk)) {
+                        hiddenDisks.emplace(TNodeIdentifier(disk.GetNodeId()), disk.GetPath());
+                    }
+                }
+            };
+            for (const auto& item : cc.GetCommittedConfigs()) {
+                collectHidden(item);
+            }
+            for (const auto& item : cc.GetProposedConfigs()) {
+                collectHidden(item);
+            }
+            response->SetIncompatible(response->GetIncompatible() || cc.GetIncompatible() || !hiddenDisks.empty());
             if (!metadataOnly && cc.GetMetadataOnly()) {
                 return;
             }
@@ -1252,11 +1302,11 @@ namespace NKikimr::NStorage {
             }
             for (const auto& item : cc.GetCommittedConfigs()) {
                 addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddCommittedConfigs, committedConfigs,
-                    nodesToIgnore, localConfigsValidated || cc.GetMetadataOnly());
+                    nodesToIgnore, hiddenDisks, localConfigsValidated || cc.GetMetadataOnly());
             }
             for (const auto& item : cc.GetProposedConfigs()) {
                 addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddProposedConfigs, proposedConfigs,
-                    nodesToIgnore, localConfigsValidated || cc.GetMetadataOnly());
+                    nodesToIgnore, hiddenDisks, localConfigsValidated || cc.GetMetadataOnly());
             }
             for (const auto& item : cc.GetNoMetadata()) {
                 if (!nodesToIgnore.contains(TNodeIdentifier(item.GetNodeId()))) {
@@ -1413,12 +1463,11 @@ namespace NKikimr::NStorage {
         }
         bool configSent = false;
         for (auto& [nodeId, info] : DirectBoundNodes) {
-            if (committedStorageConfig || info.LastReportedRootNodeId != rootNodeId) {
-                if (onlyOutdated && committedStorageConfig && !NeedsConfigUpdate(nodeId, info, *committedStorageConfig)) {
-                    continue;
-                }
+            const bool sendConfig = committedStorageConfig && CanSendConfigToPeer(info.BridgeFeatureLevel, *committedStorageConfig) &&
+                (!onlyOutdated || NeedsConfigUpdate(nodeId, info, *committedStorageConfig));
+            if (sendConfig || info.LastReportedRootNodeId != rootNodeId) {
                 auto ev = std::make_unique<TEvNodeConfigReversePush>(rootNodeId);
-                if (committedStorageConfig) {
+                if (sendConfig) {
                     ev->Record.MutableCommittedStorageConfig()->CopyFrom(*committedStorageConfig);
                     configSent = true;
                 }
@@ -1541,9 +1590,10 @@ namespace NKikimr::NStorage {
                 std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
                 SelfManagementEnabled,
                 Cfg->BridgeConfig ? GenerateBridgeInfo(CurrentProposition->StorageConfig) : nullptr));
-            if (Cfg->BridgeConfig) {
+            const ui32 requiredLevel = GetRequiredBridgeFeatureLevel(CurrentProposition->StorageConfig);
+            if (Cfg->BridgeConfig && !Cfg->UseBridgeSessionAdmission) {
                 Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvUpdateBridgeFeatureRequirement(
-                    GetRequiredBridgeFeatureLevel(CurrentProposition->StorageConfig)));
+                    requiredLevel));
             }
         }
 

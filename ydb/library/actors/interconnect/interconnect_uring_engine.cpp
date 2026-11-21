@@ -94,6 +94,14 @@ namespace NActors {
         }
     }
 
+    struct TEvUnregisterSession : TEventLocal<TEvUnregisterSession, static_cast<ui32>(ENetwork::EvUnregisterSession)> {
+        std::unique_ptr<IEventHandle> OnQuiesced;
+
+        explicit TEvUnregisterSession(std::unique_ptr<IEventHandle> onQuiesced)
+            : OnQuiesced(std::move(onQuiesced))
+        {}
+    };
+
     struct TEvUringMonRequest : TEventLocal<TEvUringMonRequest, static_cast<ui32>(ENetwork::EvUringMonRequest)> {
         NMon::TEvHttpInfoRes::TPtr Ev;
 
@@ -1119,11 +1127,16 @@ namespace NActors {
                 SendImpl(conn, std::move(ev), std::move(replyCallback), true);
             }
 
-            void Unregister(ui64 conn) {
+            void Unregister(ui64 conn, std::unique_ptr<IEventHandle> onQuiesced) {
                 ++*SessionsUnregistered;
 
                 // this event is sequenced too
-                SendInternal(conn, static_cast<ui32>(ENetwork::EvUnregisterSession), {}, nullptr, true);
+                if (onQuiesced) {
+                    SendImpl(conn, std::make_unique<IEventHandle>(TActorId(), TActorId(),
+                        new TEvUnregisterSession(std::move(onQuiesced))), nullptr, true);
+                } else {
+                    SendInternal(conn, static_cast<ui32>(ENetwork::EvUnregisterSession), {}, nullptr, true);
+                }
             }
 
             void RegisterReceiveCallback(ui64 conn, TActorId localActorId, TIntrusivePtr<IReceiveCallback> callback) {
@@ -1457,6 +1470,9 @@ namespace NActors {
                         }
                         if (session.XdcReadPending) {
                             CancelOp(session, kOpXdcRead, session.XdcReadPendingRingIdx);
+                        }
+                        if (record->Ev->HasEvent()) {
+                            Engine.Client->Send(std::move(record->Ev->Get<TEvUnregisterSession>()->OnQuiesced));
                         }
                         TouchedSessions.PushBack(&session);
                         break;
@@ -2084,11 +2100,11 @@ namespace NActors {
             GetShard(conn).Send(conn, std::move(ev), std::move(replyCallback));
         }
 
-        void Unregister(ui64 conn) override {
+        void Unregister(ui64 conn, std::unique_ptr<IEventHandle> onQuiesced) override {
             if (Stopping) {
                 return;
             }
-            GetShard(conn).Unregister(conn);
+            GetShard(conn).Unregister(conn, std::move(onQuiesced));
         }
 
         void RegisterReceiveCallback(ui64 conn, TActorId localActorId, TIntrusivePtr<IReceiveCallback> callback) override {

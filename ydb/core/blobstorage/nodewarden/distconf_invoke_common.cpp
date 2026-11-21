@@ -273,11 +273,16 @@ namespace NKikimr::NStorage {
 
                     if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
                         throw TExRace() << "Configuration changed while collecting configs";
-                    } else if (!res->HasCollectConfigs()) {
+                    }
+                    if (!res->HasCollectConfigs()) {
                         throw TExError() << "Incorrect CollectConfigs response";
-                    } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+                    }
+                    auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt);
+                    if (r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
-                    } else if (r.IsDistconfDisabledQuorum) {
+                    }
+                    RequireNoPendingBridgeConfigs();
+                    if (r.IsDistconfDisabledQuorum) {
                         Self->ConfigRecoveryRequired = false;
                         Finish(TResult::OK, std::nullopt);
                     } else if (r.ConfigToPropose) {
@@ -388,6 +393,12 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TInvokeRequestHandlerActor::RequireNoPendingBridgeConfigs() const {
+        if (!Self->PendingBridgeConfigs.empty()) {
+            throw TExRace() << "Configuration is waiting for bridge session admission";
+        }
+    }
+
     void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
                                                  bool allowConflictingGenerationAdvance) {
         if (!Self->StorageConfig || !Self->Scepter) {
@@ -409,12 +420,14 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
+            RequireNoPendingBridgeConfigs();
             if (result.RequiresRecoveryProposition) {
                 return StartRecoveryProposition(result);
             }
             if (!result.RequiresGenerationAdvance) {
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+                RequireNoPendingBridgeConfigs();
             }
             callback(std::move(result));
         });
@@ -493,6 +506,7 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable bridge configuration");
             }
+            RequireNoPendingBridgeConfigs();
             if (result.RequiresRecoveryProposition) {
                 return StartRecoveryProposition(result);
             }
@@ -537,6 +551,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartPropositionImpl(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
+        RequireNoPendingBridgeConfigs();
         if (!Self->HasConnectedNodeQuorum(*config)) {
             // we won't be able to have quorum for this configuration if we start proposing now
             throw TExNoQuorum() << "No quorum to start propose/commit configuration";
@@ -932,6 +947,21 @@ namespace NKikimr::NStorage {
         } else if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
+            const auto& record = ev->Get()->Record;
+            if (record.HasDescendCommittedStorageConfig()) {
+                const auto& config = record.GetDescendCommittedStorageConfig().GetCommittedStorageConfig();
+                if (!CanSendConfigToPeer(Binding->BridgeFeatureLevel, config)) {
+                    // Applying the commit locally also fences the old parent session. The next binding can
+                    // propagate the generation to a compatible root.
+                    if (!CommittedStorageConfig || CommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
+                        ApplyCommittedStorageConfig(config);
+                    }
+                    auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                    response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+                    SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+                    return;
+                }
+            }
             // we have binding, so we have to forward this message to 'hop' node and return answer
             ForwardInvokeOnRoot(std::move(ev), Binding->NodeId);
         } else {
@@ -1027,14 +1057,22 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId) {
+        const bool pinToBinding = Binding && Binding->NodeId == hopNodeId &&
+            ev->Get()->Record.HasDescendCommittedStorageConfig() &&
+            GetRequiredBridgeFeatureLevel(ev->Get()->Record.GetDescendCommittedStorageConfig().GetCommittedStorageConfig())
+                >= BridgeFeatureLevelSessionAdmission;
         const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
             .Command = ev->Get()->Record,
             .Sender = ev->Sender,
             .SessionId = ev->InterconnectSession,
             .Cookie = ev->Cookie,
         }, hopNodeId));
-        TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
-            ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+        auto forward = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
+            ev->Release().Release(), IEventHandle::FlagSubscribeOnSession | (pinToBinding ? IEventHandle::FlagTrackDelivery : 0));
+        if (pinToBinding) {
+            forward->Rewrite(TEvInterconnect::EvForward, Binding->SessionId);
+        }
+        TActivationContext::Send(forward.release());
     }
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {

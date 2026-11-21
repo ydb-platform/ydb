@@ -8,7 +8,9 @@
 #include <ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <util/folder/path.h>
 #include <util/generic/vector.h>
 
@@ -55,6 +57,7 @@ namespace NKikimr {
         bool CachePDisks = false;
         bool CacheVDisks = false;
         bool EnableVDiskCooldownTimeout = false;
+        bool UseBridgeSessionAdmission = false;
         TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
         TDuration LongRequestThreshold = TDuration::Seconds(50);
         TDuration SelfHealStateRequestTimeout;
@@ -95,6 +98,6 @@ namespace NKikimr {
     // selfBridgePileId is the pile id resolved against local bridge config (it is used until the storage config is
     // received), selfBridgePileName is the pile name from node's location
     IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId,
-        std::optional<TString> selfBridgePileName);
+        std::optional<TString> selfBridgePileName, std::shared_ptr<std::atomic<ui32>> admissionFloor = {});
 
 } // NKikimr

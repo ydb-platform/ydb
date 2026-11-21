@@ -549,6 +549,9 @@ namespace NKikimr::NStorage {
         record.SetInitial(true);
         record.SetSubtreeHeight(GetSubtreeHeight());
         record.SetSupportsMetadataOnlyCollect(true);
+        if (Cfg->BridgeConfig) {
+            record.SetBridgeFeatureLevel(BridgeFeatureLevel);
+        }
         if (IsBridged() && StorageConfig->GetGeneration()
             && ((!LocalCommittedStorageConfig
                     || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())
@@ -945,6 +948,9 @@ namespace NKikimr::NStorage {
 
             if (Binding) {
                 Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                if (record.HasBridgeFeatureLevel()) {
+                    Binding->BridgeFeatureLevel = record.GetBridgeFeatureLevel();
+                }
                 if (!Binding->SupportsDirectRootQueries) {
                     CancelBindingLiveness();
                 }
@@ -956,7 +962,9 @@ namespace NKikimr::NStorage {
         // update config if needed, or just fan-out binding changes
         if (record.HasCommittedStorageConfig()) {
             if (DeferConfigRefill(record.GetCommittedStorageConfig())) {
-                FanOutReversePush(&*PendingConfigRefill);
+                if (IsBridgeFeatureRequirementApplied(GetRequiredBridgeFeatureLevel(*PendingConfigRefill))) {
+                    FanOutReversePush(&*PendingConfigRefill);
+                }
             } else {
                 ApplyCommittedStorageConfig(record.GetCommittedStorageConfig());
             }
@@ -1182,8 +1190,12 @@ namespace NKikimr::NStorage {
         TBoundNode& info = it->second;
         const ui32 previousChildHeight = info.GetSubtreeHeight();
         if (inserted) {
+            info.BridgeFeatureLevel = record.GetBridgeFeatureLevel();
             BoundSubtreeHeights.insert(previousChildHeight);
             auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());
+            if (Cfg->BridgeConfig) {
+                response->Record.SetBridgeFeatureLevel(BridgeFeatureLevel);
+            }
             if (record.GetInitial()) {
                 auto *cache = record.MutableCacheUpdate();
 
@@ -1248,9 +1260,11 @@ namespace NKikimr::NStorage {
         if (IsBridged() && record.GetRequestedCommittedConfigGeneration()) {
             const ui64 generation = record.GetRequestedCommittedConfigGeneration();
             if (CommittedStorageConfig && generation <= CommittedStorageConfig->GetGeneration()) {
-                auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());
-                response->Record.MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
-                SendEvent(senderNodeId, info, std::move(response));
+                if (CanSendConfigToPeer(info.BridgeFeatureLevel, *CommittedStorageConfig)) {
+                    auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());
+                    response->Record.MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
+                    SendEvent(senderNodeId, info, std::move(response));
+                }
             } else if (auto *push = getPushEv()) {
                 push->Record.SetRequestedCommittedConfigGeneration(
                     Max(generation, push->Record.GetRequestedCommittedConfigGeneration()));

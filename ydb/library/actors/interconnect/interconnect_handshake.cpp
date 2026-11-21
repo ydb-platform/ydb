@@ -388,6 +388,7 @@ namespace NActors {
             }
         } Rdma;
         bool RunDelayedRdmaHandshake = false;
+        TVector<TActorId> ReplyCheckers;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -575,6 +576,46 @@ namespace NActors {
             Rdma.Clear();
             MainChannel.Reset();
             ExternalDataChannel.Reset();
+        }
+
+        template <typename T>
+        static THashMap<TString, TString> ReadConnectionParams(const T& proto) {
+            THashMap<TString, TString> params;
+            for (const auto& item : proto.GetParams()) {
+                params.emplace(item.GetKey(), item.GetValue());
+            }
+            return params;
+        }
+
+        void NotifyOutgoingConnection(THashMap<TString, TString> params, bool success) {
+            const auto& actors = Common->ConnectionCheckerActorIds;
+            for (size_t i = 0; i < actors.size(); ++i) {
+                Send(actors[i], new TEvInterconnect::TEvNotifyOutgoingConnectionEstablished(PeerNodeId, success,
+                    i + 1 == actors.size() ? std::move(params) : params));
+            }
+        }
+
+        void CheckOutgoingParams(const THashMap<TString, TString>& params) {
+            Params.AdmissionLevel = 0;
+            for (const auto& checker : ReplyCheckers) {
+                Send(checker, new TEvInterconnect::TEvCheckOutgoingConnection(PeerNodeId, params));
+            }
+            for (size_t i = 0; i < ReplyCheckers.size(); ++i) {
+                auto result = WaitForSpecificEvent<TEvInterconnect::TEvCheckOutgoingConnectionResult>(
+                    "EvCheckOutgoingConnectionResult");
+                auto& verdict = *result->Get();
+                if (verdict.ErrorReason) {
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, *verdict.ErrorReason);
+                }
+                Params.AdmissionLevel = Max(Params.AdmissionLevel, verdict.AdmissionLevel);
+            }
+            CheckAdmission();
+        }
+
+        void CheckAdmission() {
+            if (!Common->AllowsConnection(Params.AdmissionLevel)) {
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, ConnectionAdmissionErrorMessage);
+            }
         }
 
         void EstablishSecureConnection(TConnection& connection) {
@@ -1098,6 +1139,9 @@ namespace NActors {
                 while (pending--) {
                     auto ev = WaitForSpecificEvent<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(
                         "EvPrepareOutgoingConnectionResult");
+                    if (ev->Get()->CheckReply) {
+                        ReplyCheckers.push_back(ev->Sender);
+                    }
                     std::visit(TOverloaded{
                         [&](TString& errorReason) {
                             Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, TStringBuilder() << "connection checker "
@@ -1133,20 +1177,6 @@ namespace NActors {
 
                 SendExBlock(MainChannel, request, "ExRequest");
 
-                auto notify = [&](auto& proto, bool success) {
-                    THashMap<TString, TString> params;
-                    for (const auto& item : proto.GetParams()) {
-                        params.emplace(item.GetKey(), item.GetValue());
-                    }
-                    auto& actors = Common->ConnectionCheckerActorIds;
-                    for (size_t i = 0; i < actors.size(); ++i) {
-                        Send(actors[i], new TEvInterconnect::TEvNotifyOutgoingConnectionEstablished(PeerNodeId, success,
-                            i + 1 != actors.size()
-                                ? THashMap(params)
-                                : std::move(params)));
-                    }
-                };
-
                 NActorsInterconnect::THandshakeReply reply;
                 if (!reply.ParseFromString(ReceiveExBlock(MainChannel, "ExReply"))) {
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect THandshakeReply");
@@ -1154,10 +1184,10 @@ namespace NActors {
                 ReportProto(reply, "ReceiveExBlock ExReply");
 
                 if (reply.HasErrorExplaination()) {
-                    notify(reply, false);
+                    NotifyOutgoingConnection(ReadConnectionParams(reply), false);
                     FailFromPeer(reply.GetErrorExplaination());
                 } else if (!reply.HasSuccess()) {
-                    notify(reply, false);
+                    NotifyOutgoingConnection(ReadConnectionParams(reply), false);
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "empty reply");
                 }
 
@@ -1168,6 +1198,9 @@ namespace NActors {
                 const auto& success = reply.GetSuccess();
                 ValidateClusterUUID(success, generateError);
                 ValidateCompatibilityInfo(success, generateError);
+
+                auto params = ReadConnectionParams(success);
+                CheckOutgoingParams(params);
 
                 const auto& s = success.GetSenderActorId();
                 PeerVirtualId.Parse(s.data(), s.size());
@@ -1210,7 +1243,7 @@ namespace NActors {
                 ProgramInfo = GetProgramInfo(success);
 
                 // notify checker actors
-                notify(success, true);
+                NotifyOutgoingConnection(std::move(params), true);
             } else if (!response.Header.SelfVirtualId) {
                 // peer reported error -- empty ack was generated by proxy for this request
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_SESSION_MISMATCH, "Peer rejected session continuation handshake");
@@ -1575,6 +1608,7 @@ namespace NActors {
                     while (pending--) {
                         auto ev = WaitForSpecificEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(
                             "EvCheckIncomingConnectionResult");
+                        Params.AdmissionLevel = Max(Params.AdmissionLevel, ev->Get()->AdmissionLevel);
 
                         if (const auto& errorReason = ev->Get()->ErrorReason) {
                             generateError(TStringBuilder() << "connection checker refused to proceed with "
@@ -1586,6 +1620,9 @@ namespace NActors {
                                 p->SetValue(std::move(value));
                             }
                         }
+                    }
+                    if (!Common->AllowsConnection(Params.AdmissionLevel)) {
+                        generateError(ConnectionAdmissionErrorMessage);
                     }
 
                     SendExBlock(MainChannel, record, "ExReply");

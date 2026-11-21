@@ -11,6 +11,8 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 #include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <optional>
@@ -34,6 +36,7 @@ struct TEnvironmentSetup {
     TVector<TActorId> PDiskActors;
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
+    std::unordered_map<ui32, std::shared_ptr<std::atomic<ui32>>> BridgeAdmissionFloors;
 
     using TIcbControlKey = std::pair<ui32, TString>; // { nodeId, name }
 
@@ -77,6 +80,7 @@ struct TEnvironmentSetup {
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
         const bool AutomaticBootstrap = false;
+        const bool UseBridgeSessionAdmission = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
         const bool EnablePhantomFlagStorage = false;
         const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
@@ -581,6 +585,7 @@ config:
                 // node restarts (this is what happens when the cluster is being converted into bridged one)
                 if (const auto& bridgeConfig = Runtime->GetAppDataBridgeConfig(); bridgeConfig.PilesSize()) {
                     config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(bridgeConfig);
+                    config->UseBridgeSessionAdmission = Settings.UseBridgeSessionAdmission;
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
@@ -668,6 +673,16 @@ config:
 
             const TActorId wardenId = Runtime->Register(warden.release(), nodeId);
             Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), wardenId);
+            if (Settings.UseBridgeSessionAdmission && Runtime->GetAppDataBridgeConfig().PilesSize()) {
+                const auto pileName = Settings.LocationGenerator(nodeId).GetBridgePileName();
+                const auto pileIndex = NBridge::ResolvePileIndex(Runtime->GetAppDataBridgeConfig(), pileName);
+                Y_ABORT_UNLESS(pileIndex);
+                auto admissionFloor = std::make_shared<std::atomic<ui32>>(0);
+                BridgeAdmissionFloors[nodeId] = admissionFloor;
+                const auto checkerId = Runtime->Register(CreateDistconfBridgeConnectionCheckerActor(
+                    TBridgePileId::FromPileIndex(*pileIndex), pileName, std::move(admissionFloor)), nodeId);
+                Runtime->RegisterService(MakeDistconfBridgeConnectionCheckerActorId(), checkerId);
+            }
             if (Settings.UseFakeConfigDispatcher) {
                 Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(nodeId), Runtime->Register(new TFakeConfigDispatcher(), nodeId));
             }

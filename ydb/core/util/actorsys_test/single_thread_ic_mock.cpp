@@ -104,6 +104,10 @@ public:
     void HandleDropPendingEvents(TAutoPtr<IEventHandle> ev);
     void ProcessPendingEvents();
 
+    void Handle(TEvInterconnect::TEvRecheckConnectionAdmission::TPtr ev) {
+        Send(ev->Sender, new TEvInterconnect::TEvRecheckConnectionAdmissionResult, 0, ev->Cookie);
+    }
+
     void ShutdownConnection();
     void DetachSessionActor();
 
@@ -115,6 +119,7 @@ public:
         fFunc(TEvents::TSystem::Subscribe, ForwardToSession);
         fFunc(TEvents::TSystem::Unsubscribe, ForwardToSession);
         cFunc(TEvInterconnect::EvDisconnect, ShutdownConnection);
+        hFunc(TEvInterconnect::TEvRecheckConnectionAdmission, Handle);
     )
 };
 

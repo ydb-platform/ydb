@@ -188,7 +188,11 @@ namespace {
             }
         }
         for (size_t i = 0; i < peers.size(); ++i) {
-            peers[i].Engine->Unregister(connections[i]);
+            peers[i].Engine->Unregister(connections[i], std::make_unique<IEventHandle>(
+                actors[i], TActorId(), new TEvents::TEvWakeup, 0, connections[i]));
+            auto quiesced = peers[i].Client->Receive();
+            UNIT_ASSERT_VALUES_EQUAL(quiesced->Type, TEvents::TEvWakeup::EventType);
+            UNIT_ASSERT_VALUES_EQUAL(quiesced->Cookie, connections[i]);
             peers[i].Engine->Stop();
             peers[i].Engine->Stop();
             UNIT_ASSERT_VALUES_EQUAL(peers[i].Client->StopCalls, 1);

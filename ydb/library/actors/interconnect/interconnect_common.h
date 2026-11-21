@@ -22,6 +22,8 @@ namespace NInterconnect::NRdma {
 }
 
 namespace NActors {
+    constexpr const char* ConnectionAdmissionErrorMessage = "Peer is incompatible with current connection admission";
+
     enum class EEncryptionMode {
         DISABLED, // no encryption is required at all
         OPTIONAL, // encryption is enabled when supported by both peers
@@ -241,6 +243,15 @@ namespace NActors {
         std::unordered_map<ui16, TString> ChannelName;
         std::optional<ui32> OutgoingHandshakeInflightLimit;
         std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
+        std::shared_ptr<std::atomic<ui32>> ConnectionAdmissionLevel;
+
+        ui32 GetConnectionAdmissionLevel() const {
+            return ConnectionAdmissionLevel ? ConnectionAdmissionLevel->load(std::memory_order_acquire) : 0;
+        }
+
+        bool AllowsConnection(ui32 admissionLevel) const {
+            return admissionLevel >= GetConnectionAdmissionLevel();
+        }
 
         std::atomic_uint64_t NumSessionsWithDataInQueue = 0;
         std::atomic_uint64_t CyclesOnLastSwitch = 0;

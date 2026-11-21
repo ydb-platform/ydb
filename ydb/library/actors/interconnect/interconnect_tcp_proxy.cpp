@@ -208,6 +208,18 @@ namespace NActors {
         PrepareNewSessionHandshake();
     }
 
+    bool TInterconnectProxyTCP::TerminateIfAdmissionDenied(const TSessionParams& params) {
+        if (Common->AllowsConnection(params.AdmissionLevel)) {
+            return false;
+        }
+        if (Session) {
+            InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::HandshakeFailPermanent());
+        } else {
+            TransitToErrorState(ConnectionAdmissionErrorMessage);
+        }
+        return true;
+    }
+
     void TInterconnectProxyTCP::StartResumeHandshake(ui64 inputCounter) {
         ICPROXY_PROFILED;
 
@@ -216,6 +228,9 @@ namespace NActors {
 
         // ensure that we have session
         Y_ABORT_UNLESS(Session);
+        if (TerminateIfAdmissionDenied(Session->GetParams())) {
+            return;
+        }
 
         // ensure that we have both virtual ids
         Y_ABORT_UNLESS(SessionVirtualId);
@@ -293,6 +308,7 @@ namespace NActors {
                 {"sender", ev->Sender},
                 {"self", msg->Self},
                 {"peer", msg->Peer});
+        } else if (TerminateIfAdmissionDenied(Session->GetParams())) {
         } else if (SessionVirtualId != ev->Get()->Peer || RemoteSessionVirtualId != ev->Get()->Self) {
             // check session virtual ids for continuation
             YDB_LOG_NOTICE("(actor virtual id mismatch with existing session",
@@ -450,6 +466,9 @@ namespace NActors {
         ConnectionSubscriptions.clear();
 
         Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor);
+        if (TerminateIfAdmissionDenied(msg->Params)) {
+            return;
+        }
         SwitchToState(__LINE__, "StateWork", &TThis::StateWork);
 
         if (Session) {
@@ -1277,6 +1296,43 @@ namespace NActors {
         } else {
             TransitToErrorState("forced disconnect");
         }
+    }
+
+    void TInterconnectProxyTCP::Handle(TEvInterconnect::TEvRecheckConnectionAdmission::TPtr& ev) {
+        const ui32 required = Common->GetConnectionAdmissionLevel();
+        if (Session) {
+            TerminateIfAdmissionDenied(Session->GetParams());
+        }
+        DropHandshakes();
+        if (!Session) {
+            TransitToErrorState(ConnectionAdmissionErrorMessage);
+        }
+        AdmissionWaiters.push_back({ev->Sender, ev->Cookie, required});
+        ProcessAdmissionWaiters();
+    }
+
+    ui64 TInterconnectProxyTCP::TrackQuiescingConnection(ui32 admissionLevel) {
+        const ui64 cookie = ++NextQuiescingConnectionCookie;
+        QuiescingConnections.emplace(cookie, admissionLevel);
+        return cookie;
+    }
+
+    void TInterconnectProxyTCP::Handle(TEvConnectionQuiesced::TPtr& ev) {
+        QuiescingConnections.erase(ev->Cookie);
+        ProcessAdmissionWaiters();
+        if (PassAwayScheduled && TActivationContext::Monotonic() >= PassAwayTimestamp) {
+            HandlePassAwayIfNeeded();
+        }
+    }
+
+    void TInterconnectProxyTCP::ProcessAdmissionWaiters() {
+        std::erase_if(AdmissionWaiters, [this](const TAdmissionWaiter& waiter) {
+            if (std::ranges::any_of(QuiescingConnections, [&](const auto& item) { return item.second < waiter.RequiredLevel; })) {
+                return false;
+            }
+            Send(waiter.Sender, new TEvInterconnect::TEvRecheckConnectionAdmissionResult, 0, waiter.Cookie);
+            return true;
+        });
     }
 
     void TInterconnectProxyTCP::ScheduleCleanupEventQueue() {

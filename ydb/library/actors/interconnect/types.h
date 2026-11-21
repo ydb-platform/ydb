@@ -65,6 +65,7 @@ namespace NActors {
         bool AllowDisablingPayloadChecksums = {};
         bool UseSessionV2 = {};
         bool AllowRdmaSendReceive = {};
+        ui32 AdmissionLevel = 0;
         TString AuthCN;
         NActors::TScopeId PeerScopeId;
     };

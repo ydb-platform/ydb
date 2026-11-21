@@ -327,7 +327,7 @@ In standard SQL, the order of columns specified in the projection (in `SELECT`) 
 By default, the order of columns is ignored in YQL:
 
 * the order of columns in output tables and in query results is undefined;
-* the data schema of the `UNION ALL` result is output by column names, not by positions.
+* the schema of the `UNION ALL` result is determined by column names, not by positions.
 
 When `PRAGMA OrderedColumns;` is enabled, the order of columns is preserved in the query results and is derived from the order of columns in the input tables according to the following rules:
 

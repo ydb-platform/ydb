@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/kqp_execution_stats.h>
 #include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -13,23 +14,16 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
+
+#include <memory>
 
 namespace NKikimr::NKqp {
 
 class TKqpTasksGraph;
-
-// Description of a single PQ topic source that needs to be resolved.
-struct TPqTopicResolverSource {
-    TString Cluster;
-    TString Endpoint;
-    TString Database;   // real YDB database path for the describe RPC
-    TString TopicPath;
-    TString TokenName;   // key in SecureParams to look up the auth token
-    bool UseSsl = false;
-    TString DatabaseForClusterConfig;   // raw "database" field from the proto (may be cluster alias)
-};
+class TKqpPhyTxHolder;
 
 // Contract between the data executer and the streaming query runtime:
 // graph patching on restart, checkpointing and nodes monitoring.
@@ -62,9 +56,11 @@ public:
     // for TEvStreamingQueryPrepared before Execute().
     virtual bool NeedsPrepare() const = 0;
 
-    // Starts asynchronous preparation for PQ sources of the current execution.
+    // Starts asynchronous preparation using only transactions of the current execution.
+    // PQ source settings are interpreted by the implementation.
     // secureParams are resolved tokens of external sources.
-    virtual void StartPrepare(TVector<TPqTopicResolverSource> sources, THashMap<TString, TString> secureParams) = 0;
+    virtual void StartPrepare(TVector<std::shared_ptr<const TKqpPhyTxHolder>> transactions,
+        THashMap<TString, TString> secureParams) = 0;
 
     // Returns the saved physical graph the executer should restore tasks from.
     // May differ from the graph passed to the factory: it is never patched in place.
@@ -78,6 +74,12 @@ public:
     // Called once all compute actors are started. checkpointsEnabled is false
     // if the graph turned out to have no checkpointed ingress.
     virtual void OnComputeActorsStarted(TVector<TTaskInfo> tasks, bool checkpointsEnabled) = 0;
+
+    // Checks counter eligibility and throttling; initializes the first update deadline.
+    virtual bool NeedsCountersUpdate(TInstant now) = 0;
+
+    // Called only when NeedsCountersUpdate(now) returns true.
+    virtual void UpdateCounters(const TAggExecStat& stats, TInstant now) = 0;
 
     // Events sent to the executer by the actors started above.
     virtual bool IsOwnEvent(const NActors::IEventHandle& ev) const = 0;

@@ -113,7 +113,6 @@
 /ydb/core/kqp/common/events/script_executions.h @ydb-platform/fq
 /ydb/core/kqp/common/kqp_streaming_query_controller.h @ydb-platform/fq
 /ydb/core/kqp/common/ut/dynamic_function_registry_ut.cpp @ydb-platform/fq
-/ydb/core/kqp/executer_actor/kqp_streaming_helper.* @ydb-platform/fq
 /ydb/core/kqp/federated_query/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/external_data_source/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq

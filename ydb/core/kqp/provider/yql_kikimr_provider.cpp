@@ -715,6 +715,15 @@ bool IsYqlNullExprNode(const NNodes::TExprBase& literal) {
     return literal.Maybe<TCoNull>().IsValid() || literal.Maybe<TCoNothing>().IsValid();
 }
 
+bool IsLiteralDefaultValue(NNodes::TExprBase maybeLiteral) {
+    while (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+    }
+    return maybeLiteral.Maybe<TCoDataCtor>().IsValid()
+        || maybeLiteral.Maybe<TCoPgConst>().IsValid()
+        || IsPgNullExprNode(maybeLiteral);
+}
+
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)
 {
     if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {

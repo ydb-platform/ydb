@@ -559,7 +559,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 
     auto type = columnDesc.GetType();
     std::optional<Ydb::TypedValue> defaultFromLiteral;
-    const NKikimrSchemeOp::TDefaultExpressionColumnDescription* generated = nullptr;
+    const NKikimrSchemeOp::TDefaultExpressionColumnDescription* defaultExpression = nullptr;
     switch (columnDesc.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             defaultFromLiteral = columnDesc.GetDefaultFromLiteral();
@@ -577,7 +577,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
             break;
         }
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromExpression: {
-            generated = &columnDesc.GetDefaultFromExpression();
+            defaultExpression = &columnDesc.GetDefaultFromExpression();
             break;
         }
         default: break;
@@ -596,9 +596,13 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
         Stream << " DEFAULT ";
         Format(defaultFromLiteral.value());
     }
-    if (generated) {
-        Stream << " GENERATED ALWAYS AS (" << generated->GetExprText() << ")";
-        Stream << (generated->GetStored() ? " STORED" : " VIRTUAL");
+    if (defaultExpression) {
+        if (defaultExpression->GetWritable()) {
+            Stream << " DEFAULT " << defaultExpression->GetExprText();
+        } else {
+            Stream << " GENERATED ALWAYS AS (" << defaultExpression->GetExprText() << ") "
+                   << (defaultExpression->GetStored() ? "STORED" : "VIRTUAL");
+        }
     }
 }
 

@@ -2761,6 +2761,51 @@ partitioning_settings {
             Ydb::StatusIds::CANCELLED);
     }
 
+    Y_UNIT_TEST(ShouldRejectExportOfTableWithDefaultExpression) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns {
+              Name: "ts"
+              Type: "Timestamp"
+              DefaultFromExpression {
+                ExprText: "CurrentUtcTimestamp()"
+                Stored: true Writable: true
+              }
+            }
+            KeyColumnNames: ["key"]
+        )pb");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestExport(Runtime(), ++txId, "/MyRoot",
+            Sprintf(R"pb(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )pb",
+                S3Port()));
+        const ui64 exportId = txId;
+        Env().TestWaitNotification(Runtime(), exportId);
+        const auto response = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = response.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(),
+            "Cannot backup table with DEFAULT expression column 'ts'");
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
         const TTablesWithAttrs tables{
             {

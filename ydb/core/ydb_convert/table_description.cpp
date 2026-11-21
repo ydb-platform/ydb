@@ -656,6 +656,7 @@ static void FillColumnDefault(const NKikimrKqp::TKqpColumnMetadataProto& in,
             auto& generated = *out.MutableDefaultFromExpression();
             generated.SetExprText(expression.GetExprText());
             generated.SetStored(expression.GetStored());
+            generated.SetWritable(expression.GetWritable());
             generated.MutableDependencyColumnNames()->CopyFrom(expression.GetDependencies());
             break;
         }

@@ -491,4 +491,38 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             { { NKikimrScheme::StatusPreconditionFailed, "Cannot backup table with generated column 'sum'" } });
     }
 
+    Y_UNIT_TEST(ShouldRejectBackupOfTableWithDefaultExpression) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns {
+                Name: "ts"
+                Type: "Timestamp"
+                DefaultFromExpression {
+                    ExprText: "CurrentUtcTimestamp()"
+                    Stored: true Writable: true
+                }
+            }
+            KeyColumnNames: ["key"]
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackup(runtime, ++txId, "/MyRoot", R"pb(
+            TableName: "Table"
+            S3Settings {
+                Endpoint: "localhost:1"
+                Scheme: HTTP
+            }
+        )pb",
+            { { NKikimrScheme::StatusPreconditionFailed,
+                "Cannot backup table with DEFAULT expression column 'ts'" } });
+    }
+
 } // TBackupTests

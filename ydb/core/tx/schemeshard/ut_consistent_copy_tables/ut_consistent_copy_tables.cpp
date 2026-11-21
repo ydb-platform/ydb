@@ -1039,12 +1039,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         });
     }
 
-    Y_UNIT_TEST(ConsistentCopyTableWithGeneratedColumns) {
+    Y_UNIT_TEST(ConsistentCopyTableWithDefaultFromExpressionColumns) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
         SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
 
@@ -1053,6 +1054,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "a"   Type: "Int32"  }
             Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+                Name: "default_value"
+                Type: "Uint64"
+                DefaultFromExpression {
+                    ExprText: "42u"
+                    Stored: true Writable: true
+                }
+            }
             Columns {
                 Name: "sum"
                 Type: "Int32"
@@ -1095,6 +1104,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
 
         auto describe = DescribePath(runtime, "/MyRoot/TableCopy");
 
+        const auto* defaultValue = findColumn(describe, "default_value");
+        UNIT_ASSERT_C(defaultValue && defaultValue->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().GetExprText(), "42u");
+        UNIT_ASSERT(defaultValue->GetDefaultFromExpression().GetStored());
+        UNIT_ASSERT(defaultValue->GetDefaultFromExpression().GetWritable());
+        UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().DependencyColumnNamesSize(), 0u);
+
         const auto* sum = findColumn(describe, "sum");
         UNIT_ASSERT_C(sum && sum->HasDefaultFromExpression(), describe.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetExprText(), "a + b");
@@ -1104,7 +1120,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         const auto* diff = findColumn(describe, "diff");
         UNIT_ASSERT_C(diff && diff->HasDefaultFromExpression(), describe.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetExprText(), "a - b");
-        UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetStored(), false);
+        UNIT_ASSERT(!diff->GetDefaultFromExpression().GetStored());
     }
 
     Y_UNIT_TEST(CannotCopyBackupTable) {

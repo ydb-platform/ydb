@@ -15,6 +15,7 @@ SRCS(
     kqp_client_data_writes_ut.cpp
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
+    kqp_default_expr_ut.cpp
     kqp_generated_columns_ut.cpp
     kqp_scheme_ut.cpp
     kqp_secrets_ut.cpp
@@ -31,6 +32,7 @@ PEERDIR(
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/library/yql/dq/transform
     ydb/core/tx/replication/service
     ydb/public/lib/ydb_cli/dump/util
     ydb/library/yql/udfs/common/knn

@@ -816,6 +816,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     column.DefaultExpression->Dependencies.assign(
                         generated.GetDependencyColumnNames().begin(),
                         generated.GetDependencyColumnNames().end());
+
+                    column.DefaultExpression->Writable = generated.GetWritable();
                 }
 
                 if (columnDesc.GetNotNull()) {

@@ -42,6 +42,7 @@ public:
             auto boxStoragePool = db.Table<Schema::BoxStoragePool>().Range().Select();
             auto boxStoragePoolUser = db.Table<Schema::BoxStoragePoolUser>().Range().Select();
             auto boxStoragePoolPDiskFilter = db.Table<Schema::BoxStoragePoolPDiskFilter>().Range().Select();
+            auto boxStoragePoolPDiskFilterV2 = db.Table<Schema::BoxStoragePoolPDiskFilterV2>().Range().Select();
             auto groupStoragePool = db.Table<Schema::GroupStoragePool>().Range().Select();
             auto groupLatencies = db.Table<Schema::GroupLatencies>().Select();
             auto scrubState = db.Table<Schema::ScrubState>().Select();
@@ -64,6 +65,7 @@ public:
                     || !boxStoragePool.IsReady()
                     || !boxStoragePoolUser.IsReady()
                     || !boxStoragePoolPDiskFilter.IsReady()
+                    || !boxStoragePoolPDiskFilterV2.IsReady()
                     || !groupStoragePool.IsReady()
                     || !groupLatencies.IsReady()
                     || !scrubState.IsReady()
@@ -101,6 +103,11 @@ public:
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
                 Self->DatabaseSpace.SetThresholds(state.GetValue<T::DatabaseSpaceBlockColor>(),
                     state.GetValue<T::DatabaseSpaceUnblockColor>());
+                Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
+                Self->BridgeSyncMaxSyncers = state.GetValue<T::BridgeSyncMaxSyncers>();
+                if (state.HaveValue<T::AppliedPileOverrides>()) {
+                    Self->AppliedPileOverrides = state.GetValue<T::AppliedPileOverrides>();
+                }
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
@@ -288,7 +295,10 @@ public:
                 || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)) {
             return false;
         }
-        for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {
+        for (auto& [storagePoolId, storagePool] : Self->StoragePools) {
+            if (!storagePool.LoadPDiskFilters(db, storagePoolId)) {
+                return false;
+            }
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 
@@ -647,6 +657,9 @@ public:
                     .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
                     .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
                     .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
+                    .EstimatedBytesToCopy = bridgeSyncState.HaveValue<Table::EstimatedBytesToCopy>()
+                        ? std::make_optional(bridgeSyncState.GetValue<Table::EstimatedBytesToCopy>())
+                        : std::nullopt,
                 };
                 if (!bridgeSyncState.Next()) {
                     return false;
@@ -654,20 +667,19 @@ public:
             }
         }
 
-        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+        std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
         for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
             if (proxyGroup->BridgeGroupInfo) {
-                const auto& state = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                for (size_t i = 0; i < state.PileSize(); ++i) {
-                    const auto& pile = state.GetPile(i);
+                NBridge::ForEachGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId bridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     auto *group = Self->FindGroup(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     Y_ABORT_UNLESS(group);
-                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromPileIndex(i));
+                    Y_ABORT_UNLESS(group->BridgePileId == bridgePileId);
                     Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
                     group->BridgeProxyGroupId = proxyGroupId;
-                }
+                });
             }
         }
 
@@ -676,10 +688,11 @@ public:
             group->CalculateGroupStatus();
 
             group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
-                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                const auto [it, inserted] = cache.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
-                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
-                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    if (const auto jt = Self->StoragePools.find(group->StoragePoolId); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                            Self->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                     } else {
                         Y_DEBUG_ABORT();
                     }
@@ -735,9 +748,12 @@ public:
 
                 groupState = &jt->second->BridgeGroupInfo->GetBridgeGroupState();
             } else if (const auto it = Self->StaticGroups.find(targetGroupId); it != Self->StaticGroups.end()) {
-                if (!it->second.Info || !it->second.Info->Group || !it->second.Info->Group->HasBridgeProxyGroupId() ||
-                        !it->second.Info->Group->HasBridgePileId()) {
+                if (!it->second.Info || !it->second.Info->Group) {
                     Y_DEBUG_ABORT();
+                    return {};
+                } else if (!it->second.Info->Group->HasBridgeProxyGroupId() || !it->second.Info->Group->HasBridgePileId()) {
+                    // the inline pile has been removed along with its pile, the group is the bridge proxy one only now;
+                    // the entry could have been left if BSC has restarted before forgetting it
                     return {};
                 }
                 bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
@@ -756,10 +772,10 @@ public:
                 return {}; // group deleted
             }
 
-            if (groupState->PileSize() <= bridgePileId.GetPileIndex()) {
-                return {};
+            if (const auto *pile = NBridge::GetGroupPile(*groupState, bridgePileId)) {
+                return pile->GetStage();
             }
-            return groupState->GetPile(bridgePileId.GetPileIndex()).GetStage();
+            return {};
         };
 
         std::vector<TGroupId> groupsToErase;
@@ -776,15 +792,16 @@ public:
         // start syncers for unsynced groups
         for (const auto& [groupId, group] : Self->GroupMap) {
             if (group->BridgeGroupInfo) {
-                for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
                         const auto targetGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
                             targetGroupId);
                         Y_ABORT_UNLESS(inserted);
-                        Self->SyncersRequiringAction.PushBack(&it->second);
+                        Self->EnqueueSyncer(it->second);
                     }
-                }
+                });
             }
         }
 

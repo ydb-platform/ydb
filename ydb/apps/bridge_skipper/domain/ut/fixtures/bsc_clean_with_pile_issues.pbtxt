@@ -1,0 +1,6 @@
+self_check_result: EMERGENCY
+issue_log { id: "state-storage" status: RED type: "PILE_STATE_STORAGE" message: "There is not enough functional rings" location { compute { state_storage { pile { name: "b" } } } } reason: "ring1" reason: "ring2" }
+issue_log { id: "ring1" status: RED type: "STATE_STORAGE_RING" message: "Ring has unavailable nodes" location { compute { state_storage { ring: 1 pile { name: "b" } } } } reason: "node1" }
+issue_log { id: "ring2" status: RED type: "STATE_STORAGE_RING" message: "Ring has unavailable nodes" location { compute { state_storage { ring: 2 pile { name: "b" } } } } reason: "node2" }
+issue_log { id: "node1" status: RED type: "STATE_STORAGE_NODE" message: "Node is not available" location { compute { state_storage { ring: 1 node { id: 4 } pile { name: "b" } } } } }
+issue_log { id: "node2" status: RED type: "STATE_STORAGE_NODE" message: "Node is not available" location { compute { state_storage { ring: 2 node { id: 5 } pile { name: "b" } } } } }

@@ -12,6 +12,8 @@ TEST_SRCS(
     test_guard_invariants.py
     test_orchestrator_api.py
     test_metrics.py
+    test_local_kikimr.py
+    test_bridge_schedule_profile.py
 )
 
 PEERDIR(

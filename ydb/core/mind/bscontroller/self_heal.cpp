@@ -1,6 +1,7 @@
 #include "self_heal.h"
 #include "impl.h"
 #include "config.h"
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
 #include "layout_helpers.h"
@@ -462,11 +463,13 @@ namespace NKikimr::NBsController {
                         Y_DEBUG_ABORT_UNLESS(ActiveReassignerActorId);
                         if (ActiveReassignerActorId) {
                             Send(*ActiveReassignerActorId, new TEvents::TEvPoison);
+                            ActiveReassignerActorId.reset();
                         }
                     }
 
                     // remove the group
                     Groups.erase(it);
+                    UnreassignableGroups.erase(groupId);
 
                     groupsDeleted = true;
                 }
@@ -684,9 +687,10 @@ namespace NKikimr::NBsController {
         }
 
         void Handle(TEvReassignerDone::TPtr& ev) {
-            Y_ABORT_UNLESS(ActiveReassignerActorId);
-            TActorId reassigner = *std::exchange(ActiveReassignerActorId, std::nullopt);
-            Y_ABORT_UNLESS(reassigner == ev->Sender);
+            if (!ActiveReassignerActorId || *ActiveReassignerActorId != ev->Sender) {
+                return;
+            }
+            ActiveReassignerActorId.reset();
 
             if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end()) {
                 auto& group = it->second;
@@ -1114,6 +1118,9 @@ namespace NKikimr::NBsController {
             }
         }
         FillInSelfHealGroups(*ev, nullptr);
+        // the snapshot is as fresh as the last config transaction; with a smaller number self-heal would take the groups
+        // it has just changed for not updated yet, and would not touch them until their next change
+        ev->ConfigTxSeqNo = NextConfigTxSeqNo - 1;
         ev->GroupLayoutSanitizerEnabled = GroupLayoutSanitizerEnabled;
         ev->AllowMultipleRealmsOccupation = AllowMultipleRealmsOccupation;
         ev->DonorMode = DonorMode;
@@ -1123,7 +1130,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state) {
-        THashMap<TBoxStoragePoolId, std::shared_ptr<TGroupGeometryInfo>> geomCache;
+        std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, std::shared_ptr<TGroupGeometryInfo>> geomCache;
 
         for (auto& [groupId, group] : msg.GroupsToUpdate) {
             if (!group) {
@@ -1136,7 +1143,8 @@ namespace NKikimr::NBsController {
             group->Generation = groupInfo->Generation;
             group->Type = TBlobStorageGroupType(groupInfo->ErasureSpecies);
 
-            if (auto it = geomCache.find(groupInfo->StoragePoolId); it != geomCache.end()) {
+            const auto geometryKey = std::make_pair(groupInfo->StoragePoolId, groupInfo->BridgePileId);
+            if (auto it = geomCache.find(geometryKey); it != geomCache.end()) {
                 group->Geometry = it->second;
             } else {
                 const TMap<TBoxStoragePoolId, TStoragePoolInfo>& storagePools = state
@@ -1144,8 +1152,11 @@ namespace NKikimr::NBsController {
                     : StoragePools;
                 const auto spIt = storagePools.find(groupInfo->StoragePoolId);
                 Y_ABORT_UNLESS(spIt != storagePools.end());
-                group->Geometry = std::make_unique<TGroupGeometryInfo>(group->Type, spIt->second.GetGroupGeometry());
-                geomCache.emplace(groupInfo->StoragePoolId, group->Geometry);
+                group->Geometry = std::make_unique<TGroupGeometryInfo>(
+                    TGroupGeometryInfo::FromStoragePool(group->Type, state
+                        ? state->GetStoragePoolForPile(groupInfo->StoragePoolId, groupInfo->BridgePileId)
+                        : GetStoragePoolForPile(groupInfo->StoragePoolId, groupInfo->BridgePileId)));
+                geomCache.emplace(geometryKey, group->Geometry);
             }
 
             for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
@@ -1170,16 +1181,26 @@ namespace NKikimr::NBsController {
         }
 
         auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+        auto prevStaticGroups = std::exchange(StaticGroupsInSelfHeal, {});
 
         if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
-            const auto& smConfig = StorageConfig->GetSelfManagementConfig();
             for (const auto& group : ss.GetGroups()) {
                 if (!group.RingsSize()) {
                     continue; // bridged group probably
                 }
-                auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
+                const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                StaticGroupsInSelfHeal.insert(groupId);
+                prevStaticGroups.erase(groupId);
+                auto& content = sh->GroupsToUpdate[groupId];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
+                auto smConfig = StorageConfig->GetSelfManagementConfig();
+                const auto pileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                if (const auto *pile = BridgeInfo ? BridgeInfo->FindPile(pileId) : nullptr) {
+                    if (const auto *rule = FindStoragePoolPileOverride(bsConfig, pile->Name, std::nullopt)) {
+                        ApplyStoragePoolPileOverride(smConfig, *rule);
+                    }
+                }
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
                     .Type = gtype,
@@ -1214,6 +1235,11 @@ namespace NKikimr::NBsController {
                     };
                 }
             }
+        }
+
+        // static groups gone (along with the pile removed) or left without VDisks (inline pile removed) are deleted
+        for (const TGroupId groupId : prevStaticGroups) {
+            sh->GroupsToUpdate[groupId].reset();
         }
 
         Send(SelfHealId, sh.release());

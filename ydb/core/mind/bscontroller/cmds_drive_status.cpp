@@ -25,6 +25,20 @@ namespace NKikimr::NBsController {
             }
         }
 
+        if (cmd.GetSkipIfPileCutOff() && BridgeInfo) {
+            if (const auto *pile = BridgeInfo->GetPileForNode(pdiskId.NodeId); pile &&
+                    !NBridge::PileStateTraits(pile->State).AllowsConnection) {
+                YDB_LOG_INFO("UpdateDriveStatus skipped for the drive of the pile cut off from the cluster",
+                    {"marker", "BSCA11"},
+                    {"uniqueId", UniqueId},
+                    {"nodeId", pdiskId.NodeId},
+                    {"pdiskId", pdiskId.PDiskId},
+                    {"pileState", NKikimrBridge::TClusterState::EPileState_Name(pile->State)},
+                    {"status", cmd.GetStatus()});
+                return;
+            }
+        }
+
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
         bool fitGroups = false;
         const bool wasGoodExpectedStatus = pdisk->HasGoodExpectedStatus();

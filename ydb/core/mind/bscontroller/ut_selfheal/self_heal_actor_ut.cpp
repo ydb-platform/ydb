@@ -85,9 +85,12 @@ TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlob
     return res;
 }
 
-void ValidateCmd(const TActorId& parentId, TTestActorSystem& runtime, ui32 groupId, ui32 groupGeneration,
+TActorId ValidateCmd(const TActorId& parentId, TTestActorSystem& runtime, ui32 groupId, ui32 groupGeneration,
         ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool isSelfHealReasonDecommit = false) {
-    auto res = runtime.WaitForEdgeActorEvent({parentId});
+    const TActorId timeoutId = runtime.AllocateEdgeActor(1);
+    runtime.Schedule(TDuration::Minutes(1), new IEventHandle(timeoutId, {}, new TEvents::TEvWakeup), nullptr, 1);
+    auto res = runtime.WaitForEdgeActorEvent({parentId, timeoutId});
+    runtime.DestroyActor(timeoutId);
     UNIT_ASSERT_EQUAL(res->GetTypeRewrite(), TEvBlobStorage::TEvControllerConfigRequest::EventType);
     auto *m = res->Get<TEvBlobStorage::TEvControllerConfigRequest>();
     UNIT_ASSERT(m->SelfHeal);
@@ -103,6 +106,7 @@ void ValidateCmd(const TActorId& parentId, TTestActorSystem& runtime, ui32 group
     UNIT_ASSERT_VALUES_EQUAL(reassign.GetFailRealmIdx(), failRealmIdx);
     UNIT_ASSERT_VALUES_EQUAL(reassign.GetFailDomainIdx(), failDomainIdx);
     UNIT_ASSERT_VALUES_EQUAL(reassign.GetVDiskIdx(), vdiskIdx);
+    return res->Sender;
 }
 
 void ValidateNoCmd(const TActorId& parentId, TTestActorSystem& runtime) {
@@ -112,7 +116,91 @@ void ValidateNoCmd(const TActorId& parentId, TTestActorSystem& runtime) {
     UNIT_ASSERT_EQUAL(res->GetTypeRewrite(), TEvents::TSystem::Wakeup);
 }
 
+void TestGroupDeletion(bool queueNextGroup, bool completionInFlight) {
+    RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+        const auto first = CreateGroup();
+        const auto second = CreateGroup(TBlobStorageGroupType::Erasure4Plus2Block, TGroupId::FromValue(0x82000001));
+        const auto third = CreateGroup(TBlobStorageGroupType::Erasure4Plus2Block, TGroupId::FromValue(0x82000002));
+        RegisterDiskResponders(runtime, first);
+
+        auto updateGroup = [&](const TIntrusivePtr<TBlobStorageGroupInfo>& info, bool faulty) {
+            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+            ev->GroupsToUpdate[info->GroupID] = Convert(info, faulty ? std::set<ui32>{0} : std::set<ui32>{}, {});
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+        };
+
+        updateGroup(first, true);
+        const TActorId firstReassigner = ValidateCmd(parentId, runtime, 0x82000000, 1, 0, 0, 0);
+
+        std::unique_ptr<IEventHandle> heldCompletion;
+        if (completionInFlight) {
+            runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->Sender == firstReassigner && ev->Recipient == selfHealId) {
+                    heldCompletion = std::move(ev);
+                    return false;
+                }
+                return true;
+            };
+            runtime.Send(new IEventHandle(firstReassigner, parentId, new TEvBlobStorage::TEvControllerConfigResponse), 1);
+            const TInstant deadline = runtime.GetClock() + TDuration::Minutes(1);
+            runtime.Sim([&] { return !heldCompletion && runtime.GetClock() < deadline; });
+            UNIT_ASSERT(heldCompletion);
+            runtime.FilterFunction = {};
+        }
+
+        if (queueNextGroup) {
+            updateGroup(second, true);
+            ValidateNoCmd(parentId, runtime);
+        }
+
+        auto deletion = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+        deletion->GroupsToUpdate[first->GroupID] = std::nullopt;
+        runtime.Send(new IEventHandle(selfHealId, parentId, deletion.release()), 1);
+
+        if (!queueNextGroup) {
+            if (heldCompletion) {
+                runtime.Send(std::move(heldCompletion), 1);
+            }
+            ValidateNoCmd(parentId, runtime);
+            updateGroup(second, true);
+        }
+
+        const TActorId secondReassigner = ValidateCmd(parentId, runtime, 0x82000001, 1, 0, 0, 0);
+        UNIT_ASSERT_UNEQUAL(firstReassigner, secondReassigner);
+        updateGroup(third, true);
+        if (heldCompletion) {
+            runtime.Send(std::move(heldCompletion), 1);
+        }
+        ValidateNoCmd(parentId, runtime);
+
+        updateGroup(second, false);
+        auto response = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+        auto *result = response->Record.MutableResponse();
+        result->SetSuccess(true);
+        result->SetConfigTxSeqNo(1);
+        result->AddStatus();
+        runtime.Send(new IEventHandle(secondReassigner, parentId, response.release()), 1);
+        ValidateCmd(parentId, runtime, 0x82000002, 1, 0, 0, 0);
+    });
+}
+
 Y_UNIT_TEST_SUITE(SelfHealActorTest) {
+
+    Y_UNIT_TEST(GroupDeletionStartsQueuedReassign) {
+        TestGroupDeletion(true, false);
+    }
+
+    Y_UNIT_TEST(GroupDeletionAllowsNewReassign) {
+        TestGroupDeletion(false, false);
+    }
+
+    Y_UNIT_TEST(GroupDeletionIgnoresLateCompletionWhileIdle) {
+        TestGroupDeletion(false, true);
+    }
+
+    Y_UNIT_TEST(GroupDeletionIgnoresLateCompletionWhileReassigning) {
+        TestGroupDeletion(true, true);
+    }
 
     Y_UNIT_TEST(SingleErrorDisk) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {

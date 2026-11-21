@@ -848,6 +848,7 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/yaml-cpp
+    ydb/library/actors/http
     library/cpp/archive
     library/cpp/json
     library/cpp/mime/types

@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
 
 #include <util/system/info.h>
 #include <util/stream/null.h>
@@ -456,10 +457,17 @@ void DoPhantomWithOfflineDataCenterTest(EPhantomScenario scenario) {
 
     bool dataCenterOffline = true;
     ui32 extraOfflineNodeId = 0;
+    ui32 replicationEventToHold = 0;
+    std::unique_ptr<IEventHandle> heldReplicationEvent;
     std::map<std::tuple<ui32, ui32, ui32>, std::tuple<NKikimrBlobStorage::EVDiskStatus, bool>> statuses;
     // nodeId -> (Replicated, DetailedReplicationStatus) as reported by formatted VDisks to Whiteboard
     std::map<ui32, std::tuple<bool, NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E>> whiteboard;
     filterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (replicationEventToHold && ev->GetTypeRewrite() == replicationEventToHold && formattedNodes.contains(nodeId)) {
+            UNIT_ASSERT(!heldReplicationEvent);
+            heldReplicationEvent = std::move(ev);
+            return false;
+        }
         if (ev->GetTypeRewrite() == NNodeWhiteboard::TEvWhiteboard::EvVDiskStateUpdate) {
             const auto& record = ev->Get<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>()->Record;
             if (record.GetVDiskId().GetGroupID() == groupId && formattedNodes.contains(ev->Recipient.NodeId())) {
@@ -532,7 +540,7 @@ void DoPhantomWithOfflineDataCenterTest(EPhantomScenario scenario) {
                 TTestActorSystem::GetPipeConfigWithRetries());
         };
 
-        auto checkShownAsReady = [&](bool expected) {
+        auto checkShownAsReady = [&](bool expected, bool expectedOnlyPhantoms = true) {
             const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
             env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetVSlotsRequest, 0,
                 TTestActorSystem::GetPipeConfigWithRetries());
@@ -542,7 +550,7 @@ void DoPhantomWithOfflineDataCenterTest(EPhantomScenario scenario) {
                 const auto& key = entry.GetKey();
                 if (formattedVSlots.contains({key.GetNodeId(), key.GetPDiskId(), key.GetVSlotId()})) {
                     UNIT_ASSERT_VALUES_EQUAL(entry.GetInfo().GetStatusV2(), expected ? "READY" : "REPLICATING");
-                    UNIT_ASSERT(entry.GetInfo().GetPhantomOnly());
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetInfo().GetPhantomOnly(), expectedOnlyPhantoms);
                     ++numFound;
                 }
             }
@@ -553,9 +561,11 @@ void DoPhantomWithOfflineDataCenterTest(EPhantomScenario scenario) {
                 UNIT_ASSERT(it != whiteboard.end());
                 const auto& [replicated, replicationStatus] = it->second;
                 UNIT_ASSERT_VALUES_EQUAL(replicated, expected);
-                UNIT_ASSERT_VALUES_EQUAL(NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E_Name(replicationStatus),
-                    NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E_Name(
-                        NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly));
+                if (expectedOnlyPhantoms) {
+                    UNIT_ASSERT_VALUES_EQUAL(NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E_Name(replicationStatus),
+                        NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E_Name(
+                            NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly));
+                }
             }
         };
 
@@ -565,15 +575,31 @@ void DoPhantomWithOfflineDataCenterTest(EPhantomScenario scenario) {
         env.Sim(TDuration::Minutes(1));
         checkShownAsReady(true);
         checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, true);
-        setReportAsReady(false);
-        env.Sim(TDuration::Minutes(1));
-        checkShownAsReady(false);
+
+        // A retry alone does not invalidate the last verdict. Hold its plan before it can recheck the blob.
+        replicationEventToHold = TEvBlobStorage::EvReplPlanFinished;
+        env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT_C(heldReplicationEvent, "The next replication plan must start");
+        checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, true);
+        checkShownAsReady(true);
 
         // one more unavailable disk in the third data center may contain the blob, so it doesn't look like phantom
-        // anymore and the flag has to be reset by the next replication pass
+        // anymore. Keep the next job's completion pending after it has found non-phantom work: the new evidence
+        // must clear the old verdict without waiting for the quantum or the whole pass to finish.
         const ui32 formattedDataCenter = dataCenterOf(*formattedNodes.begin());
         const ui32 thirdDataCenter = 3 - offlineDataCenter - formattedDataCenter;
         extraOfflineNodeId = thirdDataCenter * 3 + 1;
+        replicationEventToHold = TEvBlobStorage::EvReplFinished;
+        const ui32 replNodeId = heldReplicationEvent->Recipient.NodeId();
+        env.Runtime->Send(heldReplicationEvent.release(), replNodeId);
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_C(heldReplicationEvent, "The next replication job must finish");
+        UNIT_ASSERT(heldReplicationEvent->Get<TEvReplFinished>()->Info->UnrecoveredNonphantomBlobs);
+        checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, false);
+        checkShownAsReady(false, false);
+
+        replicationEventToHold = 0;
+        env.Runtime->Send(heldReplicationEvent.release(), replNodeId);
         env.Sim(TDuration::Minutes(360));
         checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, false);
         UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus_Name(read()),
@@ -583,6 +609,10 @@ void DoPhantomWithOfflineDataCenterTest(EPhantomScenario scenario) {
         extraOfflineNodeId = 0;
         env.Sim(TDuration::Minutes(360));
         checkStatuses(NKikimrBlobStorage::EVDiskStatus::REPLICATING, true);
+        checkShownAsReady(true);
+        setReportAsReady(false);
+        env.Sim(TDuration::Minutes(1));
+        checkShownAsReady(false);
     }
 
     // when the data center is back, phantom is confirmed and data is restored otherwise

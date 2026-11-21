@@ -95,6 +95,10 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        if (!donorMode && EjectedGroups.contains(vdisk.GetGroupId())) {
+            return; // its group is gone, only the destruction of this slot is yet to come
+        }
+
         if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
             return;
         }
@@ -539,8 +543,28 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
+    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic) {
+        THashMap<TPDiskKey, ui64> pdiskGuids;
+        if (!isStatic) {
+            for (const auto& pdisk : StaticServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+            for (const auto& pdisk : DynamicServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+        }
         for (const auto& vdisk : serviceSet.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            if (!isStatic && loc.GetNodeID() == LocalNodeId && !vdisk.GetDoDestroy() && !vdisk.GetDoWipe()
+                    && vdisk.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
+                const auto it = pdiskGuids.find(TPDiskKey(loc.GetNodeID(), loc.GetPDiskID()));
+                if (it == pdiskGuids.end() || it->second != loc.GetPDiskGuid()) {
+                    YDB_LOG_NOTICE("Ignoring VDisk with unknown or superseded PDisk identity",
+                        {"marker", "NW125"}, {"vdisk", vdisk});
+                    ControllerServicesDropped = true;
+                    continue;
+                }
+            }
             ApplyLocalVDiskInfo(vdisk);
         }
     }
@@ -604,7 +628,9 @@ namespace NKikimr::NStorage {
         }
 
         const TPDiskKey pdiskKey(vslotId.NodeId, vslotId.PDiskId);
-        const bool pdiskMissing = !LocalPDisks.contains(pdiskKey);
+        const auto pdiskIt = LocalPDisks.find(pdiskKey);
+        const bool pdiskMissing = pdiskIt == LocalPDisks.end()
+            || pdiskIt->second.Record.GetPDiskGuid() != loc.GetPDiskGuid();
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
             if (record.UnderlyingPDiskDestroyed || pdiskMissing) {
                 PoisonLocalVDisk(record);
@@ -726,8 +752,9 @@ namespace NKikimr::NStorage {
         if (!vdisk.RuntimeData) {
             return;
         }
-        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
-            return; // group is decomitted, VDisks will be deleted soon
+        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE || !newInfo->GetTotalVDisksNum()) {
+            // group has no VDisks anymore (it is decommitted, or it has lost its inline pile), they will be deleted soon
+            return;
         }
 
         TIntrusivePtr<TBlobStorageGroupInfo>& currentInfo = vdisk.RuntimeData->GroupInfo;

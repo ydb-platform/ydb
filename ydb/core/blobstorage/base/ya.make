@@ -16,8 +16,11 @@ SRCS(
     blobstorage_checksum.h
     blobstorage_events.cpp
     blobstorage_events.h
+    bridge_events.h
     blobstorage_host_record.h
     infer_pdisk_slot_count_settings.h
+    pdisk_filter.h
+    storage_pool_pile_override.cpp
     blobstorage_oos_defs.h
     blobstorage_vdiskid.cpp
     blobstorage_vdiskid.h

@@ -21,6 +21,21 @@ using namespace NKikimrServices;
 
 namespace NKikimr {
 
+    namespace NRepl {
+        TDuration EstimateReplicationTimeOfArrival(ui64 workAtBegin, ui64 workAtEnd,
+                TInstant timeAtBegin, TInstant timeAtEnd) {
+            if (workAtBegin <= workAtEnd || timeAtEnd <= timeAtBegin) {
+                return {};
+            }
+
+            const double workPerSecond = (workAtBegin - workAtEnd) / (timeAtEnd - timeAtBegin).SecondsFloat();
+            const TDuration estimate = TDuration::Seconds(workAtEnd / workPerSecond);
+
+            // Whiteboard publishes the estimate in a uint32 seconds field.
+            return estimate.Seconds() <= Max<ui32>() ? estimate : TDuration::Zero();
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Internal Repl messages
     ////////////////////////////////////////////////////////////////////////////
@@ -385,6 +400,15 @@ namespace NKikimr {
                 donor.PDiskId, donor.VSlotId, donor.VDiskId));
         }
 
+        void HandleNonPhantomsRemain(STFUNC_SIG) {
+            Y_VERIFY_S(ev->Sender == ReplJobActorId &&
+                ev->Cookie == static_cast<ui64>(EReplDone::NonPhantomsRemain), ReplCtx->VCtx->VDiskLogPrefix);
+            if (!std::exchange(UnrecoveredNonphantomBlobs, true)) {
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
+                    SelfId(), nullptr, static_cast<ui64>(EReplDone::NonPhantomsRemain)));
+            }
+        }
+
         void Handle(TEvReplFinished::TPtr &ev) {
             Y_VERIFY_S(ev->Sender == ReplJobActorId, ReplCtx->VCtx->VDiskLogPrefix);
             ReplJobActorId = {};
@@ -600,13 +624,7 @@ namespace NKikimr {
             const TInstant timeAtBegin = first->Start;
             const TInstant timeAtEnd = last->End;
 
-            if (workAtBegin < workAtEnd || timeAtEnd < timeAtBegin) {
-                return {}; // can't evaluate
-            }
-
-            const double workPerSecond = (workAtBegin - workAtEnd) / (timeAtEnd - timeAtBegin).SecondsFloat();
-
-            return TDuration::Seconds(workAtEnd / workPerSecond);
+            return NRepl::EstimateReplicationTimeOfArrival(workAtBegin, workAtEnd, timeAtBegin, timeAtEnd);
         }
 
         void ResetReplProgressTimer(bool finish) {
@@ -759,6 +777,7 @@ namespace NKikimr {
         STRICT_STFUNC(StateRepl,
             cFunc(TEvReplToken::EventType, HandleReplToken)
             hFunc(TEvReplStarted, Handle)
+            fFunc(TEvBlobStorage::EvReplDone, HandleNonPhantomsRemain)
             hFunc(TEvReplFinished, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)

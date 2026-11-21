@@ -161,6 +161,23 @@ namespace NKikimr {
             bool PushStaticGroupsToSelfHeal = false;
 
             TBridgeInfo::TPtr BridgeInfo;
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+
+            // Storage pool pile overrides this transaction follows instead of the adopted ones. It is set by a dry run
+            // of the operation BSC is going to execute after it gets the StorageConfig being proposed, and hence after
+            // it adopts the overrides of that config.
+            const TStoragePoolPileOverrideRules *PileOverrideRules = nullptr;
+
+            const TStoragePoolPileOverrideRules *GetPileOverrideRules() const {
+                // the adopted rules, not the ones of the StorageConfig being proposed: BSC keeps following them until it
+                // adopts the new ones, which happens separately from this transaction
+                return PileOverrideRules ? PileOverrideRules : Self.GetPileOverrideRules();
+            }
+
+            TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const {
+                return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(),
+                    GetPileOverrideRules());
+            }
 
             THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;
 
@@ -193,6 +210,7 @@ namespace NKikimr {
                 , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
                 , BridgeInfo(controller.BridgeInfo)
+                , StorageConfig(storageConfig ? std::make_shared<const NKikimrBlobStorage::TStorageConfig>(*storageConfig) : controller.StorageConfig)
             {
                 Y_ABORT_UNLESS(HostRecords);
                 if (storageConfig && storageConfig->HasBlobStorageConfig()) {
@@ -288,6 +306,12 @@ namespace NKikimr {
 
             void CheckConsistency() const;
 
+            // refuse the change of VDisks of the part of the bridged group that leaves the part unable to restore its
+            // data from its pile, when the pile takes part in data quorum; dataless are VDisks having no full data after
+            // the change
+            void CheckBridgedPartDataRestorable(const TGroupInfo& group,
+                const TBlobStorageGroupInfo::TGroupVDisks& dataless) const;
+
             ui64 ApplyConfigUpdates();
 
             std::optional<TPDiskId> FindStaticPDiskByLocation(ui32 nodeId, const TString& path) const {
@@ -313,6 +337,15 @@ namespace NKikimr {
                 return res;
             }
 
+            // delete the group along with its VDisks
+            void DeleteExistingGroupWithVSlots(const TGroupInfo& group) {
+                const TGroupId groupId = group.ID;
+                for (const TVSlotInfo *vslot : group.VDisksInGroup) {
+                    DestroyVSlot(vslot->VSlotId);
+                }
+                DeleteExistingGroup(groupId);
+            }
+
             void DeleteExistingGroup(TGroupId groupId) {
                 const TGroupInfo *group = Groups.Find(groupId);
                 Y_ABORT_UNLESS(group);
@@ -333,10 +366,10 @@ namespace NKikimr {
                 auto& storagePools = StoragePools.Unshare();
                 const auto spIt = storagePools.find(group->StoragePoolId);
                 Y_ABORT_UNLESS(spIt != storagePools.end());
-                if (auto& numGroups = spIt->second.NumGroups; !group->BridgePileId && numGroups) {
+                if (auto& numGroups = spIt->second.NumGroups; !group->IsBridgePileOnly() && numGroups) {
                     --numGroups;
                 } else {
-                    Y_DEBUG_ABORT_UNLESS(group->BridgePileId);
+                    Y_DEBUG_ABORT_UNLESS(group->IsBridgePileOnly());
                 }
                 const size_t numErased = StoragePoolGroups.Unshare().erase({spIt->first, groupId});
                 Y_ABORT_UNLESS(numErased == 1);
@@ -356,6 +389,63 @@ namespace NKikimr {
                 Groups.DeleteExistingEntry(groupId);
                 GroupContentChanged.erase(groupId);
                 GroupFailureModelChanged.erase(groupId);
+            }
+
+            // the bridge proxy group the part belongs to; nullptr for groups that are not parts of existing bridged ones
+            const TGroupInfo *FindBridgeProxyGroup(const TGroupInfo& group) const {
+                return group.IsBridgePileOnly() && group.BridgeProxyGroupId
+                    ? Groups.Find(*group.BridgeProxyGroupId)
+                    : nullptr;
+            }
+
+            // the parts of the bridged group, but the inline pile, which is the group itself; none for other groups
+            static std::vector<TGroupId> GetBridgeParts(const TGroupInfo& group) {
+                std::vector<TGroupId> parts;
+                if (group.BridgeGroupInfo) {
+                    NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
+                        if (const auto partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                                partId != group.ID) {
+                            parts.push_back(partId);
+                        }
+                    });
+                }
+                return parts;
+            }
+
+            // delete the group along with its VDisks and, for a bridge proxy group, along with its parts, which nothing
+            // else refers to then; every deleted group is removed from the set of the ones to process
+            void DeleteGroupWithBridgeParts(const TGroupInfo& group, THashSet<TGroupId>& pending) {
+                for (const TGroupId partId : GetBridgeParts(group)) {
+                    // group entries are held by pointers, so deleting other groups keeps `group` valid
+                    if (const TGroupInfo *part = Groups.Find(partId)) {
+                        DeleteExistingGroupWithVSlots(*part);
+                        pending.erase(partId);
+                    }
+                }
+                pending.erase(group.ID);
+                DeleteExistingGroupWithVSlots(group);
+            }
+
+            // delete the listed groups along with the parts of the bridged ones; a part can't go without its bridge proxy
+            // group, as the proxy group would refer to a group that doesn't exist; the callbacks throw the errors of the
+            // command for a missing group and for such a part
+            template<typename TNotFound, typename TPartAlone>
+            void DeleteGroupsWithBridgeParts(const std::vector<TGroupId>& groups, TNotFound&& notFound,
+                    TPartAlone&& partAlone) {
+                THashSet<TGroupId> pending(groups.begin(), groups.end());
+                for (const TGroupId groupId : groups) {
+                    if (!pending.contains(groupId)) {
+                        continue; // deleted along with its bridge proxy group, or listed twice
+                    } else if (const TGroupInfo *group = Groups.Find(groupId); !group) {
+                        notFound(groupId);
+                    } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group);
+                            proxy && !pending.contains(proxy->ID)) { // an existing proxy group is pending when listed
+                        partAlone(groupId, proxy->ID);
+                    } else {
+                        DeleteGroupWithBridgeParts(*group, pending);
+                    }
+                }
             }
 
         private:
@@ -385,6 +475,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TReadStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TUpdateStoragePoolSettings& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TChangeStoragePoolBridgeMode& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);
@@ -416,6 +507,16 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteDDiskPool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
+
+            template<typename TCallback>
+            void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);
+
+            // turn ordinary groups of the storage pool being made bridged into inline piles, and give every bridged
+            // group of the pool its parts in all piles
+            void MakeStoragePoolGroupsBridged(TBoxStoragePoolId storagePoolId);
+
+            // designate the part every bridged group of the storage pool being made ordinary keeps
+            void MakeStoragePoolGroupsOrdinary(TBoxStoragePoolId storagePoolId, const TString& retainPileName);
         };
 
     } // NBsController

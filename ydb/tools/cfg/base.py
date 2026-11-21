@@ -537,8 +537,12 @@ class ClusterDetailsProvider(object):
         return self.__cluster_description.get("state_storages", [])
 
     @property
+    def explicit_state_storage_node_ids(self):
+        return self.__cluster_description.get("state_storage", {}).get("node_ids", [])
+
+    @property
     def state_storage_node_ids(self):
-        node_ids = self.__cluster_description.get("state_storage", {}).get("node_ids", [])
+        node_ids = self.explicit_state_storage_node_ids
         if node_ids:
             return node_ids
 

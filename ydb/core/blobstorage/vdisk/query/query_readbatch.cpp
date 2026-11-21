@@ -41,7 +41,7 @@ namespace NKikimr {
         }
 
         ui32 partOffs = data.Offset;
-        TDiskBlob::DeriveBlobHeaderMode(blobSize, data.Size, &partOffs);
+        const auto headerMode = TDiskBlob::DeriveBlobHeaderMode(blobSize, data.Size, &partOffs);
 
         for (ui8 i : parts) {
             const TLogoBlobID partId(CurID, i + 1);
@@ -54,8 +54,15 @@ namespace NKikimr {
                 } else if (!partSize) {
                     tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
-                    const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
+                    ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
                     Y_VERIFY_DEBUG_S(size, Ctx->VCtx->VDiskLogPrefix);
+                    // The stored checksum belongs to the whole disk blob. It can
+                    // accompany a part only when that part is the entire blob.
+                    // TProcessor extracts it before returning the payload.
+                    if (headerMode == EBlobHeaderMode::XXH3_64BIT_HEADER && parts.CountBits() == 1 &&
+                            QueryShift == 0 && size == partSize) {
+                        size += sizeof(ui64);
+                    }
                     tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size), isHugeBlob);
                 }
             }

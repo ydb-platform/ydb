@@ -615,7 +615,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 const auto& group = detail.GetGroups(0);
                 UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), swapRoles ? 2 : 3);
                 UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferDDiskIdSize(), swapRoles ? 2 : 1);
-                UNIT_ASSERT(!group.GetDDiskId(group.DDiskIdSize() - 1).HasNodeId());
+                const auto& unallocated = group.GetDDiskId(group.DDiskIdSize() - 1);
+                UNIT_ASSERT_VALUES_EQUAL(unallocated.GetNodeId(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(unallocated.GetPDiskId(), 0);
                 UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 4);
                 THashMap<ui32, const TDDiskStateInfo*> slots;
                 for (const auto& slot : detail.GetSlots()) {

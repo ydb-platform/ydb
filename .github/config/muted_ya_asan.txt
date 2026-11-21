@@ -37,6 +37,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommi
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting-LocalTopics-ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.StreamingQueryWithDeferredComitPublicationCreation+LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.StreamingQueryWithDeferredComitPublicationCreation-LocalTopics
+ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapTiering.EvictionIncreaseDuration
 ydb/core/kqp/ut/olap KqpOlapTiering.EvictionResetTiering
@@ -681,6 +682,7 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
+ydb/tests/functional/ydb_cli test_ydb_config_migration.py.TestConfigRolloutPreview.test_review_tenant_overrides
 ydb/tests/olap data_read_correctness.py.TestDataReadPerformanceNoIntersections.test
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_during_export
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

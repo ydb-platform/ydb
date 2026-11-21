@@ -2301,7 +2301,7 @@ value {
 
     Y_UNIT_TEST_FLAG(ExportImportPg, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
@@ -2321,6 +2321,7 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2334,6 +2335,7 @@ value {
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(false);
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"

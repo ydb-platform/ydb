@@ -377,6 +377,7 @@ public:
                 FederatedQuerySetup, ModuleResolverState, Counters, Settings.QueryService, GUCSettings));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
+        QueryState->RequestEv->DisablePgCompatibility = QueryState->GetDisablePgCompatibility();
         WorkerStatsMode = QueryState->GetStatsMode();
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
                     nullptr, QueryState->KqpSessionSpan.GetTraceId()));
@@ -608,6 +609,18 @@ public:
 
             case NKikimrKqp::QUERY_ACTION_TOPIC:
                 return AddOffsetsToTransaction();
+        }
+
+        if (QueryState->GetDisablePgCompatibility()) {
+            if (QueryState->QueryPhysicalGraph && !QueryState->QueryPhysicalGraph->GetCompiledWithPgCompatibilityDisabled()) {
+                ythrow TRequestFail(Ydb::StatusIds::UNSUPPORTED)
+                    << "PostgreSQL compatibility is disabled and the saved plan was not compiled in that mode";
+            }
+            try {
+                TQueryData::ValidateNoPgParameters(QueryState->GetYdbParameters());
+            } catch (const yexception& e) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << e.what();
+            }
         }
 
         QueryState->UpdateTempTablesState(TempTablesState);
@@ -2511,6 +2524,7 @@ public:
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
+        request.CompiledWithPgCompatibilityDisabled = request.SaveQueryPhysicalGraph && QueryState->GetDisablePgCompatibility();
         request.QueryPhysicalGraph = allowSaveState ? QueryState->QueryPhysicalGraph : nullptr;
         YDB_LOG_DEBUG("Sending to Executer",
             {"marker", "KQPSA"},

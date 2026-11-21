@@ -16,8 +16,11 @@
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <type_traits>
 
 namespace NFq::NPrivate {
 
@@ -31,6 +34,8 @@ protected:
     using TBase::SelfId;
     using TBase::Send;
 
+    static constexpr bool IsModifyBinding = std::is_same_v<TRequest, TEvControlPlaneStorage::TEvModifyBindingRequest>;
+
     typename TRequestProxy::TPtr RequestProxy;
     TControlPlaneProxyConfig Config;
     TActorId ServiceId;
@@ -40,13 +45,14 @@ protected:
     TPermissions Permissions;
     ui32 RetryCount = 0;
     bool ReplyWithResponseOnSuccess = true;
+    bool UpdateComputeBindingFirst = false;
 
 public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
 
     TRequestActor(typename TRequestProxy::TPtr requestProxy, const TControlPlaneProxyConfig& config, const TActorId& serviceId,
         const TRequestCounters& counters, const std::function<void(const TDuration&, bool, bool)>& probe,
-        const TPermissions& availablePermissions, bool replyWithResponseOnSuccess = true)
+        const TPermissions& availablePermissions, bool replyWithResponseOnSuccess = true, bool updateComputeBindingFirst = false)
         : RequestProxy(requestProxy)
         , Config(config)
         , ServiceId(serviceId)
@@ -55,6 +61,7 @@ public:
         , Probe(probe)
         , Permissions(ExtractPermissions(RequestProxy, availablePermissions))
         , ReplyWithResponseOnSuccess(replyWithResponseOnSuccess)
+        , UpdateComputeBindingFirst(updateComputeBindingFirst)
     {
         Counters.IncInFly();
     }
@@ -119,15 +126,40 @@ public:
     void ProcessResponse(const T& response) {
         if (response.Issues) {
             ReplyWithError(response.Issues);
-        } else {
-            ReplyWithSuccess(response.Result, response.AuditDetails);
+            return;
         }
+        if constexpr (IsModifyBinding) {
+            if (UpdateComputeBindingFirst) {
+                if (response.AuditDetails.IdempotencyResult) {
+                    ReplyWithResponseOnSuccess = true;
+                } else if (RequestProxy->Get()->BindingUpdateValidated ? !response.AuditDetails.After : !response.AuditDetails.Before) {
+                    NYql::TIssues issues;
+                    issues.AddIssue(MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Couldn't determine binding update result"));
+                    ReplyWithError(issues);
+                    return;
+                }
+            }
+        }
+        ReplyWithSuccess(response.Result, response.AuditDetails);
     }
 
     void ReplyWithError(const NYql::TIssues& issues, bool isTimeout = false) {
         const TDuration delta = TInstant::Now() - StartTime;
         Counters.IncError();
         Probe(delta, false, isTimeout);
+        if constexpr (IsModifyBinding) {
+            auto& binding = *RequestProxy->Get();
+            if (UpdateComputeBindingFirst && binding.BindingUpdateValidated &&
+                binding.OldBindingContent->name() != binding.Request.content().name() && !issues.Empty() && AllOf(issues, [](const auto& issue) {
+                    return issue.GetCode() == TIssuesIds::BAD_REQUEST || issue.GetCode() == TIssuesIds::ACCESS_DENIED;
+                })) {
+                binding.Response = std::make_unique<TResponseProxy>(issues, binding.SubjectType);
+                binding.ControlPlaneYDBOperationWasPerformed = true;
+                Send(RequestProxy->Forward(ControlPlaneProxyActorId()));
+                PassAway();
+                return;
+            }
+        }
         Send(RequestProxy->Sender, new TResponseProxy(issues, RequestProxy->Get()->SubjectType), 0, RequestProxy->Cookie);
         PassAway();
     }
@@ -141,6 +173,14 @@ public:
             Send(RequestProxy->Sender, new TResponseProxy(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType), 0,
                 RequestProxy->Cookie);
         } else {
+            if constexpr (IsModifyBinding) {
+                if (UpdateComputeBindingFirst && !RequestProxy->Get()->BindingUpdateValidated) {
+                    RequestProxy->Get()->BindingUpdateValidated = true;
+                    Send(RequestProxy->Forward(ControlPlaneProxyActorId()));
+                    PassAway();
+                    return;
+                }
+            }
             RequestProxy->Get()->Response = std::make_unique<TResponseProxy>(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType);
             RequestProxy->Get()->ControlPlaneYDBOperationWasPerformed = true;
             Send(RequestProxy->Forward(ControlPlaneProxyActorId()));
@@ -154,9 +194,16 @@ public:
 
     void SendRequestIfCan() {
         if (CanSendRequest()) {
-            Send(ServiceId, new TRequest(RequestProxy->Get()->Scope, RequestProxy->Get()->Request, RequestProxy->Get()->User,
-                                RequestProxy->Get()->Token, RequestProxy->Get()->CloudId, Permissions, RequestProxy->Get()->Quotas,
-                                RequestProxy->Get()->TenantInfo, RequestProxy->Get()->ComputeDatabase.GetOrElse({})), 0, RequestProxy->Cookie);
+            auto request = std::make_unique<TRequest>(RequestProxy->Get()->Scope, RequestProxy->Get()->Request, RequestProxy->Get()->User,
+                RequestProxy->Get()->Token, RequestProxy->Get()->CloudId, Permissions, RequestProxy->Get()->Quotas,
+                RequestProxy->Get()->TenantInfo, RequestProxy->Get()->ComputeDatabase.GetOrElse({}));
+            if constexpr (IsModifyBinding) {
+                if (UpdateComputeBindingFirst) {
+                    request->ValidateOnly = !RequestProxy->Get()->BindingUpdateValidated;
+                    request->ObservedRevision = RequestProxy->Get()->OldBindingRevision;
+                }
+            }
+            Send(ServiceId, request.release(), 0, RequestProxy->Cookie);
         }
     }
 

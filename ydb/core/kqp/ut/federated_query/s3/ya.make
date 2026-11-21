@@ -26,7 +26,8 @@ PEERDIR(
     ydb/library/testlib/s3_recipe_helper
     ydb/library/yql/providers/s3/actors
     ydb/public/sdk/cpp/src/client/types/operation
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
     yql/essentials/udfs/common/yson2
 )
 

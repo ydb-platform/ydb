@@ -1485,6 +1485,15 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
+        auto setDisablePgCompatibility = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                auto& appData = runtime.GetAppData(node);
+                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+                flags.SetDisablePgCompatibility(disabled);
+                appData.UpdateRuntimeFlags(flags);
+            }
+        };
+        setDisablePgCompatibility(false);
         ExecuteYqlScript(env, R"(
             CREATE TABLE `Root/Database/Table` (
                 Key pgint8,
@@ -1499,6 +1508,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         )");
 
         const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
+        setDisablePgCompatibility(true);
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
         CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
     }

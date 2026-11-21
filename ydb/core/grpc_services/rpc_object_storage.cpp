@@ -217,9 +217,17 @@ private:
     }
 
     bool BuildSchema(const NActors::TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
         auto& entry = ResolveNamesResult->ResultSet.front();
+        const bool disablePgCompatibility = AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
+        const auto rejectPg = [&] {
+            TString error;
+            if (!CheckAccess(entry.SecurityObject.Get(), error)) {
+                ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, error, ctx);
+            } else {
+                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "PostgreSQL compatibility is disabled", ctx);
+            }
+            return false;
+        };
 
         TVector<ui32> keyColumnIds;
         THashMap<TString, ui32> columnByName;
@@ -227,6 +235,9 @@ private:
             columnByName[ci.second.Name] = ci.second.Id;
             i32 keyOrder = ci.second.KeyOrder;
             if (keyOrder != -1) {
+                if (disablePgCompatibility && ci.second.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    return rejectPg();
+                }
                 Y_VERIFY(keyOrder >= 0);
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
                 KeyColumnTypes[keyOrder] = ci.second.PType;
@@ -302,7 +313,11 @@ private:
                                Sprintf("Unknown column '%s'", name.data()), ctx);
                 return false;
             }
-            ContentsColumns.push_back(entry.Columns[columnByName[name]]);
+            const auto& column = entry.Columns[columnByName[name]];
+            if (disablePgCompatibility && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                return rejectPg();
+            }
+            ContentsColumns.push_back(column);
         }
 
         if (Request->has_matching_filter()) {
@@ -347,6 +362,9 @@ private:
 
                 const auto& columnInfo = entry.Columns[colIdIt->second];
                 const auto& type = columnInfo.PType;
+                if (disablePgCompatibility && type.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    return rejectPg();
+                }
 
                 types.emplace_back(type, columnInfo.PTypeMod, columnInfo.IsNotNullColumn);
 
@@ -475,13 +493,9 @@ private:
         }
     }
 
-    bool CheckAccess(TString& errorMessage) {
+    bool CheckAccess(const TSecurityObject* securityObject, TString& errorMessage) {
         const ui32 access = NACLib::EAccessRights::SelectRow;
-        if (access != 0
-                && UserToken != nullptr
-                && KeyRange->Status == TKeyDesc::EStatus::Ok
-                && KeyRange->SecurityObject != nullptr
-                && !KeyRange->SecurityObject->CheckAccess(access, *UserToken))
+        if (UserToken && securityObject && !securityObject->CheckAccess(access, *UserToken))
         {
             TStringStream explanation;
             explanation << "Access denied for " << UserToken->GetUserSID()
@@ -510,7 +524,7 @@ private:
         }
 
         TString accessCheckError;
-        if (!CheckAccess(accessCheckError)) {
+        if (KeyRange->Status == TKeyDesc::EStatus::Ok && !CheckAccess(KeyRange->SecurityObject.Get(), accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
         }
 

@@ -182,6 +182,48 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
             DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
     }
 
+    Y_UNIT_TEST_F(PgPolicyPreservesCheckpointOnRejectedRestart, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        CreateScopedTopic("pgPolicyInput");
+        CreateScopedTopic("pgPolicyOutput");
+        CreatePqSource("pgPolicySource");
+
+        ExecQuery(R"(
+            CREATE STREAMING QUERY pgPolicyQuery AS
+            DO BEGIN
+                $in = SELECT value FROM pgPolicySource.pgPolicyInput WITH (
+                    FORMAT = "json_each_row", SCHEMA = (value String NOT NULL)
+                )
+                WHERE (FromPg(Pg::abs(ToPg(CAST(Length(value) AS Int32)))) ?? 0) > 0;
+                INSERT INTO pgPolicySource.pgPolicyOutput SELECT value FROM $in;
+            END DO;
+        )");
+        WriteTopicMessage("pgPolicyInput", R"({"value": "before"})");
+        ReadTopicMessages("pgPolicyOutput", { "before" }, TInstant::Now() - TDuration::Seconds(100));
+
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")->GetCounter("CompletedCheckpoints", true);
+        const auto initial = completed->Val();
+        NTestUtils::WaitFor(TDuration::Seconds(30), "streaming checkpoint after processing input", [&] {
+            return completed->Val() >= initial + 2;
+        });
+        const auto checkpointId = GetStreamingQueryCheckpointId("pgPolicyQuery");
+        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = FALSE)");
+
+        auto& featureFlags = GetRuntime().GetAppData().FeatureFlags;
+        featureFlags.SetDisablePgCompatibility(true);
+        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = TRUE)", EStatus::UNSUPPORTED, "PostgreSQL compatibility is disabled");
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId("pgPolicyQuery"), checkpointId);
+
+        featureFlags.SetDisablePgCompatibility(false);
+        const auto restartTime = TInstant::Now();
+        ExecQuery("ALTER STREAMING QUERY pgPolicyQuery SET (RUN = TRUE)");
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId("pgPolicyQuery"), checkpointId);
+        WriteTopicMessage("pgPolicyInput", R"({"value": "after"})");
+        ReadTopicMessages("pgPolicyOutput", { "after" }, restartTime);
+        ExecQuery("DROP STREAMING QUERY pgPolicyQuery");
+    }
+
     Y_UNIT_TEST(LocalConnectionOperationTimeout) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);

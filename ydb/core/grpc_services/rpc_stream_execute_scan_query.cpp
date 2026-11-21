@@ -7,6 +7,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/common/events/stream.h>
 #include <ydb/core/kqp/query_plan/query_plan.h>
@@ -252,6 +253,10 @@ private:
         );
 
         ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
+
+        if (ev->IsInternalCall() && ev->GetRequestType() == NRequestTypes::Analyze) {
+            ev->DisablePgCompatibility = false;
+        }
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Request_->GetWilsonTraceId())) {
             NYql::TIssues issues;

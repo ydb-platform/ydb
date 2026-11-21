@@ -107,6 +107,11 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
             return std::make_pair(nullptr, errStr);
         }
 
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility() && typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+            errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.c_str());
+            return std::make_pair(nullptr, errStr);
+        }
+
         ui32 colId = col.HasId() ? col.GetId() : nextColumnId;
         if (externalTableInfo->Columns.contains(colId)) {
             errStr = Sprintf("Duplicate column id: %" PRIu32, colId);

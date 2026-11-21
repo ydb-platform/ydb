@@ -819,9 +819,6 @@ message TDDiskTabletListResponse {
         // Absent if any assigned DDisk has no valid, available monitoring sample.
         optional double DiskUsage = 8;
         optional string DiskId = 9; // NBS volume identifier; absent for older/unavailable reporters
-        reserved 10 to 13;
-        reserved "UnavailableDDiskGroups", "UnavailablePersistentBufferGroups",
-            "GroupsWithUnknownDDiskStatus", "GroupsWithUnknownPersistentBufferStatus";
     }
 
     reserved 2;

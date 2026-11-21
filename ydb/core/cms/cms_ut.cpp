@@ -519,11 +519,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                     TFakeNodeWhiteboardService::Info[env.GetNodeId(i)]
                         .PDiskStateInfo.at(pdiskIds.at(env.GetNodeId(i))).SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
                 }
-                const auto nodeId = env.GetNodeId(1);
-                auto& sample = TFakeNodeWhiteboardService::Info.at(nodeId).DDiskStateInfo.emplace_back();
-                sample.SetPDiskId(pdiskIds.at(nodeId));
-                sample.SetDDiskSlotId(1);
-                sample.SetDDiskPath("legacy-viewer-path");
+                auto addSample = [&](ui32 nodeId) -> TDDiskStateInfo& {
+                    auto& sample = TFakeNodeWhiteboardService::Info.at(nodeId).DDiskStateInfo.emplace_back();
+                    sample.SetPDiskId(pdiskIds.at(nodeId));
+                    sample.SetDDiskSlotId(1);
+                    return sample;
+                };
+                addSample(env.GetNodeId(1)).SetDDiskPath("legacy-viewer-path");
+                addSample(env.GetNodeId(2)).SetDDiskStatus(TDDiskStateInfo::Ready);
             }
             // Exercise the HTTP parameter mapping through the actual proxy and CMS.
             auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds,
@@ -607,30 +610,38 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
                 const auto detail = env.RequestDDiskInfo(2002, true);
                 UNIT_ASSERT_VALUES_EQUAL(detail.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT(detail.HasRequiredReadyMembers());
+                UNIT_ASSERT_VALUES_EQUAL(detail.GetRequiredReadyMembers(), 3);
                 const auto& group = detail.GetGroups(0);
-                UNIT_ASSERT_VALUES_EQUAL(group.DDiskHealthSize(), group.DDiskIdSize());
-                UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferHealthSize(), group.PersistentBufferDDiskIdSize());
-                UNIT_ASSERT(group.GetDDiskHealth(0).GetStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
-                UNIT_ASSERT_VALUES_EQUAL(group.GetDDiskHealth(0).GetReason(), "DeviceIoError");
-                UNIT_ASSERT(!group.GetDDiskHealth(group.DDiskHealthSize() - 1).HasStatus());
-                UNIT_ASSERT_VALUES_EQUAL(group.GetUnavailableDDiskCount(), swapRoles ? 1 : 2);
-                UNIT_ASSERT_VALUES_EQUAL(group.GetUnavailablePersistentBufferCount(), swapRoles ? 2 : 1);
-                UNIT_ASSERT(group.GetMonitoredQuorum() ==
-                    NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult::NoQuorum);
+                UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), swapRoles ? 2 : 3);
+                UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferDDiskIdSize(), swapRoles ? 2 : 1);
+                UNIT_ASSERT(!group.GetDDiskId(group.DDiskIdSize() - 1).HasNodeId());
                 UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 4);
-                for (const auto& member : detail.GetSlots()) {
-                    UNIT_ASSERT(!member.HasDDiskPath());
+                THashMap<ui32, const TDDiskStateInfo*> slots;
+                for (const auto& slot : detail.GetSlots()) {
+                    UNIT_ASSERT(!slot.HasDDiskPath());
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskId(), pdiskIds.at(slot.GetNodeId()));
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetDDiskSlotId(), 1);
+                    UNIT_ASSERT(!slot.GetPersistentBufferId().empty());
+                    UNIT_ASSERT(slots.emplace(slot.GetNodeId(), &slot).second);
                 }
-                const auto& slot = detail.GetSlots(0);
-                UNIT_ASSERT_VALUES_EQUAL(slot.GetNodeId(), env.GetNodeId(0));
-                UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskId(), pdiskIds.at(slot.GetNodeId()));
-                UNIT_ASSERT_VALUES_EQUAL(slot.GetDDiskSlotId(), 1);
-                UNIT_ASSERT(!slot.GetPersistentBufferId().empty());
-                UNIT_ASSERT(!slot.GetHasWhiteboardData());
-                UNIT_ASSERT(slot.GetDDiskStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
-                UNIT_ASSERT(slot.GetPersistentBufferStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
+                for (ui32 i : {0, 1}) {
+                    const auto& slot = *slots.at(env.GetNodeId(i));
+                    UNIT_ASSERT(!slot.GetHasWhiteboardData());
+                    UNIT_ASSERT(slot.GetDDiskStatus() == TDDiskStateInfo::Broken);
+                    UNIT_ASSERT(slot.GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetDDiskStatusReason(), "DeviceIoError");
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetPersistentBufferStatusReason(), "DeviceIoError");
+                }
+                const auto& ready = *slots.at(env.GetNodeId(2));
+                UNIT_ASSERT(ready.HasDDiskStatus());
+                UNIT_ASSERT(ready.GetDDiskStatus() == TDDiskStateInfo::Ready);
+                UNIT_ASSERT(!ready.HasPersistentBufferStatus());
+                const auto& unknown = *slots.at(env.GetNodeId(3));
+                UNIT_ASSERT(!unknown.HasDDiskStatus());
+                UNIT_ASSERT(!unknown.HasPersistentBufferStatus());
                 const auto legacy = env.RequestDDiskInfo(2002);
-                UNIT_ASSERT_VALUES_EQUAL(legacy.GetGroups(0).DDiskHealthSize(), 0);
+                UNIT_ASSERT(!legacy.HasRequiredReadyMembers());
                 UNIT_ASSERT_VALUES_EQUAL(legacy.SlotsSize(), 0);
             }
 

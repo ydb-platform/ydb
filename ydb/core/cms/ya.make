@@ -229,6 +229,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/mind/bscontroller
+    ydb/core/nbs/cloud/blockstore/libs/common
     ydb/core/node_whiteboard
     ydb/core/protos
     ydb/core/protos/out

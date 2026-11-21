@@ -18,6 +18,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config_units.pb.h>
@@ -2177,44 +2178,6 @@ std::optional<TDDiskComponentStatus> GetComponentStatus(const TDDiskSample* samp
     return std::nullopt;
 }
 
-void SetMemberHealth(TDDiskTabletLayout::TMemberHealth& health,
-        std::optional<TDDiskComponentStatus> status, TStringBuf reason) {
-    if (status) {
-        health.SetStatus(*status);
-    }
-    if (!reason.empty()) {
-        health.SetReason(reason.data(), reason.size());
-    }
-}
-
-struct TDDiskHealthCounts {
-    ui32 Ready = 0;
-    ui32 Unavailable = 0;
-    ui32 Unknown = 0;
-
-    void Add(std::optional<TDDiskComponentStatus> status) {
-        if (!status) {
-            ++Unknown;
-        } else if (*status == TDDiskSample::Ready) {
-            ++Ready;
-        } else {
-            ++Unavailable;
-        }
-    }
-};
-
-TDDiskTabletLayout::EMonitoredQuorum EstimateMonitoredQuorum(const TDDiskHealthCounts& disks,
-        const TDDiskHealthCounts& buffers) {
-    constexpr ui32 requiredReady = 3;
-    if (disks.Ready + disks.Unknown < requiredReady || buffers.Ready + buffers.Unknown < requiredReady) {
-        return TDDiskTabletLayout::NoQuorum;
-    }
-    if (disks.Ready >= requiredReady && buffers.Ready >= requiredReady) {
-        return TDDiskTabletLayout::Quorum;
-    }
-    return TDDiskTabletLayout::Unknown;
-}
-
 } // anonymous namespace
 
 void TCms::HandleDDiskInfoGet(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx) {
@@ -2244,54 +2207,37 @@ void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext&
             response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
             response->Record.SetErrorReason("Cannot collect cluster state");
         } else {
+            response->Record.SetRequiredReadyMembers(NYdb::NBS::NBlockStore::QuorumDirectBlockGroupHostCount);
             THashSet<std::tuple<ui32, ui32, ui32>> slots;
-            auto fillHealth = [&](const auto& ids, auto& health, bool buffer) {
-                TDDiskHealthCounts counts;
+            auto addSlots = [&](const auto& ids) {
                 for (const auto& id : ids) {
-                    auto& member = *health.Add();
-                    if (!id.GetNodeId() && !id.GetPDiskId()) {
-                        continue; // retain an aligned entry for the unallocated member
-                    }
                     const auto [nodeId, pdiskId, slotId] = DDiskKey(id);
-                    const auto* sample = ClusterInfo->FindDDiskState(nodeId, pdiskId, slotId);
-                    const bool pdiskAvailable = IsDDiskAvailable(id);
-                    const auto status = GetComponentStatus(sample, pdiskAvailable, buffer);
-                    const TString pdiskFailure = pdiskAvailable ? TString{} : GetDDiskStateName(id);
-                    const TString reason = !pdiskAvailable ? pdiskFailure : sample
-                        ? (buffer ? sample->GetPersistentBufferStatusReason() : sample->GetDDiskStatusReason()) : TString{};
-                    SetMemberHealth(member, status, reason);
-                    counts.Add(status);
-
-                    if (slots.emplace(nodeId, pdiskId, slotId).second) {
-                        auto& disk = *response->Record.AddSlots();
-                        if (sample) {
-                            disk.CopyFrom(*sample);
-                            disk.ClearDDiskPath();
-                        } else {
-                            disk.SetHasWhiteboardData(false);
-                        }
-                        disk.SetNodeId(nodeId);
-                        disk.SetPDiskId(pdiskId);
-                        disk.SetDDiskSlotId(slotId);
-                        FillDDiskMetadata(disk, *ClusterInfo, id);
-                        if (!pdiskAvailable) {
-                            disk.SetDDiskStatus(TDDiskSample::Broken);
-                            disk.SetPersistentBufferStatus(TDDiskSample::Broken);
-                            disk.SetDDiskStatusReason(pdiskFailure);
-                            disk.SetPersistentBufferStatusReason(pdiskFailure);
-                        }
+                    if ((!nodeId && !pdiskId) || !slots.emplace(nodeId, pdiskId, slotId).second) {
+                        continue;
+                    }
+                    auto& disk = *response->Record.AddSlots();
+                    if (const auto* sample = ClusterInfo->FindDDiskState(nodeId, pdiskId, slotId)) {
+                        disk.CopyFrom(*sample);
+                        disk.ClearDDiskPath();
+                    } else {
+                        disk.SetHasWhiteboardData(false);
+                    }
+                    disk.SetNodeId(nodeId);
+                    disk.SetPDiskId(pdiskId);
+                    disk.SetDDiskSlotId(slotId);
+                    FillDDiskMetadata(disk, *ClusterInfo, id);
+                    if (!IsDDiskAvailable(id)) {
+                        const auto pdiskFailure = GetDDiskStateName(id);
+                        disk.SetDDiskStatus(TDDiskSample::Broken);
+                        disk.SetPersistentBufferStatus(TDDiskSample::Broken);
+                        disk.SetDDiskStatusReason(pdiskFailure);
+                        disk.SetPersistentBufferStatusReason(pdiskFailure);
                     }
                 }
-                return counts;
             };
-            for (auto& group : *response->Record.MutableGroups()) {
-                const auto disks = fillHealth(group.GetDDiskId(), *group.MutableDDiskHealth(), false);
-                const auto buffers = fillHealth(group.GetPersistentBufferDDiskId(), *group.MutablePersistentBufferHealth(), true);
-                group.SetUnavailableDDiskCount(disks.Unavailable);
-                group.SetUnavailablePersistentBufferCount(buffers.Unavailable);
-                group.SetUnknownDDiskCount(disks.Unknown);
-                group.SetUnknownPersistentBufferCount(buffers.Unknown);
-                group.SetMonitoredQuorum(EstimateMonitoredQuorum(disks, buffers));
+            for (const auto& group : response->Record.GetGroups()) {
+                addSlots(group.GetDDiskId());
+                addSlots(group.GetPersistentBufferDDiskId());
             }
         }
     }

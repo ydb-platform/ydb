@@ -16,6 +16,7 @@
 #include <ydb/library/actors/core/mailbox.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -3723,7 +3724,8 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestSelectRangeWithPartitions) {
+    Y_UNIT_TEST_TWIN(TestSelectRangeWithPartitions, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -3849,7 +3851,8 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeWithPartitionsTruncatedByItems) {
+    Y_UNIT_TEST_TWIN(TestSelectRangeWithPartitionsTruncatedByItems, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -3969,7 +3972,8 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeWithPartitionsTruncatedByBytes) {
+    Y_UNIT_TEST_TWIN(TestSelectRangeWithPartitionsTruncatedByBytes, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -4107,7 +4111,8 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitions) {
+    Y_UNIT_TEST_TWIN(TestSelectRangeReverseWithPartitions, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -4254,7 +4259,8 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems1) {
+    Y_UNIT_TEST_TWIN(TestSelectRangeReverseWithPartitionsTruncatedByItems1, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -4381,7 +4387,8 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems2) {
+    Y_UNIT_TEST_TWIN(TestSelectRangeReverseWithPartitionsTruncatedByItems2, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -4515,7 +4522,8 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeReverseWithPartitionsTruncatedByItems3) {
+    Y_UNIT_TEST_TWIN(TestSelectRangeReverseWithPartitionsTruncatedByItems3, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5007,9 +5015,10 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestMapsPushdown) {
+    Y_UNIT_TEST_TWIN(TestMapsPushdown, ShareShardedMkqlProgram) {
         const TString okValue = "Ok";
 
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5619,7 +5628,8 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestCombineByKeyPushdown) {
+    Y_UNIT_TEST_TWIN(TestCombineByKeyPushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5741,7 +5751,8 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestCombineByKeyNoPushdown) {
+    Y_UNIT_TEST_TWIN(TestCombineByKeyNoPushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5858,7 +5869,8 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestTakePushdown) {
+    Y_UNIT_TEST_TWIN(TestTakePushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5942,7 +5954,8 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestNoOrderedTakePushdown) {
+    Y_UNIT_TEST_TWIN(TestNoOrderedTakePushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6020,7 +6033,8 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestLengthPushdown) {
+    Y_UNIT_TEST_TWIN(TestLengthPushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6101,7 +6115,8 @@ Value {
         NKqp::CompareYson(R"___([["3"]])___", res);
     }
 
-    Y_UNIT_TEST(TestNoAggregatedPushdown) {
+    Y_UNIT_TEST_TWIN(TestNoAggregatedPushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6190,7 +6205,8 @@ Value {
         NKqp::CompareYson(R"___([["1"]])___", res);
     }
 
-    Y_UNIT_TEST(TestTopSortPushdownPk) {
+    Y_UNIT_TEST_TWIN(TestTopSortPushdownPk, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6277,7 +6293,8 @@ Value {
         NKqp::CompareYson(R"___([[[[["2"];["Value2"]];[["3"];["Value3"]]]]])___", res);
     }
 
-    Y_UNIT_TEST(TestTopSortPushdown) {
+    Y_UNIT_TEST_TWIN(TestTopSortPushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6368,7 +6385,8 @@ Value {
         NKqp::CompareYson(R"___([[[[["5"];["Value5"]];[["4"];["Value4"]]]]])___", res);
     }
 
-    Y_UNIT_TEST(TestTopSortNonImmediatePushdown) {
+    Y_UNIT_TEST_TWIN(TestTopSortNonImmediatePushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6463,7 +6481,8 @@ Value {
         NKqp::CompareYson(R"___([[[[["5"];["Value5"]];[["4"];["Value4"]]]]])___", res);
     }
 
-    Y_UNIT_TEST(TestNoPartialSortPushdown) {
+    Y_UNIT_TEST_TWIN(TestNoPartialSortPushdown, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6726,7 +6745,8 @@ Value {
         ])___", res);
     }
 
-    Y_UNIT_TEST(TestMultiRSPerDestination) {
+    Y_UNIT_TEST_TWIN(TestMultiRSPerDestination, ShareShardedMkqlProgram) {
+        TShareShardedMkqlProgramContext context(ShareShardedMkqlProgram);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);

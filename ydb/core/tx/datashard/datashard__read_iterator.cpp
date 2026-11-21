@@ -298,6 +298,9 @@ struct TShortTableInfo {
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
+            if (column.IsBuildInProgress) {
+                continue;
+            }
             Columns.emplace(it.first, TShortColumnInfo(it.first, column.Type, column.Name));
         }
     }

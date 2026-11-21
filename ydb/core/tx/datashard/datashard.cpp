@@ -1855,6 +1855,25 @@ TUserTable::TPtr TDataShard::AlterTableSchemaVersion(
     return newTableInfo;
 }
 
+TUserTable::TPtr TDataShard::AlterTableFinishColumnBuild(
+    const TActorContext& ctx, TTransactionContext& txc,
+    const TPathId& pathId, ui64 tableSchemaVersion)
+{
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    NKikimrSchemeOp::TTableDescription schema;
+    tableInfo->GetSchema(schema);
+    for (auto& column : *schema.MutableColumns()) {
+        column.SetIsBuildInProgress(false);
+        tableInfo->Columns.at(column.GetId()).IsBuildInProgress = false;
+    }
+    tableInfo->SetSchema(schema);
+
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *tableInfo);
+
+    return tableInfo;
+}
+
 TUserTable::TPtr TDataShard::AlterTableAddIndex(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,

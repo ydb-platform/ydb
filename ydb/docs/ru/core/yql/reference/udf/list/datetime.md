@@ -126,9 +126,28 @@ SELECT
     DateTime::GetDayOfWeekName($tm) as WeekDay; -- "Wednesday"
 ```
 
+## Init/Init64 {#init}
+
+Доступна начиная с версии [YQL 2026.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2026.03.md#datetime-module).
+
+Создаёт внутреннее представление даты и времени. Неуказанные или NULL-компоненты получают значения по умолчанию: год 1970, месяц 1, день 1, а для остальных компонентов — 0. Для незаданного часового пояса используется GMT. `Timezone` допустим только как именованный аргумент. Возвращает NULL для некорректных компонентов или даты.
+
+### Список функций
+
+```yql
+DateTime::Init([ Year:Uint16?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM>?
+DateTime::Init64([ Year:Int32?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM64>?
+```
+
+```yql
+SELECT DateTime::MakeTimestamp(DateTime::Init(2024 as Year, 2 as Month, 29 as Day)); -- 2024-02-29T00:00:00Z
+```
+
 ## Update {#update}
 
 Обновление одной или нескольких компонент во [внутреннем представлении](#resource). Возвращает либо обновлённую копию, либо `NULL`, если после обновления получается некорректная дата или возникают другие противоречия.
+
+`Timezone` можно передать только как именованный аргумент.
 
 ### Список функций
 
@@ -173,6 +192,7 @@ SELECT
 ### Список функций
 
 * `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`;
+
 *
 
   ```text
@@ -378,7 +398,7 @@ SELECT
 *
 
   ```text
-  DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?)
+  DateTime::Format(String, [AlwaysWriteFractionalSeconds:Bool?, WriteOffsetWithColon:Bool?])
   -> (Resource<TM64>{Flags:AutoMap}) -> String
   ```
 
@@ -390,8 +410,8 @@ SELECT
 * `%d` — день, 2 цифры;
 * `%H` - час 2 цифры;
 * `%M` - минуты 2 цифры;
-* `%S` — секунды, 2 цифры или `XX.XXXXXX`, если есть микросекунды (и только если флаг `alwaysWriteFractionalSeconds` не установлен в `True`);
-* `%z` — `+hhmm` или `-hhmm`;
+* `%S` — секунды, 2 цифры или `XX.XXXXXX`, если есть микросекунды (и только если флаг `AlwaysWriteFractionalSeconds` не установлен в `True`);
+* `%z`: `+hhmm` или `-hhmm` по умолчанию; `+hh:mm` или `-hh:mm`, если `WriteOffsetWithColon` равен `True`.
 * `%Z` - IANA имя таймзоны;
 * `%b` - короткое трехбуквенное английское название месяца (Jan);
 * `%B` - полное английское название месяца (January).
@@ -426,6 +446,7 @@ SELECT
 * `%H` — час, 2 цифры;
 * `%M` — минуты, 2 цифры;
 * `%S` — секунды, могут включать микросекунды в форматах от `XX` до `XX.XXXXXX`;
+* `%z`: смещение часового пояса в формате `±hh:mm`, `±hhmm` или `±hh`.
 * `%Z` — имя таймзоны в формате IANA (например, GMT);
 * `%b` — короткое трёхбуквенное регистронезависимое английское название месяца (например, Jan).
 * `%B` - полное регистронезависимое английское название месяца (January).

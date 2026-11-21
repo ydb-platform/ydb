@@ -50,6 +50,7 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 * `Math::ErfInv(Double{Flags:AutoMap}) -> Double`
 * `Math::ErfcInv(Double{Flags:AutoMap}) -> Double`
 * `Math::Exp(Double{Flags:AutoMap}) -> Double`
+* `Math::Expm1(Double{Flags:AutoMap}) -> Double`
 * `Math::Exp2(Double{Flags:AutoMap}) -> Double`
 * `Math::Fabs(Double{Flags:AutoMap}) -> Double`
 * `Math::Floor(Double{Flags:AutoMap}) -> Double`
@@ -64,8 +65,11 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 * `Math::Tgamma(Double{Flags:AutoMap}) -> Double`
 * `Math::Trunc(Double{Flags:AutoMap}) -> Double`
 * `Math::Log(Double{Flags:AutoMap}) -> Double`
+* `Math::Log1p(Double{Flags:AutoMap}) -> Double`
 * `Math::Log2(Double{Flags:AutoMap}) -> Double`
 * `Math::Log10(Double{Flags:AutoMap}) -> Double`
+
+`Math::Expm1` и `Math::Log1p` доступны начиная с версии [YQL 2026.03](https://github.com/ydb-platform/ydb/blob/7402b1bc5fce2db81cb0d8a2248dfa0fdf7c6751/yql/essentials/docs/ru/changelog/2026.03.md#math-module).
 
 ### Примеры
 
@@ -144,19 +148,34 @@ SELECT Math::Mod(-1, 7);        -- 6
 SELECT Math::Rem(-1, 7);        -- -1
 ```
 
+## SwapBytes {#swap-bytes}
+
+### Сигнатура
+
+* `Math::SwapBytes(T{Flags:AutoMap}) -> T`
+
+Меняет порядок байтов в заданном целочисленном значении на обратный. Поддерживаемые типы: Uint8, Uint16, Uint32, Uint64.
+
+#### Examples
+
+```yql
+-- 0x0001 -> 0x0100
+SELECT Math::SwapBytes(Uint16("1")); -- 256
+```
+
 ## Функции округления до целого числа в заданном режиме
 
 ### Список функций
 
-* `Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards negative infinity
-* `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards nearest representable value
-* `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards zero
-* `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards positive infinity
-* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>`
+* `Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону отрицательной бесконечности
+* `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону ближайшего представимого значения
+* `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону нуля
+* `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону положительной бесконечности
+* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>` &mdash; округление до ближайшего целого значения
 
-Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответсвии с режимом, заданным вторым аргументом.
+Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответствии с режимом, заданным вторым аргументом.
 
-Если результат выходит за пределы 64-битного целого числа, возращается NULL.
+Если результат выходит за пределы 64-битного целого числа, возвращается NULL.
 
 ### Примеры
 

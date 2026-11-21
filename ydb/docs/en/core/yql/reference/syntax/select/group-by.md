@@ -11,6 +11,12 @@ If `GROUP BY` is present in the query, then when selecting columns (between `SEL
 
 It is possible to group by the result of evaluating an arbitrary expression on the source columns. In this case, to access the result of this expression, it is recommended to assign it a name using `AS`, see the second [example](#examples).
 
+{% note info %}
+
+`NaN` values in `GROUP BY` keys are treated as equal to each other.
+
+{% endnote %}
+
 ### Syntax
 
 

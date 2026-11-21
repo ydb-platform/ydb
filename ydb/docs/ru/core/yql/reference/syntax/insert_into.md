@@ -8,25 +8,25 @@
 
 `INSERT INTO` позволяет выполнять следующие операции:
 
-* Добавление константных значений с помощью [`VALUES`](values.md).
+* Добавлять константные значения с помощью [`VALUES`](values.md).
 
   ```yql
-  INSERT INTO my_table (Key1, Key2, Value1, Value2)
+  INSERT INTO my_table (Column1, Column2, Column3, Column4)
   VALUES (345987,'ydb', 'Яблочный край', 1414);
   COMMIT;
   ```
 
   ```yql
-  INSERT INTO my_table (key, value)
+  INSERT INTO my_table (Column1, Column2)
   VALUES ("foo", 1), ("bar", 2);
   ```
 
-* Сохранение результата выборки `SELECT`.
+* Сохранять результаты выборки `SELECT`.
 
   ```yql
   INSERT INTO my_table
-  SELECT Key AS Key1, "Empty" AS Key2, Value AS Value1
-  FROM my_table1;
+  SELECT SourceTableColumn1 AS MyTableColumn1, "Empty" AS MyTableColumn2, SourceTableColumn2 AS MyTableColumn3
+  FROM source_table;
   ```
 
 {% if feature_insert_with_truncate %}

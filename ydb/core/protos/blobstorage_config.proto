@@ -964,6 +964,7 @@ message TBaseConfig {
         // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
         repeated TFailRealmInfo FailRealms = 14;
         optional TGroupState.EState Mirror3dcState = 15;
+        optional bool DDisk = 16;
     }
     message TNode {
         uint32 NodeId = 1;
@@ -994,6 +995,8 @@ message TBaseConfig {
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
     TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
+    // Present when the controller supplies typed DDisk pool groups.
+    optional bool HasDDiskPools = 8;
 }
 
 message TMoveCommand {

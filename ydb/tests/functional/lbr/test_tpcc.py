@@ -25,6 +25,7 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
         for name, path in (("ydbd", binary), ("CLI", cli)):
             if not path.is_absolute() or not path.is_file() or not os.access(path, os.X_OK):
                 raise ValueError(f"Pass an absolute path to the prebuilt baseline {name}: {path}")
+        binary = binary.resolve()
         pdisk_directory = yatest.common.get_param("tpc-lbr-pdisk-directory", "")
         if pdisk_directory:
             directory = Path(pdisk_directory)
@@ -138,8 +139,11 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
             phase="workload",
             conversion=self.conversion,
         )
-        with ExitStack() as self._lbr_stack:
-            super().test()
+        try:
+            with ExitStack() as self._lbr_stack:
+                super().test()
+        finally:
+            self.conversion.finish()
 
     def _signal_tpcc_load_started(self):
         super()._signal_tpcc_load_started()
@@ -150,4 +154,4 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
         try:
             cls.cluster.stop()
         finally:
-            cls.conversion.finish()
+            cls.conversion.abort()

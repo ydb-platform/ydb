@@ -108,7 +108,7 @@ They use a fake perf executable and do not start YDB or collect hardware profile
 Each closed, valid snapshot immediately starts its own conversion in a background
 thread, without a worker limit or a waiting queue. An open perf file is never submitted. Import and compaction
 conversion overlaps the later phases; the test waits for the remaining jobs
-at teardown and merges each successful phase separately.
+at the end of the test and merges each successful phase separately.
 
 Pass `--test-param=tpc-lbr-llvm-directory=/absolute/path/to/llvm/bin` to select
 `llvm-profgen` and `llvm-profdata`; otherwise they are found on PATH. If the
@@ -122,4 +122,6 @@ next to each snapshot. `profiles/conversion.json` records phase validity and
 errors. A failed or incomplete phase is not merged, even if some of its
 snapshots converted successfully. Conversion errors in successful phases fail
 the test. Sampling errors keep their original exception; setup failure drains
-or cancels the pending conversion jobs.
+or cancels the pending conversion jobs. Each conversion command has a one-hour
+timeout; expiry and cancellation terminate its process group. Failed conversion
+or merging of one phase does not prevent publishing other successful phases.

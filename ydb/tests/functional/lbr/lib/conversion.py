@@ -1,8 +1,10 @@
 from concurrent.futures import Future
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import time
 import threading
@@ -11,8 +13,15 @@ import threading
 class LbrConversion:
     """Convert closed snapshots concurrently; publish only successful phases."""
 
-    def __init__(self, binary, output_dir, llvm_dir="", perf="perf"):
+    def __init__(self, binary, output_dir, llvm_dir="", perf="perf", timeout=3600):
+        self.binary_paths = tuple(set((os.fsencode(Path(binary).absolute()), os.fsencode(Path(binary).resolve()))))
         self.binary = Path(binary).resolve()
+        if timeout <= 0:
+            raise ValueError("Conversion timeout must be positive")
+        self.timeout = timeout
+        self._processes = set()
+        self._process_lock = threading.Lock()
+        self._aborted = threading.Event()
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=False)
         self.profgen = str(Path(llvm_dir) / "llvm-profgen") if llvm_dir else "llvm-profgen"
@@ -35,10 +44,14 @@ class LbrConversion:
             except BaseException as exc:
                 future.set_exception(exc)
 
-        thread = threading.Thread(target=convert, name=f"lbr-convert-{phase}-{index}")
+        thread = threading.Thread(target=convert, name=f"lbr-convert-{phase}-{index}", daemon=True)
         self.jobs.append((phase, index, future))
-        self.threads.append(thread)
-        thread.start()
+        try:
+            thread.start()
+        except Exception as exc:
+            future.set_exception(exc)
+        else:
+            self.threads.append(thread)
 
     def finish_phase(self, phase, valid):
         if valid:
@@ -48,75 +61,133 @@ class LbrConversion:
                 if job_phase == phase:
                     future.cancel()
 
+    @staticmethod
+    def _kill(process):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    @contextmanager
+    def _process(self, command, **kwargs):
+        with self._process_lock:
+            if self._aborted.is_set():
+                raise RuntimeError("LBR conversion aborted")
+            process = subprocess.Popen(command, start_new_session=True, **kwargs)
+            self._processes.add(process)
+        expired = threading.Event()
+
+        def expire():
+            expired.set()
+            self._kill(process)
+
+        timer = threading.Timer(self.timeout, expire)
+        timer.daemon = True
+        try:
+            timer.start()
+            yield process
+            if expired.is_set():
+                raise TimeoutError(f"Conversion command timed out after {self.timeout}s: {command[0]}")
+        finally:
+            timer.cancel()
+            self._kill(process)
+            try:
+                process.wait(timeout=5)
+            finally:
+                if process.stdout is not None:
+                    process.stdout.close()
+                with self._process_lock:
+                    self._processes.discard(process)
+
+    def _join(self, timeout):
+        deadline = time.monotonic() + timeout
+        for thread in self.threads:
+            thread.join(timeout=max(0, deadline - time.monotonic()))
+
     def abort(self):
+        self._aborted.set()
         for _, _, future in self.jobs:
             future.cancel()
-        for thread in self.threads:
-            thread.join()
+        with self._process_lock:
+            for process in self._processes:
+                self._kill(process)
+        self._join(5)
 
     def finish(self):
-        for thread in self.threads:
-            thread.join()
+        self._join(self.timeout + 5)
+        if any(thread.is_alive() for thread in self.threads):
+            self.abort()
         results = []
         profiles = {}
-        error = None
+        errors = {}
         for phase, index, future in self.jobs:
             valid = phase in self.valid_phases
             try:
-                result = future.result()
+                if not future.done():
+                    raise TimeoutError(f"Conversion did not finish: {phase}/snap{index}")
+                result = future.result(timeout=0)
                 result.update(phase=phase, index=index, phase_valid=valid)
                 results.append(result)
                 if valid:
                     profiles.setdefault(phase, []).append(result["profile"])
             except Exception as exc:
                 results.append({"phase": phase, "index": index, "phase_valid": valid, "error": str(exc)})
-                if valid and error is None:
-                    error = exc
-        (self.output_dir / "conversion.json").write_text(json.dumps(results, indent=2))
-        if error is not None:
-            raise RuntimeError("LBR conversion failed; see conversion.json and snapshot logs") from error
+                if valid:
+                    errors[phase] = exc
         for phase, inputs in profiles.items():
+            if phase in errors:
+                continue
             destination = self.output_dir / f"{phase}.prof"
             temporary = destination.with_suffix(".prof.tmp")
-            self._run(
-                [self.profdata, "merge", "--sample", "-o", str(temporary), *inputs], self.output_dir / f"merge-{phase}"
+            try:
+                self._run(
+                    [self.profdata, "merge", "--sample", "-o", str(temporary), *inputs],
+                    self.output_dir / f"merge-{phase}",
+                )
+                temporary.replace(destination)
+            except Exception as exc:
+                errors[phase] = exc
+                results.append({"phase": phase, "phase_valid": True, "merge_error": str(exc)})
+        (self.output_dir / "conversion.json").write_text(json.dumps(results, indent=2))
+        if errors:
+            raise RuntimeError("LBR conversion failed; see conversion.json and snapshot logs") from next(
+                iter(errors.values())
             )
-            temporary.replace(destination)
 
     def _run(self, command, prefix):
         prefix.with_suffix(".command.json").write_text(json.dumps(command, indent=2))
         timing = prefix.with_suffix(".time")
         started = time.monotonic()
         with prefix.with_suffix(".log").open("w") as log:
-            result = subprocess.run(
+            with self._process(
                 ["/usr/bin/time", "-v", "-o", str(timing), *command], stdout=log, stderr=subprocess.STDOUT
-            )
+            ) as process:
+                return_code = process.wait(timeout=self.timeout + 5)
         elapsed = time.monotonic() - started
-        details = {"seconds": elapsed, "exit_code": result.returncode}
+        details = {"seconds": elapsed, "exit_code": return_code}
         match = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", timing.read_text())
         details["peak_rss_kib"] = int(match[1]) if match else None
         prefix.with_suffix(".result.json").write_text(json.dumps(details, indent=2))
-        if result.returncode:
-            raise RuntimeError(f"Command failed ({result.returncode}); see {prefix.with_suffix('.log')}")
+        if return_code:
+            raise RuntimeError(f"Command failed ({return_code}); see {prefix.with_suffix('.log')}")
         return details
 
     def _convert(self, data, prefix):
         lbr = prefix.with_suffix(".lbr")
         samples = mappings = 0
         branch = re.compile(rb"0x[0-9a-fA-F]+/0x[0-9a-fA-F]+")
-        binary = os.fsencode(self.binary)
         command = [self.perf, "script", "-G", "--show-mmap-events", "-F", "ip,brstack", "-i", str(data)]
         prefix.with_suffix(".perf-command.json").write_text(json.dumps(command, indent=2))
         with lbr.open("wb") as output, prefix.with_suffix(".perf-script.log").open("wb") as log:
-            with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=log) as process:
+            with self._process(command, stdout=subprocess.PIPE, stderr=log) as process:
                 for line in process.stdout:
                     sample = bool(branch.search(line))
-                    mapping = b"PERF_RECORD_MMAP" in line and line.rstrip().endswith(binary)
+                    mapping = b"PERF_RECORD_MMAP" in line and line.rstrip().endswith(self.binary_paths)
                     if sample or mapping:
                         output.write(line)
                         samples += sample
                         mappings += mapping
-                return_code = process.wait()
+                return_code = process.wait(timeout=self.timeout + 5)
         if return_code or not samples or not mappings:
             raise RuntimeError(
                 f"Invalid perf script for {data}: code={return_code}, samples={samples}, mappings={mappings}"

@@ -1,5 +1,7 @@
 #include "file_params.h"
 
+#include <util/system/file.h>
+
 #include <fcntl.h>
 #include <sys/disk.h>
 #include <sys/ioctl.h>
@@ -10,7 +12,7 @@
 namespace NKikimr {
 
 void DetectFileParameters(TString path, ui64 &outDiskSizeBytes, bool &outIsBlockDevice) {
-    int file = open(path.c_str(), O_RDWR);
+    const TFileHandle file(open(path.c_str(), O_RDWR));
     if (file < 0) {
         TStringStream errStr;
         errStr << "Can't open file \"" << path << "\": ";
@@ -48,7 +50,6 @@ void DetectFileParameters(TString path, ui64 &outDiskSizeBytes, bool &outIsBlock
             ythrow yexception() << "Can't get info about file/device, errno# " << errno << ", strerror(errno)# "
                 << strerror(errno) << Endl;
         }
-        close(file);
     }
 }
 

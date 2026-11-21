@@ -106,6 +106,7 @@ public:
         , MustRestoreFirst(params.Common.Event->MustRestoreFirst)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
+        , ReaderTabletData(params.Common.Event->ReaderTabletData)
     {}
 
     void PrepareRequest(ui32 beginIdx, ui32 endIdx) {

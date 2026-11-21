@@ -22,7 +22,7 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
         AUDIT_PART("component", GrpcConnComponentName)
 
         AUDIT_PART("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()))
-        AUDIT_PART("subject", userSID)
+        AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         AUDIT_PART("database", database)
         AUDIT_PART("operation", ctx->GetRequestName())

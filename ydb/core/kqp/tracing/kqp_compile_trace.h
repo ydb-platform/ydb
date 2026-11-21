@@ -17,7 +17,15 @@
 #include <functional>
 #include <optional>
 
+namespace NYql {
+class TExprNode;
+struct TExprContext;
+struct TTypeAnnotationContext;
+}
+
 namespace NKikimr::NKqp {
+
+class TOpRoot;
 
 struct TCompileTraceLevels {
     enum : ui8 {
@@ -46,6 +54,10 @@ public:
 
     TCompileTrace(NWilson::TTraceId root, NActors::TActorSystem* actorSystem);
     ~TCompileTrace();
+
+    std::function<void()> OnSqlTranslated;
+    std::function<void(const NYql::TExprNode&, NYql::TExprContext&, const NYql::TTypeAnnotationContext&)> CaptureKqlQuery;
+    std::function<void(const TVector<TIntrusivePtr<TOpRoot>>&, const NYql::TExprNode&, NYql::TExprContext&)> CaptureRboRoots;
 
     bool IsEnabled(ui8 verbosity) const {
         return Root && verbosity <= Root.GetVerbosity();

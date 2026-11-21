@@ -4,6 +4,10 @@
 #include <map>
 #include <memory>
 
+namespace NYql {
+struct TAstParseResult;
+}
+
 namespace NKikimr::NKqp {
 
 struct TKqpQueryRef {
@@ -15,6 +19,7 @@ struct TKqpQueryRef {
     // Text is owned by TKqpQueryId
     const TString& Text;
     std::shared_ptr<std::map<TString, Ydb::Type>> ParameterTypes;
+    const NYql::TAstParseResult* TranslatedAst = nullptr;
 };
 
 } // namespace NKikimr::NKqp

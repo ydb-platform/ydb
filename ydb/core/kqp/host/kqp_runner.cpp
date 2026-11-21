@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_inspection.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
@@ -200,6 +201,12 @@ public:
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
     }
 
+    TIntrusivePtr<TAsyncQueryResult> PrepareNewRbo(const TExprNode::TPtr& query, TExprContext& ctx) override {
+        Y_ENSURE(NewRBOTransformer, "NewRBO composite graph transformer was not initialized.");
+        NewRBOTransformer->Rewind();
+        return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+    }
+
     TIntrusivePtr<TAsyncQueryResult> PrepareDataQuery(const TString& cluster, const TExprNode::TPtr& query,
         TExprContext& ctx, const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
@@ -332,6 +339,10 @@ private:
         }
 
         TExprNode::TPtr query = kqlQueryBlocks->Ptr();
+        if (const auto* trace = queryCtx->CompileTrace.Get(); trace && trace->CaptureKqlQuery) {
+            trace->CaptureKqlQuery(*query, ctx, TypesCtx);
+            return MakeKikimrResultHolder(IKqpHost::TQueryResult{});
+        }
         YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
         YQL_CLOG(DEBUG, CoreDq) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
 
@@ -344,9 +355,7 @@ private:
 
         if (Config->GetEnableNewRBO()) {
             YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
-            Y_ENSURE(NewRBOTransformer, "NewRBO composite graph transformer was not initialized.");
-            NewRBOTransformer->Rewind();
-            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+            return PrepareNewRbo(query, ctx);
         } else {
             YQL_CLOG(INFO, CoreDq) << "Taking the old RBO branch";
             return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
@@ -492,6 +501,13 @@ private:
             //    .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             //    .Build(false);
 
+            auto rbo = CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
+                SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx);
+            if (dynamic_cast<TImportedRboInspection*>(OptimizeCtx->GetCompileTrace())) {
+                NewRBOTransformer = std::move(rbo);
+                return;
+            }
+
             auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
@@ -511,8 +527,7 @@ private:
 
                 .Add(traced(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "Rewrite select",
                     TCompileTraceLevels::Step), "RewriteSelect")
-                .Add(traced(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
-                    SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx),
+                .Add(traced(std::move(rbo),
                     "Run new RBO", TCompileTraceLevels::Step), "NewRBOTransformer")
                 .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
                 .Add(CreateCompileTraceEnd(getTrace, "Optimize query", &optimization),

@@ -137,7 +137,7 @@ struct TTestSchema {
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
-        bool UseForcedCompaction = false;
+        std::optional<TString> CompactionPlanner;   // the planner class of the table; the node default when not set
 
         TTableSpecials() noexcept = default;
 
@@ -154,7 +154,7 @@ struct TTestSchema {
         }
 
         bool GetUseForcedCompaction() const {
-            return UseForcedCompaction;
+            return CompactionPlanner == "tiling++";
         }
 
         TTableSpecials WithCodec(const TString& codec) const {
@@ -163,9 +163,14 @@ struct TTestSchema {
             return out;
         }
 
+        // tiling++: the planner whose end state a forced compaction waits for
         TTableSpecials WithForcedCompaction(bool forced) const {
+            return WithCompactionPlanner(forced ? std::optional<TString>("tiling++") : std::nullopt);
+        }
+
+        TTableSpecials WithCompactionPlanner(const std::optional<TString>& className) const {
             TTableSpecials out = *this;
-            out.UseForcedCompaction = forced;
+            out.CompactionPlanner = className;
             return out;
         }
 
@@ -480,7 +485,7 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId,
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr,
-    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1);
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1, const ui64 schemaVersion = 1);
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 

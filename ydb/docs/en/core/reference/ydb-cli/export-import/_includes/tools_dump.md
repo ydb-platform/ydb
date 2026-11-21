@@ -18,8 +18,6 @@ A [cluster configuration](../../../../devops/configuration-management/configurat
 
 The `admin database dump` command dumps the database' data and metadata to the client file system in the format described in [{#T}](../file-structure.md):
 
-{% include [limitation](./limitation-dump-column-tables.md) %}
-
 {% include [limitation](./limitation-dump-secrets.md) %}
 
 ```bash
@@ -35,8 +33,6 @@ A [database configuration](../../../../devops/configuration-management/configura
 ## Schema objects {#schema-objects}
 
 The `tools dump` command dumps the schema objects to the client file system in the format described in [{#T}](../file-structure.md):
-
-{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [limitation](./limitation-dump-secrets.md) %}
 

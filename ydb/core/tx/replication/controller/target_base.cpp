@@ -42,6 +42,10 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
+bool TTargetBase::TConfigBase::GetSrcIsImpl() const {
+    return false;
+}
+
 TTargetBase::TTargetBase(
         TReplication* replication,
         ETargetKind kind,
@@ -312,6 +316,10 @@ void TTargetBase::Reset(TActorId& id) {
 }
 
 void TTargetBase::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
+}
+
+TString TTargetBase::GetSrcIndexPath() const {
+    Y_ABORT("Unreachable");
 }
 
 }

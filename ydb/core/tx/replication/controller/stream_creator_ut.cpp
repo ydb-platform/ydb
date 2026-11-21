@@ -51,6 +51,36 @@ Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
 
+    Y_UNIT_TEST(TargetStreamPathsAreCanonical) {
+        const NKikimrReplication::TReplicationConfig config;
+        TReplication replication(1, TPathId(1, 1), config, "/Root");
+        const auto check = [&](const TReplication::ITarget::IConfig::TPtr& targetConfig, const TString& expected) {
+            const auto id = replication.AddTarget(targetConfig->GetKind(), targetConfig);
+            auto* target = replication.FindTarget(id);
+            target->SetStreamName("Stream");
+            UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), expected);
+        };
+
+        check(std::make_shared<TTargetTable::TTableConfig>("Root//Table/", "/Root/Replica"),
+            "/Root/Table/Stream");
+        check(std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+            "/Root//Table/Index/indexImplTable/", "/Root/Replica/Index/indexImplTable", true),
+            "/Root/Table/Index/indexImplTable/Stream");
+
+        // An index built after the replication was created refers to the source index, while its
+        // stream lives on the source impl table taken from the destination path.
+        const auto indexBuildConfig = std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+            "/Root//Table/Index/", "/Root/Replica/Index/indexImplTable", false);
+        const auto indexBuildTargetId = replication.AddTarget(indexBuildConfig->GetKind(), indexBuildConfig);
+        auto* indexBuildTarget = replication.FindTarget(indexBuildTargetId);
+        indexBuildTarget->SetStreamName("Stream");
+        indexBuildTarget->SetIndexBuild(true);
+        UNIT_ASSERT_VALUES_EQUAL(indexBuildTarget->GetStreamPath(), "/Root/Table/Index/indexImplTable/Stream");
+
+        check(std::make_shared<TTargetTransfer::TTransferConfig>("/Root//Topic/", "/Root/Replica", config),
+            "/Root/Topic");
+    }
+
     Y_UNIT_TEST_TWIN(WriteSpeedWithConfiguredLimits, Allowed) {
         TEnv env(true, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
@@ -670,7 +700,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
                 config = std::make_shared<TTargetTransfer::TTransferConfig>("/Root/Topic", "/Root/Replica",
                     NKikimrReplication::TReplicationConfig{});
             } else {
-                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica");
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica", false);
             }
             Creator = Runtime.Register(CreateStreamCreator(Parent, Proxy, 1, 1, config,
                 "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,

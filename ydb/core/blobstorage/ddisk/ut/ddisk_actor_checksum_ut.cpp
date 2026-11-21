@@ -21,6 +21,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -109,7 +110,7 @@ class TTestContext {
 
     static void SendFromPDisk(TTestActorSystem& runtime, const TActorId& sender, const TActorId& recipient,
             IEventBase* ev, ui64 cookie = 0) {
-        runtime.Send(new IEventHandle(recipient, sender, ev, 0, cookie), NodeId);
+        runtime.Send(new IEventHandle(recipient, sender, ev, 0, cookie), sender.NodeId());
     }
 
 public:
@@ -121,8 +122,8 @@ public:
     std::unordered_map<TActorId, std::unordered_map<ui32, TString>> RegistrationImages;
     std::set<TActorId> PDiskEdges;
 
-    TTestContext()
-        : Runtime(1)
+    explicit TTestContext(ui32 numNodes = 1)
+        : Runtime(numNodes)
         , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     {
         Runtime.Start();
@@ -135,15 +136,16 @@ public:
 
     TDiskHandle CreateDDisk(ui32 pdiskId, ui32 slotId, NDDisk::TDDiskConfig ddiskConfig = {},
             ui32 chunkSize = ChunkSize,
-            std::optional<NDDisk::TPersistentBufferFormat> customFormat = std::nullopt) {
+            std::optional<NDDisk::TPersistentBufferFormat> customFormat = std::nullopt,
+            ui32 nodeId = NodeId) {
         const bool enableChecksums = ddiskConfig.EnableChecksums;
-        const TActorId pdiskEdge = Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
-        const TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
+        const TActorId pdiskEdge = Runtime.AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        const TActorId pdiskServiceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
         Runtime.RegisterService(pdiskServiceId, pdiskEdge);
         PDiskEdges.insert(pdiskEdge);
 
         TVector<TActorId> actorIds = {
-            MakeBlobStorageDDiskId(NodeId, pdiskId, slotId),
+            MakeBlobStorageDDiskId(nodeId, pdiskId, slotId),
         };
         auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone, ui32(1), ui32(1),
             ui32(1), &actorIds);
@@ -162,9 +164,9 @@ public:
             NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 5000, 512 * 1024});
         const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), std::move(ddiskConfig), Counters),
-            NodeId);
-        const TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
-        const TActorId pbServiceId = MakeBlobStoragePersistentBufferId(NodeId, pdiskId, slotId);
+            nodeId);
+        const TActorId ddiskServiceId = MakeBlobStorageDDiskId(nodeId, pdiskId, slotId);
+        const TActorId pbServiceId = MakeBlobStoragePersistentBufferId(nodeId, pdiskId, slotId);
         Runtime.RegisterService(ddiskServiceId, ddiskActor);
 
         TDiskHandle disk{ddiskServiceId, pbServiceId, pdiskEdge, pdiskId, slotId, 100000 + pdiskId * 1000};
@@ -2911,6 +2913,121 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
             GetChecksumCounter(ctx, disk, "IntegrityCorruption")->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
             GetChecksumCounter(ctx, disk, "IntegrityLostWriteDetected")->Val(), 1);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDDiskSyncSessionLoss) {
+
+    // The source DDisk accepts a Sync source read and starts reading its disk. While the disk is
+    // slow, the link between the nodes breaks. The source replies through the interconnect session
+    // of the request, so the reply is lost for sure. The destination must still answer the Sync.
+    Y_UNIT_TEST(SyncAnswersWhenSourceReplyIsLostWithSession) {
+        constexpr ui32 DestinationNodeId = NodeId;
+        constexpr ui32 SourceNodeId = NodeId + 1;
+        TTestContext ctx(2);
+        const TDiskHandle destination = ctx.CreateDDisk(50, 1);
+        const TDiskHandle source = ctx.CreateDDisk(60, 1, {}, TTestContext::ChunkSize, std::nullopt, SourceNodeId);
+
+        TFakeDiskStorage sourceStorage;
+        const NDDisk::TBlockSelector selector{0, 0, 2 * BlockSize};
+        const auto sourceCreds = Connect(ctx, source.ServiceId, 100, 1);
+        AssertStatus(WriteDirect(ctx, source, sourceStorage, sourceCreds, selector.VChunkIndex,
+            selector.OffsetInBytes, MakeData('S', selector.Size)), TReplyStatus::OK);
+        const auto destinationCreds = Connect(ctx, destination.ServiceId, 100, 1);
+
+        // a reply to a dead session is dropped on send, so count the replies of the source by its counter
+        const auto sourceReadReplies = ctx.Counters
+            ->GetSubgroup("counters", "ddisks")
+            ->GetSubgroup("ddiskPool", "ddisk_pool")
+            ->GetSubgroup("group", Sprintf("%09u", 0u))
+            ->GetSubgroup("orderNumber", Sprintf("%02u", 0u))
+            ->GetSubgroup("pdisk", Sprintf("%09u", source.PDiskId))
+            ->GetSubgroup("media", "nvme")
+            ->GetSubgroup("subsystem", "interface")
+            ->GetSubgroup("operation", "Read")
+            ->GetCounter("ReplyOk", true);
+        UNIT_ASSERT_VALUES_EQUAL(sourceReadReplies->Val(), 0);
+        ui32 sourceRepliesDelivered = 0;
+        ctx.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == DestinationNodeId && ev->GetTypeRewrite() == NDDisk::TEvReadResult::EventType) {
+                ++sourceRepliesDelivered;
+            }
+            return true;
+        };
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(destinationCreds);
+        sync->AddSegmentFromDDisk({SourceNodeId, source.PDiskId, source.SlotId},
+            *sourceCreds.DDiskInstanceGuid, selector);
+        SendToDDisk(ctx, destination.ServiceId, sync.release());
+
+        const TActorId timeoutEdge = ctx.Runtime.AllocateEdgeActor(DestinationNodeId, __FILE__, __LINE__);
+        ctx.Runtime.Schedule(TDuration::Minutes(10),
+            new IEventHandle(timeoutEdge, timeoutEdge, new TEvents::TEvWakeup), nullptr, DestinationNodeId);
+        const TActorId releaseEdge = ctx.Runtime.AllocateEdgeActor(SourceNodeId, __FILE__, __LINE__);
+
+        auto replyFromPDisk = [&](const IEventHandle& request, IEventBase* response) {
+            ctx.Runtime.Send(new IEventHandle(request.Sender, request.Recipient, response, 0, request.Cookie),
+                request.Recipient.NodeId());
+        };
+        auto completeSourceRead = [&](IEventHandle& read) {
+            replyFromPDisk(read, new NPDisk::TEvChunkReadRawResult(
+                sourceStorage.Read(*read.Get<NPDisk::TEvChunkReadRaw>())));
+        };
+
+        std::vector<std::unique_ptr<IEventHandle>> heldSourceReads;
+        bool disconnected = false;
+        bool released = false;
+        std::unique_ptr<IEventHandle> result;
+        bool timedOut = false;
+        // run until the Sync is answered and the slow source has replied too, or until the timeout
+        while (!timedOut && !(result && sourceReadReplies->Val())) {
+            auto ev = ctx.Runtime.WaitForEdgeActorEvent(
+                {ctx.Edge, timeoutEdge, releaseEdge, source.PDiskEdge, destination.PDiskEdge});
+            const ui32 type = ev->GetTypeRewrite();
+            if (ev->Recipient == ctx.Edge) {
+                UNIT_ASSERT_VALUES_EQUAL(type, NDDisk::TEvSyncResult::EventType);
+                result = std::move(ev);
+            } else if (ev->Recipient == timeoutEdge) {
+                timedOut = true;
+            } else if (ev->Recipient == releaseEdge) {
+                // the slow disk completes; the source replies through the session that is gone
+                released = true;
+                for (const auto& read : std::exchange(heldSourceReads, {})) {
+                    completeSourceRead(*read);
+                }
+            } else if (type == NPDisk::TEvChunkReadRaw::EventType && ev->GetRecipientRewrite() == source.PDiskEdge) {
+                if (released) {
+                    completeSourceRead(*ev);
+                    continue;
+                }
+                heldSourceReads.push_back(std::move(ev));
+                if (!disconnected) {
+                    // the source has accepted the read and waits for its disk; now the link breaks
+                    UNIT_ASSERT_VALUES_EQUAL(sourceReadReplies->Val(), 0);
+                    disconnected = true;
+                    const TActorId proxy = ctx.Runtime.GetNode(DestinationNodeId)->ActorSystem->InterconnectProxy(SourceNodeId);
+                    ctx.Runtime.Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0, proxy, {}, nullptr, 0),
+                        DestinationNodeId);
+                    ctx.Runtime.Schedule(TDuration::Seconds(1),
+                        new IEventHandle(releaseEdge, releaseEdge, new TEvents::TEvWakeup), nullptr, SourceNodeId);
+                }
+            } else if (type == NPDisk::TEvCheckSpace::EventType) {
+                replyFromPDisk(*ev, new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0));
+            } else {
+                UNIT_FAIL("unexpected event " << type << " at " << ev->Recipient);
+            }
+        }
+
+        UNIT_ASSERT(disconnected);
+        UNIT_ASSERT(released);
+        UNIT_ASSERT_VALUES_EQUAL_C(sourceReadReplies->Val(), 1, "the source must have replied after the link broke");
+        UNIT_ASSERT_VALUES_EQUAL_C(sourceRepliesDelivered, 0, "the reply of the source must be lost with the session");
+        UNIT_ASSERT_C(result, "Sync got no reply after the reply of its source was lost with the session");
+
+        const auto& record = result->Get<NDDisk::TEvSyncResult>()->Record;
+        UNIT_ASSERT_C(record.GetStatus() == TReplyStatus::ERROR, record.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(record.SegmentResultsSize(), 1);
+        UNIT_ASSERT_C(record.GetSegmentResults(0).GetStatus() == TReplyStatus::ERROR, record.ShortDebugString());
     }
 }
 

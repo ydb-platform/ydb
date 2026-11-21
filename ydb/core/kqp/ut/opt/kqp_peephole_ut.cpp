@@ -89,6 +89,68 @@ NYql::TExprNode::TPtr BuildPackUnpackWideMap(NYql::TExprContext& ctx, EPackKind 
 
 Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
 
+    Y_UNIT_TEST_TWIN(TimestampBucketAggregation, BlockChannels) {
+        for (const bool constraintsEnabled : { false, true }) {
+            NKikimrKqp::TKqpSetting constraintsSetting;
+            constraintsSetting.SetName("_KqpYqlConstraintsTransformerEnabled");
+            constraintsSetting.SetValue(constraintsEnabled ? "true" : "false");
+            auto settings = TKikimrSettings().SetWithSampleTables(false).SetKqpSettings({ constraintsSetting });
+            auto* tableService = settings.AppConfig.MutableTableServiceConfig();
+            tableService->SetEnableNewRBO(false);
+            tableService->SetBlockChannelsMode(BlockChannels
+                ? NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO
+                : NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR);
+            TKikimrRunner kikimr(settings);
+            auto db = kikimr.GetQueryClient();
+            auto create = db.ExecuteQuery(R"(
+                CREATE TABLE Events (
+                    hostid String,
+                    time Timestamp,
+                    source String,
+                    PRIMARY KEY (hostid, source, time)
+                ) WITH (PARTITION_AT_KEYS = (('target', 'b')));
+            )", NYdb::NQuery::TTxControl::NoTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), NYdb::EStatus::SUCCESS, create.GetIssues().ToString());
+            auto insert = db.ExecuteQuery(R"(
+                UPSERT INTO Events (hostid, time, source) VALUES
+                    ('target', Timestamp('2026-01-16T15:27:22Z'), 'a'),
+                    ('target', Timestamp('2026-01-16T15:27:23Z'), 'a'),
+                    ('target', Timestamp('2026-01-16T15:29:59Z'), 'a'),
+                    ('target', Timestamp('2026-01-16T15:28:00Z'), 'b'),
+                    ('target', Timestamp('2026-01-16T15:30:00Z'), 'a'),
+                    ('target', Timestamp('2026-01-16T17:27:23Z'), 'a'),
+                    ('target', Timestamp('2026-01-16T17:27:24Z'), 'a'),
+                    ('other', Timestamp('2026-01-16T15:28:00Z'), 'a');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), NYdb::EStatus::SUCCESS, insert.GetIssues().ToString());
+            auto result = db.ExecuteQuery(R"(
+                $start_time = Timestamp('2026-01-16T15:27:23+00:00');
+                $end_time = Timestamp('2026-01-16T17:27:23+00:00');
+                $interval_us = 600000000;
+
+                SELECT
+                    MIN(CAST(((CAST(time AS Uint64) / $interval_us) * $interval_us) AS Timestamp)) AS interval_start,
+                    source,
+                    COUNT(*) AS event_count
+                FROM Events
+                WHERE hostid = 'target' AND time >= $start_time AND time <= $end_time
+                GROUP BY (CAST(time AS Uint64) / $interval_us) AS bucket, source
+                ORDER BY interval_start ASC, source ASC;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1768576800000000u];["a"];2u];
+                [[1768576800000000u];["b"];1u];
+                [[1768577400000000u];["a"];1u];
+                [[1768584000000000u];["a"];1u]
+            ])", NYdb::FormatResultSetYson(result.GetResultSet(/* resultIndex */ 0)));
+        }
+    }
+
     Y_UNIT_TEST(NonDeterministicProducerKeepsTypes) {
         TKikimrSettings settings;
         auto* tableService = settings.AppConfig.MutableTableServiceConfig();

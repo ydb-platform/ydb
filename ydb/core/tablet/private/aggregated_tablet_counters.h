@@ -44,7 +44,8 @@ public:
     explicit TAggregatedTabletCounters(
         ::NMonitoring::TDynamicCounterPtr counterGroup,
         ::NMonitoring::TCountableBase::EVisibility visibility
-            = ::NMonitoring::TCountableBase::EVisibility::Public);
+            = ::NMonitoring::TCountableBase::EVisibility::Public,
+        bool memOnly = false);
 
     /**
      * Create the aggregated counters for the counter set reported by the tablets.
@@ -120,6 +121,7 @@ private:
 
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
     ::NMonitoring::TCountableBase::EVisibility Visibility;
+    bool MemOnly;
 };
 
 } // namespace NKikimr::NPrivate

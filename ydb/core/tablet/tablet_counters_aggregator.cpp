@@ -167,7 +167,8 @@ public:
     TTabletMon(::NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId,
             bool dbCountersEnabled, bool detailedMetricsEnabled, const TActorContext& ctx)
         : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
-        , AllTypes(MakeIntrusive<TTabletCountersForTabletType>(Counters.Get(), "type", "all"))
+        // The sum (max) over the other types: Solomon needs only its cluster aggregates.
+        , AllTypes(MakeIntrusive<TTabletCountersForTabletType>(Counters.Get(), "type", "all", true /* memOnly */))
         , IsFollower(isFollower)
         , DbWatcherActorId(dbWatcherActorId)
         , DbCountersEnabled(dbCountersEnabled)
@@ -665,12 +666,13 @@ private:
     class TTabletCountersForTabletType : public TThrRefBase {
     public:
         //
-        TTabletCountersForTabletType(::NMonitoring::TDynamicCounters* owner, const char* category, const char* name)
+        TTabletCountersForTabletType(::NMonitoring::TDynamicCounters* owner, const char* category, const char* name,
+                bool memOnly = false)
             : TabletCountersSection(owner->GetSubgroup(category, name))
             , TabletExecutorCountersSection(TabletCountersSection->GetSubgroup("category", "executor"))
             , TabletAppCountersSection(TabletCountersSection->GetSubgroup("category", "app"))
-            , TabletExecutorCounters(TabletExecutorCountersSection)
-            , TabletAppCounters(TabletAppCountersSection)
+            , TabletExecutorCounters(TabletExecutorCountersSection, ::NMonitoring::TCountableBase::EVisibility::Public, memOnly)
+            , TabletAppCounters(TabletAppCountersSection, ::NMonitoring::TCountableBase::EVisibility::Public, memOnly)
         {}
 
         void Apply(ui64 tabletId, ui32 followerId,

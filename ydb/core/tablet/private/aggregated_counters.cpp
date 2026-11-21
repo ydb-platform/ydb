@@ -1,4 +1,5 @@
 #include "aggregated_counters.h"
+#include <ydb/core/mon/counters_memonly.h>
 #include <ydb/core/protos/labeled_counters.pb.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -32,9 +33,11 @@ using THistogramVector = TVector<THolder<THistogramCounter>>;
 
 TAggregatedSimpleCounters::TAggregatedSimpleCounters(
     ::NMonitoring::TDynamicCounterPtr counterGroup,
-    ::NMonitoring::TCountableBase::EVisibility visibility)
+    ::NMonitoring::TCountableBase::EVisibility visibility,
+    bool memOnly)
     : CounterGroup(counterGroup)
     , Visibility(visibility)
+    , MemOnly(memOnly)
 {}
 
 void TAggregatedSimpleCounters::Reserve(size_t hint) {
@@ -53,7 +56,7 @@ void TAggregatedSimpleCounters::AddSimpleCounter(
     TString sumName = Sprintf("SUM(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = CounterGroup->GetCounter(name, false, Visibility);
+        auto counter = NMonitoring::NMemOnlyShim::GetCounter(CounterGroup, name, false, Visibility, MemOnly);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxSimpleCounters);
@@ -195,9 +198,11 @@ bool TAggregatedSimpleCounters::Find(const TString& name, TVector<TTabletCounter
 
 TAggregatedCumulativeCounters::TAggregatedCumulativeCounters(
     ::NMonitoring::TDynamicCounterPtr counterGroup,
-    ::NMonitoring::TCountableBase::EVisibility visibility)
+    ::NMonitoring::TCountableBase::EVisibility visibility,
+    bool memOnly)
     : CounterGroup(counterGroup)
     , Visibility(visibility)
+    , MemOnly(memOnly)
 {}
 
 void TAggregatedCumulativeCounters::Reserve(size_t hint) {
@@ -214,7 +219,7 @@ void TAggregatedCumulativeCounters::AddCumulativeCounter(
     TString maxName = Sprintf("MAX(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = CounterGroup->GetCounter(name, false, Visibility);
+        auto counter = NMonitoring::NMemOnlyShim::GetCounter(CounterGroup, name, false, Visibility, MemOnly);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxCumulativeCounters);
@@ -339,9 +344,11 @@ bool TAggregatedCumulativeCounters::Find(const TString& name, TVector<TTabletCou
 
 TAggregatedHistogramCounters::TAggregatedHistogramCounters(
     ::NMonitoring::TDynamicCounterPtr counterGroup,
-    ::NMonitoring::TCountableBase::EVisibility visibility)
+    ::NMonitoring::TCountableBase::EVisibility visibility,
+    bool memOnly)
     : CounterGroup(counterGroup)
     , Visibility(visibility)
+    , MemOnly(memOnly)
 {}
 
 void TAggregatedHistogramCounters::Reserve(size_t hint) {
@@ -373,8 +380,8 @@ bool TAggregatedHistogramCounters::AddCounter(
         bucketBounds.push_back(percentileCounter.GetRangeBound(i));
     }
 
-    auto histogram = CounterGroup->GetHistogram(
-        name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative, Visibility);
+    auto histogram = NMonitoring::NMemOnlyShim::GetHistogram(
+        CounterGroup, name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative, Visibility, MemOnly);
 
     if (histogramAggregate) {
         // either simple or cumulative aggregate will handle this histogram,

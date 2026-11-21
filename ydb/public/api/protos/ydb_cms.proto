@@ -256,6 +256,13 @@ message AlterDatabaseRequest {
     // Freeze row-table writes and wait for outstanding writes and CDC delivery.
     // false removes the database freeze. Must not be combined with other changes.
     // ASYNC returns an operation id; SUCCESS means all participating shards applied it.
+    // Confirm cluster support before freeze or thaw; the SDK version is insufficient.
+    // Do not probe support with this call: an old Console may increment generation
+    // before UNSUPPORTED is returned.
+    // Before freezing a database served by a shared SchemeShard, wait until
+    // GetDatabaseStatus reports RUNNING after all prior quota changes.
+    // Prevent concurrent administrative changes during this check and freeze.
+    // With a dedicated SchemeShard, RUNNING does not confirm quota propagation.
     optional bool freeze = 15;
 }
 

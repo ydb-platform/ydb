@@ -1791,6 +1791,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->BridgeModeEnabled = true;
     }
 
+    AppData->SysViewConfig = runConfig.AppConfig.GetSysViewConfig();
+
     if (runConfig.AppConfig.HasStatisticsConfig()) {
         AppData->StatisticsConfig = runConfig.AppConfig.GetStatisticsConfig();
     }

@@ -2,6 +2,8 @@
 
 #include "ext_counters.h"
 
+#include <ydb/core/protos/config.pb.h>
+
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
@@ -15,7 +17,8 @@ inline TActorId MakeSysViewServiceID(ui32 node) {
 }
 
 THolder<NActors::IActor> CreateSysViewService(
-    TExtCountersConfig&& config, bool hasExternalCounters);
+    TExtCountersConfig&& config, bool hasExternalCounters,
+    const NKikimrConfig::TSysViewConfig& sysViewConfig);
 
 THolder<NActors::IActor> CreateSysViewServiceForTests();
 

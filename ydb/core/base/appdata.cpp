@@ -87,6 +87,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TBridgeConfig BridgeConfig;
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
+    NKikimrConfig::TSysViewConfig SysViewConfig;
     TMetricsConfig MetricsConfig;
     NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
     NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
@@ -161,6 +162,7 @@ TAppData::TAppData(
     , QueryServiceConfig(Impl->QueryServiceConfig)
     , BridgeConfig(Impl->BridgeConfig)
     , StatisticsConfig(Impl->StatisticsConfig)
+    , SysViewConfig(Impl->SysViewConfig)
     , MetricsConfig(Impl->MetricsConfig)
     , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
     , RecoveryShardConfig(Impl->RecoveryShardConfig)

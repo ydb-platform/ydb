@@ -6,6 +6,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -20,7 +21,9 @@ namespace {
     }
 
     void FillIssues(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo) {
-        if (exportInfo.Issue) {
+        if (exportInfo.Issue && !AnyOf(exportInfo.Items, [&](const auto& item) {
+            return item.Issue == exportInfo.Issue;
+        })) {
             AddIssue(exprt, exportInfo.Issue);
         }
 

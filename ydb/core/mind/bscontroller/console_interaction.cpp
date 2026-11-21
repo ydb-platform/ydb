@@ -246,12 +246,17 @@ namespace NKikimr::NBsController {
         }
     }
 
-    void TBlobStorageController::TConsoleInteraction::OnConfigCommit() {
+    void TBlobStorageController::TConsoleInteraction::OnConfigCommit(bool mainConfigChanged) {
         CommitInProgress = false;
         if (!Working) {
             return;
         }
         if (ConsolePipe) {
+            if (!mainConfigChanged) {
+                // A storage-only replacement must not advance the main config version in Console.
+                OnConsoleCommit();
+                return;
+            }
             Y_ABORT_UNLESS(Self.YamlConfig);
             if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
                 NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
@@ -294,14 +299,18 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed:
-                MaybeDisableConfigV2();
-                if (ClientId) {
-                    IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
-                }
+                OnConsoleCommit();
                 break;
 
             default:
                 Y_FAIL("Unexpected console commit config response status: %d", status);
+        }
+    }
+
+    void TBlobStorageController::TConsoleInteraction::OnConsoleCommit() {
+        MaybeDisableConfigV2();
+        if (ClientId) {
+            IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
         }
     }
 
@@ -480,11 +489,11 @@ namespace NKikimr::NBsController {
         }
 
         if (record.GetSkipConsoleValidation() || !record.HasClusterYaml()) {
-            // TODO(alexvru): INCORRECT!!!
-            Y_DEBUG_ABORT();
+            // nothing for Console to validate: the replacement goes on in BSC as if Console had found it valid
             auto validateConfigResponse = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
             validateConfigResponse->Record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid);
-            Self.Send(ev->Sender, validateConfigResponse.release());
+            TActivationContext::Send(new IEventHandle(Self.SelfId(), Self.SelfId(), validateConfigResponse.release(), 0,
+                ExpectedValidationTimeoutCookie));
             return;
         }
 
@@ -575,6 +584,21 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::ProcessDryRunResponse(bool success, TString errorReason) {
+        // the validation resolves the hosts of the box with the node list of the new config, but the commit applies the
+        // box with the node list the controller has now; reject a host this list does not know yet, otherwise the
+        // commit would persist the YAML and then fail to resolve it
+        if (success && PendingCommitState && PendingCommitState->StorageConfig && Self.Boxes.size() <= 1
+                && PendingCommitState->StorageConfig->HasBlobStorageConfig()) {
+            for (const auto& host : PendingCommitState->StorageConfig->GetBlobStorageConfig().GetDefineBox().GetHost()) {
+                const ui32 nodeId = host.GetEnforcedNodeId();
+                if (!Self.HostRecords || !Self.HostRecords->GetHostId(nodeId)) {
+                    success = false;
+                    errorReason = TStringBuilder() << "host with node id " << nodeId
+                        << " is not known to BS controller yet";
+                    break;
+                }
+            }
+        }
         if (success) {
             if (IsDryRun) {
                 IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);

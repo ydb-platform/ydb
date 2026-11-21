@@ -1320,7 +1320,9 @@ namespace NActors {
                                             }
                                             break;
                                         case EEventAction::DROP:
-                                            // do nothing
+                                            if (AllowBreakOnStopCondition && checkStopConditions(/* perMessage */ true)) {
+                                                stopCondition = true;
+                                            }
                                             break;
                                         case EEventAction::RESCHEDULE: {
                                             TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay;

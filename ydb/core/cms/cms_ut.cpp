@@ -610,8 +610,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
                 const auto detail = env.RequestDDiskInfo(2002, true);
                 UNIT_ASSERT_VALUES_EQUAL(detail.GetStatus(), NKikimrProto::OK);
-                UNIT_ASSERT(detail.HasRequiredReadyMembers());
-                UNIT_ASSERT_VALUES_EQUAL(detail.GetRequiredReadyMembers(), 3);
                 const auto& group = detail.GetGroups(0);
                 UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), swapRoles ? 2 : 3);
                 UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferDDiskIdSize(), swapRoles ? 2 : 1);
@@ -643,7 +641,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 UNIT_ASSERT(!unknown.HasDDiskStatus());
                 UNIT_ASSERT(!unknown.HasPersistentBufferStatus());
                 const auto legacy = env.RequestDDiskInfo(2002);
-                UNIT_ASSERT(!legacy.HasRequiredReadyMembers());
                 UNIT_ASSERT_VALUES_EQUAL(legacy.SlotsSize(), 0);
             }
 

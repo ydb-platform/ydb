@@ -1810,8 +1810,6 @@ message TEvControllerDDiskInfoGetTabletResult {
     // Allocated slots referenced by either role, keyed by node, PDisk, and slot.
     // Included with health so a consumer can display the layout from one snapshot.
     repeated NKikimrWhiteboard.TDDiskStateInfo Slots = 6;
-    // NBS ready-member threshold for each role. Included by CMS with health.
-    optional uint32 RequiredReadyMembers = 7;
 }
 
 message TEvControllerDDiskInfoTabletRevisionChanged {

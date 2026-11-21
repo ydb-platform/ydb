@@ -18,7 +18,6 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config_units.pb.h>
@@ -2207,7 +2206,6 @@ void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext&
             response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
             response->Record.SetErrorReason("Cannot collect cluster state");
         } else {
-            response->Record.SetRequiredReadyMembers(NYdb::NBS::NBlockStore::QuorumDirectBlockGroupHostCount);
             THashSet<std::tuple<ui32, ui32, ui32>> slots;
             auto addSlots = [&](const auto& ids) {
                 for (const auto& id : ids) {

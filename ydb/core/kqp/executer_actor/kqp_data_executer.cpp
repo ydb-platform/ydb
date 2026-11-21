@@ -1115,6 +1115,9 @@ private:
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
             hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
+            hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleShutdown);
+            hFunc(TEvents::TEvUndelivered, HandleShutdown);
+            hFunc(TEvPrivate::TEvRetry, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
@@ -1130,15 +1133,54 @@ private:
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        HandleComputeStats(ev);
-
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            PassAway();
+        if (HandleComputeStats(ev) && Planner->GetPendingComputeActors().contains(ev->Sender)) {
+            AbortLateComputeActor(ev->Sender);
         }
+        TryFinishShutdown();
     }
 
     void HandleShutdown(TEvDqCompute::TEvNodeState::TPtr&) {
+        TryFinishShutdown();
+    }
+
+    void HandleShutdown(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetTxId() != TxId) {
+            return;
+        }
+
+        for (const auto& task : record.GetStartedTasks()) {
+            const auto computeActor = ActorIdFromProto(task.GetActorId());
+            if (Planner->AcknowledgeCA(task.GetTaskId(), computeActor, nullptr)) {
+                AbortLateComputeActor(computeActor);
+            }
+        }
+        for (const auto& task : record.GetNotStartedTasks()) {
+            Planner->TaskNotStarted(task.GetTaskId());
+        }
+        TryFinishShutdown();
+    }
+
+    void HandleShutdown(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+            Planner->RequestNotStarted(ev->Cookie);
+            TryFinishShutdown();
+        }
+    }
+
+    void HandleShutdown(TEvPrivate::TEvRetry::TPtr& ev) {
+        Planner->RequestNotStarted(ev->Get()->RequestId);
+        TryFinishShutdown();
+    }
+
+    void AbortLateComputeActor(const TActorId& computeActor) {
+        const auto status = ResponseEv->Record.GetResponse().GetStatus();
+        Send(computeActor, new TEvKqp::TEvAbortExecution(YdbStatusToDqStatus(status), "Terminate execution"));
+    }
+
+    void TryFinishShutdown() {
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            FillLocksFromExtraData();
             PassAway();
         }
     }
@@ -1166,10 +1208,7 @@ private:
             }
         }
 
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            FillLocksFromExtraData();
-            PassAway();
-        }
+        TryFinishShutdown();
     }
 
     void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {

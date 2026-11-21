@@ -872,14 +872,16 @@ TMaybe<ui64> TKqpPlanner::GetActualNodeIdForTask(ui64 taskId) const {
 }
 
 void TKqpPlanner::TaskNotStarted(ui64 taskId) {
-    // NOTE: should be invoked only while shutting down - when node is disconnected.
-
-    auto& task = TasksGraph.GetTask(taskId);
-
-    YQL_ENSURE(!task.ComputeActorId);
-    YQL_ENSURE(!task.Meta.Completed);
-
+    // A start failure can include tasks whose actors already reported in.
     PendingComputeTasks.erase(taskId);
+}
+
+void TKqpPlanner::RequestNotStarted(ui64 requestId) {
+    if (requestId < Requests.size()) {
+        for (ui64 taskId : Requests[requestId].TaskIds) {
+            TaskNotStarted(taskId);
+        }
+    }
 }
 
 TProgressStat::TEntry TKqpPlanner::CalculateConsumptionUpdate() {

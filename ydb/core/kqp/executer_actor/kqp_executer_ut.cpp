@@ -5,8 +5,12 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_planner.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
@@ -15,7 +19,172 @@ namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+namespace {
+
+enum class ELateRemoteTaskStart {
+    ComputeState,
+    StartResponse,
+    NotStarted,
+    Undelivered,
+};
+
+void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) {
+    using NYql::NDq::TEvDqCompute::TEvState;
+    using NYql::NDqProto::StatusIds;
+    constexpr auto failureStatus = StatusIds::PRECONDITION_FAILED;
+    const TString failureMessage = "Local compute actor failed";
+
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetNodeCount(2);
+    auto* config = settings.AppConfig.MutableTableServiceConfig();
+    config->SetDqChannelVersion(channelVersion);
+    config->MutableResourceManager()->SetMaxNonParallelDataQueryTasksLimit(0);
+    config->MutableResourceManager()->SetMaxNonParallelTasksExecutionLimit(0);
+    config->MutableQueryLimits()->SetWaitCAStatsTimeoutMs(1000);
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+    TActorId executer;
+    TActorId localComputeActor;
+    TActorId localExecuter;
+    TInstant shutdownDeadline;
+    TInstant responseTime;
+    THashSet<TActorId> abortedRemoteActors;
+    TBlockEvents<TEvKqpNode::TEvStartKqpTasksRequest> startRequests(runtime, [&](const auto& ev) {
+        return ev->Sender.NodeId() != ev->GetRecipientRewrite().NodeId();
+    });
+    TBlockEvents<TEvKqpNode::TEvStartKqpTasksResponse> startResponses(runtime, [&](const auto& ev) {
+        return outcome == ELateRemoteTaskStart::ComputeState && ev->GetRecipientRewrite() == executer
+            && ev->Sender.NodeId() != executer.NodeId();
+    });
+    const auto stateObserver = runtime.AddObserver<TEvState>([&](auto& ev) {
+        const auto recipient = ev->GetRecipientRewrite();
+        if (ev->Sender.NodeId() == recipient.NodeId()
+            && ev->Get()->Record.GetState() == NYql::NDqProto::COMPUTE_STATE_EXECUTING && !localComputeActor) {
+            localComputeActor = ev->Sender;
+            localExecuter = recipient;
+        }
+    });
+    TBlockEvents<TEvState> remoteHellos(runtime, [&](const auto& ev) {
+        return outcome == ELateRemoteTaskStart::StartResponse && ev->GetRecipientRewrite() == executer
+            && ev->Sender.NodeId() != executer.NodeId()
+            && ev->Get()->Record.GetState() == NYql::NDqProto::COMPUTE_STATE_EXECUTING;
+    });
+    const auto abortObserver = runtime.AddObserver<TEvKqp::TEvAbortExecution>([&](auto& ev) {
+        const auto recipient = ev->GetRecipientRewrite();
+        if (ev->Sender == executer && recipient.NodeId() != executer.NodeId()) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(ev->Get()->Record.GetStatusCode()), static_cast<int>(failureStatus));
+            UNIT_ASSERT(abortedRemoteActors.insert(recipient).second);
+        }
+    });
+    const auto responseObserver = runtime.AddObserver<TEvKqpExecuter::TEvTxResponse>([&](auto& ev) {
+        if (ev->Sender == executer) {
+            responseTime = runtime.GetCurrentTime();
+        }
+    });
+    TTestActorRuntimeBase::TScheduledEventFilter previousFilter;
+    previousFilter = runtime.SetScheduledEventFilter([&](auto& actorRuntime, auto& ev, auto delay, auto& deadline) {
+        if (executer && ev->GetTypeRewrite() == TEvents::TEvPoison::EventType
+            && ev->Sender == executer && ev->GetRecipientRewrite() == executer) {
+            shutdownDeadline = deadline;
+            return false;
+        }
+        return previousFilter(actorRuntime, ev, delay, deadline);
+    });
+    Y_DEFER { runtime.SetScheduledEventFilter(previousFilter); };
+
+    // Keep the compute actors alive until they receive an abort, even if a read could finish immediately.
+    NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+    Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
+
+    auto edge = runtime.AllocateEdgeActor();
+    auto query = MakeHolder<TEvKqp::TEvQueryRequest>();
+    ActorIdToProto(edge, query->Record.MutableRequestActorId());
+    auto& request = *query->Record.MutableRequest();
+    request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    request.SetDatabase("/Root");
+    request.SetQuery("SELECT COUNT(*) FROM `/Root/EightShard`;");
+    request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    request.MutableTxControl()->set_commit_tx(true);
+    NDataShard::NKqpHelpers::SendRequest(runtime, edge, std::move(query));
+
+    runtime.WaitFor("local compute actor and remote start request", [&] {
+        return localComputeActor && !startRequests.empty();
+    }, TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(startRequests.size(), 1);
+    auto& heldRequest = startRequests.front();
+    executer = heldRequest->Sender;
+    UNIT_ASSERT_VALUES_EQUAL(localExecuter, executer);
+    const auto remoteNode = heldRequest->GetRecipientRewrite().NodeId();
+    const auto remoteNodeIndex = remoteNode - runtime.GetFirstNodeId();
+    const auto& start = heldRequest->Get()->Record;
+    const auto remoteTaskCount = start.TasksSize();
+    UNIT_ASSERT_GT(remoteTaskCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(start.GetTasks(0).GetDqChannelVersion(), channelVersion);
+
+    // The local actor reports a failure through the same path as a failing query expression.
+    runtime.Send(new IEventHandle(localComputeActor, executer, new TEvKqp::TEvAbortExecution(failureStatus, failureMessage)),
+        executer.NodeId() - runtime.GetFirstNodeId(), true);
+    runtime.WaitFor("executer waiting for compute actors to shut down", [&] { return bool(shutdownDeadline); }, TDuration::Seconds(5));
+
+    switch (outcome) {
+        case ELateRemoteTaskStart::ComputeState:
+        case ELateRemoteTaskStart::StartResponse:
+            startRequests.Stop().Unblock();
+            break;
+        case ELateRemoteTaskStart::NotStarted: {
+            auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
+            reply->Record.SetTxId(start.GetTxId());
+            for (const auto& task : start.GetTasks()) {
+                auto* notStarted = reply->Record.AddNotStartedTasks();
+                notStarted->SetTaskId(task.GetId());
+                notStarted->SetRequestId(heldRequest->Cookie);
+                notStarted->SetReason(NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN);
+            }
+            runtime.Send(new IEventHandle(executer, heldRequest->Recipient, reply.Release(), 0, heldRequest->Cookie),
+                remoteNodeIndex, true);
+            break;
+        }
+        case ELateRemoteTaskStart::Undelivered: {
+            auto reply = MakeHolder<TEvents::TEvUndelivered>(TEvKqpNode::TEvStartKqpTasksRequest::EventType,
+                TEvents::TEvUndelivered::ReasonActorUnknown);
+            runtime.Send(new IEventHandle(executer, heldRequest->Recipient, reply.Release(), 0, heldRequest->Cookie),
+                remoteNodeIndex, true);
+            break;
+        }
+    }
+
+    auto reply = runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(reply);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+    UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.GetResponse().DebugString(), failureMessage);
+    UNIT_ASSERT_C(responseTime && responseTime < shutdownDeadline, "Executer waited for the compute actor shutdown timeout");
+    UNIT_ASSERT_VALUES_EQUAL(startRequests.size(),
+        outcome == ELateRemoteTaskStart::ComputeState || outcome == ELateRemoteTaskStart::StartResponse ? 0 : 1);
+    if (outcome == ELateRemoteTaskStart::ComputeState || outcome == ELateRemoteTaskStart::StartResponse) {
+        UNIT_ASSERT_VALUES_EQUAL(abortedRemoteActors.size(), remoteTaskCount);
+    }
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpExecuter) {
+
+    Y_UNIT_TEST_TWIN(LateRemoteTaskComputeStateDuringShutdown, ChannelsV2) {
+        TestLateRemoteTaskStart(ChannelsV2 ? 2 : 1, ELateRemoteTaskStart::ComputeState);
+    }
+
+    Y_UNIT_TEST(LateRemoteTaskStartResponseDuringShutdown) {
+        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::StartResponse);
+    }
+
+    Y_UNIT_TEST(LateRemoteTaskNotStartedDuringShutdown) {
+        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::NotStarted);
+    }
+
+    Y_UNIT_TEST(LateRemoteTaskUndeliveredDuringShutdown) {
+        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::Undelivered);
+    }
 
     /* Scenario:
         - Start query execution and receive TEvTxRequest.

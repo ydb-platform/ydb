@@ -89,6 +89,7 @@ struct TTestEnvOpts {
     ui32 PileCount;
     ui32 NodesWithoutPDisksCount;
     TNodeTenantsMap Tenants;
+    TErasureType::EErasureSpecies BlockErasure = TErasureType::Erasure4Plus2Block;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
     bool EnableSentinel;

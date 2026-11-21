@@ -347,6 +347,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvWrite
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
+    SessionClosing = true;
+
     if (AuthInitActor) {
         ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
     }
@@ -1861,9 +1863,15 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(ui64 tabletId,
 
                     if (jt->second.LockSent) {
                         SendReleaseSignal(jt->second, true, ctx);
+                        if (SessionClosing) {
+                            return;
+                        }
                     }
 
                     ReleasePartition(jt, true, ctx);
+                    if (SessionClosing) {
+                        return;
+                    }
                 } else {
                     ++it;
                 }

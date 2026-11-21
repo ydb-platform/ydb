@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/columnshard/data_accessor)
 SRCS(
     ut_manager.cpp
     ut_cache_consumers.cpp
+    ut_portion_chunks.cpp
 )
 
 PEERDIR(

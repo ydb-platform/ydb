@@ -345,10 +345,10 @@ public:
             if (!delay || now < startedAt + *delay || (secret.Revision == rejectedRevision && now < retryAt)) {
                 continue;
             }
-            // DescribeTopic can succeed for credentials that the worker cannot use to read.
-            // The failed legacy password is known in memory until the controller restarts.
+            // A consumer grant can make the installed legacy password usable again.
+            // Delay probing that value while still allowing a changed password on the next poll.
             if (FailedRevision == LegacySecretRecoveryMarker && failedCredentials.HasPassword()
-                && secret.Value == failedCredentials.GetPassword())
+                && secret.Value == failedCredentials.GetPassword() && now < startedAt + MaxSecretRetryDelay)
             {
                 continue;
             }

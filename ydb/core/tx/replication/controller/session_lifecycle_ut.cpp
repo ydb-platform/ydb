@@ -34,9 +34,24 @@ namespace NKikimr::NReplication::NController {
 Y_UNIT_TEST_SUITE(SessionLifecycle) {
     using namespace NTestHelpers;
 
+    enum class ESecretStore { Schema, Legacy };
+
     // Exercise the real resolver and its sender/cookie checks while controlling
     // the external secret lookup and the order of delivery to the controller.
     class TSecretGate {
+        struct TLegacySnapshot : NMetadata::NSecret::TSnapshot {
+            TString Value;
+
+            explicit TLegacySnapshot(const TString& value)
+                : TSnapshot(TInstant::Zero())
+                , Value(value)
+            {}
+
+            TConclusion<TString> GetSecretValue(const NMetadata::NSecret::TSecretIdOrValue&) const override {
+                return Value;
+            }
+        };
+
         TTestActorRuntime& Runtime;
         TTestActorRuntime::TEventObserverHolder Observer;
 
@@ -44,18 +59,22 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         bool Hold = false;
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         ui32 FailedLookups = 0;
+        ui32 LegacyLookups = 0;
         TString Value = "root@builtin";
         std::optional<NKqp::TSecretRevision> Revision = NKqp::TSecretRevision{1, 2, 0};
         TAutoPtr<IEventHandle> Pending;
 
-        explicit TSecretGate(TTestActorRuntime& runtime)
+        explicit TSecretGate(TTestActorRuntime& runtime, ESecretStore store = ESecretStore::Schema)
             : Runtime(runtime)
-            , Observer(runtime.AddObserver([this](IEventHandle::TPtr& ev) {
+            , Observer(runtime.AddObserver([this, store](IEventHandle::TPtr& ev) {
                 if (!ev->HasEvent()) {
                     return;
                 }
 
-                if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet) {
+                const ui32 lookupEvent = store == ESecretStore::Schema
+                    ? static_cast<ui32>(TEvTxProxySchemeCache::EvNavigateKeySet)
+                    : static_cast<ui32>(NMetadata::NProvider::TEvAskSnapshot::EventType);
+                if (ev->GetTypeRewrite() == lookupEvent) {
                     const auto* sender = Runtime.FindActor(ev->Sender);
                     if (!sender || sender->GetActivityType()
                         != NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER)
@@ -63,6 +82,13 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                         return;
                     }
 
+                    if (store == ESecretStore::Legacy) {
+                        ++LegacyLookups;
+                        Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                            new NMetadata::NProvider::TEvRefreshSubscriberData(std::make_shared<TLegacySnapshot>(Value))));
+                        ev.Reset();
+                        return;
+                    }
                     using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
                     const std::vector<TString> values{Value};
                     if (Status != Ydb::StatusIds::SUCCESS) {
@@ -86,7 +112,12 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                     }
                 }
             }))
-        {}
+        {
+            if (store == ESecretStore::Legacy) {
+                runtime.GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(false);
+                runtime.GetAppData(0).FeatureFlags.SetDisableOldSecrets(false);
+            }
+        }
 
         void Release() {
             UNIT_ASSERT(Pending);
@@ -110,7 +141,8 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         TString CredentialInstanceId;
 
         explicit TSetup(ui32 nodeCount = 2, bool transfer = false, bool secret = false,
-                ESecretCredentials credentials = ESecretCredentials::OAuth, ESourceSchema schema = ESourceSchema::Table)
+                ESecretCredentials credentials = ESecretCredentials::OAuth, ESourceSchema schema = ESourceSchema::Table,
+                ESecretStore store = ESecretStore::Schema)
             : Env(true, ERuntimeMode::Simulated, nodeCount)
             , Transfer(transfer)
         {
@@ -118,7 +150,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             auto& runtime = Env.GetRuntime();
             runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
             if (secret) {
-                Secret = std::make_unique<TSecretGate>(runtime);
+                Secret = std::make_unique<TSecretGate>(runtime, store);
                 if (credentials == ESecretCredentials::Static) {
                     Secret->Value = "AutoPassword27516";
                 }
@@ -459,32 +491,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             (return (AsList (UpdateRow 'Replications key data)))
         ))", s.Worker.ReplicationId()), result), NKikimrProto::OK);
 
-        s.Secret.reset();
-        runtime.GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(false);
-        runtime.GetAppData(0).FeatureFlags.SetDisableOldSecrets(false);
-        struct TLegacySnapshot : NMetadata::NSecret::TSnapshot {
-            TString Value;
-
-            TLegacySnapshot()
-                : TSnapshot(TInstant::Zero())
-            {}
-
-            TConclusion<TString> GetSecretValue(const NMetadata::NSecret::TSecretIdOrValue&) const override {
-                return Value;
-            }
-        };
-        const auto snapshot = std::make_shared<TLegacySnapshot>();
-        ui32 lookups = 0;
-        auto lookup = runtime.AddObserver<NMetadata::NProvider::TEvAskSnapshot>(
-            [&](NMetadata::NProvider::TEvAskSnapshot::TPtr& ev) {
-                const auto* actor = runtime.FindActor(ev->Sender);
-                if (actor && actor->GetActivityType() == NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER) {
-                    ++lookups;
-                    runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
-                        new NMetadata::NProvider::TEvRefreshSubscriberData(snapshot)));
-                    ev.Reset();
-                }
-            });
+        s.Secret = std::make_unique<TSecretGate>(runtime, ESecretStore::Legacy);
         s.Reboot();
         s.Status(0, false);
         UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, s.ControllerId, Sprintf(R"((
@@ -496,7 +503,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
         const auto edge = runtime.AllocateEdgeActor();
         for (const char* value : {"first password", "AutoPassword27516"}) {
-            snapshot->Value = value;
+            s.Secret->Value = value;
             runtime.Register(CreateSecretResolver(edge, 1, s.PathId, "/Root/source-token", 1, "/Root"));
             const auto resolved = runtime.GrabEdgeEvent<TEvPrivate::TEvResolveSecretResult>(edge, TDuration::Seconds(30));
             UNIT_ASSERT(resolved && resolved->Get()->IsSuccess());
@@ -515,12 +522,12 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         s.CredentialInstanceId = run->Get()->Record.GetCommand().GetRemoteTopicReader()
             .GetConnectionParams().GetCredentialInstanceId();
         s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
-        const auto previousLookups = lookups;
+        const auto previousLookups = s.Secret->LegacyLookups;
         ui32 probes = 0;
         auto observeProbes = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
             [&](TEvYdbProxy::TEvDescribeTopicRequest::TPtr&) { ++probes; });
         runtime.SimulateSleep(TDuration::Minutes(2));
-        UNIT_ASSERT_GE(lookups, previousLookups + 2);
+        UNIT_ASSERT_GE(s.Secret->LegacyLookups, previousLookups + 2);
         UNIT_ASSERT_VALUES_EQUAL(probes, 0);
         UNIT_ASSERT(s.Describe().GetState().HasError());
 
@@ -531,7 +538,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 "ALTER USER sourceauto WITH PASSWORD 'RotatedPassword27516';").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         });
-        snapshot->Value = "RotatedPassword27516";
+        s.Secret->Value = "RotatedPassword27516";
         runtime.SimulateSleep(TDuration::Seconds(35));
         runtime.WaitFor("changed legacy password restores replication", [&] {
             return s.Describe().GetState().HasStandBy();
@@ -1030,8 +1037,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT(s.Describe().GetState().HasStandBy());
     }
 
-    Y_UNIT_TEST(SecretRecoveryRetriesRevisionAfterConsumerAccessIsGranted) {
-        TSetup s(1, false, true, ESecretCredentials::Static);
+    Y_UNIT_TEST_TWIN(SecretRecoveryRetriesRevisionAfterConsumerAccessIsGranted, LegacySecret) {
+        TSetup s(1, false, true, ESecretCredentials::Static, ESourceSchema::Table,
+            LegacySecret ? ESecretStore::Legacy : ESecretStore::Schema);
         auto& runtime = s.Env.GetRuntime();
         s.ReportSourceError(NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION);
         const auto scheme = [&](const TString& query) {
@@ -1080,7 +1088,12 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 deniedInstance = status.GetCredentialInstanceId();
             }
         });
-        ++s.Secret->Revision->Version;
+        if (LegacySecret) {
+            scheme("ALTER USER sourceauto WITH PASSWORD 'RotatedPassword27516';");
+            s.Secret->Value = "RotatedPassword27516";
+        } else {
+            ++s.Secret->Revision->Version;
+        }
         runtime.SimulateSleep(TDuration::Seconds(35));
         runtime.WaitFor("reader denied with rotated credentials", [&] {
             return !deniedInstance.empty() && s.Describe().GetState().HasError();

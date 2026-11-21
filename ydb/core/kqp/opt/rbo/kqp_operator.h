@@ -257,6 +257,8 @@ public:
      */
     virtual const TUnorderedIUs& GetOutputIUs();
 
+    void InitializeOutputIUs() { ComputeOutputIUs(); }
+
     /**
      * Get the child-output IDs this operator reads. Subplan results are not
      * included; Aggregate omits the keys it forwards.

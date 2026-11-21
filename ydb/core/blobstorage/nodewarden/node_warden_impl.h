@@ -595,6 +595,7 @@ namespace NKikimr::NStorage {
             // 2. Incrementing generation.
             // 3. Becoming a donor.
             // 4. Deleting disk.
+            // 5. Getting a donor at a new place, when the PDisk of the donor moves.
             NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk Config;
 
             // Runtime configuration of VDisk.
@@ -606,6 +607,7 @@ namespace NKikimr::NStorage {
                 bool DonorMode;
                 bool ReadOnly;
                 bool DDisk;
+                std::vector<std::pair<TVDiskID, TActorId>> DonorDiskIds; // donors known to the running VDisk
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;
@@ -698,6 +700,7 @@ namespace NKikimr::NStorage {
         void DestroyLocalVDisk(TVDiskRecord& vdisk);
         void PoisonLocalVDisk(TVDiskRecord& vdisk);
         void StartLocalVDiskActor(TVDiskRecord& vdisk);
+        static bool HasUnknownDonors(const TVDiskRecord& vdisk);
         void HandleGone(STATEFN_SIG);
         void ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic);
 

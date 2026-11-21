@@ -3611,6 +3611,7 @@ FROM `{table_name}`"""
         [(1, 1), (0, 6), (5, 5)],
         ids=["max_tasks_1", "default", "max_tasks_50"],
     )
+    @pytest.mark.usefixtures("wait_initial_resources")
     def test_pq_source_actor_count(
         self: StreamingTestBase,
         kikimr: Kikimr,
@@ -3649,6 +3650,69 @@ FROM `{table_name}`"""
                 for node_id in kikimr.cluster.slots
             )
 
+        assert wait_for(
+            lambda: streaming_query_tasks_count() == expected_actor_count, timeout_seconds=60, step_seconds=1
+        ), f"Expected {expected_actor_count} streaming query tasks, got {streaming_query_tasks_count()}"
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("kikimr", [{"aggregation_compute_threads": 16}], indirect=["kikimr"])
+    @pytest.mark.parametrize(
+        "max_tasks_per_stage, expected_actor_count",
+        [(1, 1 + 1), (0, 6 + 16), (5, 5 + 5)],
+        ids=["max_tasks_1", "default", "max_tasks_50"],
+    )
+    @pytest.mark.usefixtures("wait_initial_resources")
+    def test_pq_source_with_aggregation_actor_count(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        max_tasks_per_stage: int,
+        expected_actor_count: int,
+    ) -> None:
+
+        partitions_count = 100
+        test_name = f"test_pq_source_agg_actor_count_{max_tasks_per_stage or 'default'}"
+        inp, out, _ = self.get_io_names(
+            kikimr,
+            test_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
+        )
+        query_name = test_name
+        path = f"{kikimr.get_database_name()}/{query_name}"
+
+        kikimr.ydb_client.query(f"""
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                {f'PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";' if max_tasks_per_stage else ''}
+                INSERT INTO {out}
+                SELECT SOME(Data) FROM {inp}
+                GROUP BY Length(Data), HOP(CAST(Data AS Timestamp), 'PT1S', 'PT1S', 'PT1S')
+                ;
+            END DO;
+            """)
+        self.wait_completed_checkpoints(kikimr, query_name)
+
+        def streaming_query_tasks_count():
+            return sum(
+                get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+                    {"path": path, "subsystem": "streaming_queries", "sensor": "streaming.query.tasks.count"}
+                )
+                or 0
+                for node_id in kikimr.cluster.slots
+            )
+
+        def query_plan() -> str:
+            result_sets = kikimr.ydb_client.query(
+                f'SELECT Plan FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+            )
+            assert len(result_sets) == 1
+            assert len(result_sets[0].rows) == 1
+            return result_sets[0].rows[0]["Plan"]
+
+        logger.debug(f"query plan: {query_plan()}")
         assert wait_for(
             lambda: streaming_query_tasks_count() == expected_actor_count, timeout_seconds=60, step_seconds=1
         ), f"Expected {expected_actor_count} streaming query tasks, got {streaming_query_tasks_count()}"

@@ -433,7 +433,8 @@ public:
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        bool useKqpTasksGraphV2
+        bool useKqpTasksGraphV2,
+        const ui64 maxTasksPerStage = 0
     );
     ~TKqpTasksGraph();
 
@@ -554,6 +555,7 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
     const bool UseKqpTasksGraphV2;
+    const ui64 MaxTasksPerStage;
 };
 
 } // namespace NKikimr::NKqp

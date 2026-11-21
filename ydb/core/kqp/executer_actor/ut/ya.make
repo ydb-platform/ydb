@@ -5,6 +5,19 @@ REQUIREMENTS(cpu:2)
 FORK_SUBTESTS()
 SPLIT_FACTOR(8)
 
+IF (PROFILE_MEMORY_ALLOCATIONS)
+    MESSAGE("Enabled profile memory allocations")
+    ALLOCATOR(LF_DBG)
+ELSE()
+    IF (OS_LINUX)
+        ALLOCATOR(TCMALLOC_256K)
+    ENDIF()
+ENDIF()
+
+IF (OS_LINUX)
+    LINKER_SCRIPT(strip_debug.ld)
+ENDIF()
+
 SRCS(
     kqp_compute_actor_creation_ut.cpp
     kqp_executer_stats_ut.cpp

@@ -1735,6 +1735,9 @@ message TPersQueueGroupDescription {
         optional bool CreatePartition = 3;
     }
     repeated TPartitionBoundary RootPartitionBoundaries = 17;
+
+    // Internal ALTER action. SchemeShard stamps the tablet config after checking ownership.
+    optional uint64 TrimCdcReplicationTxId = 18;
 }
 
 message TRtmrVolumeDescription {

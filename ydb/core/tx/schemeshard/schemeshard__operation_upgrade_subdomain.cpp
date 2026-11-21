@@ -201,6 +201,9 @@ public:
 
         descr.SetAlterVersion(tableInfo->AlterVersion);
         descr.SetPartitioningVersion(tableInfo->PartitioningVersion);
+        if (tableInfo->TableDescription.HasNotNullSince()) {
+            descr.MutableNotNullSince()->CopyFrom(tableInfo->TableDescription.GetNotNullSince());
+        }
 
         for (auto& item: tableInfo->Columns) {
             ui32 columnId = item.first;

@@ -101,6 +101,13 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     if (!commitTx)
         return true;
 
+    // The session must check this snapshot even when the optimizer folded the entire read.
+    for (const auto& table : physicalQuery.GetTableInfos()) {
+        if (table.HasNotNullSince()) {
+            return true;
+        }
+    }
+
     size_t readPhases = 0;
     bool hasEffects = false;
     bool hasInsert = false;

@@ -84,6 +84,17 @@ TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& contex
 {
 }
 
+void TFetchingScriptBuilder::AddReadNotNullFilter(const TColumnsSetIds& columns) {
+    if (columns.IsEmpty()) {
+        return;
+    }
+
+    const auto stage = NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter;
+    AddFetchingStep(columns, stage);
+    AddAssembleStep(columns, "NOT_NULL", stage, false);
+    AddStep(std::make_shared<TReadNotNullFilter>());
+}
+
 void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
     auto actualColumns = columns - AddedFetchingColumns;
     AddedFetchingColumns += columns;

@@ -1,5 +1,6 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -12,6 +13,77 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SetNotNullTest) {
+    Y_UNIT_TEST_TWIN(ColumnTableAdmissionFeatureFlag, Enabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardSetNotNull(Enabled);
+        TestCreateColumnTable(runtime, 100, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "key"
+            }
+        )");
+        env.TestWaitNotification(runtime, 100);
+        TestAlterColumnTable(runtime, 102, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "value" NotNull: true } }
+        )", {NKikimrScheme::StatusSchemeError});
+        TestAlterColumnTable(runtime, 103, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "value" SetNotNullInProgress: true } }
+        )", {NKikimrScheme::StatusSchemeError});
+        TestAlterColumnTable(runtime, 104, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "extra" Type: "Utf8" FilterNullsOnRead: true } }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // TTestEnv uses a fake coordinator with its own plan steps and no LongTx service.
+        const auto snapshotService = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NLongTxService::MakeLongTxServiceID(runtime.GetNodeId()), snapshotService);
+        auto response = TestSetColumnConstraint(runtime, 101, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/ColumnTable", {"value"});
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNSUPPORTED,
+            response.ShortDebugString());
+        if constexpr (Enabled) {
+            using TEvents = NLongTxService::TEvLongTxService;
+            auto request = runtime.GrabEdgeEventRethrow<TEvents::TEvAcquireReadSnapshot>(snapshotService);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->DatabaseName, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->TableIds.size(), 1);
+            runtime.Send(new IEventHandle(request->Sender, snapshotService, new TEvents::TEvAcquireReadSnapshotResult(
+                request->Get()->DatabaseName, TRowVersion(env.GetCoordinatorStep(), Max<ui64>()), {}, std::move(request->Get()->Orbit))));
+            env.TestWaitNotification(runtime, 101);
+        }
+
+        auto description = DescribePath(runtime, "/MyRoot/ColumnTable");
+        const auto& columns = description.GetPathDescription().GetColumnTableDescription().GetSchema().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        for (const auto& column : columns) {
+            if (column.GetName() == "value") {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), Enabled);
+                UNIT_ASSERT(!column.GetSetNotNullInProgress());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetFilterNullsOnRead(), Enabled);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetName(), "key");
+                UNIT_ASSERT(!column.HasFilterNullsOnRead());
+            }
+        }
+
+        if constexpr (Enabled) {
+            TestAlterColumnTable(runtime, 105, "/MyRoot", R"(
+                Name: "ColumnTable"
+                AlterSchema { AlterColumns { Name: "value" NotNull: false } }
+            )");
+            env.TestWaitNotification(runtime, 105);
+            auto afterDrop = DescribePath(runtime, "/MyRoot/ColumnTable");
+            for (const auto& column : afterDrop.GetPathDescription().GetColumnTableDescription().GetSchema().GetColumns()) {
+                UNIT_ASSERT(!column.HasFilterNullsOnRead());
+            }
+        }
+    }
+
     Y_UNIT_TEST(BasicRequest) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

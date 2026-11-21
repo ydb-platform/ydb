@@ -26,6 +26,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, EFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PredicateColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PKColumns);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ReadNotNullColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, AllUsageColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ProgramInputColumns);
@@ -39,9 +40,13 @@ private:
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const IDataSource& source, const bool isFinalSyncPoint) = 0;
 
 protected:
+    void IncludeReadNotNullColumnsForMerge();
+
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
 
 public:
+    void ApplyReadNotNullFilter(NArrow::NAccessor::TAccessorsCollection& table) const;
+
     std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const IDataSource& source, const bool isFinalSyncPoint) {
         return DoGetColumnsFetchingPlan(source, isFinalSyncPoint);
     }

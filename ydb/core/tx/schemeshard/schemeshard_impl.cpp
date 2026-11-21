@@ -3634,7 +3634,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
             NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig),
             NIceDb::TUpdate<Schema::Tables::DetailedMetricsSettings>(detailedMetricsSettings),
-            NIceDb::TUpdate<Schema::Tables::MultiColumnStatistics>(statistics)
+            NIceDb::TUpdate<Schema::Tables::MultiColumnStatistics>(statistics),
+            NIceDb::TUpdate<Schema::Tables::NotNullSince>(tableInfo->TableDescription.GetNotNullSince().SerializeAsString())
         );
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -3651,7 +3652,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
             NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig),
             NIceDb::TUpdate<Schema::MigratedTables::DetailedMetricsSettings>(detailedMetricsSettings),
-            NIceDb::TUpdate<Schema::MigratedTables::MultiColumnStatistics>(statistics)
+            NIceDb::TUpdate<Schema::MigratedTables::MultiColumnStatistics>(statistics),
+            NIceDb::TUpdate<Schema::MigratedTables::NotNullSince>(tableInfo->TableDescription.GetNotNullSince().SerializeAsString())
         );
     }
 
@@ -6282,6 +6284,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSetColumnConstraint::TEvForgetRequest, Handle);
         HFuncTraced(TEvSetColumnConstraint::TEvCancelRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
+        HFuncTraced(TEvColumnShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCancelRequest, Handle);

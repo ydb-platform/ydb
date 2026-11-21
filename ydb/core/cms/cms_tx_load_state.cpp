@@ -257,7 +257,9 @@ public:
     void Complete(const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLoadState Complete");
         Self->Become(&TCms::StateWork);
-        Self->SignalTabletActive(ctx);
+        NKikimrCms::TVersionInfo versionInfo;
+        versionInfo.SetSupportWalleDrainData(true);
+        Self->SignalTabletActive(ctx, versionInfo.SerializeAsString());
         Self->SchedulePermissionsCleanup(ctx);
         Self->ScheduleNotificationsCleanup(ctx);
         Self->ScheduleLogCleanup(ctx);

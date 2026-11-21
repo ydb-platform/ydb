@@ -12,6 +12,7 @@ ENDIF()
 SRCS(
     kqp_kill_session_proxy_ut.cpp
     kqp_proxy_ut.cpp
+    kqp_stream_session_loss_ut.cpp
 )
 
 PEERDIR(

@@ -134,6 +134,7 @@ namespace NKikimr::NYmq::V1 {
         , UserSid(GetMetaValue(request, USER_SID))
         , RequestId(GetMetaValue(request, REQUEST_ID))
         , SecurityToken(GetMetaValue(request, SECURITY_TOKEN))
+        , SanitizedToken(GetMetaValue(request, SANITIZED_TOKEN))
         , SourceAddress(GetMetaValue(request, SOURCE_ADDRESS))
         {
         }
@@ -155,6 +156,7 @@ namespace NKikimr::NYmq::V1 {
             request->MutableAuth()->SetUserName(CloudId);
             request->MutableAuth()->SetFolderId(FolderId);
             request->MutableAuth()->SetUserSID(UserSid);
+            request->MutableAuth()->SetSanitizedToken(SanitizedToken);
             request->MutableAuth()->SetSourceAddress(SourceAddress);
 
             if (SecurityToken) {
@@ -177,6 +179,7 @@ namespace NKikimr::NYmq::V1 {
         const TString UserSid;
         const TString RequestId;
         const TString SecurityToken;
+        const TString SanitizedToken;
 
     protected:
         const TString SourceAddress;

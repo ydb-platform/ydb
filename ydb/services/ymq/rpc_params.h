@@ -8,5 +8,6 @@ namespace NKikimr::NYmq::V1 {
     static const TString USER_SID = "userSid";
     static const TString REQUEST_ID = "requestId";
     static const TString SECURITY_TOKEN = "securityToken";
+    static const TString SANITIZED_TOKEN = "sanitizedToken";
     static const TString SOURCE_ADDRESS = "sourceAddress";
 }

@@ -7,6 +7,7 @@ message TAuthentification {
     optional string MaskedToken = 4;
     optional string AuthType = 5;
     optional string SourceAddress = 6;
+    optional string SanitizedToken = 7;
 }
 
 message TCredentials {

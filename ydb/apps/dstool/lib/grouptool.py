@@ -60,7 +60,7 @@ def check_fail_model(coord_to_status, erasure):
         status_per_fdom[key[:2]] = status_per_fdom.get(key[:2], True) and value
     if erasure == 'none':
         return all(status_per_fdom.values())
-    elif erasure in ['block-4-2', 'mirror-3of4']:
+    elif erasure in ['block-4-2', 'block-8-2', 'mirror-3of4']:
         return sum(status_per_fdom.values()) >= len(status_per_fdom) - 2
     elif erasure == 'mirror-3-dc':
         nwdom = defaultdict(int)
@@ -69,7 +69,7 @@ def check_fail_model(coord_to_status, erasure):
                 nwdom[fr] += 1
         return len(nwdom) <= 1 or (len(nwdom) == 2 and any(v == 1 for v in nwdom.values()))
     else:
-        assert False, 'unexpected erasure type %s' % erasure
+        raise common.QueryError('unexpected erasure type %s' % erasure)
 
 
 def vdisk_id_from_json(j):
@@ -120,6 +120,7 @@ class GroupMapper(object):
     _geom_for_erasure = {
         'mirror-3-dc': (3, 3, 1),
         'block-4-2': (1, 8, 1),
+        'block-8-2': (1, 12, 1),
         'none': (1, 1, 1),
         'mirror-3of4': (1, 8, 1),
     }
@@ -270,7 +271,10 @@ class GroupMapper(object):
         g = self.sp.Geometry
         geom = g.NumFailRealms, g.NumFailDomainsPerFailRealm, g.NumVDisksPerFailDomain
         if not any(geom):
-            geom = self._geom_for_erasure[self.sp.ErasureSpecies]
+            try:
+                geom = self._geom_for_erasure[self.sp.ErasureSpecies]
+            except KeyError:
+                raise common.QueryError('unexpected erasure type %s' % self.sp.ErasureSpecies)
         return geom
 
 

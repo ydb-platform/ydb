@@ -8,15 +8,15 @@ metadata:
     ydb.tech/node-claim: {{ nodeclaim_name }}.{{ nodeclaim_namespace }}
 spec:
   image:
-    name: cr.yandex/crpl7ipeu79oseqhcgn2/ydb:23.2.9
+    name: {{ ydb_image | default("cr.yandex/crpl7ipeu79oseqhcgn2/ydb:23.2.9") }}
     pullPolicy: IfNotPresent
-  nodes: 8
+  nodes: {{ node_count | default(8) }}
   domain: Root
   hostNetwork: true
   dataStore: []
-  erasure: block-4-2
+  erasure: {{ erasure | default("block-4-2") }}
   configuration: |
-    static_erasure: block-4-2
+    static_erasure: {{ erasure | default("block-4-2") }}
 
     # host_configs:
     #   section will be filled automatically if not specified
@@ -37,7 +37,7 @@ spec:
         - kind: ssd                     # please double check this field with disk kind on your selected nodes
           pool_config:
             box_id: '1'
-            erasure_species: block-4-2
+            erasure_species: {{ erasure | default("block-4-2") }}
             kind: ssd
             pdisk_filter:
             - property:
@@ -52,13 +52,13 @@ spec:
     channel_profile_config:
       profile:
         - channel:
-            - erasure_species: block-4-2
+            - erasure_species: {{ erasure | default("block-4-2") }}
               pdisk_category: 1
               storage_pool_kind: ssd    # please double check this field with disk kind on your selected nodes
-            - erasure_species: block-4-2
+            - erasure_species: {{ erasure | default("block-4-2") }}
               pdisk_category: 1
               storage_pool_kind: ssd    # please double check this field with disk kind on your selected nodes
-            - erasure_species: block-4-2
+            - erasure_species: {{ erasure | default("block-4-2") }}
               pdisk_category: 1
               storage_pool_kind: ssd    # please double check this field with disk kind on your selected nodes
           profile_id: 0

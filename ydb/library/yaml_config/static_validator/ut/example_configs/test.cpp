@@ -1,6 +1,7 @@
 #include <ydb/library/yaml_config/static_validator/builders.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/subst.h>
 #include <ydb/library/yaml_config/validator/validator.h>
 #include <ydb/library/yaml_config/validator/validator_builder.h>
 #include <ydb/library/yaml_config/static_validator/builders.h>
@@ -305,6 +306,9 @@ Y_UNIT_TEST_SUITE(StaticConfigExamples) {
         "    - legacy\n";
 
         Y_ENSURE(Valid(v.Validate(yaml)));
+        TString wide(yaml);
+        SubstGlobal(wide, "block-4-2", "block-8-2");
+        Y_ENSURE(Valid(v.Validate(wide)));
     }
 
     Y_UNIT_TEST(MIRROR_3_DC_NODES) {

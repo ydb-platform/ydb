@@ -57,7 +57,7 @@ class DistConfKiKiMRTest(object):
     @classmethod
     def _setup_cluster(cls):
         if cls.nodes_count == 0:
-            cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+            cls.nodes_count = max(9 if cls.erasure == Erasure.MIRROR_3_DC else 1, cls.erasure.min_fail_domains)
         log_configs = {
             'BOARD_LOOKUP': LogLevels.DEBUG,
             'BS_NODE': LogLevels.DEBUG,
@@ -833,3 +833,9 @@ class TestDistConfWithAuth(DistConfKiKiMRTest):
             self.cluster.wait_tenant_up(table_path, token=self.cluster.root_token)
         finally:
             self.cluster.unregister_and_stop_slots(slots)
+
+
+class TestKiKiMRDistConfBlock82(DistConfKiKiMRTest):
+    erasure = Erasure.BLOCK_8_2
+    nodes_count = 12
+    test_cluster_is_operational_with_distconf = TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf

@@ -123,6 +123,19 @@ namespace NKikimr::NBsController {
             it->second.Update(previous, current);
         }
 
+        void SetGroupErasure(const TString& id, ui32 groupId, std::optional<TErasureType::EErasureSpecies> erasure) {
+            const auto it = Map.find(id);
+            Y_ABORT_UNLESS(it != Map.end());
+            const auto& pool = it->second.Subgroup;
+            const TString group = ToString(groupId);
+            pool->RemoveSubgroup("group", group);
+            if (erasure) {
+                *pool->GetSubgroup("group", group)
+                    ->GetSubgroup("erasureSpecies", TErasureType::ErasureSpeciesName(*erasure))
+                    ->GetCounter("GroupErasureSpecies") = 1;
+            }
+        }
+
         void UpdateAllocatedSize(const TString& id, i64 allocatedSizeIncrement) {
             const auto it = Map.find(id);
             Y_ABORT_UNLESS(it != Map.end());

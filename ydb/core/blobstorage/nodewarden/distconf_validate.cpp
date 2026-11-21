@@ -1,4 +1,5 @@
 #include "distconf.h"
+#include <util/generic/algorithm.h>
 
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/data_center_states.h>
@@ -405,6 +406,11 @@ namespace NKikimr::NStorage {
             const ui32 groupId = group.GetGroupID();
             const ui32 groupGen = group.GetGroupGeneration();
 
+            if (!AnyOf(TBlobStorageGroupType::ErasureNames, [&group](const auto& item) {
+                return ui32(item.first) == group.GetErasureSpecies();
+            })) {
+                return "invalid ErasureSpecies";
+            }
             const auto e = static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies());
             const TBlobStorageGroupType gtype(e);
             std::optional<ui32> numFailDomainsInFailRealm;

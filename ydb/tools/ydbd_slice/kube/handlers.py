@@ -587,14 +587,15 @@ def validate_name(name, field):
 
 #
 # generate scenarios
-def slice_generate_8_node_block_4_2(project_path, user, slice_name, node_flavor):
+def slice_generate_block_erasure(project_path, user, slice_name, node_flavor,
+                                 erasure="block-4-2", node_count=8, ydb_image=None):
     slice_name = validate_name(slice_name, 'slice name')
     namespace_name = validate_name(f'dev-{user}-{slice_name}', 'namespace name')
     nodeclaim_name = slice_name
     storage_name = slice_name
     database_name = validate_name(f'{slice_name}-db1', 'database name')
 
-    generate.generate_8_node_block_4_2(
+    generate.generate_block_erasure(
         project_path=project_path,
         user=user,
         namespace_name=namespace_name,
@@ -602,15 +603,24 @@ def slice_generate_8_node_block_4_2(project_path, user, slice_name, node_flavor)
         node_flavor=node_flavor,
         storage_name=storage_name,
         database_name=database_name,
+        erasure=erasure,
+        node_count=node_count,
+        ydb_image=ydb_image,
     )
 
 
 def slice_generate(project_path, user, slice_name, template, template_vars):
-    if template == '8-node-block-4-2':
+    if template in ('8-node-block-4-2', '12-node-block-8-2'):
         if 'node_flavor' not in template_vars:
             sys.exit(f'Template {template} requires node_flavor to be specified. '
                      'Please use argument: -v node_flavor=<your_desired_node_flavor_here>')
-        slice_generate_8_node_block_4_2(project_path, user, slice_name, node_flavor=template_vars['node_flavor'])
+        wide = template == '12-node-block-8-2'
+        if wide and not template_vars.get('image'):
+            sys.exit('12-node-block-8-2 requires -v image=<image supporting block-8-2>')
+        slice_generate_block_erasure(
+            project_path, user, slice_name, node_flavor=template_vars['node_flavor'],
+            erasure='block-8-2' if wide else 'block-4-2', node_count=12 if wide else 8,
+            ydb_image=template_vars.get('image'))
 
     else:
         sys.exit(f'Slice template {template} not implemented.')

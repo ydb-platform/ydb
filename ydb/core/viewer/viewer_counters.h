@@ -201,7 +201,7 @@ public:
     }
 
     void RenderStats(TStringStream& json,
-                     NKikimrWhiteboard::TEvVDiskStateResponse& response,
+                     NKikimrWhiteboard::TEvVDiskStateResponse response,
                      const TEvInterconnect::TNodeInfo& nodeInfo) {
         if (response.VDiskStateInfoSize() == 0)
             return;
@@ -315,7 +315,6 @@ public:
 
         NKikimrWhiteboard::TEvVDiskStateResponse mergedVDiskInfo;
         MergeWhiteboardResponses(mergedVDiskInfo, VDiskInfo);
-        RenderStats(json, mergedVDiskInfo, totals);
         NKikimrWhiteboard::TEvPDiskStateResponse mergedPDiskInfo;
         MergeWhiteboardResponses(mergedPDiskInfo, PDiskInfo);
         RenderStats(json, mergedPDiskInfo, totals);
@@ -323,9 +322,9 @@ public:
         NKikimrWhiteboard::TEvBSGroupStateResponse mergedBSGroupInfo;
         MergeWhiteboardResponses(mergedBSGroupInfo, BSGroupInfo);
 
-        std::array<int, 9> bsGroupUnavaiableHistogram = {};
-        std::array<int, 9> bsGroupGreenHistogram = {};
-        std::array<int, 9> bsGroupNotGreenHistogram = {};
+        std::array<int, 13> bsGroupUnavaiableHistogram = {};
+        std::array<int, 13> bsGroupGreenHistogram = {};
+        std::array<int, 13> bsGroupNotGreenHistogram = {};
         std::unordered_map<ui64, int> bsGroupVDisks;
         std::unordered_map<ui64, int> bsGroupGreenVDisks;
         std::unordered_map<ui64, int> bsGroupNotGreenVDisks;
@@ -384,6 +383,8 @@ public:
                 bsGroupNotGreenHistogram[idx]++;
             }
         }
+
+        RenderStats(json, std::move(mergedVDiskInfo), totals);
 
         for (size_t p = 0; p < bsGroupUnavaiableHistogram.size(); ++p) {
             json << ",{\"labels\":{";

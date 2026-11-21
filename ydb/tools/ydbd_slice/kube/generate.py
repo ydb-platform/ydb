@@ -78,8 +78,9 @@ def generate_obliterate(project_path, namespace_name, nodeclaim_name, ydb_image,
         )
 
 
-def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name, node_flavor,
-                              storage_name, database_name, cluster_uuid=''):
+def generate_block_erasure(
+        project_path, user, namespace_name, nodeclaim_name, node_flavor,
+        storage_name, database_name, cluster_uuid='', erasure='block-4-2', node_count=8, ydb_image=None):
     generate_file(
         project_path=project_path,
         filename=f'namespace-{namespace_name}.yaml',
@@ -97,6 +98,7 @@ def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name
             nodeclaim_name=nodeclaim_name,
             nodeclaim_owner=user,
             nodeclaim_flavor_name=node_flavor,
+            node_count=node_count,
         )
     )
     generate_file(
@@ -105,6 +107,9 @@ def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name
         template='/ydbd_slice/templates/8-node-block-4-2/storage.yaml',
         template_kwargs=dict(
             storage_name=storage_name,
+            node_count=node_count,
+            erasure=erasure,
+            **(dict(ydb_image=ydb_image) if ydb_image else {}),
             storage_namespace=namespace_name,
             nodeclaim_name=nodeclaim_name,
             nodeclaim_namespace=namespace_name,
@@ -116,6 +121,7 @@ def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name
         template='/ydbd_slice/templates/common/database.yaml',
         template_kwargs=dict(
             database_name=database_name,
+            **(dict(ydb_image=ydb_image) if ydb_image else {}),
             database_namespace=namespace_name,
             storage_name=storage_name,
             nodeclaim_name=nodeclaim_name,

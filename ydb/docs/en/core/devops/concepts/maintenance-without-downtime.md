@@ -45,7 +45,7 @@ In a maintenance task, you need to specify the cluster's availability mode to co
     - No more than one unavailable State Storage ring is allowed.
 - **Weak**: a mode that does not allow exceeding the failure model.
 
-  - For affected storage groups with the [block-4-2](../../reference/configuration/domains_config.md#domains-blob) scheme, no more than two unavailable VDisks are allowed.
+  - For affected storage groups with the [block-4-2 or block-8-2](../../reference/configuration/domains_config.md#domains-blob) scheme, no more than two unavailable VDisks are allowed.
   - For affected storage groups with the [mirror-3-dc](../../reference/configuration/domains_config.md#domains-blob) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center.
   - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
 

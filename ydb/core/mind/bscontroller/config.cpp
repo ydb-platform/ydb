@@ -968,6 +968,14 @@ namespace NKikimr::NBsController {
             // apply created/deleted groups and the ones moved to another storage pool: their status and the space
             // allocated by their remaining VDisks, donors included, go along with them
             for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (base && state.StoragePools.Get().count(base->second->StoragePoolId)) {
+                    StoragePoolStat->SetGroupErasure(TStoragePoolStat::ConvertId(base->second->StoragePoolId),
+                        base->first.GetRawId(), std::nullopt);
+                }
+                if (overlay->second && !overlay->second->VDisksInGroup.empty()) {
+                    StoragePoolStat->SetGroupErasure(TStoragePoolStat::ConvertId(overlay->second->StoragePoolId),
+                        overlay->first.GetRawId(), overlay->second->ErasureSpecies);
+                }
                 if (!base) { // newly created group
                     overlay->second->StatusFlags = overlay->second->GetStorageStatusFlags();
                     StoragePoolStat->Update(TStoragePoolStat::ConvertId(overlay->second->StoragePoolId),

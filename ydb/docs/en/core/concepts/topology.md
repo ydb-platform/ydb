@@ -12,6 +12,9 @@ The cluster topology is built according to the distributed storage operating mod
 - `block-4-2`. Redundancy using [erasure coding](https://en.wikipedia.org/wiki/Erasure_code). For every 4 blocks of source data, 2 additional blocks with redundancy codes are generated. Storage nodes are placed in at least 8 failure domains (usually server racks). The {{ ydb-short-name }} cluster remains fully available if any two failure domains are unavailable, continuing to write all 6 data parts in the remaining domains. This mode is recommended for clusters deployed in a single data center or availability zone.
 
   ![block-4-2 topology](./_assets/block-4-2.drawio.png)
+
+- `block-8-2`. Erasure coding with 8 data parts and 2 parity parts. A group uses 12 failure domains in one availability zone: 10 VDisks store the encoded parts and 2 handoff VDisks accept parts when a main VDisk is unavailable. With one VDisk per physical rack, the group remains available after any two rack failures. The coding overhead is `10/8 = 1.25`.
+
 - `none`. No redundancy. Any failure leads to temporary unavailability or loss of all or part of the stored data. This mode is recommended only for application development or functional testing.
 
 {% note info %}
@@ -30,6 +33,7 @@ Fault-tolerant distributed storage operating modes require a significant amount 
 | `block-4-2`, survives failure of 2 racks | 1.5 | 8 ( [10 recommended](*recommended-node-count)) | Rack | Data center | 1 | 8 |
 | `block-4-2` *(simplified)*, survives failure of 1 rack | 1.5 | 10 | ½ rack | Data center | 1 | 5 |
 | `block-4-2` *(simplified fault-tolerant)*, survives failure of 1 node | 1.5 | 4 | Server | Data center | 1 | Not important |
+| `block-8-2`, survives failure of 2 racks | 1.25 | 12 | Rack | Data center | 1 | 12 |
 | `none`, no redundancy | 1 | 1 | Node | Node | 1 | 1 |
 
 {% note info %}
@@ -39,6 +43,8 @@ The storage volume multiplier above applies only to the fault tolerance factor. 
 {% endnote %}
 
 To learn how to set the {{ ydb-short-name }} cluster topology, see the [{#T}](../reference/configuration/domains_config.md#domains-blob) section.
+
+For `block-8-2`, 12 domains are the placement minimum. Relocating VDisks after losing an entire domain requires a suitable spare domain with free slots; the two handoff VDisks are already inside each 12-domain group and do not replace this spare. Failure of a third domain is outside the availability guarantee.
 
 ### Bridge mode {#bridge}
 

@@ -65,7 +65,8 @@ namespace {
 
     template <typename TRpc>
     typename TRpc::TResponse CallOperationRpc(TTestBasicRuntime& runtime,
-            typename TRpc::TRequest request, const TString& userSID = {}) {
+            typename TRpc::TRequest request, const TString& userSID = {})
+    {
         TMaybe<TString> token;
         if (userSID) {
             token = NACLib::TUserToken(userSID, TVector<TString>{}).SerializeAsString();

@@ -291,6 +291,9 @@ namespace NKikimr::NStorage {
             },
             [&](TProposeConfig& op) {
                 StartProposition(&op.Config);
+            },
+            [&](const TPromoteStaticGroup& op) {
+                PromoteStaticGroup(op);
             }
         }, Query);
     }
@@ -334,6 +337,7 @@ namespace NKikimr::NStorage {
                 || !before || !after || *before != *after) {
             throw TExError() << "Use ApplyDataCenterStates to change DC availability";
         }
+        CheckStaticGroupStateUpdate(proposed);
         StartProposition(request->MutableConfig());
     }
 
@@ -717,6 +721,13 @@ namespace NKikimr::NStorage {
                     // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
+                }
+            },
+            [&](const TPromoteStaticGroup& op) {
+                if (op.Sender == Self->StaticGroupStateActor) {
+                    // The coordinator fences proposal acknowledgements by owner and cookie.
+                    TActivationContext::Send(new IEventHandle(op.Sender, Self->SelfId(),
+                        new NGroupSyncer::TEvGroupState::TEvProposalResult, 0, op.Cookie));
                 }
             }
         }, Query);

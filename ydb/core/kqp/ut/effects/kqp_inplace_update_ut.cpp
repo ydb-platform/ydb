@@ -61,14 +61,15 @@ void Test(
     TParams&& params,
     const TString& expectedResult,
     std::function<void(const Ydb::TableStats::QueryStats&)>&& check,
-    const std::function<void(TSession& session)>& prepareTable = &PrepareTable
+    const std::function<void(TSession& session)>& prepareTable = &PrepareTable,
+    std::optional<bool> disablePgCompatibility = std::nullopt
 ) {
     auto setting = NKikimrKqp::TKqpSetting();
     setting.SetName("_KqpAllowUnsafeCommit");
     setting.SetValue("true");
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
-    auto settings = TKikimrSettings().SetKqpSettings({ setting });
+    auto settings = TKikimrSettings().SetKqpSettings({ setting }).SetDisablePgCompatibility(disablePgCompatibility);
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
@@ -423,7 +424,7 @@ Y_UNIT_TEST(SingleRowPgNotNull) {
             UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
             ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
         },
-        &PreparePgTable);
+        &PreparePgTable, /* disablePgCompatibility */ false);
 }
 
 } // suite

@@ -895,7 +895,7 @@ void TPartitionFixture::SendWrite
     msgs.push_back(msg);
 
     auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
-    event->FromMirrorer = fromMirrorer;
+    event->MirrorerActor = fromMirrorer ? Ctx->Edge : TActorId{};
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 

@@ -155,7 +155,8 @@ TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, co
 void TChannelPool::GetStubsHolderLocked(
     const std::string& channelId,
     const TGRpcClientConfig& config,
-    std::function<void(TStubsHolder&)> cb)
+    std::function<void(TStubsHolder&)> cb,
+    std::function<void(TStubsHolder&)> onBroken)
 {
     {
         std::shared_lock readGuard(RWMutex_);
@@ -178,6 +179,9 @@ void TChannelPool::GetStubsHolderLocked(
                     it->second.SetLastUseTime(now);
                     return cb(it->second);
                 } else {
+                    if (onBroken) {
+                        onBroken(it->second);
+                    }
                     // This channel can't be used. Remove from pool to create new one
                     EraseFromQueueByTime(it->second.GetLastUseTime(), channelId);
                     Pool_.erase(it);
@@ -198,6 +202,12 @@ void TChannelPool::DeleteChannel(const std::string& channelId) {
         EraseFromQueueByTime(poolIt->second.GetLastUseTime(), channelId);
         Pool_.erase(poolIt);
     }
+}
+
+void TChannelPool::Clear() {
+    std::unique_lock guard(RWMutex_);
+    Pool_.clear();
+    LastUsedQueue_.clear();
 }
 
 void TChannelPool::DeleteExpiredStubsHolders() {

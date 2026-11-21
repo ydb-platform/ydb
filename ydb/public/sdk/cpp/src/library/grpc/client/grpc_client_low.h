@@ -581,8 +581,10 @@ public:
     TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6), bool tcpNoDelay = true);
     //Allows to CreateStub from TStubsHolder under lock
     //The callback will be called just during GetStubsHolderLocked call
-    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb);
+    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb,
+                              std::function<void(TStubsHolder&)> onBroken = {});
     void DeleteChannel(const std::string& channelId);
+    void Clear();
     void DeleteExpiredStubsHolders();
 private:
     std::shared_mutex RWMutex_;
@@ -1345,6 +1347,14 @@ private:
             }
         }
 
+        // Publish the terminal transport status before a failed write can reconnect.
+        for (auto& finishedCallback : finishedCallbacks) {
+            TGrpcStatus statusCopy = status;
+            RunGuarded([&] {
+                finishedCallback(std::move(statusCopy));
+            });
+        }
+
         while (!writesDropped.empty()) {
             auto callback = std::move(writesDropped.front().Callback);
             // Release the queued request before reporting its completion.
@@ -1358,13 +1368,6 @@ private:
                     callback(std::move(writeStatus));
                 });
             }
-        }
-
-        for (auto& finishedCallback : finishedCallbacks) {
-            TGrpcStatus statusCopy = status;
-            RunGuarded([&] {
-                finishedCallback(std::move(statusCopy));
-            });
         }
 
         if (connectedCallback) {

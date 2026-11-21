@@ -342,7 +342,7 @@ class TestCompactJsonIndexWithRowId(RollingUpgradeAndDowngradeFixture):
 
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
-        self.driver = self.create_driver()
+        self._wait_for_readiness(probe_data=True)
 
     def _exercise_json_feature_gate_authority(self):
         self._restart_with_json_feature_gates(False)

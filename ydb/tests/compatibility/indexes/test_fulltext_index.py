@@ -456,7 +456,7 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
             flags[name] = enabled
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
-        self.driver = self.create_driver()
+        self._wait_for_readiness(probe_data=True)
 
     def _exercise_feature_gate_authority(self):
         # Physical indexes created while the flags were enabled remain authoritative: their read/write

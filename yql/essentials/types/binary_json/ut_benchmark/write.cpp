@@ -45,6 +45,29 @@ void BenchWriteSimdJson(benchmark::State& state) {
     }
 }
 
+// Converts many distinct documents one at a time, as a column conversion does, so that the
+// per-call cost is measured and not only the parsing of one document.
+void BenchWriteSimdJsonRows(benchmark::State& state) {
+    seed = 42;
+    TVector<TString> rows;
+    size_t bytes = 0;
+    for (size_t i = 0; i < 1024; ++i) {
+        rows.push_back(NJson::WriteJson(GetTestJson(2, state.range(0))));
+        bytes += rows.back().size();
+    }
+    for (auto _ : state) {
+        for (const auto& row : rows) {
+            auto result = SerializeToBinaryJson(row);
+            benchmark::DoNotOptimize(result);
+        }
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * rows.size());
+    state.SetBytesProcessed(state.iterations() * bytes);
+    state.counters["bytes_per_row"] = double(bytes) / rows.size();
+}
+
 } // namespace
 
 BENCHMARK(BenchWriteSimdJson)->MinTime(1);
+BENCHMARK(BenchWriteSimdJsonRows)->Arg(2)->Arg(8)->Arg(32)->Arg(128)->MinTime(1);

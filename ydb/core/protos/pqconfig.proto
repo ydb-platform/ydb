@@ -27,6 +27,7 @@ message TPartitionCounterData {
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
+    optional uint64 MirroredOffset = 8 [default = 0];
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
@@ -276,6 +277,7 @@ message TMirrorPartitionConfig {
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
     optional bool SyncWriteTime = 10 [default = false];
+    optional bool MirrorConsumerOffsets = 11 [default = false];
 }
 
 message TPartitionConfig {
@@ -364,6 +366,9 @@ message TOffloadConfig {
 }
 
 message TPQTabletConfig {
+    // Source service-consumer id identifying the replication that created this topic.
+    optional string ReplicationSourceConsumer = 50;
+
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
     repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)
@@ -398,6 +403,7 @@ message TPQTabletConfig {
     enum EConsumerType {
         CONSUMER_TYPE_STREAMING = 0;
         CONSUMER_TYPE_MLP = 1;
+        CONSUMER_TYPE_REPLICATION = 2;
     }
 
     enum EDeadLetterPolicy {
@@ -434,6 +440,8 @@ message TPQTabletConfig {
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
+
+        optional bool ReplicateOffsets = 23 [default = true];
     }
 
     repeated TConsumer Consumers = 37;

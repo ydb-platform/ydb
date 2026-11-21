@@ -87,6 +87,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 ++RequestCookie);
             break;
         case TReplication::ETargetKind::Transfer:
+        case TReplication::ETargetKind::Topic:
             return CreateConsumer();
         }
 
@@ -136,12 +137,14 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case TReplication::ETargetKind::IndexTable:
             return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
         case TReplication::ETargetKind::Transfer:
+        case TReplication::ETargetKind::Topic:
             return CanonizePath(SplitPath(SrcPath));
         }
     }
 
     bool IsOwnedChangefeed() const {
-        return Kind != TReplication::ETargetKind::Transfer;
+        return Kind == TReplication::ETargetKind::Table
+            || Kind == TReplication::ETargetKind::IndexTable;
     }
 
     enum class ETopicOperation {
@@ -156,6 +159,10 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         switch (operation) {
         case ETopicOperation::CreateConsumer: {
             auto& consumer = settings.BeginAddConsumer(SrcConsumerName);
+            if (Kind == TReplication::ETargetKind::Topic) {
+                consumer.Important(true);
+                settings.BeginAlterAttributes().Add("_ydb_replication_consumer", SrcConsumerName);
+            }
             if (IsOwnedChangefeed()) {
                 consumer.Important(ConsumerImportant).AvailabilityPeriod(ConsumerAvailabilityPeriod);
             }

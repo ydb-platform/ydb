@@ -186,8 +186,11 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED));
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !TopicHolder->IsAsyncReplication
+        && !TopicHolder->IsReplicationConsumer)
+    {
+        CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
         return;
     }
     // extend the lifetime for PartitionGraph
@@ -716,6 +719,11 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
         InitStartReading(ctx);
     }
 
+    // The parent must send StartPartitionSessionRequest before any replication data.
+    for (auto& event : PendingReplicationData) {
+        ctx.Send(ParentId, event.Release());
+    }
+    PendingReplicationData.clear();
     MakeCommit(ctx);
 }
 
@@ -1498,6 +1506,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
+    event->Record.SetSessionId(Session);
     if (MaxTimeLagMs) {
         event->Record.SetMaxTimeLagMs(MaxTimeLagMs);
     }
@@ -1519,6 +1528,21 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     WaitDataInfly.insert(WaitDataCookie);
 }
 
+void TPartitionActor::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (Protocol != EProtocol::Topic || record.GetSession() != Session
+        || record.GetPartitionId() != Partition.Partition
+        || record.GetGeneration() != Generation || record.GetStep() != Step) {
+        return;
+    }
+    ev->Get()->Record.SetPartitionSessionId(Partition.AssignId);
+    if (!InitDone) {
+        PendingReplicationData.emplace_back(ev->Release().Release());
+        return;
+    }
+    ctx.Send(ParentId, ev->Release().Release());
+}
+
 void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
@@ -1535,6 +1559,19 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     WaitDataInfly.erase(it);
     if (!WaitForData)
         return;
+
+    if (record.GetSessionInvalidated()) {
+        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, close read session",
+            {"partition", Partition},
+            {"session", Session});
+        WaitForData = false;
+        WaitDataInfly.clear();
+        Counters.Errors.Inc();
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+            TStringBuilder() << "status is not ok: no such session '" << Session << "'",
+            ConvertOldCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION)));
+        return;
+    }
 
     if (Counters.WaitsForData) {
         Counters.WaitsForData.Inc();

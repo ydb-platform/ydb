@@ -1209,6 +1209,9 @@ message TopicSettings {
             StreamingConsumerType streaming_consumer_type = 9;
             SharedConsumerType shared_consumer_type = 10;
         }
+
+        // Whether offsets for this consumer are replicated from the source topic. Defaults to true when omitted on creation.
+        optional bool replicate_offsets = 13;
     }
 
     // List of consumer read rules for this topic.

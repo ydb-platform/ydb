@@ -1,4 +1,7 @@
 #include "actors.h"
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -114,12 +117,231 @@ void CreateTopic(NActors::TTestActorRuntime& runtime, const TString& path) {
     AssertStatus(result, Ydb::StatusIds::SUCCESS);
 }
 
+template <typename TResult, typename TResponse>
+const TResult& GetResult(const std::shared_ptr<TResultHolder<TResponse>>& result) {
+    auto* typed = dynamic_cast<const TResult*>(result->Response.get());
+    UNIT_ASSERT(typed);
+    return *typed;
+}
+
+Ydb::Topic::DescribeTopicResult DescribeTopic(
+    NActors::TTestActorRuntime& runtime,
+    const TString& path)
+{
+    Ydb::Topic::DescribeTopicRequest request;
+    request.set_path(path);
+    auto result = DoActorRequest<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>(
+        runtime, request, +[](NGRpcService::IRequestOpCtx* ctx) -> NActors::IActor* { return new TDescribeTopicActor(ctx); }, path);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    return GetResult<Ydb::Topic::DescribeTopicResult>(result);
+}
+
+NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
+    NActors::TTestActorRuntime& runtime,
+    const TString& path,
+    const TString& database = "/Root",
+    bool forceSyncVersion = false)
+{
+    auto edge = runtime.AllocateEdgeActor();
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(edge, database, {path},
+        {.ForceSyncVersion = forceSyncVersion}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    return topic.Info->Description.GetPQTabletConfig();
+}
+
 } // namespace
 
 // Core create/alter/drop/CDC/msg-s coverage lives in ydb/core/persqueue/public/schema.
 // Here we keep Topic service describe/auth wrappers only.
 
 Y_UNIT_TEST_SUITE(SchemaOps_TopicAPI) {
+
+Y_UNIT_TEST(ReplicationConsumerAttributeLifecycle) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/replication_consumer_attribute";
+    const TString attribute = "_ydb_replication_consumer";
+
+    auto check = [&](const TString& expected) {
+        // Alter completion may precede the schema-cache notification. Synchronize
+        // before checking both the persisted type and the public description.
+        const auto config = DescribeTabletConfig(runtime, path, "/Root", true);
+        ui32 replicationConsumers = 0;
+        for (const auto& consumer : config.GetConsumers()) {
+            if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+                ++replicationConsumers;
+                UNIT_ASSERT_VALUES_EQUAL(consumer.GetName(), expected);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(replicationConsumers, expected.empty() ? 0 : 1,
+            "Expected replication consumer '" << expected << "': " << config.DebugString());
+
+        const auto description = DescribeTopic(runtime, path);
+        const auto it = description.attributes().find(attribute);
+        if (expected.empty()) {
+            UNIT_ASSERT_C(it == description.attributes().end(), description.DebugString());
+        } else {
+            UNIT_ASSERT_C(it != description.attributes().end(),
+                "Expected replication consumer '" << expected << "': " << description.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(it->second, expected);
+        }
+    };
+    auto alter = [&](const Ydb::Topic::AlterTopicRequest& request) {
+        AssertStatus(DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path), Ydb::StatusIds::SUCCESS);
+    };
+
+    auto createRequest = MakeCreateTopicRequest(path);
+    (*createRequest.mutable_attributes())[attribute] = "user";
+    AssertStatus(DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, createRequest, CreateCreateTopicActor, path), Ydb::StatusIds::SUCCESS);
+    check("user");
+
+    // Altering a consumer without the attribute must retain its replication type.
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path(path);
+    auto* consumer = request.add_alter_consumers();
+    consumer->set_name("user");
+    consumer->mutable_set_read_from()->set_seconds(1);
+    alter(request);
+    check("user");
+    request.clear_alter_consumers();
+
+    // The attribute can name a consumer added in the same request.
+    request.add_add_consumers()->set_name("next");
+    (*request.mutable_alter_attributes())[attribute] = "next";
+    alter(request);
+    check("next");
+    request.clear_add_consumers();
+
+    (*request.mutable_alter_attributes())[attribute] = "";
+    alter(request);
+    check("");
+
+    (*request.mutable_alter_attributes())[attribute] = "user";
+    alter(request);
+    check("user");
+
+    // Dropping and recreating the name must not restore the old designation.
+    request.clear_alter_attributes();
+    request.add_drop_consumers("user");
+    request.add_add_consumers()->set_name("user");
+    alter(request);
+    check("");
+    request.clear_drop_consumers();
+    request.clear_add_consumers();
+
+    (*request.mutable_alter_attributes())[attribute] = "next";
+    alter(request);
+    check("next");
+    request.clear_alter_attributes();
+    request.add_drop_consumers("next");
+    alter(request);
+    check("");
+}
+
+Y_UNIT_TEST(ReplicationConsumerAttributeValidation) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString attribute = "_ydb_replication_consumer";
+    for (const bool shared : {false, true}) {
+        const TString path = shared ? "/Root/replication_shared" : "/Root/replication_unknown";
+        auto request = MakeCreateTopicRequest(path);
+        if (shared) {
+            request.mutable_consumers(0)->mutable_shared_consumer_type();
+        }
+        const TString name = shared ? "user" : "missing";
+        const TString error = shared ? "cannot be a shared consumer" : "Unknown _ydb_replication_consumer";
+        (*request.mutable_attributes())[attribute] = name;
+        AssertStatus(DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, path), Ydb::StatusIds::BAD_REQUEST, error);
+
+        // An empty value is valid on create and leaves all consumers unchanged.
+        (*request.mutable_attributes())[attribute] = "";
+        AssertStatus(DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, path), Ydb::StatusIds::SUCCESS);
+        Ydb::Topic::AlterTopicRequest alter;
+        alter.set_path(path);
+        (*alter.mutable_alter_attributes())[attribute] = name;
+        AssertStatus(DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, alter, CreateAlterTopicActor, path), Ydb::StatusIds::BAD_REQUEST, error);
+        UNIT_ASSERT(!DescribeTopic(runtime, path).attributes().contains(attribute));
+    }
+}
+
+Y_UNIT_TEST(DescribeReplicateOffsets) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    auto channel = grpc::CreateChannel(
+        "localhost:" + ToString(server->Server->GrpcPort), grpc::InsecureChannelCredentials());
+    auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+
+    for (const std::optional<bool> replicateOffsets : {std::optional<bool>{}, {false}, {true}}) {
+        const TString path = TStringBuilder() << "/Root/topic_replicate_offsets_"
+            << (replicateOffsets ? (*replicateOffsets ? "true" : "false") : "default");
+        auto createRequest = MakeCreateTopicRequest(path);
+        if (replicateOffsets.has_value()) {
+            createRequest.mutable_consumers(0)->set_replicate_offsets(*replicateOffsets);
+        }
+        createRequest.add_consumers()->set_name("default");
+        auto createResult = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, createRequest, CreateCreateTopicActor, path);
+        AssertStatus(createResult, Ydb::StatusIds::SUCCESS);
+
+        const auto createdTopic = DescribeTopic(runtime, path);
+        for (const auto& consumer : createdTopic.consumers()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.replicate_offsets(),
+                consumer.name() != "user" || replicateOffsets.value_or(true));
+        }
+
+        Ydb::Topic::AlterTopicRequest alterRequest;
+        alterRequest.set_path(path);
+        alterRequest.mutable_set_retention_period()->set_seconds(3600);
+        auto alterResult = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, alterRequest, CreateAlterTopicActor, path);
+        AssertStatus(alterResult, Ydb::StatusIds::SUCCESS);
+
+        const auto topic = DescribeTopic(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(topic.consumers_size(), 2);
+        for (const auto& consumer : topic.consumers()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.replicate_offsets(),
+                consumer.name() != "user" || replicateOffsets.value_or(true));
+
+            Ydb::Topic::DescribeConsumerRequest request;
+            request.set_path(path);
+            request.set_consumer(consumer.name());
+            auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+                runtime, request, CreateDescribeConsumerActor, path);
+            AssertStatus(result, Ydb::StatusIds::SUCCESS);
+            const auto& describedConsumer = GetResult<Ydb::Topic::DescribeConsumerResult>(result).consumer();
+            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.name(), consumer.name());
+            UNIT_ASSERT_VALUES_EQUAL(describedConsumer.replicate_offsets(), consumer.replicate_offsets());
+        }
+
+        auto future = NThreading::Async([&] {
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/Root");
+            Ydb::PersQueue::V1::DescribeTopicRequest request;
+            request.set_path(path);
+            Ydb::PersQueue::V1::DescribeTopicResponse response;
+            const auto status = pqStub->DescribeTopic(&context, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_message());
+            return response;
+        }, *server->Pool);
+        const auto response = static_cast<NKikimr::TTestActorRuntime&>(runtime).WaitFuture(std::move(future));
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+        Ydb::PersQueue::V1::DescribeTopicResult pqTopic;
+        UNIT_ASSERT(response.operation().result().UnpackTo(&pqTopic));
+        UNIT_ASSERT_VALUES_EQUAL(pqTopic.settings().read_rules_size(), 2);
+        for (const auto& rule : pqTopic.settings().read_rules()) {
+            UNIT_ASSERT_VALUES_EQUAL(rule.replicate_offsets(),
+                rule.consumer_name() != "user" || replicateOffsets.value_or(true));
+        }
+    }
+}
 
 Y_UNIT_TEST(DescribePartitionSmokeAndMissing) {
     auto setup = CreateSetup();

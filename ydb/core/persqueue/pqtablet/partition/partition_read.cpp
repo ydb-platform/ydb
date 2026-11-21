@@ -210,6 +210,37 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     }
 }
 
+void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx) {
+    const auto now = ctx.Now();
+
+    auto forgetSubscription = [&](const TString& clientId) {
+        if (InitDone && !clientId.empty()) {
+            UsersInfoStorage->GetOrCreate(clientId, ctx).ForgetSubscription(GetEndOffset(), now);
+        }
+    };
+
+    for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
+        if (it->ClientId != user) {
+            ++it;
+            continue;
+        }
+        auto response = MakeHasDataInfoResponse(0, it->Cookie);
+        response->Record.SetSessionInvalidated(true);
+        ctx.Send(it->Sender, response.Release());
+
+        forgetSubscription(it->ClientId);
+        it = HasDataRequests.erase(it);
+    }
+
+    for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end();) {
+        if (dlIt->Request.ClientId == user) {
+            dlIt = HasDataDeadlines.erase(dlIt);
+        } else {
+            ++dlIt;
+        }
+    }
+}
+
 void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     PQ_ENSURE(record.HasSender());
@@ -219,6 +250,22 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
+
+    if (InitDone && !record.GetSessionId().empty()) {
+        auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
+        if (!userInfo.NoConsumer) {
+            // Prefer pending session: CommitTransaction clears it before persist applies to UsersInfoStorage.
+            const TUserInfoBase* pending = GetPendingUserIfExists(record.GetClientId());
+            const TString& session = pending ? pending->Session : userInfo.Session;
+            if (session != record.GetSessionId()) {
+                auto response = MakeHasDataInfoResponse(0, cookie);
+                response->Record.SetSessionInvalidated(true);
+                ctx.Send(sender, response.Release());
+                return;
+            }
+            RestoreReadSessionActor(userInfo, record.GetSessionId(), sender, ctx);
+        }
+    }
 
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp,
@@ -882,6 +929,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                 TStringBuilder() << "no such session '" << read->SessionId << "'", replyTo);
             return;
         }
+        RestoreReadSessionActor(userInfo, read->SessionId, read->ReadSessionActor, ctx);
     }
     userInfo.ReadsInQuotaQueue++;
     Send(ReadQuotaTrackerActor,
@@ -1097,22 +1145,28 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
             {"readingForOffset", ReadingForOffset},
             {"userInfoOffset", userInfo->Offset},
             {"responseDebugString", ev->Get()->Response->DebugString()});
+        bool timestampAvailable = false;
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&
-            ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize() > 0 &&
-            (i64)ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().GetResult(0).GetOffset() >= userInfo->Offset) {
-                //offsets is inside gap - return timestamp of first record after gap
+            ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize() > 0) {
             const auto& res = ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().GetResult(0);
-            userInfo->WriteTimestamp = TInstant::MilliSeconds(res.GetWriteTimestampMS());
-            userInfo->CreateTimestamp = TInstant::MilliSeconds(res.GetCreateTimestampMS());
-            userInfo->ActualTimestamps = true;
-            if (userInfo->ReadOffset + 1 < userInfo->Offset) {
-                userInfo->ReadOffset = userInfo->Offset - 1;
-                userInfo->ReadWriteTimestamp = userInfo->WriteTimestamp;
-                userInfo->ReadCreateTimestamp = userInfo->CreateTimestamp;
+            // Use the first record after a gap, or the batch containing the requested offset.
+            if ((i64)res.GetOffset() >= userInfo->Offset ||
+                (res.GetLogicalMessageCount() > 0 &&
+                 ui64(userInfo->Offset) - res.GetOffset() < ui64(res.GetLogicalMessageCount()))) {
+                userInfo->WriteTimestamp = TInstant::MilliSeconds(res.GetWriteTimestampMS());
+                userInfo->CreateTimestamp = TInstant::MilliSeconds(res.GetCreateTimestampMS());
+                userInfo->ActualTimestamps = true;
+                timestampAvailable = true;
+                if (userInfo->ReadOffset + 1 < userInfo->Offset) {
+                    userInfo->ReadOffset = userInfo->Offset - 1;
+                    userInfo->ReadWriteTimestamp = userInfo->WriteTimestamp;
+                    userInfo->ReadCreateTimestamp = userInfo->CreateTimestamp;
+                }
             }
-        } else {
+        }
+        if (!timestampAvailable) {
             UpdateUserInfoTimestamp.push_back(std::make_pair(ReadingForUser, ReadingForUserReadRuleGeneration));
             userInfo->ReadScheduled = true;
         }

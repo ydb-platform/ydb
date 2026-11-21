@@ -553,7 +553,9 @@ namespace NKikimr {
                     TEvRestoreCorruptedBlob::TItem item(payload.BlobId, needed, GType, payload.Location, payload.Id);
                     return new TEvRestoreCorruptedBlob(now + RestoreDeadline, {1u, item}, false, true);
                 } else {
-                    Y_VERIFY_S(status == NKikimrProto::OK, HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(status == NKikimrProto::OK, HullCtx->VCtx->VDiskLogPrefix
+                        << " Status# " << static_cast<int>(status)
+                        << " (" << NKikimrProto::EReplyStatus_Name(status) << ')');
                     DeferredItems.AddReadDiskBlob(payload.Id, TRope(std::move(buffer)), payload.PartIdx);
                 }
             }

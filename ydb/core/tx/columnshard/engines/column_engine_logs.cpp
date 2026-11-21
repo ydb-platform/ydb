@@ -414,41 +414,27 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
 }
 
 std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(
-    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) {
+    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions, const bool loadPortions) {
     auto result = std::make_shared<TTxCompositeReader>("column_engines");
     result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineShardingInfoReader>("sharding_info", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineUncommittedPortionsReader>(
         "uncommitted_portions", this, dsGroupSelector, std::move(uncommittedPortions)));
-    if (GranulesStorage->GetTables().size()) {
+    if (loadPortions && GranulesStorage->GetTables().size()) {
         auto granules = std::make_shared<TTxCompositeReader>("granules");
         for (auto&& i : GranulesStorage->GetTables()) {
-            granules->AddChildren(i.second->BuildLoader(dsGroupSelector, GetVersionedIndex()));
+            granules->AddChildren(i.second->BuildLoader(dsGroupSelector, *this));
         }
         result->AddChildren(granules);
     }
-    result->AddChildren(std::make_shared<NEngineLoading::TEngineLoadingFinish>("finish", this));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineLoadingFinish>("finish", this, loadPortions));
     return result;
 }
 
-bool TColumnEngineForLogs::FinishLoading() {
+bool TColumnEngineForLogs::FinishLoading(const bool portionsLoaded) {
     for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
-        for (const auto& [_, portionInfo] : spg->GetPortions()) {
-            Counters->AddPortion(*portionInfo);
-            if (portionInfo->HasRemoveSnapshot()) {
-                AddCleanupPortion(portionInfo);
-            }
-        }
-        spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
-
-        for (const auto& [_, portion] : spg->GetPortions()) {
-            if (portion->GetPortionType() == EPortionType::Written) {
-                LastInsertWriteId =
-                    std::max(LastInsertWriteId, (ui64)std::static_pointer_cast<TWrittenPortionInfo>(portion)->GetInsertWriteId());
-            }
-        }
-        for (const auto& [insertWriteId, _] : spg->GetInsertedPortions()) {
-            LastInsertWriteId = std::max(LastInsertWriteId, (ui64)insertWriteId);
+        if (portionsLoaded) {
+            spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
         }
     }
 
@@ -456,6 +442,23 @@ bool TColumnEngineForLogs::FinishLoading() {
     Y_ABORT_UNLESS(!(LastGranule >> 63), "near to int overflow");
     Y_ABORT_UNLESS(!(LastInsertWriteId >> 63), "near to int overflow");
     return true;
+}
+
+void TColumnEngineForLogs::AddPortionLoadedOnStart(TGranuleMeta& granule, const TPortionInfo::TPtr& portion) {
+    granule.UpsertPortionOnLoad(portion);
+    if (portion->GetPortionType() == EPortionType::Written) {
+        LastInsertWriteId = std::max(LastInsertWriteId, (ui64) static_cast<const TWrittenPortionInfo&>(*portion).GetInsertWriteId());
+    }
+    if (portion->IsCommitted()) {
+        RegisterPortion(portion);
+    }
+}
+
+void TColumnEngineForLogs::AddPortionsLoadedInBatch(
+    const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions, TLoadedKeyRanges&& loadedKeyRanges) {
+    for (const auto& portion : GetGranulePtrVerified(pathId)->AddPortionsLoadedInBatch(portions, std::move(loadedKeyRanges))) {
+        RegisterPortion(portion);
+    }
 }
 
 void TColumnEngineForLogs::PrefetchPortionsMetadata() {
@@ -781,11 +784,8 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
     YDB_LOG_VERIFY(portionInfo);
     auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
     YDB_LOG_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
-    Counters->AddPortion(*portionInfo);
     granule->AppendPortion(portionInfo);
-    if (portionInfo->HasRemoveSnapshot()) {
-        AddCleanupPortion(portionInfo);
-    }
+    RegisterPortion(portionInfo);
     SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
 }
 
@@ -793,11 +793,8 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAcces
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
     auto granule = GetGranulePtrVerified(portionInfo->GetPortionInfo().GetPathId());
     YDB_LOG_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionInfo().GetPortionId()));
-    Counters->AddPortion(portionInfo->GetPortionInfo());
     granule->AppendPortion(portionInfo);
-    if (portionInfo->GetPortionInfo().HasRemoveSnapshot()) {
-        AddCleanupPortion(portionInfo->GetPortionInfoPtr());
-    }
+    RegisterPortion(portionInfo->GetPortionInfoPtr());
     SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
 }
 
@@ -914,11 +911,11 @@ bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
 
     {
         auto guard = GranulesStorage->GetStats()->StartPackModification();
-        for (auto&& [_, i] : GranulesStorage->GetTables()) {
-            i->TestingLoad(db, MutableVersionedIndex());
-        }
         if (!LoadCounters(db)) {
             return false;
+        }
+        for (auto&& [_, i] : GranulesStorage->GetTables()) {
+            i->TestingLoad(db, *this);
         }
         FinishLoading();
     }

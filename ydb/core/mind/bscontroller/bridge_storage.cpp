@@ -170,6 +170,9 @@ namespace NKikimr::NBsController {
         struct TCopySummary {
             NBridgeStorage::TCounts Counts;
             NBridgeStorage::TCopyObservation LastError;
+            std::optional<ui64> RemainingBytes;
+            bool RemainingBytesComplete = true;
+            ui64 CopyBytesPerSecond = 0;
 
             void Add(const NBridgeStorage::TCopyObservation& copy) {
                 Counts.Count(copy.State);
@@ -362,6 +365,9 @@ namespace NKikimr::NBsController {
         if (query.GetGroupByStoragePool() && query.GetView() != TQuery::DATABASES) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Grouping by storage pool requires database synchronization view");
         }
+        if (query.GetIncludeSyncMetrics() && query.GetView() != TQuery::DATABASES) {
+            return fail(Ydb::StatusIds::BAD_REQUEST, "Copy metrics require database synchronization view");
+        }
         if (query.HasStoragePool() && query.GetStoragePool().empty()) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Storage pool name must not be empty");
         }
@@ -418,6 +424,24 @@ namespace NKikimr::NBsController {
         }
         std::map<TBridgePileId, NBridgeStorage::TCounts> databaseCounts;
         std::map<std::pair<TPathId, TBoxStoragePoolId>, TOwnerSummary> owners;
+        auto addSyncMetrics = [&](TCopySummary& summary, const NBridgeStorage::TCopyObservation& copy) {
+            if (copy.State == NKikimrBridge::NOT_REQUIRED || copy.State == NKikimrBridge::SYNCED) {
+                return;
+            }
+            if (copy.State == NKikimrBridge::UNKNOWN || !copy.Part || !copy.CurrentGeneration) {
+                summary.RemainingBytesComplete = false;
+                return;
+            }
+            const auto id = TGroupId::FromProto(copy.Part, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            const auto remaining = GetBridgeSyncRemaining(id, copy.Part->GetStage());
+            if (remaining) {
+                summary.RemainingBytes = summary.RemainingBytes.value_or(0) + remaining->Bytes;
+            }
+            summary.RemainingBytesComplete &= remaining && remaining->Complete;
+            if (const auto it = TargetGroupToSyncerState.find(id); it != TargetGroupToSyncerState.end()) {
+                summary.CopyBytesPerSecond += it->second.CopyRate;
+            }
+        };
         auto resolveOrdinaryPlacement = [&](const TGroupInfo& group, const NBridgeStorage::TGroupContext& context,
                 std::set<TBridgePileId>& placement, std::optional<ui32>& physical) {
             const TGroupInfo* actual = &group;
@@ -531,7 +555,11 @@ namespace NKikimr::NBsController {
                         copy.State = NKikimrBridge::NOT_REQUIRED;
                     }
                     if (owner) {
-                        owner->Copies[pile ? pile->BridgePileId : TBridgePileId()].Add(copy);
+                        auto& summary = owner->Copies[pile ? pile->BridgePileId : TBridgePileId()];
+                        summary.Add(copy);
+                        if (query.GetIncludeSyncMetrics()) {
+                            addSyncMetrics(summary, copy);
+                        }
                     } else if (!statusMask || (statusMask & (1u << copy.State))) {
                         if (!poolFilled) {
                             if (!budget.Fits(pool.Name.size() + 64)) {
@@ -684,6 +712,7 @@ namespace NKikimr::NBsController {
                 report.MutablePiles()->add_piles()->Swap(&row); // no pile name for unresolved placement
             }
         } else if (query.GetView() == TQuery::DATABASES) {
+            const bool syncersReported = TActivationContext::Monotonic() >= LoadedAt + SyncerReportingTime;
             for (auto& [key, owner] : owners) {
                 if (query.HasStorageMode() && query.GetStorageMode() != owner.Mode) {
                     continue; // match the selected owner or per-pool summary mode
@@ -717,6 +746,15 @@ namespace NKikimr::NBsController {
                         row.set_pile_name(pile->Name);
                     }
                     copy.Counts.ToProto(row.mutable_groups());
+                    if (query.GetIncludeSyncMetrics() && copy.Counts.Total) {
+                        if (copy.RemainingBytes || copy.Counts.Total == copy.Counts.Synced) {
+                            row.set_remaining_bytes(copy.RemainingBytes.value_or(0));
+                        }
+                        row.set_remaining_bytes_complete(copy.RemainingBytesComplete);
+                        if (!copy.Counts.Unknown && (copy.Counts.Total == copy.Counts.Synced || syncersReported)) {
+                            row.set_copy_bytes_per_second(copy.CopyBytesPerSecond);
+                        }
+                    }
                     if (copy.LastError.LastError && (!copy.LastError.LastError->empty() || copy.LastError.LastErrorTimestamp)) {
                         row.mutable_last_sync_error()->set_message(*copy.LastError.LastError);
                         if (copy.LastError.LastErrorTimestamp) {

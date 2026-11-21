@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include "viewer_bridge_storage.h"
 #include <ydb/core/protos/feature_flags.pb.h>
 
 namespace NKikimr::NViewer {
@@ -7,6 +8,9 @@ namespace NKikimr::NViewer {
 using namespace NActors;
 
 class TViewerCapabilities : public TViewerPipeClient {
+    std::optional<THashSet<TString>> DatabasePoolNames;
+    TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse> PoolsResponse;
+
 public:
     using TThis = TViewerCapabilities;
     using TBase = TViewerPipeClient;
@@ -19,7 +23,59 @@ public:
         if (TBase::NeedToRedirect(false/* don't check auth for capabilities on purpose */)) {
             return;
         }
+        if (AppData()->BridgeModeEnabled && DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
+            const auto& entry = DatabaseNavigateResponse->Get()->Request->ResultSet.front();
+            const auto* resource = ResourceNavigateResponse && ResourceNavigateResponse->IsOk()
+                ? &ResourceNavigateResponse->Get()->Request->ResultSet.front() : nullptr;
+            DatabasePoolNames = GetBridgeDatabaseStoragePools(entry, resource);
+            if (DatabasePoolNames && !DatabasePoolNames->empty()) {
+                UseCache = FromStringWithDefault<bool>(Params.Get("use_cache"), true);
+                PoolsResponse = MakeCachedRequestBSControllerPools();
+                if (!PoolsResponse.IsDone()) {
+                    // Bound the extra wait on a cold cache: the remaining capabilities are already available.
+                    Become(&TThis::StateWaitPools, Min(Timeout, TDuration::MilliSeconds(250)), new TEvents::TEvWakeup());
+                    return;
+                }
+            }
+        }
         ReplyAndPassAway();
+    }
+
+    void HandlePools(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+        if (PoolsResponse.Set(std::move(ev))) {
+            RequestDone();
+        }
+    }
+
+    STATEFN(StateWaitPools) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, HandlePools);
+            cFunc(TEvents::TEvWakeup::EventType, ReplyAndPassAway);
+            default:
+                return TBase::StateWork(ev);
+        }
+    }
+
+    std::optional<bool> GetDatabaseBridgeMode() const {
+        if (!AppData()->BridgeModeEnabled) {
+            return false;
+        }
+        if (!PoolsResponse.IsOk()) {
+            return std::nullopt;
+        }
+        const auto pools = FindBridgeDatabasePoolEntries(*DatabasePoolNames, PoolsResponse->Record);
+        if (!pools) {
+            return std::nullopt;
+        }
+        std::optional<bool> mode;
+        for (const auto& [_, pool] : *pools) {
+            const auto& info = pool->GetInfo();
+            if (!info.HasBridgeMode() || (mode && *mode != info.GetBridgeMode())) {
+                return std::nullopt;
+            }
+            mode = info.GetBridgeMode();
+        }
+        return mode;
     }
 
     NJson::TJsonValue GetSettings() {
@@ -36,6 +92,9 @@ public:
                 TSchemeCacheNavigate::TEntry& entry = DatabaseNavigateResponse->Get()->Request->ResultSet.front();
                 if (entry.DomainInfo) {
                     database["GraphShardExists"] = entry.DomainInfo->Params.GetGraphShard() != 0;
+                    if (const auto mode = GetDatabaseBridgeMode()) {
+                        database["BridgeModeEnabled"] = *mode;
+                    }
                 }
             }
         }

@@ -25,6 +25,8 @@ message TStorageQuery {
     optional EStorageMode StorageMode = 11;
     // DATABASES only: return separate summaries for each storage pool and pile.
     bool GroupByStoragePool = 12;
+    // DATABASES only: include aggregate copy metrics for required group copies.
+    bool IncludeSyncMetrics = 13;
 }
 
 message TStorageState {
@@ -141,6 +143,12 @@ message TDatabaseSynchronization {
     // Mixed mode counts only bridged pools.
     TGroupSyncCounts groups = 4;
     TSynchronizationError last_sync_error = 5;
+    // Blob bytes left to copy. Omitted when no estimate is available.
+    optional uint64 remaining_bytes = 6;
+    // False if an unfinished copy has no full scan; in that case remaining_bytes is a lower bound.
+    optional bool remaining_bytes_complete = 7;
+    // Sum of the per-copy rates over the last minute. Omitted for unknown copies or while syncers re-register after restart.
+    optional uint64 copy_bytes_per_second = 8;
 }
 
 message TGroupSynchronization {

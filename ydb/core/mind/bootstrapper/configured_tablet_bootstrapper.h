@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/mind/defs.h>
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/appdata.h>

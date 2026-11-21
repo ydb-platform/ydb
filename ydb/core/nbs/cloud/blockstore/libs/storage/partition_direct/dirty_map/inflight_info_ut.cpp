@@ -245,7 +245,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             readyQueue.ReadyToFlush.contains(MakeKey(123)));
@@ -302,7 +305,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             readyQueue.ReadyToFlush.contains(MakeKey(123)));
@@ -350,7 +356,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // Flush started
         UNIT_ASSERT_VALUES_EQUAL(
@@ -422,7 +431,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeMask({THostIndex{2}}));
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // Flush to a disabled host is refused.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -493,7 +505,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
                 &readyQueue,
                 MakeDDisks(),
                 THostMask::MakeEmpty());
-            inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+            inflightInfo.OnWritten(
+                MakePrimaryHosts(),
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
 
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
@@ -530,7 +545,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // Start and confirm flushes to all 3 hosts.
         FlushAll(inflightInfo);
@@ -563,6 +581,47 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL("[]", eraseNeeded.Print());
     }
 
+    Y_UNIT_TEST(ShouldReachErasedFromWriteWithoutQuorum)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+
+        // The quorum was not reached and the client got an error: H0 holds a
+        // copy, H1 and H2 answered with an error.
+        inflightInfo.OnWriteWithoutQuorum(
+            MakePrimaryHosts(),
+            THostMask::MakeOne(THostIndex{0}),
+            MakePrimaryHosts());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferDiscarded,
+            inflightInfo.GetState());
+
+        // The write was answered with an error, so reads go to DDisk.
+        UNIT_ASSERT_VALUES_EQUAL(true, inflightInfo.ReadMask().OnlyDDisk());
+
+        // Only the host that confirmed the write is erased. H1 and H2
+        // answered with an error, so their copies are left to the barrier.
+        UNIT_ASSERT_VALUES_EQUAL("[H0]", inflightInfo.GetEraseNeeded().Print());
+
+        inflightInfo.RequestErase(THostIndex{0});
+        inflightInfo.ConfirmErase(THostIndex{0});
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferDiscarded,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.CanBeCoveredByRestoreBarrier());
+
+        inflightInfo.MarkCoveredByRestoreBarrier();
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErased,
+            inflightInfo.GetState());
+    }
+
     Y_UNIT_TEST(ShouldReturnEraseNeededAfterEraseFailed)
     {
         TTestReadyQueue readyQueue;
@@ -570,7 +629,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         FlushAll(inflightInfo);
 
@@ -608,7 +670,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(false, readSource.Empty());
 
         // After OnWritten, should switch to PBuffer read with non-zero Lsn.
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferWritten,
             inflightInfo.GetState());
@@ -661,7 +726,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         FlushAll(inflightInfo);
 
@@ -691,7 +759,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // OnWritten transitions to Written directly and does not go through the
         // quorum-ready promise (that path is only for PBufferIncompleteWrite).
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(false, future.IsReady());
     }
 
@@ -736,7 +807,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
                 readyQueue.GetTotalBytes(THostIndex{2}));
 
             // After OnWritten, bytes should be accounted on written hosts.
-            inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+            inflightInfo.OnWritten(
+                MakePrimaryHosts(),
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{0}));
@@ -765,6 +839,75 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
     }
 
+    Y_UNIT_TEST(ShouldCountLockedBytesOfBelatedCopy)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+
+        // H3 was asked to write too, but the quorum was reached without it.
+        inflightInfo.OnWritten(
+            THostMask::MakeAll(4),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        // Locked bytes follow the requested hosts, H3 included.
+        inflightInfo.LockPBuffer();
+        for (const auto host: THostMask::MakeAll(4)) {
+            UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetLockedBytes(host));
+        }
+
+        // H3 answers under the lock: nothing changes for the counter.
+        inflightInfo.OnBelatedWrite(
+            THostMask::MakeMask({THostIndex{3}}),
+            THostMask{});
+        UNIT_ASSERT_VALUES_EQUAL(
+            4096,
+            readyQueue.GetLockedBytes(THostIndex{3}));
+
+        inflightInfo.UnlockPBuffer();
+        for (const auto host: THostMask::MakeAll(4)) {
+            UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetLockedBytes(host));
+        }
+    }
+
+    Y_UNIT_TEST(ShouldNotAdvanceToErasedWhileLocked)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        inflightInfo.LockPBuffer();
+        FlushAll(inflightInfo);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+
+        // Every written host is disabled. The read still holds the copies,
+        // and a disabled host is not treated as erased.
+        const auto mask = MakePrimaryHosts();
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), mask, mask);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.CanBeCoveredByRestoreBarrier());
+    }
+
     Y_UNIT_TEST(ShouldTrackLockedBytes)
     {
         TTestReadyQueue readyQueue;
@@ -772,7 +915,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         FlushAll(inflightInfo);
         UNIT_ASSERT_VALUES_EQUAL(
             true,
@@ -826,7 +972,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // Lock before flushing completes.
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
@@ -864,7 +1013,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{2}));
 
@@ -893,7 +1045,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(4),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4));
 
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{1}));
@@ -932,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         inflightInfo.ConfirmErase(THostIndex{1});
         inflightInfo.ConfirmErase(THostIndex{2});
         UNIT_ASSERT_VALUES_EQUAL(
-            TInflightInfo::EState::PBufferErasing,
+            TInflightInfo::EState::PBufferFlushed,
             inflightInfo.GetState());
         UNIT_ASSERT_VALUES_EQUAL(
             true,
@@ -951,7 +1106,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(4),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
             Y_UNUSED(inflightInfo.RequestFlush(host));
@@ -1003,7 +1161,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(4),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
             Y_UNUSED(inflightInfo.RequestFlush(host));
@@ -1036,7 +1197,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(4),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
             Y_UNUSED(inflightInfo.RequestFlush(host));
@@ -1064,8 +1228,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             inflightInfo.GetState());
     }
 
-    // In the erasing state, disabling the last non-erased host lets the erase
-    // complete because EraseConfirmed\Disabled == WriteRequested\Disabled.
+    // Disabling the last non-erased host leaves the record flushed: its copy
+    // is covered by the restore barrier, not forgotten on the erase path.
     Y_UNIT_TEST(ShouldWaitForRestoreBarrierWhenDisablingPendingHost)
     {
         TTestReadyQueue readyQueue;
@@ -1073,7 +1237,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         FlushAll(inflightInfo);
 
@@ -1083,7 +1250,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         inflightInfo.ConfirmErase(THostIndex{0});
         inflightInfo.ConfirmErase(THostIndex{1});
         UNIT_ASSERT_VALUES_EQUAL(
-            TInflightInfo::EState::PBufferErasing,
+            TInflightInfo::EState::PBufferFlushed,
             inflightInfo.GetState());
 
         // Disable + remove host 2. Its copy is left to the restore barrier:
@@ -1092,7 +1259,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         inflightInfo.UpdateHosts(THostMask::MakeEmpty(), mask, mask);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            TInflightInfo::EState::PBufferErasing,
+            TInflightInfo::EState::PBufferFlushed,
             inflightInfo.GetState());
         UNIT_ASSERT_VALUES_EQUAL("[]", inflightInfo.GetEraseNeeded().Print());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1112,7 +1279,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         FlushAll(inflightInfo);
 
         // Host 2 is disabled before the erase: only hosts 0 and 1 are erased.
@@ -1163,7 +1333,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         inflightInfo.LockPBuffer();
         FlushAll(inflightInfo);
@@ -1203,7 +1376,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{1}));
@@ -1230,7 +1406,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             readyQueue.ReadyToFlush.contains(MakeKey(123)));
@@ -1275,7 +1454,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
                 &readyQueue,
                 MakeDDisks(),
                 THostMask::MakeEmpty());
-            inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+            inflightInfo.OnWritten(
+                MakePrimaryHosts(),
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
             FlushAll(inflightInfo);
 
             // Hold a lock, then detach. The destructor must not abort on the
@@ -1303,7 +1485,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
                 &readyQueue,
                 MakeDDisks(),
                 THostMask::MakeEmpty());
-            source.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+            source.OnWritten(
+                MakePrimaryHosts(),
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{0}));
@@ -1336,7 +1521,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // No notification before the flush completes.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1369,7 +1557,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(4),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4));
 
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{1}));
@@ -1408,7 +1599,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         inflightInfo.ConfirmErase(THostIndex{1});
         inflightInfo.ConfirmErase(THostIndex{2});
         UNIT_ASSERT_VALUES_EQUAL(
-            TInflightInfo::EState::PBufferErasing,
+            TInflightInfo::EState::PBufferFlushed,
             inflightInfo.GetState());
         UNIT_ASSERT_VALUES_EQUAL(
             true,
@@ -1427,7 +1618,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(4),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
             Y_UNUSED(inflightInfo.RequestFlush(host));
@@ -1465,7 +1659,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(4),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4),
+            MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
             Y_UNUSED(inflightInfo.RequestFlush(host));
@@ -1507,7 +1704,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // Lock before flushing completes.
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
@@ -1553,7 +1753,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // Lock/unlock while still in the written state: no flush happened, so
         // no completion notification may fire.
@@ -1580,7 +1783,10 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             &readyQueue,
             MakeDDisks(),
             THostMask::MakeEmpty());
-        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        inflightInfo.OnWritten(
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         FlushAll(inflightInfo);
         UNIT_ASSERT_VALUES_EQUAL(

@@ -573,6 +573,34 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
+    Y_UNIT_TEST(DisablePgCompatibilityPreservesPreparedQueryId) {
+        TKikimrSettings settings;
+        settings.SetDisablePgCompatibility(false).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetCompileQueryCacheSize(1);
+        TKikimrRunner kikimr(settings);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto prepared = session.PrepareDataQuery("SELECT 44 AS value;").ExtractValueSync();
+        UNIT_ASSERT_C(prepared.IsSuccess(), prepared.GetIssues().ToString());
+        auto query = prepared.GetQuery();
+        const auto txControl = TTxControl::BeginTx().CommitTx();
+        const auto execSettings = TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        for (const bool disablePgCompatibility : {true, false}) {
+            NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+            flags.SetDisablePgCompatibility(disablePgCompatibility);
+            appData.UpdateRuntimeFlags(flags);
+            for (const bool fromCache : {false, true}) {
+                const auto result = query.Execute(txControl, execSettings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CompareYson("[[44]]", FormatResultSetYson(result.GetResultSet(0)));
+                const auto stats = result.GetStats();
+                UNIT_ASSERT(stats);
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::TProtoAccessor::GetProto(*stats).compilation().from_cache(), fromCache);
+            }
+        }
+    }
+
     Y_UNIT_TEST(SecondaryIndex_PgKey) {
         TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();

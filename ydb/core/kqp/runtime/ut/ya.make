@@ -17,7 +17,6 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/common
-    ydb/core/kqp/runtime/scheduler
     ydb/core/kqp/ut/common
     ydb/core/testlib/basics/pg
     yql/essentials/ast

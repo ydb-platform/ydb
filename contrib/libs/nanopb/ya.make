@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.4.9.1)
+VERSION(0.4.9.2)
 
-ORIGINAL_SOURCE(https://github.com/nanopb/nanopb/archive/0.4.9.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/nanopb/nanopb/archive/0.4.9.2.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/nanopb

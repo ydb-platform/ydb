@@ -5,6 +5,7 @@
 #include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "target_transfer.h"
 #include "tenant_resolver.h"
 #include "util.h"
@@ -95,6 +96,8 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::Transfer:
             return new TTargetTransfer(self, id, std::forward<Args>(args)...);
+        case ETargetKind::Topic:
+            return new TTargetTopic(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -191,6 +194,8 @@ public:
                 case ETargetKind::IndexTable:
                 case ETargetKind::Transfer:
                     TargetTablePaths.push_back(target->GetDstPath());
+                    break;
+                case ETargetKind::Topic:
                     break;
                 }
             }

@@ -985,44 +985,78 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     return TExprBase{read};
 }
 
+// The extracted target can contain its own lambdas, but it must not
+// reference a row argument outside the target expression.
+bool HasFreeArguments(const TExprNode::TPtr& expr) {
+    TNodeSet bound;
+    VisitExpr(expr, [&](const TExprNode::TPtr& node) {
+        if (node->IsLambda()) {
+            for (const auto& arg : node->Head().Children()) {
+                bound.insert(arg.Get());
+            }
+        }
+        return true;
+    });
+    return bool(FindNode(expr, [&](const TExprNode::TPtr& node) {
+        return node->IsArgument() && !bound.contains(node.Get());
+    }));
+}
+
 TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TCoFlatMap& flatMap,
     const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
     TExprContext& ctx, const TKikimrTableDescription& tableDesc,
-    const TIntrusivePtr<TKikimrTableMetadata>& postingMeta, const TIndexDescription& indexDesc)
+    const TKikimrTableDescription& posting, const TIndexDescription& indexDesc)
 {
-    // The search actor cannot apply a residual SQL predicate before choosing
-    // candidates. Scan index members exactly and keep WHERE ahead of LIMIT.
-    // Reading the posting table also preserves autoupdate=false membership.
+    // Scan index members exactly so WHERE runs before LIMIT.
     const auto pos = match.Pos();
-    const auto& embeddingColumn = indexDesc.KeyColumns.back();
-    const bool covered = CheckIndexCovering(match.Columns(), postingMeta);
-    const auto columns = covered
-        ? MergeColumns(match.Columns(), tableDesc.Metadata->KeyColumnNames, ctx)
-        : MergeColumns(BuildKeyColumnsList(tableDesc, pos, ctx), {embeddingColumn}, ctx);
+    TVector<TCoAtom> coveredColumns;
+    TVector<TCoAtom> lookupColumns;
+    for (const auto& column : match.Columns()) {
+        auto& columns = posting.Metadata->Columns.contains(column.StringValue()) ? coveredColumns : lookupColumns;
+        columns.push_back(column);
+    }
+    const auto columns = MergeColumns(Build<TCoAtomList>(ctx, pos).Add(coveredColumns).Done(),
+        tableDesc.Metadata->KeyColumnNames, ctx);
     const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
         indexDesc.SpecializedIndexDescription).GetSettings();
     TNodeOnNodeOwnedMap replaces;
     TExprNode::TPtr target;
     LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, target);
     YQL_ENSURE(target, "failed to extract the HNSW target vector");
-    const auto zero = Build<TCoUint64>(ctx, pos).Literal().Build("0").Done();
-    const auto unbounded = ctx.NewCallable(pos, "If", {
-        ctx.NewCallable(pos, "==", {top.Count().Ptr(), zero.Ptr()}), zero.Ptr(),
-        ctx.NewCallable(pos, "Uint64", {ctx.NewAtom(pos, ToString(Max<ui64>()))})});
-    const auto validation = Build<TKqpVectorSearchLimit>(ctx, pos)
-        .Count(TExprBase(unbounded))
-        .TargetVector(TExprBase(target))
-        .Settings().Build(NKMeans::MakeDistanceSettings(settings.settings()).SerializeAsString())
-        .Done();
-    const auto limit = Build<TDqPrecompute>(ctx, pos).Input(validation).Done();
-    // The read must evaluate this prerequisite even if no rows reach TopSort.
-    // Use an unbounded read limit, preserving WHERE-before-LIMIT semantics.
-    auto readSettings = TKqpReadTableSettings::Parse(match.Settings());
-    readSettings.SetItemsLimit(limit.Ptr());
-    const auto source = match.BuildRead(ctx, BuildTableMeta(*postingMeta, pos, ctx), columns);
-    const auto settingsIndex = source.Maybe<TKqlReadTable>()
-        ? TKqlReadTable::idx_Settings : TKqlReadTableRanges::idx_Settings;
-    TExprBase rows(ctx.ChangeChild(source.Ref(), settingsIndex, readSettings.BuildNode(ctx, pos).Ptr()));
+    const auto postingTable = BuildTableMeta(*posting.Metadata, pos, ctx);
+    auto rows = match.BuildRead(ctx, postingTable, columns);
+    if (!HasFreeArguments(target)) {
+        const auto validation = Build<TKqpVectorSearchLimit>(ctx, pos)
+            .Count(top.Count())
+            .TargetVector(TExprBase(target))
+            .Settings().Build(NKMeans::MakeDistanceSettings(settings.settings()).SerializeAsString())
+            .Done();
+
+        // Evaluate validation before opening the scan. A NULL or empty
+        // target yields no ranges, and a valid target keeps normal read credit.
+        TExprNode::TListType boundaryItems;
+        for (const auto& key : posting.Metadata->KeyColumnNames) {
+            const auto* type = ctx.MakeType<TOptionalExprType>(posting.GetColumnType(key));
+            boundaryItems.push_back(ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *type, ctx)}));
+        }
+        boundaryItems.push_back(Build<TCoInt32>(ctx, pos).Literal().Build("0").Done().Ptr());
+        const auto boundary = ctx.NewList(pos, std::move(boundaryItems));
+        const auto fullRange = ctx.NewCallable(pos, "AsRange", {ctx.NewList(pos, {boundary, boundary})});
+        const auto zero = Build<TCoUint64>(ctx, pos).Literal().Build("0").Done();
+        const auto ranges = ctx.NewCallable(pos, "RangeFinalize", {
+            ctx.NewCallable(pos, "If", {
+                ctx.NewCallable(pos, "!=", {validation.Ptr(), zero.Ptr()}),
+                fullRange,
+                ctx.NewCallable(pos, "RangeEmpty", {})})});
+        rows = Build<TKqlReadTableRanges>(ctx, pos)
+            .Table(postingTable)
+            .Columns(columns)
+            .Ranges(ranges)
+            .Settings(match.Settings())
+            .ExplainPrompt(TKqpReadTableExplainPrompt().BuildNode(ctx, pos))
+            .Done();
+    }
+
     if (settings.overlap_clusters() > 1) {
         // Group by the full primary key. Covered values are identical across
         // a row's postings; SOME preserves them without using them as hash keys.
@@ -1049,14 +1083,14 @@ TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TCoFlatMap& fla
             ctx.NewList(pos, std::move(handlers)), ctx.NewList(pos, {})}));
     }
 
-    if (covered) {
+    if (lookupColumns.empty()) {
         rows = Build<TCoExtractMembers>(ctx, pos)
             .Input(rows)
             .Members(match.Columns())
             .Done();
     } else {
-        // Carry the posting embedding through the lookup: autoupdate=false
-        // freezes index geometry even when the base-table vector changes.
+        // Carry all covered values through the lookup so a projection of
+        // uncovered columns cannot change the predicate or ranking.
         const auto postingArg = ctx.NewArgument(pos, "postingRow");
         TExprNode::TListType keyMembers;
         for (const auto& key : tableDesc.Metadata->KeyColumnNames) {
@@ -1068,10 +1102,11 @@ TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TCoFlatMap& fla
                 postingArg, ctx.NewCallable(pos, "Just", {ctx.NewCallable(pos, "AsStruct", std::move(keyMembers))})}))});
         TKqpStreamLookupSettings lookupSettings;
         lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+        lookupSettings.AllowNullKeysPrefixSize = tableDesc.Metadata->KeyColumnNames.size();
         const auto joined = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(match.Table())
             .LookupKeys(TExprBase(input))
-            .Columns(match.Columns())
+            .Columns<TCoAtomList>().Add(lookupColumns).Build()
             .Settings(lookupSettings.BuildNode(ctx, pos))
             .Done();
         const auto joinArg = ctx.NewArgument(pos, "joinedRow");
@@ -1080,7 +1115,7 @@ TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TCoFlatMap& fla
         TExprNode::TListType members;
         for (const auto& column : match.Columns()) {
             members.push_back(ctx.NewList(pos, {column.Ptr(), ctx.NewCallable(pos, "Member", {
-                column.Value() == embeddingColumn ? postingRow : mainArg, column.Ptr()})}));
+                posting.Metadata->Columns.contains(column.StringValue()) ? postingRow : mainArg, column.Ptr()})}));
         }
         const auto mainBody = ctx.NewCallable(pos, "Just", {ctx.NewCallable(pos, "AsStruct", std::move(members))});
         const auto joinBody = ctx.NewCallable(pos, "FlatMap", {
@@ -1093,12 +1128,6 @@ TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TCoFlatMap& fla
         .Input(rows)
         .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
         .Done().Ptr();
-    // Read actors interpret a zero read limit as unbounded. Suppress rows for
-    // NULL/empty targets explicitly, matching the vector-search actor.
-    const auto rowArg = ctx.NewArgument(pos, "validatedRow");
-    read = ctx.NewCallable(pos, "Filter", {read,
-        ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}),
-            ctx.NewCallable(pos, "!=", {limit.Ptr(), zero.Ptr()}))});
     VectorTopMain(ctx, top, read);
     return TExprBase(read);
 }
@@ -4213,7 +4242,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             }
             const auto& posting = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Next->Name);
             return RewriteFilteredHnswScan(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase, ctx,
-                tableDesc, posting.Metadata, *indexDesc);
+                tableDesc, posting, *indexDesc);
         }
         // Unprefixed HNSW uses the actor's all-partition search;
         // the legacy lookup chain only implements k-means cluster traversal.

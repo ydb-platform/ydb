@@ -1076,6 +1076,72 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT(!rows.TryNextRow());
     }
 
+    Y_UNIT_TEST(HnswFilteredSearchKeepsNullableKeysAndCoveredValues) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schema = [&](const TString& sql) {
+            const auto result = session.ExecuteSchemeQuery(sql).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        schema(R"(
+            CREATE TABLE `/Root/HnswNullableFilter` (
+                id Uint64, emb String, active Bool, note String, PRIMARY KEY(id));
+        )");
+        auto written = ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswNullableFilter` (id, emb, active, note) VALUES
+                (NULL, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), true, "old"),
+                (1u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"), true, "other");
+        )");
+        UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+        schema(R"(
+            ALTER TABLE `/Root/HnswNullableFilter` ADD INDEX idx GLOBAL USING hnsw ON (emb) COVER (active)
+            WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, autoupdate=false);
+        )");
+        written = ExecuteDataQuery(session, R"(
+            UPDATE `/Root/HnswNullableFilter` SET active=false, note="updated" WHERE id IS NULL;
+        )");
+        UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+        for (const TString projection : {"id", "id, note"}) {
+            const auto read = ExecuteDataQuery(session, TStringBuilder()
+                << "$q = Knn::ToBinaryStringFloat([0.0f, 0.0f]); SELECT " << projection
+                << " FROM `/Root/HnswNullableFilter` VIEW idx WHERE active"
+                << " ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;");
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            TResultSetParser rows(read.GetResultSet(0));
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT(!rows.ColumnParser("id").GetOptionalUint64());
+            if (projection == "id, note") {
+                UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("note").GetOptionalString().value(), "updated");
+            }
+            UNIT_ASSERT(!rows.TryNextRow());
+        }
+    }
+
+    Y_UNIT_TEST(HnswFilteredSearchSupportsRowDependentTarget) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswRowTarget` (
+                id Uint64 NOT NULL, emb String NOT NULL, other_emb String NOT NULL, active Bool, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (emb)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto result = ExecuteDataQuery(session, R"(
+            $zero = Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector");
+            $one = Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector");
+            UPSERT INTO `/Root/HnswRowTarget` (id, emb, other_emb, active) VALUES
+                (1u, $zero, $one, true), (2u, $one, $one, true);
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto read = ExecuteDataQuery(session, R"(
+            SELECT id FROM `/Root/HnswRowTarget` VIEW idx WHERE active
+            ORDER BY Knn::EuclideanDistance(emb, other_emb) LIMIT 1;
+        )");
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), "[[2u]]");
+    }
+
     Y_UNIT_TEST_QUAD(HnswFilteredSearchValidatesTarget, Covered, Parameterized) {
         TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
         auto db = kikimr.GetTableClient();
@@ -1130,15 +1196,27 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         const auto zero = read(3, "active", 0);
         UNIT_ASSERT_C(zero.IsSuccess(), zero.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(zero.GetResultSet(0)), "[]");
-        const auto nullParams = db.GetParamsBuilder().AddParam("$target")
-            .EmptyOptional(EPrimitiveType::String).Build().Build();
-        const auto nullTarget = session.ExecuteDataQuery(R"(
-            DECLARE $target AS String?;
-            SELECT id FROM `/Root/HnswFilteredTarget` VIEW idx WHERE active
-            ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT 1;
-        )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), nullParams).ExtractValueSync();
-        UNIT_ASSERT_C(nullTarget.IsSuccess(), nullTarget.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(nullTarget.GetResultSet(0)), "[]");
+        auto emptyTargetParams = db.GetParamsBuilder();
+        emptyTargetParams.AddParam("$target").OptionalString(std::string{}).Build();
+        auto nullTargetParams = db.GetParamsBuilder();
+        nullTargetParams.AddParam("$target").EmptyOptional(EPrimitiveType::String).Build();
+        for (const auto& params : {nullTargetParams.Build(), emptyTargetParams.Build()}) {
+            const auto result = session.ExecuteDataQuery(R"(
+                DECLARE $target AS String?;
+                SELECT id FROM `/Root/HnswFilteredTarget` VIEW idx WHERE active
+                ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT 1;
+            )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params,
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[]");
+            UNIT_ASSERT(result.GetStats());
+            const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(access.reads().rows(), 0, access.name());
+                }
+            }
+        }
         for (const TString& target : {TString("\x01\x00\x02", 3), TString("invalid")}) {
             const auto params = db.GetParamsBuilder().AddParam("$target").String(target).Build().Build();
             const auto invalid = session.ExecuteDataQuery(R"(

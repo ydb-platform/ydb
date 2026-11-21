@@ -220,20 +220,6 @@ private:
     NMonitoring::THistogramPtr ActualizationTaskSizeRemove;
     NMonitoring::THistogramPtr ActualizationTaskSizeEvict;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipRWProgressCount;
-    NMonitoring::THistogramPtr ActualizationSkipTooFreshPortion;
-
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnCount;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnBytes;
-
-    NMonitoring::TDynamicCounters::TCounterPtr StatUsageForTTLCount;
-    NMonitoring::TDynamicCounters::TCounterPtr ChunkUsageForTTLCount;
-
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderCount;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
-
-    NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
-
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr BadPortionsCount;
@@ -290,14 +276,6 @@ public:
         return GranuleDataAgent.RegisterClient();
     }
 
-    void OnActualizationSkipRWProgress() const {
-        ActualizationSkipRWProgressCount->Add(1);
-    }
-
-    void OnActualizationSkipTooFreshPortion(const TDuration dWait) const {
-        ActualizationSkipTooFreshPortion->Collect(dWait.Seconds());
-    }
-
     void OnSkipDeleteWithProcessMemory(const TDuration lag) const {
         SkipDeleteWithProcessMemory->Collect(lag.Seconds());
     }
@@ -326,30 +304,8 @@ public:
         PortionToDropLag->Collect(lag.Seconds());
     }
 
-    void OnPortionNoTtlColumn(const ui64 size) const {
-        PortionNoTtlColumnCount->Add(1);
-        PortionNoTtlColumnBytes->Add(size);
-    }
-
-    void OnChunkUsageForTTL() const {
-        ChunkUsageForTTLCount->Add(1);
-    }
-
-    void OnStatUsageForTTL() const {
-        StatUsageForTTLCount->Add(1);
-    }
-
-    void OnPortionNoBorder(const ui64 size) const {
-        PortionNoBorderCount->Add(1);
-        PortionNoBorderBytes->Add(size);
-    }
-
     void OnIndexMetadataUsageBytes(const ui64 size) const {
         IndexMetadataUsageBytes->Set(size);
-    }
-
-    void OnGranuleOptimizerLocked() const {
-        GranuleOptimizerLocked->Add(1);
     }
 
     void OnCleanupPortionSkippedByLock(ui32 count) const {

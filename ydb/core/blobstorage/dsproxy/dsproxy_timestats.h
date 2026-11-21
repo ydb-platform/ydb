@@ -9,6 +9,7 @@
 
 #include <util/generic/queue.h>
 #include <util/datetime/parser.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 
@@ -23,21 +24,17 @@ class TBlobStorageGroupProxyTimeStats {
             }
         };
 
-        TDuration& AggrTime;
         TDeque<TQueueItem> Queue;
 
     public:
-        TTimeSeries(TDuration& aggrTime)
-            : AggrTime(aggrTime)
-        {}
-
-        void Add(TInstant now, TItem&& item) {
+        // the aggregation time is kept by the owner, which can change it from the monitoring page
+        void Add(TInstant now, TItem&& item, TDuration aggrTime) {
             Queue.emplace_back(now, std::move(item));
-            Update(now);
+            Update(now, aggrTime);
         }
 
-        void Update(TInstant now) {
-            while (!Queue.empty() && Queue.front().first + AggrTime < now) {
+        void Update(TInstant now, TDuration aggrTime) {
+            while (!Queue.empty() && Queue.front().first + aggrTime < now) {
                 Queue.pop_front();
             }
         }
@@ -89,10 +86,10 @@ public:
         , Enabled(false)
     {
         for (ui32 size : {0, 128, 1024, 4096, 65536, 1048576}) {
-            Puts.emplace_back(size, aggrTime);
+            Puts.emplace_back(size, TTimeSeries<TPutInfo>());
         }
         for (ui32 sizeKB : {0, 512, 1024, 2048, 3072, 4096, 5120, 6144, 7168}) {
-            HugePuts.emplace_back(sizeKB << 10, aggrTime);
+            HugePuts.emplace_back(sizeKB << 10, TTimeSeries<THugePutInfo>());
         }
     }
 
@@ -113,12 +110,12 @@ public:
             auto it = std::upper_bound(HugePuts.begin(), HugePuts.end(), size, TCompareTimeSeries<TTimeSeries<THugePutInfo>>());
             Y_ABORT_UNLESS(it != HugePuts.begin());
             --it;
-            it->second.Add(now, std::move(info));
+            it->second.Add(now, std::move(info), AggrTime);
         } else {
             auto it = std::upper_bound(Puts.begin(), Puts.end(), size, TCompareTimeSeries<TTimeSeries<TPutInfo>>());
             Y_ABORT_UNLESS(it != Puts.begin());
             --it;
-            it->second.Add(now, std::move(info));
+            it->second.Add(now, std::move(info), AggrTime);
         }
     }
 
@@ -142,7 +139,7 @@ public:
                     TABLED() { str << "<b>" << #NAME << "</b>"; } \
                     for (auto it = V.begin(); it != V.end(); ++it) { \
                         auto& series = it->second; \
-                        series.Update(now); \
+                        series.Update(now, AggrTime); \
                         const auto& v = series.GetVector(); \
                         using T = decltype(std::declval<std::decay<decltype(v)>::type::value_type::second_type>().NAME); \
                         TVector<T> values; \
@@ -269,6 +266,12 @@ public:
             TDurationParser parser;
             if (parser.ParsePart(param.data(), param.size())) {
                 AggrTime = parser.GetResult(AggrTime);
+            }
+        }
+        if (cgi.Has("percentile")) {
+            double percentile;
+            if (TryFromString(cgi.Get("percentile"), percentile) && percentile > 0 && percentile <= 1) {
+                Percentile = percentile;
             }
         }
     }

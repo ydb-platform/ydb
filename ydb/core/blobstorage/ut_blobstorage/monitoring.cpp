@@ -2,7 +2,9 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_timestats.h>
 
+#include <util/generic/scope.h>
 #include <util/string/printf.h>
 
 constexpr bool VERBOSE = false;
@@ -340,3 +342,76 @@ Y_UNIT_TEST_SUITE(TestDSProxyAndVDiskEqualByteCounters) {
 }
 
 #undef MAKE_BURST_TEST
+
+Y_UNIT_TEST_SUITE(DSProxyTimeStats) {
+    class TTestTimeProvider : public ITimeProvider {
+    public:
+        TInstant Time;
+
+        TInstant Now() override {
+            return Time;
+        }
+    };
+
+    // the percentile of the total time of the puts below 128 bytes, as the monitoring page shows it
+    TString RenderTotalOfSmallPuts(TBlobStorageGroupProxyTimeStats& stats) {
+        TStringStream str;
+        stats.Render(str);
+        const TString& html = str.Str();
+        const TStringBuf prefix = "<b>Total</b></td><td>";
+        const size_t begin = html.find(prefix);
+        UNIT_ASSERT(begin != TString::npos);
+        const size_t end = html.find("</td>", begin + prefix.size());
+        UNIT_ASSERT(end != TString::npos);
+        return html.substr(begin + prefix.size(), end - begin - prefix.size());
+    }
+
+    Y_UNIT_TEST(SubmittedAggregationTimeIsUsed) {
+        TIntrusivePtr<TTestTimeProvider> time = MakeIntrusive<TTestTimeProvider>();
+        TIntrusivePtr<ITimeProvider> prevTimeProvider = std::exchange(TAppData::TimeProvider, time);
+        Y_DEFER {
+            TAppData::TimeProvider = prevTimeProvider;
+        };
+
+        TBlobStorageGroupProxyTimeStats stats(TDuration::Seconds(5));
+        TCgiParameters cgi;
+        cgi.InsertUnescaped("enabled", "on");
+        cgi.InsertUnescaped("aggrTime", "10s");
+        stats.Submit(cgi);
+
+        auto put = [&](TInstant now, TDuration total) {
+            time->Time = now;
+            NKikimrBlobStorage::TExecTimeStats execTimeStats;
+            execTimeStats.SetSubmitTimestamp(now.MicroSeconds());
+            execTimeStats.SetTotal(total.MicroSeconds());
+            stats.ApplyPut(10, execTimeStats);
+        };
+        const TInstant start = TInstant::Seconds(1000);
+        put(start, TDuration::MicroSeconds(300));
+        put(start + TDuration::Seconds(7), TDuration::MicroSeconds(100));
+
+        // both puts are within the 10 s set on the page, and the 90th percentile of two values is the bigger one
+        UNIT_ASSERT_VALUES_EQUAL(RenderTotalOfSmallPuts(stats), ToString(TDuration::MicroSeconds(300)));
+
+        // 12 s after the first put only the second one is left
+        time->Time = start + TDuration::Seconds(12);
+        UNIT_ASSERT_VALUES_EQUAL(RenderTotalOfSmallPuts(stats), ToString(TDuration::MicroSeconds(100)));
+    }
+
+    Y_UNIT_TEST(SubmittedPercentileIsUsed) {
+        TIntrusivePtr<TTestTimeProvider> time = MakeIntrusive<TTestTimeProvider>();
+        TIntrusivePtr<ITimeProvider> prevTimeProvider = std::exchange(TAppData::TimeProvider, time);
+        Y_DEFER {
+            TAppData::TimeProvider = prevTimeProvider;
+        };
+
+        TBlobStorageGroupProxyTimeStats stats;
+        TCgiParameters cgi;
+        cgi.InsertUnescaped("percentile", "0.5");
+        stats.Submit(cgi);
+
+        TStringStream str;
+        stats.Render(str);
+        UNIT_ASSERT_STRING_CONTAINS(str.Str(), "Put stats percentile# 0.5");
+    }
+}

@@ -56,10 +56,6 @@
       "channel": "main",
       "responsible": ["@yql-lead"]
     },
-    "postgres-compatibility": {
-      "channel": "main",
-      "responsible": ["@postgres-lead"]
-    },
     "duty": {
       "channel": "main",
       "responsible": ["@duty-lead1", "@duty-lead2", "@duty-lead3"]

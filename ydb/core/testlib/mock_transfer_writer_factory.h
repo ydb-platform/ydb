@@ -14,6 +14,10 @@ struct MockTransferWriterFactory : public NKikimr::NReplication::NService::ITran
     NActors::IActor* Create(const Parameters&) const override {
         return new MockActor();
     }
+
+    NActors::IActor* CreateCompilationService() const override {
+        return new MockActor();
+    }
 };
 
 } // namespace NKikimr::Tests

@@ -28,6 +28,8 @@ public:
 
     virtual IActor* Create(const Parameters& parameters) const = 0;
 
+    virtual IActor* CreateCompilationService() const = 0;
+
     virtual ~ITransferWriterFactory() = default;
 };
 

@@ -12,6 +12,7 @@ SRCS(
     schema_change.cpp
     schema_change.h
     sensitive_event_pb.h
+    transfer_writer_stats.h
     worker_id.cpp
 )
 

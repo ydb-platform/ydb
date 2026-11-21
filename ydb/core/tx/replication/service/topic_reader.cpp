@@ -3,7 +3,7 @@
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/common/transfer_writer_stats.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor.h>

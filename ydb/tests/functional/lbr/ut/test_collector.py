@@ -88,12 +88,22 @@ class TestLbrCollector:
         assert record["return_code"] == -signal.SIGTERM
         assert record["complete"] and record["stopped_on_phase_end"]
 
-    def test_import_is_sampled_repeatedly(self, tmp_path, fake_perf):
+    def test_import_is_sampled_repeatedly(self, tmp_path, fake_perf, monkeypatch):
         output = tmp_path / "import"
-        with LbrCollector([os.getpid()], output, None, 0.03, perf=fake_perf, interval_seconds=0.2):
-            time.sleep(0.5)
+        collector = LbrCollector([os.getpid()], output, None, 0.03, perf=fake_perf, interval_seconds=0.2)
+        ready = threading.Event()
+        original_record = collector._record
+
+        def record(index, offset):
+            original_record(index, offset)
+            if index >= 3:
+                ready.set()
+
+        monkeypatch.setattr(collector, "_record", record)
+        with collector:
+            assert ready.wait(5)
         records = manifest(output)["records"]
-        assert len(records) == 3
+        assert len(records) >= 3
         assert all(record["complete"] for record in records)
         assert all(a["finished_at"] <= b["started_at"] for a, b in zip(records, records[1:]))
 
@@ -199,3 +209,16 @@ def test_incomplete_workload_is_not_valid_for_conversion(tmp_path, fake_perf):
             pass
     assert calls == [("workload", False)]
     assert not manifest(tmp_path / "workload")["valid"]
+
+
+@pytest.mark.parametrize("executable", [False, True])
+def test_windowed_perf_is_checked_before_start(tmp_path, executable):
+    perf = tmp_path / "missing-or-not-executable-perf"
+    if executable:
+        perf.write_text("#!/bin/sh\nexit 0\n")
+        perf.chmod(0o644)
+    collector = LbrCollector([os.getpid()], tmp_path / "workload", 1800, perf=str(perf), start_delay_seconds=600)
+    with pytest.raises(FileNotFoundError, match="perf executable is missing or not executable"):
+        with collector:
+            pytest.fail("Invalid perf must fail before the workload starts")
+    assert collector._thread is None

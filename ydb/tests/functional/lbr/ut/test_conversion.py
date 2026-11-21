@@ -140,6 +140,8 @@ def test_merge_error_does_not_prevent_other_phase_merge(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="LBR conversion failed"):
         conversion.finish()
     assert (tmp_path / "profiles/workload.prof").is_file()
+    report = json.loads((tmp_path / "profiles/conversion.json").read_text())
+    assert next(row for row in report if "merge_error" in row)["index"] is None
     assert "merge failed" in (tmp_path / "profiles/conversion.json").read_text()
 
 
@@ -307,3 +309,13 @@ def test_pending_cancellation_has_readable_error(tmp_path):
     report = json.loads((tmp_path / "profiles/conversion.json").read_text())
     assert future.cancelled()
     assert report[0]["error"] == "cancelled"
+
+
+def test_conversion_without_gnu_time(tmp_path, monkeypatch):
+    monkeypatch.setattr("ydb.tests.functional.lbr.lib.conversion.os.access", lambda path, mode: False)
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles")
+    assert conversion.time_tool is None
+    result = conversion._run(["/bin/sh", "-c", "printf converted"], tmp_path / "profiles/snap1")
+    assert result["exit_code"] == 0
+    assert result["peak_rss_kib"] is None
+    assert (tmp_path / "profiles/snap1.log").read_text() == "converted"

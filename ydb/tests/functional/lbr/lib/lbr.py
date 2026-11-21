@@ -4,6 +4,7 @@ import math
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import threading
 import time
@@ -70,6 +71,12 @@ class LbrCollector:
         self.output_dir.mkdir(parents=True, exist_ok=False)
         self.started = time.monotonic()
         self.started_at = time.time()
+        executable = shutil.which(self.perf)
+        if executable is None:
+            self.error = FileNotFoundError(f"perf executable is missing or not executable: {self.perf}")
+            self._write_manifest()
+            raise self.error
+        self.perf = executable
         self._thread = threading.Thread(target=self._collect, name=f"tpcc-lbr-{self.phase or 'load'}")
         self._thread.start()
         if self.periodic and self.start_delay_seconds == 0:

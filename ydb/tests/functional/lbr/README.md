@@ -125,3 +125,8 @@ the test. Sampling errors keep their original exception; setup failure drains
 or cancels the pending conversion jobs. Each conversion command has a one-hour
 timeout; expiry and cancellation terminate its process group. Failed conversion
 or merging of one phase does not prevent publishing other successful phases.
+
+The collector checks that `perf` is executable before starting a phase. Hardware
+LBR support and permissions are checked by the actual recording. GNU time at
+`/usr/bin/time` is optional: without it conversion still runs, but
+`peak_rss_kib` is null. Merge-error report rows have `index: null`.

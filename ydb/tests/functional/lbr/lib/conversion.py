@@ -19,6 +19,7 @@ class LbrConversion:
         self.binary = Path(binary).resolve()
         if timeout <= 0:
             raise ValueError("Conversion timeout must be positive")
+        self.time_tool = "/usr/bin/time" if os.access("/usr/bin/time", os.X_OK) else None
         self.timeout = timeout
         self._processes = {}
         self._phase = threading.local()
@@ -180,7 +181,7 @@ class LbrConversion:
                 temporary.replace(destination)
             except Exception as exc:
                 errors[phase] = exc
-                results.append({"phase": phase, "phase_valid": True, "merge_error": str(exc)})
+                results.append({"phase": phase, "index": None, "phase_valid": True, "merge_error": str(exc)})
         (self.output_dir / "conversion.json").write_text(json.dumps(results, indent=2))
         if errors:
             raise RuntimeError("LBR conversion failed; see conversion.json and snapshot logs") from next(
@@ -191,14 +192,15 @@ class LbrConversion:
         prefix.with_suffix(".command.json").write_text(json.dumps(command, indent=2))
         timing = prefix.with_suffix(".time")
         started = time.monotonic()
+        measured_command = [self.time_tool, "-v", "-o", str(timing), *command] if self.time_tool else command
         with prefix.with_suffix(".log").open("w") as log:
-            with self._process(
-                ["/usr/bin/time", "-v", "-o", str(timing), *command], stdout=log, stderr=subprocess.STDOUT
-            ) as process:
+            with self._process(measured_command, stdout=log, stderr=subprocess.STDOUT) as process:
                 return_code = process.wait(timeout=self.timeout + 5)
         elapsed = time.monotonic() - started
         details = {"seconds": elapsed, "exit_code": return_code}
-        match = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", timing.read_text())
+        match = (
+            re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", timing.read_text()) if self.time_tool else None
+        )
         details["peak_rss_kib"] = int(match[1]) if match else None
         prefix.with_suffix(".result.json").write_text(json.dumps(details, indent=2))
         if return_code:

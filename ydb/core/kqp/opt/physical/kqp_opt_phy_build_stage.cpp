@@ -264,6 +264,12 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
 
     const TKqlReadTableFullTextIndex& read = node.Cast<TKqlReadTableFullTextIndex>();
 
+    // Scalar subqueries are lowered by the shared precompute rules.
+    // Wait until all logical dependencies have been materialized before building the read.
+    if (!IsDqPureExpr(read.Query())) {
+        return node;
+    }
+
     auto phyRead = ctx.RenameNode(*node.Raw(), TKqpReadTableFullTextIndex::CallableName());
 
     // Materialize computed patterns as parameters before the fulltext source runs.

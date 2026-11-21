@@ -6,6 +6,13 @@
 
 * [DateTime](datetime.md)
 * [Digest](digest.md)
+
+{% if backend_name == "YDB" %}
+
+* [DigestAggregate](digest-aggregate.md)
+
+{% endif %}
+
 * [Histogram](histogram.md)
 * [Hyperscan](hyperscan.md)
 * [Ip](ip.md)

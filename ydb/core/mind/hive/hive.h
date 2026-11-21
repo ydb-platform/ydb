@@ -34,6 +34,8 @@
 
 #include <util/stream/format.h>
 
+#include "named_resources.h"
+
 namespace NKikimr {
 namespace NHive {
 
@@ -92,8 +94,9 @@ enum class EBalancerType {
     Emergency,
     SpreadNeighbours,
     Storage,
+    ScatterNamed, // balancing of a named resource, see TBalancerSettings::NamedResource
 
-    Last = Storage,
+    Last = ScatterNamed,
 };
 
 constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType::Last) + 1;
@@ -317,6 +320,9 @@ struct TBalancerSettings {
     const std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::ComputeResources;
     std::optional<TFullObjectId> FilterObjectId;
+    // When set, the balancer moves tablets to even out usage of this named resource
+    // (FilterNodeIds are the source nodes), ResourceToBalance is ignored
+    TString NamedResource;
 };
 
 struct TStorageBalancerSettings {
@@ -408,6 +414,7 @@ struct TMetrics {
     TVector<NKikimrTabletBase::TIopsRecord> GroupWriteIops;
     ui64 ReadIops = 0;
     ui64 WriteIops = 0;
+    TNamedResourceValues NamedResources;
 
     TMetrics& operator+=(const TMetrics& other);
 

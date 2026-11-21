@@ -29,7 +29,7 @@ namespace NKikimr {
             TActorId LeaderId;
             TOutOfSpaceStatus OOSStatus;
 
-            TInstant Deadline = TInstant::Zero();
+            TInstant Deadline = TInstant::Max(); // a request without a deadline has none
 
             NLWTrace::TOrbit Orbit;
 
@@ -110,6 +110,25 @@ namespace NKikimr {
                     {"marker", "BSVSP00"});
                 SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx, {});
                 PassAway();
+            }
+
+            // the request may come from any node, so the diffs are checked here as the DS proxy checks them; the offsets
+            // are taken from the record, as Diffs keeps them narrowed to ui32
+            bool CheckDiffs() {
+                const NKikimrBlobStorage::TEvVMovedPatch &record = Event->Get()->Record;
+                ui64 prevEnd = 0;
+                for (ui32 idx = 0; idx < DiffCount; ++idx) {
+                    const NKikimrBlobStorage::TDiffBlock &diff = record.GetDiffs(idx);
+                    const ui64 begin = diff.GetOffset();
+                    const ui64 end = begin + diff.GetBuffer().size();
+                    if (begin >= OriginalId.BlobSize() || end > OriginalId.BlobSize() || begin < prevEnd) {
+                        ErrorReason = TStringBuilder() << "incorrect diff at index " << idx
+                            << " DiffStart# " << begin << " DiffEnd# " << end << " BlobSize# " << OriginalId.BlobSize();
+                        return false;
+                    }
+                    prevEnd = end;
+                }
+                return true;
             }
 
             void ApplyDiffs() {
@@ -204,8 +223,12 @@ namespace NKikimr {
             }
 
             void Bootstrap() {
-                if (Deadline && Deadline < TActivationContext::Now()) {
+                if (Deadline < TActivationContext::Now()) {
                     SendResponseAndDie(TActivationContext::AsActorContext(), NKikimrProto::DEADLINE);
+                    return;
+                }
+                if (!CheckDiffs()) {
+                    SendResponseAndDie(TActivationContext::AsActorContext(), NKikimrProto::ERROR, "incorrect diffs");
                     return;
                 }
 

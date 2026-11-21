@@ -4,6 +4,7 @@
 #include "stream_creator.h"
 #include "stream_remover.h"
 #include "target_with_stream.h"
+#include "target_cdc.h"
 #include "util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -218,7 +219,9 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
 }
 
 bool TTargetWithStream::CanDetachWithoutStream() const {
-    if (GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+    if (GetReplication()->GetDesiredState() != TReplication::EState::Done
+        || (GetKind() == ETargetKind::CdcTopic && GetReplication()->GetState() == TReplication::EState::Removing))
+    {
         return false;
     }
 
@@ -240,8 +243,9 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
-    if (GetKind() == TReplication::ETargetKind::Topic
-        && replication->GetState() == TReplication::EState::Removing)
+    if (replication->GetState() == TReplication::EState::Removing
+        && (IsTopicTarget(GetKind())
+            || (GetDstState() == EDstState::Alter && !GetCdcChildren(*replication, GetId()).empty())))
     {
         switch (GetDstState()) {
         case EDstState::Alter:
@@ -315,6 +319,16 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     case EStreamState::Removed:
     case EStreamState::Error:
         break;
+    }
+
+    const bool startingTable = GetDstState() == EDstState::Ready || GetDstState() == EDstState::PreparingCdc
+        || (GetDstState() == EDstState::Alter && replication->GetDesiredState() == TReplication::EState::Ready);
+    if (GetKind() == ETargetKind::Table && startingTable && !HasWorkers()) {
+        for (const auto* child : GetCdcChildren(*replication, GetId())) {
+            if (child->GetDstState() != EDstState::Ready) {
+                return;
+            }
+        }
     }
 
     TTargetBase::Progress(ctx);

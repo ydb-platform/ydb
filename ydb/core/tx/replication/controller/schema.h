@@ -101,6 +101,7 @@ struct TControllerSchema: NIceDb::Schema {
         };
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
         struct SrcIsImpl: Column<21, NScheme::NTypeIds::Bool> {};
+        struct Cdc: Column<22, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -124,7 +125,8 @@ struct TControllerSchema: NIceDb::Schema {
             PendingDstPathOwnerId,
             PendingDstPathLocalId,
             IndexBuild,
-            SrcIsImpl
+            SrcIsImpl,
+            Cdc
         >;
     };
 

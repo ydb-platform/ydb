@@ -4,10 +4,14 @@
 #include "target_transfer.h"
 
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -84,6 +88,70 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetSrcPath(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetDstPath(), "/Root/Replicated/Table");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Kind, TReplication::ETargetKind::Table);
+    }
+
+    class TCdcDiscoveryFixture {
+    public:
+        TCdcDiscoveryFixture() {
+            Runtime.Initialize(TAppPrepare().Unwrap());
+            Parent = Runtime.AllocateEdgeActor();
+            Proxy = Runtime.AllocateEdgeActor();
+        }
+
+        Ydb::Table::ChangefeedDescription& AddCdc(const TString& name, Ydb::Table::ChangefeedDescription::State state) {
+            auto& stream = *Description.add_changefeeds();
+            stream.set_name(name);
+            stream.set_mode(Ydb::Table::ChangefeedMode::MODE_UPDATES);
+            stream.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+            stream.set_state(state);
+            return stream;
+        }
+
+        TEvPrivate::TEvDiscoveryTargetsResult::TPtr Discover() {
+            auto observer = Runtime.AddObserver<TEvYdbProxy::TEvAlterTopicRequest>([](auto&) {
+                UNIT_FAIL("Discovery must not create source consumers");
+            });
+            const auto actor = Runtime.Register(CreateTargetDiscoverer(Parent, 1, Proxy,
+                CreateConfig({{"/Root/Table", "/Root/Replica"}})));
+            const auto path = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribePathRequest>(Proxy);
+            NYdb::NScheme::TSchemeEntry entry;
+            entry.Type = NYdb::NScheme::ESchemeEntryType::Table;
+            Runtime.Send(new IEventHandle(actor, Proxy, new TEvYdbProxy::TEvDescribePathResponse(
+                NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(entry)), 0, path->Cookie));
+            const auto table = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(Proxy);
+            Runtime.Send(new IEventHandle(actor, Proxy, new TEvYdbProxy::TEvDescribeTableResponse(
+                NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(Description), NYdb::NTable::TDescribeTableSettings()),
+                0, table->Cookie));
+            return Runtime.GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(Parent);
+        }
+
+    private:
+        TTestActorRuntime Runtime;
+        TActorId Parent;
+        TActorId Proxy;
+        Ydb::Table::DescribeTableResult Description;
+    };
+
+    Y_UNIT_TEST(UserCdcDescriptionsStayWithParentTable) {
+        TCdcDiscoveryFixture env;
+        auto& ready = env.AddCdc("Ready", Ydb::Table::ChangefeedDescription::STATE_ENABLED);
+        (*ready.mutable_attributes())["user"] = "value";
+        env.AddCdc("Disabled", Ydb::Table::ChangefeedDescription::STATE_DISABLED);
+        auto& service = env.AddCdc("Service", Ydb::Table::ChangefeedDescription::STATE_ENABLED);
+        (*service.mutable_attributes())["__async_replication"] = "";
+
+        const auto result = env.Discover();
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        const auto& targets = result->Get()->ToAdd;
+        UNIT_ASSERT_VALUES_EQUAL(targets.size(), 1);
+        UNIT_ASSERT(targets.front().Kind == TReplication::ETargetKind::Table);
+        const auto& streams = targets.front().CdcStreams;
+        UNIT_ASSERT_VALUES_EQUAL(streams.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(streams[0].GetName(), "Ready");
+        UNIT_ASSERT(streams[0].GetState() == NYdb::NTable::EChangefeedState::Enabled);
+        UNIT_ASSERT_VALUES_EQUAL(streams[0].GetAttributes().at("user"), "value");
+        UNIT_ASSERT_VALUES_EQUAL(streams[1].GetName(), "Disabled");
+        UNIT_ASSERT(streams[1].GetState() == NYdb::NTable::EChangefeedState::Disabled);
     }
 
     Y_UNIT_TEST(IndexedTable) {

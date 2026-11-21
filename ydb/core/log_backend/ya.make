@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/log_backend/structured
     library/cpp/unified_agent_client
     library/cpp/messagebus/monitoring
     ydb/core/base
@@ -21,4 +22,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    structured/ut
 )

@@ -87,7 +87,8 @@ namespace NActors {
             enum ELogFormat {
                 PLAIN_FULL_FORMAT,
                 PLAIN_SHORT_FORMAT,
-                JSON_FORMAT
+                JSON_FORMAT,
+                STRUCTURED_FORMAT
             };
             ELogFormat Format;
             TString ShortHostName;

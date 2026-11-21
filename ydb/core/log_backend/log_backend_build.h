@@ -19,6 +19,7 @@ public:
             const TString& logName,
             const TString& nodeType,
             const TString& tenant,
-            const TString& clusterName);
+            const TString& clusterName,
+            bool structuredTechnicalLogs = false);
 };
 }

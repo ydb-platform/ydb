@@ -1898,6 +1898,8 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
         NKikimr::NStLog::OutputLogJson = true;
+    } else if (logConfig.GetFormat() == "structured") {
+        LogSettings->Format = NLog::TSettings::STRUCTURED_FORMAT;
     } else {
         Y_ABORT("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }
@@ -1914,7 +1916,8 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->SetUseLocalTimestamps(logConfig.GetUseLocalTimestamps());
     }
 
-    if (LogSettings->Format == NLog::TSettings::JSON_FORMAT) {
+    if (LogSettings->Format == NLog::TSettings::JSON_FORMAT ||
+        LogSettings->Format == NLog::TSettings::STRUCTURED_FORMAT) {
         TString fullHostName = HostName();
         size_t firstDot = fullHostName.find_first_of('.');
         LogSettings->ShortHostName = fullHostName.substr(0, firstDot);

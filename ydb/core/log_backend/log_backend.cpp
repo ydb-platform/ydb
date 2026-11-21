@@ -76,7 +76,8 @@ TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
                 logName,
                 runConfig.NodeId <= maxStaticNodeId ? "static" : "slot",
                 runConfig.TenantName,
-                logConfig.HasClusterName() ? logConfig.GetClusterName() : ""
+                logConfig.HasClusterName() ? logConfig.GetClusterName() : "",
+                logConfig.GetFormat() == "structured"
             );
             logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
         }

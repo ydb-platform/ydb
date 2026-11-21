@@ -94,7 +94,7 @@ Y_UNIT_TEST(CdcHandoffRequiresDedicatedKind) {
     auto check = [&](EOperationKind kind, bool expected) {
         // Recovery reconstructs the operation from this persisted kind.
         const TBasicOpInfo info(1, kind, 0, 0, TInstant::Zero(), 1);
-        const auto op = NEvWrite::TConvertor::MakeOperation(kind, info, 100);
+        const auto op = NDataShard::NEvWrite::TConvertor::MakeOperation(kind, info, 100);
         UNIT_ASSERT(op->IsSchemeTx());
         UNIT_ASSERT_EQUAL(op->GetKind(), kind);
         auto* tx = dynamic_cast<TActiveTransaction*>(op.Get());

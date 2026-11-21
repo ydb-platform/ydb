@@ -3,6 +3,7 @@ LIBRARY()
 PEERDIR(
     ydb/core/fq/libs/row_dispatcher/purecalc_compilation
     ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
+    ydb/core/kqp/runtime
     ydb/core/tx/replication/common
     ydb/core/tx/replication/service
 )

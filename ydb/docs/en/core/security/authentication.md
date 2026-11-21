@@ -85,7 +85,7 @@ If necessary, the cluster or database administrator can [unblock](../yql/referen
 
 Information about the user's lock status and the number of incorrect password entry attempts can be found in the user's [system view](../dev/system-views.md#users).
 
-## Authentication using an LDAP directory {#ldap}
+## Authentication using an LDAP directory {#ldap-auth-provider} {#ldap}
 
 {{ ydb-short-name }} integrates interaction with the [LDAP directory](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol). The LDAP directory is external to the {{ ydb-short-name }} service and is used for authenticating and authorizing database users. Before using this method of authentication and authorization, you must have a deployed LDAP service and configured network access between it and the {{ ydb-short-name }} servers.
 
@@ -307,7 +307,7 @@ Certificate verification and group assignment rules are set in the [client_certi
 
 ### Client configuration
 
-For more information about configuring [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), see the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section.
+For more information about configuring [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), see the [TLS connection parameters](../reference/ydb-cli/connect.md#additional) section.
 
 ## Device authentication by certificate {#device-auth}
 
@@ -334,8 +334,8 @@ After device authentication, [authentication](./authentication.md) of a user or 
 Device authentication is optional and configured independently: the mechanism can be enabled on some ports and disabled on others.
 
 - **Interconnect** — when TLS is enabled in the [interconnect_config](../reference/configuration/tls.md#interconnect) section, [Interconnect](../concepts/glossary.md#actor-system-interconnect) requires a client certificate.
-- **Kafka API** — when mTLS is enabled, it requires a client certificate. Only the chain of trust to the CA is verified, and a connection without a certificate or with an untrusted certificate is not established. Server configuration is set in `kafka_proxy_config`, and client connection is described in the [Device authentication by mTLS](../reference/kafka-api/auth.md#device-auth) section.
-- **gRPC** and **YDB Monitoring** — you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section. YDB Monitoring configuration is set in `monitoring_config`.
+- **Kafka API** — when mTLS is enabled, it requires a client certificate. Only the chain of trust to the CA is verified, and a connection without a certificate or with an untrusted certificate is not established. Server configuration is set in `kafka_proxy_config`, and client connection is described in the [Device authentication by mTLS](../reference/kafka-api/auth.md#authentication-using-mtls) section.
+- **gRPC** and **YDB Monitoring** — you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#additional) section. YDB Monitoring configuration is set in `monitoring_config`.
 
 ## Authentication using a third-party IAM provider {#iam}
 

@@ -64,6 +64,10 @@ namespace NKikimr {
         }
         void RunDisposeTest();
         void RunRecoveryBaseTest();
+        void RunMemOverflowTest();
+
+        // the sync log memory limit used by the next CreateState
+        ui64 SyncLogMaxMemAmount = ui64(64) << ui64(20);
 
     private:
         std::unique_ptr<TSyncLogKeeperState> State;
@@ -104,7 +108,7 @@ namespace NKikimr {
         const ui64 lastLsnOfIndexRecord = recovery->GetLastLsnOfIndexRecord();
         std::unique_ptr<TSyncLogRepaired> repaired = recovery->ReleaseRepaired();
 
-        const ui64 syncLogMaxMemAmount = ui64(64) << ui64(20);
+        const ui64 syncLogMaxMemAmount = SyncLogMaxMemAmount;
         const ui64 syncLogMaxDiskAmount = 0;
         const ui32 maxResponseSize = 10 << 20;
 
@@ -393,7 +397,44 @@ namespace NKikimr {
         UNIT_ASSERT(!State->PerformInitialCommit());
     }
 
+    // On memory overflow the keeper drops pages that are no longer needed. A page that ends with the first record
+    // still needed (neither trimmed nor written to disk) must stay, or a neighbour synced up to the record before it
+    // skips that record.
+    void TSyncLogKeeperTest::RunMemOverflowTest() {
+        SyncLogMaxMemAmount = 2 * 4064; // two memory pages, so that four pages overflow it
+        CreateState({});
+        ui64 lsn = 0;
+        auto memPages = [&] { return State->GetSyncLogSnapshot()->MemSnapPtr->Size(); };
+        while (memPages() < 2) {
+            PayloadWriter.WriteToLog(State.get(), &lsn);
+        }
+        const ui64 firstPageLastLsn = lsn - 1; // the record just written opened the second page
+        while (memPages() < 4) {
+            PayloadWriter.WriteToLog(State.get(), &lsn);
+        }
+
+        // the neighbours have confirmed everything up to the record before the last one of the first page
+        const ui64 confirmedLsn = firstPageLastLsn - 1;
+        Trim(confirmedLsn);
+        UNIT_ASSERT_VALUES_EQUAL(State->GetSyncLogSnapshot()->LogStartLsn, firstPageLastLsn);
+        State->PerformMemOverflowAction();
+        PrintStatus("after memory overflow: ");
+
+        const TSyncLogSnapshotPtr snap = State->GetSyncLogSnapshot();
+        TMemRecLogSnapshot::TIterator it(snap->MemSnapPtr);
+        it.Seek(confirmedLsn + 1);
+        UNIT_ASSERT_C(it.Valid(), "no records after lsn# " << confirmedLsn);
+        UNIT_ASSERT_VALUES_EQUAL_C(it.Get()->Lsn, confirmedLsn + 1,
+            "a neighbour synced up to lsn# " << confirmedLsn << " would skip a record; boundaries# "
+            << snap->BoundariesToString());
+    }
+
     Y_UNIT_TEST_SUITE(TBlobStorageSyncLogKeeper) {
+        Y_UNIT_TEST(MemOverflowKeepsTheFirstNeededRecord) {
+            TSyncLogKeeperTest test;
+            test.RunMemOverflowTest();
+        }
+
         Y_UNIT_TEST(RecoveryBaseSurvivesEntryPointReload) {
             TSyncLogKeeperTest test;
             test.RunRecoveryBaseTest();

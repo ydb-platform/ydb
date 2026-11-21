@@ -128,7 +128,8 @@ void LogCandidates(const TVector<TReadCandidate>& candidates, const TVector<size
              << ": score (Sort+NoRes " << score.SortMatchesAndNoResidual << ", PCover " << score.PointCoversKey << ", PPrefix " << score.PointPrefixLen
              << ", UCover " << score.UsedCoversKey << ", UPrefix " << score.UsedPrefixLen << ", SortMatches " << score.SortMatches << ")"
              << ", covering " << candidate.Covering << ", points " << match.PointPrefixLen << ", used " << match.UsedPrefixLen
-             << ", ranges " << (match.ExpectedMaxRanges ? ToString(*match.ExpectedMaxRanges) : "?") << ", residual " << match.HasResidual;
+             << ", ranges " << (match.ExpectedMaxRanges ? ToString(*match.ExpectedMaxRanges) : "?") << ", residual " << match.HasResidual
+             << ", key ranges " << RangesToString(match);
         if (costBased) {
             line << ", rows " << candidate.TableRows << ", bytes " << candidate.TableBytes
                  << ", sel range " << candidate.SelRange << ", sel total " << candidate.SelTotal << ", cost " << candidate.Cost;

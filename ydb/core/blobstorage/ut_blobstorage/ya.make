@@ -27,6 +27,7 @@ SRCS(
     decommit_3dc.cpp
     defrag.cpp
     discover.cpp
+    discover_blocked_generation.cpp
     ds_proxy_lwtrace.cpp
     encryption.cpp
     extra_block_checks.cpp

@@ -1,13 +1,17 @@
 #include "consumer_collection.h"
+#include "limit_budget.h"
 
+#include <util/generic/mapfindptr.h>
 #include <util/generic/reserve.h>
+
+#include <limits>
 
 namespace NKikimr::NMemory {
 
 namespace {
 
-// An eighth of a kind limit is split equally among its registrants regardless of demand
-constexpr ui64 BootstrapLimitDivisor = 8;
+// An eighth of the kind limit is shared equally among automatic registrants.
+constexpr ui64 EqualShareDivisor = 8;
 
 }
 
@@ -28,13 +32,13 @@ TIntrusivePtr<TRegistrantConsumer> TConsumerCollection::Register(TActorId regist
     // A fresh object even for the same actor: a pointer handed out earlier may outlive the registration that got it
     auto& slot = Registrants[registrant];
     Retiring.erase(registrant);
-    slot = MakeIntrusive<TRegistrantConsumer>(demandOnly);
-    return slot;
+    slot = {.Consumer = MakeIntrusive<TRegistrantConsumer>(demandOnly)};
+    return slot.Consumer;
 }
 
 bool TConsumerCollection::Unregister(TActorId registrant, bool retainUntilUnused) {
     const auto* consumer = Registrants.FindPtr(registrant);
-    if (consumer && (retainUntilUnused || (*consumer)->DemandOnly) && (*consumer)->GetReport().Used) {
+    if (consumer && (retainUntilUnused || consumer->Consumer->DemandOnly) && consumer->Consumer->GetReport().Used) {
         Retiring.insert(registrant);
         return true;
     }
@@ -42,60 +46,114 @@ bool TConsumerCollection::Unregister(TActorId registrant, bool retainUntilUnused
     return Registrants.erase(registrant) > 0;
 }
 
-void TConsumerCollection::CollectRetired() {
+TVector<TActorId> TConsumerCollection::CollectRetired() {
+    TVector<TActorId> result;
     for (auto it = Retiring.begin(); it != Retiring.end();) {
         const auto* consumer = Registrants.FindPtr(*it);
-        if (!consumer || !(*consumer)->GetReport().Used) {
+        if (!consumer || !consumer->Consumer->GetReport().Used) {
+            result.push_back(*it);
             Registrants.erase(*it);
             Retiring.erase(it++);
         } else {
             ++it;
         }
     }
+    return result;
 }
 
-TConsumerReport TConsumerCollection::GetTotal() const {
-    TConsumerReport total;
-    for (const auto& [registrant, consumer] : Registrants) {
-        const auto report = consumer->GetReport();
-        total.Used += report.Used;
-        total.Demand += Retiring.contains(registrant) ? report.Used : report.Demand;
-        total.Reclaimable += report.Reclaimable;
+bool TConsumerCollection::SetDesired(TActorId registrant, std::optional<ui64> desired, ui64 requestOrder) {
+    if (Retiring.contains(registrant)) {
+        return false;
     }
-    return total;
-}
-
-TVector<TConsumerShare> TConsumerCollection::ComputeLimitShares(ui64 limitBytes) const {
-    TVector<TConsumerShare> result(::Reserve(Registrants.size()));
-    if (Registrants.empty()) {
-        return result;
-    }
-    TVector<ui64> demands(::Reserve(Registrants.size()));
-    ui64 totalDemand = 0;
-    size_t bootstrapConsumers = 0;
-    for (const auto& [registrant, consumer] : Registrants) {
-        bootstrapConsumers += !consumer->DemandOnly;
-        const auto report = consumer->GetReport();
-        demands.push_back(Retiring.contains(registrant) ? report.Used : report.Demand);
-        totalDemand += demands.back();
-    }
-    // A slice of the limit ignores demand: a cache that obeys its limit and reports only Used could never grow out of zero
-    const ui64 bootstrapShare = bootstrapConsumers ? limitBytes / (BootstrapLimitDivisor * bootstrapConsumers) : 0;
-    const ui64 rest = limitBytes - bootstrapShare * bootstrapConsumers;
-    // The demand-covered part of the rest splits proportionally; what demand leaves over splits equally.
-    const ui64 covered = Min(totalDemand, rest);
-    const ui64 surplusShare = bootstrapConsumers ? (rest - covered) / bootstrapConsumers : 0;
-    size_t index = 0;
-    for (const auto& [registrant, consumer] : Registrants) {
-        const ui64 demandShare = totalDemand
-            ? static_cast<ui64>(static_cast<unsigned __int128>(covered) * demands[index] / totalDemand)
-            : 0;
-        if (!Retiring.contains(registrant)) {
-            result.push_back({.Registrant = registrant, .Bytes = demandShare + (consumer->DemandOnly ? 0 : bootstrapShare + surplusShare)});
+    if (auto* entry = MapFindPtr(Registrants, registrant)) {
+        if (entry->Desired != desired) {
+            entry->Desired = desired;
+            entry->RequestOrder = requestOrder;
         }
-        ++index;
+        return true;
+    }
+    return false;
+}
+
+TConsumerCollectionSnapshot TConsumerCollection::GetSnapshot() const {
+    TConsumerCollectionSnapshot result;
+    result.Entries.reserve(Registrants.size());
+    for (const auto& [registrant, entry] : Registrants) {
+        auto report = entry.Consumer->GetReport();
+        const bool retiring = Retiring.contains(registrant);
+        if (retiring) {
+            report.Demand = report.Used;
+        }
+        const auto desired = retiring ? std::nullopt : entry.Desired;
+        result.Entries.push_back({.Registrant = registrant, .Report = report,
+            .DemandOnly = entry.Consumer->DemandOnly, .Retiring = retiring, .Desired = desired,
+            .RequestOrder = entry.RequestOrder, .PlannedLimit = desired,
+            .LimitCeiling = entry.Consumer->GetLimitCeiling()});
+        result.Total.Used = SaturatingAdd(result.Total.Used, report.Used);
+        result.Total.Demand = SaturatingAdd(result.Total.Demand, report.Demand);
+        result.Total.Reclaimable = SaturatingAdd(result.Total.Reclaimable, report.Reclaimable);
+        if (!desired) {
+            result.AutomaticRegistrantCount += !entry.Consumer->DemandOnly && !retiring;
+            result.AutomaticDemand = SaturatingAdd(result.AutomaticDemand, report.Demand);
+        }
     }
     return result;
+}
+
+ui64 TConsumerCollectionSnapshot::ComputeLimitShare(const TEntry& entry, ui64 limitBytes) const {
+    if (entry.Retiring) {
+        return 0;
+    }
+    if (entry.Desired) {
+        return entry.PlannedLimit.value_or(*entry.Desired);
+    }
+    // A slice ignores demand so a usage-only cache can grow out of zero.
+    const ui64 equalShare = AutomaticRegistrantCount ? limitBytes / (EqualShareDivisor * AutomaticRegistrantCount) : 0;
+    const ui64 rest = limitBytes - equalShare * AutomaticRegistrantCount;
+    const ui64 covered = Min(AutomaticDemand, rest);
+    const ui64 surplusShare = AutomaticRegistrantCount ? (rest - covered) / AutomaticRegistrantCount : 0;
+    const ui64 demandShare = AutomaticDemand
+        ? static_cast<ui64>(static_cast<unsigned __int128>(covered) * entry.Report.Demand / AutomaticDemand)
+        : 0;
+    return Min(demandShare + (entry.DemandOnly ? 0 : equalShare + surplusShare), entry.LimitCeiling);
+}
+
+TVector<TConsumerShare> TConsumerCollectionSnapshot::ComputeLimitShares(ui64 limitBytes, ui64 limitReduction) const {
+    TVector<TConsumerShare> result(::Reserve(Entries.size()));
+    unsigned __int128 total = 0;
+    for (const auto& entry : Entries) {
+        if (entry.Retiring) {
+            continue;
+        }
+        const ui64 bytes = ComputeLimitShare(entry, limitBytes);
+        result.push_back({.Registrant = entry.Registrant, .Bytes = bytes});
+        total += bytes;
+    }
+    // Soft pressure reduces current grants, including explicit ones, without erasing Desired.
+    if (limitReduction && total) {
+        const auto reduction = Min<unsigned __int128>(limitReduction, total);
+        for (auto& share : result) {
+            const auto weighted = static_cast<unsigned __int128>(share.Bytes) * reduction;
+            share.Bytes -= static_cast<ui64>(weighted / total + (weighted % total != 0));
+        }
+    }
+    return result;
+}
+
+ui64 TConsumerCollectionSnapshot::GetDesiredLimit(ui64 defaultLimitBytes) const {
+    bool hasOverride = false;
+    for (const auto& entry : Entries) {
+        hasOverride |= entry.DemandOnly || entry.Retiring || entry.Desired.has_value() || entry.LimitCeiling != std::numeric_limits<ui64>::max();
+    }
+    if (!hasOverride) {
+        return defaultLimitBytes;
+    }
+    ui64 total = 0;
+    for (const auto& entry : Entries) {
+        const ui64 bytes = entry.PlannedLimit.value_or(ComputeLimitShare(entry, defaultLimitBytes));
+        total = SaturatingAdd(total, bytes);
+    }
+    return total;
 }
 
 TVector<TConsumerShare> TConsumerCollection::ComputeReleaseRequests(ui64 limitBytes) const {
@@ -103,8 +161,8 @@ TVector<TConsumerShare> TConsumerCollection::ComputeReleaseRequests(ui64 limitBy
     TVector<std::pair<TActorId, ui64>> reclaimables(::Reserve(Registrants.size()));
     ui64 totalUsed = 0;
     ui64 totalReclaimable = 0;
-    for (const auto& [registrant, consumer] : Registrants) {
-        const auto report = consumer->GetReport();
+    for (const auto& [registrant, entry] : Registrants) {
+        const auto report = entry.Consumer->GetReport();
         totalUsed += report.Used;
         if (report.Reclaimable) {
             reclaimables.emplace_back(registrant, report.Reclaimable);

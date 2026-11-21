@@ -68,7 +68,9 @@ public:
 
     // ColumnShard can report completion before this schemeshard has applied the plan step.
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        YDB_LOG_INFO_CTX(context.Ctx, "TEvNotifyTxCompletionResult triggered early");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvNotifyTxCompletionResult triggered early"
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }

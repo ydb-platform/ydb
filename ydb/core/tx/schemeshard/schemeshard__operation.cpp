@@ -835,6 +835,33 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
             {"schemeshard", Self->TabletID()},
         );
 
+        // Collection drop removes persisted restore history in the plan transaction.
+        // Precharge before invoking ANY sub-operation: HandleReply's return value
+        // advances its state machine, it cannot retry this executor transaction.
+        bool dropsBackupCollection = false;
+        for (size_t i = 0; i < txCount && !dropsBackupCollection; ++i) {
+            const TTxId txId(record.GetTransactions(i).GetTxId());
+            const auto* operation = Self->Operations.FindPtr(txId);
+            if (!operation) {
+                continue;
+            }
+            for (ui32 partIdx = 0; partIdx < (*operation)->Parts.size(); ++partIdx) {
+                const auto* txState = Self->FindTx(TOperationId(txId, partIdx));
+                if (txState && txState->TxType == TTxState::TxDropBackupCollection) {
+                    dropsBackupCollection = true;
+                    break;
+                }
+            }
+        }
+        if (dropsBackupCollection) {
+            NIceDb::TNiceDb db(txc.DB);
+            const bool operationsReady = db.Table<Schema::IncrementalRestoreOperations>().Precharge();
+            const bool itemsReady = db.Table<Schema::IncrementalRestoreItem>().Precharge();
+            if (!operationsReady || !itemsReady) {
+                return false;
+            }
+        }
+
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
             const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo());

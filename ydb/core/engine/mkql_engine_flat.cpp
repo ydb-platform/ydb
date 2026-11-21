@@ -502,7 +502,7 @@ public:
                 }
             }
 
-            ShareShardedMkqlProgram = HasAppData() && AppData()->FeatureFlags.GetShareShardedMkqlProgram() == true;
+            ShareShardedMkqlProgram = HasAppData() && AppData()->FeatureFlags.GetShareShardedMkqlProgram() && FindIfPtr(DbKeys, [](const THolder<TKeyDesc>& key) { return key->GetPartitions().size() > 1; });
             if (ShareShardedMkqlProgram) {
                 TIdsByShard readIdsByShard;
                 TIdsByShard writeIdsByShard;
@@ -516,19 +516,16 @@ public:
                     const auto [it, uniqueSignature] = representativeBySignature.try_emplace(std::move(signature), shardIndex);
                     const ui32 representativeShardIndex = it->second;
                     representative.Of[shardIndex] = representativeShardIndex;
-                    if (!uniqueSignature) {
-                        representative.Shared[representativeShardIndex] = true;
+                    if (uniqueSignature) {
+                        PrepareShardProgram(shardId, proxyShards, SpecializedParts[shardIndex], readsets);
                         continue;
                     }
-                    PrepareShardProgram(shardId, proxyShards, SpecializedParts[shardIndex], readsets);
-                    CollectSelectIds(SpecializedParts[shardIndex].Write, selectIdsByRepresentative[shardIndex]);
-                }
-                // Shards with the same reads and writes share one program. Readset pairs and ShardsToWrite still name every shard.
-                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
-                    const ui32 representativeShardIndex = representative.Of[shardIndex];
-                    if (representativeShardIndex != shardIndex) {
-                        RecordSiblingReadsets(AffectedShards[shardIndex].ShardId, selectIdsByRepresentative[representativeShardIndex], readsets);
+                    // Shards with the same reads and writes share one program. Readset pairs and ShardsToWrite still name every shard.
+                    if (!representative.Shared[representativeShardIndex]) {
+                        representative.Shared[representativeShardIndex] = true;
+                        CollectSelectIds(SpecializedParts[representativeShardIndex].Write, selectIdsByRepresentative[representativeShardIndex]);
                     }
+                    RecordSiblingReadsets(shardId, selectIdsByRepresentative[representativeShardIndex], readsets);
                 }
 
                 BuildAllReads();

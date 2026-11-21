@@ -87,19 +87,19 @@ void TSensorEncoder::OnLabelsEnd()
     if (cube == nullptr) {
         switch (SensorContext_->Type) {
             case NMonitoring::EMetricType::GAUGE:
-                Cubes_.emplace(SensorContext_->Name, TGaugeCube{1, 0});
+                Cubes_.try_emplace(SensorContext_->Name, std::in_place_type<TGaugeCube>, 1, 0);
                 break;
             case NMonitoring::EMetricType::RATE:
-                Cubes_.emplace(SensorContext_->Name, TCounterCube{1, 0});
+                Cubes_.try_emplace(SensorContext_->Name, std::in_place_type<TCounterCube>, 1, 0);
                 break;
             case NMonitoring::EMetricType::HIST:
-                Cubes_.emplace(SensorContext_->Name, TGaugeHistogramCube{1, 0});
+                Cubes_.try_emplace(SensorContext_->Name, std::in_place_type<TGaugeHistogramCube>, 1, 0);
                 break;
             case NMonitoring::EMetricType::HIST_RATE:
-                Cubes_.emplace(SensorContext_->Name, TRateHistogramCube{1, 0});
+                Cubes_.try_emplace(SensorContext_->Name, std::in_place_type<TRateHistogramCube>, 1, 0);
                 break;
             case NMonitoring::EMetricType::DSUMMARY:
-                Cubes_.emplace(SensorContext_->Name, TSummaryCube{1, 0});
+                Cubes_.try_emplace(SensorContext_->Name, std::in_place_type<TSummaryCube>, 1, 0);
                 break;
             case NMonitoring::EMetricType::LOGHIST:
             case NMonitoring::EMetricType::IGAUGE:

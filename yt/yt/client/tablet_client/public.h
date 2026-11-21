@@ -102,6 +102,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ReadOnlySmoothMovementStage)            (1748))
     ((CellHasNoLeader)                        (1749))
     ((TabletReplicationEraIsUnknown)          (1750))
+    ((ReplicationFenceConflict)               (1751))
 
     // Test error codes.
     ((TestingFailureBeforeWrite)              (1798))
@@ -125,6 +126,8 @@ extern const TTabletCellId NullTabletCellId;
 
 using TTabletId = NObjectClient::TObjectId;
 extern const TTabletId NullTabletId;
+
+using TReplicationStreamId = TTabletId;
 
 using TStoreId = NObjectClient::TObjectId;
 extern const TStoreId NullStoreId;

@@ -179,8 +179,28 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
     flags.SetDisablePgCompatibility(false);
     appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const TString textUid = receive()->Get()->CompileResult->Uid;
+    UNIT_ASSERT_UNEQUAL(textUid, uid);
+    check(0, 1);
+
     recompile(TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
-        TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings), false);
+                  TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings), false);
+    send(text);
+    const auto textHit = receive();
+    UNIT_ASSERT(textHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(textHit->Get()->CompileResult->Uid, textUid);
+    check(1, 0);
+
+    for (const auto& cachedUid : { uid, textUid }) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(token, "", cachedUid, Nothing(), true, false, TInstant::Max(),
+                                                         nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+        const auto uidHit = receive();
+        UNIT_ASSERT(uidHit->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(uidHit->Get()->CompileResult->Uid, cachedUid);
+        check(1, 0);
+    }
+
     flags.SetDisablePgCompatibility(true);
     appData.UpdateRuntimeFlags(flags);
     recompile(Nothing(), true);

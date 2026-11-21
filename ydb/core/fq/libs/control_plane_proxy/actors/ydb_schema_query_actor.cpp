@@ -776,7 +776,8 @@ IActor* MakeModifyBindingActor(const TActorId& proxyActorId, TEvControlPlaneProx
         Y_UNUSED(status);
         Y_UNUSED(issues);
         if (atomicReplace) {
-            return "Couldn't atomically replace external data table in YDB";
+            return "Couldn't atomically replace external data table in YDB. "
+                   "This operation requires EnableReplaceIfExistsForExternalEntities on the compute database";
         }
         return "Couldn't modify external data table in YDB";
     };

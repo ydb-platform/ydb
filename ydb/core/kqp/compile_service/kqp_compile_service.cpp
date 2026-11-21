@@ -1272,7 +1272,8 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
     if (it != Index.end()) {
         TItem& item = const_cast<TItem&>(*it);
         const auto& previous = *item.Value.CompileResult;
-        if (previous.Query->DisablePgCompatibility != compileResult->Query->DisablePgCompatibility) {
+        if (*previous.Query != *compileResult->Query) {
+            // A query can have multiple prepared UIDs. Keep the existing owner of the text lookup.
             QueryIndex.try_emplace(*compileResult->Query, compileResult->Uid);
             EraseQueryIndex(previous);
             DecBytes(previous.PreparedQuery->ByteSize());

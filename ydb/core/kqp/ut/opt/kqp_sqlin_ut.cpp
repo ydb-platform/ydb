@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             UNIT_ASSERT_STRING_CONTAINS(pg.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
         }
 
-        const auto explicitPgType = session.ExecuteDataQuery("SELECT PgType('int4');", txControl).ExtractValueSync();
+        const auto explicitPgType = session.ExecuteDataQuery("SELECT id, PgType('int4') FROM Mixed;", txControl).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explicitPgType.GetStatus(), EStatus::BAD_REQUEST, explicitPgType.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(explicitPgType.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
 

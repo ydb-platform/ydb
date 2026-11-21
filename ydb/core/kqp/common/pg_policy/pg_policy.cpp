@@ -6,8 +6,6 @@
 
 #include <util/generic/hash_set.h>
 
-#include <algorithm>
-
 namespace NKikimr::NKqp {
 namespace {
 
@@ -61,6 +59,15 @@ bool IsPgValue(const NYql::TTypeAnnotationNode* type) {
     return type->GetKind() == NYql::ETypeAnnotationKind::Pg;
 }
 
+bool IsExpandedType(const NYql::TExprNode& node, const NYql::TExprContext& ctx) {
+    const auto* type = node.GetTypeAnn().Get();
+    if (!type || type->GetKind() != NYql::ETypeAnnotationKind::Type) {
+        return false;
+    }
+    const auto it = ctx.TypeAsNodeCache.find(type->Cast<NYql::TTypeExprType>()->GetType());
+    return it != ctx.TypeAsNodeCache.end() && it->second.Get() == &node;
+}
+
 void AddPgCompatibilityIssue(const NYql::TExprNode& node, NYql::TExprContext& ctx, NYql::EYqlIssueCode code) {
     ctx.AddError(NYql::YqlIssue(ctx.GetPosition(node.Pos()), code, "PostgreSQL compatibility is disabled"));
 }
@@ -74,21 +81,21 @@ public:
 
     TStatus Transform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final {
         const auto name = input->Content();
-        // ExpandType can describe a full input row before the projection prunes unused columns.
-        const bool explicitPgCallable = IsPgCallable(name) &&
-            (name != "PgType" || !std::ranges::any_of(ctx.TypeAsNodeCache, [&](const auto& entry) {
-                return entry.second == input;
-            }));
-        const bool unsupported = input->IsCallable() && (explicitPgCallable ||
-            (name == "FromPg" && input->ChildrenSize() == 1 && input->Head().GetTypeAnn() &&
-                input->Head().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg));
-        if (unsupported) {
+        const bool pgType = input->IsCallable("PgType");
+        const bool convertsPg = input->IsCallable("FromPg") && input->ChildrenSize() == 1 && input->Head().GetTypeAnn() &&
+                                input->Head().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg;
+        if (input->IsCallable() && (convertsPg || (!pgType && IsPgCallable(name)))) {
             output = input;
             AddPgCompatibilityIssue(*input, ctx, NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
             return TStatus::Error;
         }
 
         auto status = Inner_->Transform(input, output, ctx);
+        // PgType only resolves type metadata. ExpandType can emit it for unused input columns.
+        if (pgType && (status != TStatus::Ok || !IsExpandedType(*input, ctx))) {
+            AddPgCompatibilityIssue(*input, ctx, NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+            return TStatus::Error;
+        }
         if (status == TStatus::Ok && output && output->GetTypeAnn()) {
             const auto& type = *output->GetTypeAnn();
             // An initial read contains the full row. Composite value types

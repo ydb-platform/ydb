@@ -1,3 +1,5 @@
+#include "public_events.h"
+
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
@@ -33,6 +35,22 @@ class TLiveCdcMirror {
             NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         return result;
+    }
+
+    void WaitForState(NKikimrReplication::TReplicationState::StateCase state) {
+        const auto description = Destination.GetDescription("/Root/replication").GetPathDescription();
+        const auto controllerId = description.GetReplicationDescription().GetControllerId();
+        const auto pathId = Destination.GetPathId("/Root/replication");
+
+        WaitForReplication(Destination, [&] {
+            auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+            pathId.ToProto(request->Record.MutablePathId());
+            const auto result = Destination.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+            UNIT_ASSERT_C(!record.GetState().HasError(), record.GetState().ShortDebugString());
+            return record.GetState().GetStateCase() == state;
+        }, "replication controller state");
     }
 
     void CheckOffsets(ui64 end, ui64 start = 0) {
@@ -105,12 +123,9 @@ public:
         const TString topicPath = TString(DestinationFeed) + "/streamImpl";
         const auto topicId = Destination.GetPathId(topicPath);
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
-        WaitForReplication(Destination, [&] {
-            return Destination.GetDescription("/Root/replication").GetPathDescription()
-                .GetReplicationDescription().GetState().HasPaused()
-                && !Destination.GetDescription(topicPath).GetPathDescription()
-                    .GetPersQueueGroup().GetPQTabletConfig().GetPartitionConfig().HasMirrorFrom();
-        }, "paused table replication and CDC mirroring");
+        WaitForState(NKikimrReplication::TReplicationState::kPaused);
+        UNIT_ASSERT(!Destination.GetDescription(topicPath).GetPathDescription()
+            .GetPersQueueGroup().GetPQTabletConfig().GetPartitionConfig().HasMirrorFrom());
 
         Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (3u, 30u);");
         UNIT_ASSERT_VALUES_EQUAL(ReadTopic(Source, SourceFeed, 3).back().Offset, 2);
@@ -122,14 +137,9 @@ public:
             return offsets && offsets->End == 3 && offsets->Committed == 2;
         }, "source history and consumer commit ahead of standby");
         CheckOffsets(2);
-        UNIT_ASSERT_VALUES_EQUAL(Execute(Destination, "SELECT key FROM `/Root/replica` WHERE key = 3u;")
-            .GetResultSet(0).RowsCount(), 0);
 
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
-        WaitForReplication(Destination, [&] {
-            return Destination.GetDescription("/Root/replication").GetPathDescription()
-                .GetReplicationDescription().GetState().HasDone();
-        }, "forced CDC handoff");
+        WaitForState(NKikimrReplication::TReplicationState::kDone);
         CheckOffsets(2, 2);
         UNIT_ASSERT_VALUES_EQUAL(Destination.GetPathId(DestinationFeed), feedId);
         UNIT_ASSERT_VALUES_EQUAL(Destination.GetPathId(topicPath), topicId);

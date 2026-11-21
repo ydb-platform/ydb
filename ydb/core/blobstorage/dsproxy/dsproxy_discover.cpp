@@ -345,6 +345,8 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
         if (!IsGetBlockDone && GetBlockReplies == Info->Type.TotalPartCount()) {
             IsGetBlockDone = true;
             if (IsIterativeDone && (IsGetDataDone || !ReadBody)) {
+                // the result was prepared before all the replies came, so it carries an older blocked generation
+                PendingResult->BlockedGeneration = BlockedGen;
                 DSP_LOG_LOG_S(PriorityForStatusOutbound(PendingResult->Status), "BSD05",
                     "Die. Result# "<< PendingResult->Print(false));
                 SendResult(PendingResult);

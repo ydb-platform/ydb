@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+
 #include <util/string/printf.h>
 
 constexpr bool VERBOSE = false;
@@ -15,6 +17,11 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
     env.reset(new TEnvironmentSetup({
         .NodeCount = groupSize,
         .Erasure = groupType,
+        .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
+            for (TCostMetricsParameters& parameters : config.CostMetricsParametersByMedia) {
+                parameters.TimeProvider = TAppData::TimeProvider;
+            }
+        },
         .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
         .BurstThresholdNs = burstThresholdNs,
         .DiskTimeAvailableScale =  diskTimeAvailableScale,

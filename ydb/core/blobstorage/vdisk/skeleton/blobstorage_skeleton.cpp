@@ -58,6 +58,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/util/light.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/intrlist.h>

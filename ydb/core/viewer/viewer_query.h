@@ -1178,6 +1178,7 @@ private:
                 ev->Get()->ResultSet->set_truncated(true);
             }
             TotalRows += ev->Get()->ResultSet->rows_size();
+            FetchResultRowsOffset += ev->Get()->ResultSet->rows_size();
             if (Streaming != EStreamingType::None) {
                 StreamJsonResponse(*ev->Get(), FetchResultSetIndex);
             } else {
@@ -1186,7 +1187,6 @@ private:
                 }
                 ResultSets[FetchResultSetIndex].emplace_back() = std::move(*ev->Get()->ResultSet);
             }
-            FetchResultRowsOffset += ev->Get()->ResultSet->rows_size();
         }
         if (TotalRows < LimitRows) {
             if (ev->Get()->HasMoreResults) {

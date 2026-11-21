@@ -1,4 +1,6 @@
+from concurrent.futures import CancelledError, Future
 import json
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -209,3 +211,99 @@ def test_abort_stops_active_conversion(tmp_path):
     assert conversion._processes
     conversion.abort()
     assert all(not thread.is_alive() for thread in conversion.threads)
+
+
+def test_workload_error_survives_conversion_error(tmp_path, monkeypatch, caplog):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles")
+    workload_error = ValueError("TPC-C failed")
+
+    def fail():
+        raise RuntimeError("conversion failed")
+
+    monkeypatch.setattr(conversion, "finish", fail)
+    with pytest.raises(ValueError) as exc:
+        with conversion.finish_on_exit():
+            raise workload_error
+    assert exc.value is workload_error
+    assert "conversion failed" in caplog.text
+    assert "preserving the original workload error" in caplog.text
+
+
+def test_conversion_error_fails_successful_workload(tmp_path, monkeypatch):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles")
+
+    def fail():
+        raise RuntimeError("conversion failed")
+
+    monkeypatch.setattr(conversion, "finish", fail)
+    with pytest.raises(RuntimeError, match="conversion failed"):
+        with conversion.finish_on_exit():
+            pass
+
+
+def test_invalid_phase_kills_only_its_processes(tmp_path, monkeypatch):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles", timeout=60)
+    entered = {phase: threading.Event() for phase in ("import", "workload")}
+    completed = {phase: threading.Event() for phase in entered}
+
+    def convert(data, prefix):
+        phase = prefix.parent.name
+        try:
+            with conversion._process(["sleep", "60"], stdout=subprocess.DEVNULL) as process:
+                entered[phase].set()
+                process.wait(timeout=65)
+        finally:
+            completed[phase].set()
+        return fake_result(prefix.with_suffix(".prof"))
+
+    monkeypatch.setattr(conversion, "_convert", convert)
+    try:
+        for phase in entered:
+            conversion.submit(phase, 1, tmp_path / "data")
+        assert all(event.wait(5) for event in entered.values())
+        conversion.finish_phase("import", False)
+        assert completed["import"].wait(5)
+        assert not completed["workload"].is_set()
+        with conversion._process_lock:
+            assert list(conversion._processes.values()) == ["workload"]
+        future = next(future for phase, _, future in conversion.jobs if phase == "import")
+        with pytest.raises(CancelledError):
+            future.result(timeout=5)
+    finally:
+        conversion.abort()
+
+
+def test_invalidated_phase_cannot_start_next_process(tmp_path, monkeypatch):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles")
+    entered = threading.Event()
+    resume = threading.Event()
+
+    def convert(data, prefix):
+        entered.set()
+        assert resume.wait(5)
+        with conversion._process(["this-must-not-be-started"]):
+            pytest.fail("Cancelled phase started another process")
+
+    monkeypatch.setattr(conversion, "_convert", convert)
+    try:
+        conversion.submit("import", 1, tmp_path / "data")
+        assert entered.wait(5)
+        conversion.finish_phase("import", False)
+        resume.set()
+        conversion.finish()
+        report = json.loads((tmp_path / "profiles/conversion.json").read_text())
+        assert report[0]["error"] == "cancelled"
+    finally:
+        resume.set()
+        conversion.abort()
+
+
+def test_pending_cancellation_has_readable_error(tmp_path):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles")
+    future = Future()
+    conversion.jobs.append(("import", 1, future))
+    conversion.finish_phase("import", False)
+    conversion.finish()
+    report = json.loads((tmp_path / "profiles/conversion.json").read_text())
+    assert future.cancelled()
+    assert report[0]["error"] == "cancelled"

@@ -1,6 +1,7 @@
-from concurrent.futures import Future
+from concurrent.futures import CancelledError, Future
 from contextlib import contextmanager
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -19,7 +20,9 @@ class LbrConversion:
         if timeout <= 0:
             raise ValueError("Conversion timeout must be positive")
         self.timeout = timeout
-        self._processes = set()
+        self._processes = {}
+        self._phase = threading.local()
+        self._cancelled_phases = set()
         self._process_lock = threading.Lock()
         self._aborted = threading.Event()
         self.output_dir = Path(output_dir)
@@ -40,6 +43,7 @@ class LbrConversion:
             if not future.set_running_or_notify_cancel():
                 return
             try:
+                self._phase.name = phase
                 future.set_result(self._convert(Path(data), prefix))
             except BaseException as exc:
                 future.set_exception(exc)
@@ -57,9 +61,28 @@ class LbrConversion:
         if valid:
             self.valid_phases.add(phase)
         else:
+            self.valid_phases.discard(phase)
+            with self._process_lock:
+                self._cancelled_phases.add(phase)
+                for process, job_phase in self._processes.items():
+                    if job_phase == phase:
+                        self._kill(process)
             for job_phase, _, future in self.jobs:
                 if job_phase == phase:
                     future.cancel()
+
+    @contextmanager
+    def finish_on_exit(self):
+        try:
+            yield
+        except BaseException:
+            try:
+                self.finish()
+            except Exception:
+                logging.exception("LBR conversion also failed; preserving the original workload error")
+            raise
+        else:
+            self.finish()
 
     @staticmethod
     def _kill(process):
@@ -70,11 +93,12 @@ class LbrConversion:
 
     @contextmanager
     def _process(self, command, **kwargs):
+        phase = getattr(self._phase, "name", None)
         with self._process_lock:
-            if self._aborted.is_set():
-                raise RuntimeError("LBR conversion aborted")
+            if self._aborted.is_set() or phase in self._cancelled_phases:
+                raise CancelledError("LBR conversion cancelled")
             process = subprocess.Popen(command, start_new_session=True, **kwargs)
-            self._processes.add(process)
+            self._processes[process] = phase
         expired = threading.Event()
 
         def expire():
@@ -86,6 +110,8 @@ class LbrConversion:
         try:
             timer.start()
             yield process
+            if self._aborted.is_set() or phase in self._cancelled_phases:
+                raise CancelledError("LBR conversion cancelled")
             if expired.is_set():
                 raise TimeoutError(f"Conversion command timed out after {self.timeout}s: {command[0]}")
         finally:
@@ -97,7 +123,7 @@ class LbrConversion:
                 if process.stdout is not None:
                     process.stdout.close()
                 with self._process_lock:
-                    self._processes.discard(process)
+                    self._processes.pop(process, None)
 
     def _join(self, timeout):
         deadline = time.monotonic() + timeout
@@ -131,7 +157,14 @@ class LbrConversion:
                 if valid:
                     profiles.setdefault(phase, []).append(result["profile"])
             except Exception as exc:
-                results.append({"phase": phase, "index": index, "phase_valid": valid, "error": str(exc)})
+                results.append(
+                    {
+                        "phase": phase,
+                        "index": index,
+                        "phase_valid": valid,
+                        "error": "cancelled" if isinstance(exc, CancelledError) else str(exc),
+                    }
+                )
                 if valid:
                     errors[phase] = exc
         for phase, inputs in profiles.items():

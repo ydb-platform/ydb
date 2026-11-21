@@ -139,11 +139,9 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
             phase="workload",
             conversion=self.conversion,
         )
-        try:
+        with self.conversion.finish_on_exit():
             with ExitStack() as self._lbr_stack:
                 super().test()
-        finally:
-            self.conversion.finish()
 
     def _signal_tpcc_load_started(self):
         super()._signal_tpcc_load_started()

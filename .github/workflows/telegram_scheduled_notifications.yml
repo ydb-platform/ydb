@@ -37,7 +37,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
+        with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -66,7 +68,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
+        with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
 
       - name: Setup YDB access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials

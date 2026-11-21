@@ -35,8 +35,9 @@ jobs:
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
     steps:
       - name: Checkout config
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
       - name: Resolve build types matrix
@@ -115,15 +116,16 @@ jobs:
           echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+            bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
             ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
       - name: Resolve and load muted YA from base branch
         run: |
           set -euo pipefail
           MUTED_YA_RELATIVE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ matrix.build_type }}")"
-          git fetch origin "${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}"
+          cached-git fetch origin "${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}"
           git show "origin/${{ env.BASE_BRANCH }}:${MUTED_YA_RELATIVE}" > base_muted_ya.txt
           echo "MUTED_YA_FILE_PATH=${{ github.workspace }}/base_muted_ya.txt" >> "$GITHUB_ENV"
           echo "Using base_branch=${{ env.BASE_BRANCH }} build_type=${{ matrix.build_type }} muted_ya_file=$MUTED_YA_RELATIVE"
@@ -199,8 +201,9 @@ jobs:
           echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: rekby-tmp/bundle-checkout@74b111d51af1bee00b2609ed53e738974f75d7dd # main
         with:
+          bundle-url: https://storage.yandexcloud.net/pg-ext-deploy/ydb-mirror/A5A269B5-E212-4167-916A-A937A0414866/ydb-mirror.bundle
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
       - name: Install dependencies

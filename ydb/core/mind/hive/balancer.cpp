@@ -128,6 +128,9 @@ protected:
     std::vector<TNodeId>::iterator NextNode;
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
+    bool IsNamedResourceBalancer() const {
+        return !Settings.NamedResource.empty();
+    }
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -172,6 +175,9 @@ protected:
     }
 
     TString GetDescription() const override {
+        if (IsNamedResourceBalancer()) {
+            return TStringBuilder() << "Balancer(" << EBalancerTypeName(Settings.Type) << ", " << Settings.NamedResource << ")";
+        }
         return TStringBuilder() << "Balancer(" << EBalancerTypeName(Settings.Type) << ")";
     }
 
@@ -207,7 +213,13 @@ protected:
             }
         }
 
-        switch (Hive->GetNodeBalanceStrategy()) {
+        if (IsNamedResourceBalancer()) {
+            // most saturated sources first
+            const TString& name = Settings.NamedResource;
+            std::sort(nodes.begin(), nodes.end(), [&name](const TNodeInfo* a, const TNodeInfo* b) -> bool {
+                return a->GetNamedResourceUsage(name).value_or(0) > b->GetNamedResourceUsage(name).value_or(0);
+            });
+        } else switch (Hive->GetNodeBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
             BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(nodes, Settings.ResourceToBalance);
             break;
@@ -238,7 +250,13 @@ protected:
         if (Settings.FilterObjectId && tablet->GetObjectId() != *Settings.FilterObjectId) {
             return false;
         }
-        if (!tablet->HasMetric(Settings.ResourceToBalance)) {
+        if (IsNamedResourceBalancer()) {
+            // only the tablets which a move would not interrupt
+            const auto* value = tablet->GetResourceValues().NamedResources.Find(Settings.NamedResource);
+            if (value == nullptr || !value->IsTransferable()) {
+                return false;
+            }
+        } else if (!tablet->HasMetric(Settings.ResourceToBalance)) {
             return false;
         }
         if (tablet->IsPinnedToNode()) {
@@ -263,6 +281,13 @@ protected:
     }
 
     void BalanceTabletsByStrategy(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last) {
+        if (IsNamedResourceBalancer()) {
+            const TString& name = Settings.NamedResource;
+            std::stable_sort(first, last, [&name](const TTabletInfo* a, const TTabletInfo* b) -> bool {
+                return a->GetResourceValues().NamedResources.GetValue(name) > b->GetResourceValues().NamedResources.GetValue(name);
+            });
+            return;
+        }
         switch (Hive->GetTabletBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
             BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(first, last, Settings.ResourceToBalance);
@@ -375,6 +400,17 @@ protected:
                         {"tablet", tablet->ToString()},
                         {"sourceNodeId", tablet->Node->Id},
                         {"targetNodeId", node->Id});
+                    if (IsNamedResourceBalancer()) {
+                        const TString& name = Settings.NamedResource;
+                        const ui64 value = tablet->GetResourceValues().NamedResources.GetValue(name);
+                        YDB_LOG_DEBUG("Balancer moving tablet by named resource",
+                            {"logPrefix", GetLogPrefix()},
+                            {"tablet", tablet->ToString()},
+                            {"resource", name},
+                            {"sourceUsage", tablet->Node->GetNamedResourceUsage(name).value_or(0)},
+                            {"targetUsageWithTablet", node->GetNamedResourceUsage(name, value).value_or(0)},
+                            {"tabletValue", value});
+                    }
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();

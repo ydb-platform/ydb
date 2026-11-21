@@ -39,11 +39,11 @@ struct TTestBootstrap {
         Runtime.EnableScheduleForActor(HttpSenderActorId, true);
     }
 
-    void SendHttpOutgoingRequest()
+    void SendHttpOutgoingRequest(bool allowConnectionReuse = false)
     {
         auto sender = Runtime.AllocateEdgeActor();
         auto req = NHttp::THttpOutgoingRequest::CreateRequestGet("124");
-        auto request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(req);
+        auto request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(req, allowConnectionReuse);
         Runtime.Send(new IEventHandle(HttpSenderActorId, sender, request.release()));
     }
 
@@ -55,8 +55,10 @@ struct TTestBootstrap {
         return {handle, event};
     }
 
-    void HandleHttpProxyOutgoing(std::unique_ptr<NHttp::THttpIncomingResponse>&& response) {
+    void HandleHttpProxyOutgoing(std::unique_ptr<NHttp::THttpIncomingResponse>&& response, bool allowConnectionReuse = false) {
         auto [_, event] = Grab<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>();
+        UNIT_ASSERT(event);
+        UNIT_ASSERT_VALUES_EQUAL(event->AllowConnectionReuse, allowConnectionReuse);
 
         Runtime.Send(new IEventHandle(
             HttpSenderActorId,
@@ -80,6 +82,34 @@ struct TTestBootstrap {
 } // namespace
 
 Y_UNIT_TEST_SUITE(THttpSenderTests) {
+    Y_UNIT_TEST(ConnectionReuseIsPreservedOnRetry) {
+        for (const bool allowConnectionReuse : {false, true}) {
+            auto retryPolicy = NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
+                [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse*) {
+                    return ERetryErrorClass::ShortRetry;
+                });
+            TTestBootstrap bootstrap(retryPolicy);
+            bootstrap.SendHttpOutgoingRequest(allowConnectionReuse);
+
+            auto error = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
+            error->Status = "500";
+            bootstrap.HandleHttpProxyOutgoing(std::move(error), allowConnectionReuse);
+            {
+                auto [_, event] = bootstrap.Grab<NDq::TEvHttpBase::TEvSendResult>();
+                UNIT_ASSERT(event);
+                UNIT_ASSERT(!event->IsTerminal);
+            }
+
+            auto success = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
+            success->Status = "200";
+            bootstrap.HandleHttpProxyOutgoing(std::move(success), allowConnectionReuse);
+            auto [_, event] = bootstrap.Grab<NDq::TEvHttpBase::TEvSendResult>();
+            UNIT_ASSERT(event);
+            UNIT_ASSERT(event->IsTerminal);
+            UNIT_ASSERT_VALUES_EQUAL(event->RetryCount, 1);
+        }
+    }
+
     Y_UNIT_TEST(SuccessResponse)
     {
         auto retryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy();

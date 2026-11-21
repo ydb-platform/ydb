@@ -3846,6 +3846,13 @@ TChangefeedDescription& TChangefeedDescription::WithAwsRegion(const std::string&
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithCompression(EChangefeedCompression compression,
+        std::optional<int32_t> level) {
+    Compression_ = compression;
+    CompressionLevel_ = level;
+    return *this;
+}
+
 const std::string& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -3892,6 +3899,14 @@ const std::unordered_map<std::string, std::string>& TChangefeedDescription::GetA
 
 const std::string& TChangefeedDescription::GetAwsRegion() const {
     return AwsRegion_;
+}
+
+EChangefeedCompression TChangefeedDescription::GetCompression() const {
+    return Compression_;
+}
+
+const std::optional<int32_t>& TChangefeedDescription::GetCompressionLevel() const {
+    return CompressionLevel_;
 }
 
 const std::optional<TChangefeedDescription::TInitialScanProgress>& TChangefeedDescription::GetInitialScanProgress() const {
@@ -3958,6 +3973,23 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (!proto.aws_region().empty()) {
         ret.WithAwsRegion(proto.aws_region());
     }
+    if (proto.has_compression()) {
+        EChangefeedCompression compression;
+        switch (proto.compression().codec()) {
+        case Ydb::Table::ChangefeedCompression::CODEC_NONE:
+            compression = EChangefeedCompression::None;
+            break;
+        case Ydb::Table::ChangefeedCompression::CODEC_ZSTD:
+            compression = EChangefeedCompression::Zstd;
+            break;
+        default:
+            compression = EChangefeedCompression::Unknown;
+            break;
+        }
+        ret.WithCompression(compression, proto.compression().has_level()
+            ? std::make_optional(proto.compression().level())
+            : std::nullopt);
+    }
 
     if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
         switch (proto.state()) {
@@ -3998,6 +4030,23 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_aws_region(TStringType{AwsRegion_});
     proto.set_user_sids(UserSIDs_);
     proto.set_trace_ids(TraceIds_);
+
+    if (Compression_ != EChangefeedCompression::None || CompressionLevel_) {
+        auto& compression = *proto.mutable_compression();
+        switch (Compression_) {
+        case EChangefeedCompression::None:
+            compression.set_codec(Ydb::Table::ChangefeedCompression::CODEC_NONE);
+            break;
+        case EChangefeedCompression::Zstd:
+            compression.set_codec(Ydb::Table::ChangefeedCompression::CODEC_ZSTD);
+            break;
+        case EChangefeedCompression::Unknown:
+            break;
+        }
+        if (CompressionLevel_) {
+            compression.set_level(*CompressionLevel_);
+        }
+    }
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
@@ -4083,6 +4132,13 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
       << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << ""
       << ", schema_changes: " << (SchemaChanges_ ? "on": "off") << "";
 
+    if (Compression_ != EChangefeedCompression::None) {
+        o << ", compression: " << Compression_;
+        if (CompressionLevel_) {
+            o << ", compression_level: " << *CompressionLevel_;
+        }
+    }
+
     if (ResolvedTimestamps_) {
         o << ", resolved_timestamps: " << *ResolvedTimestamps_;
     }
@@ -4109,7 +4165,9 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
         && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
         && lhs.GetSchemaChanges() == rhs.GetSchemaChanges()
         && lhs.GetResolvedTimestamps() == rhs.GetResolvedTimestamps()
-        && lhs.GetAwsRegion() == rhs.GetAwsRegion();
+        && lhs.GetAwsRegion() == rhs.GetAwsRegion()
+        && lhs.GetCompression() == rhs.GetCompression()
+        && lhs.GetCompressionLevel() == rhs.GetCompressionLevel();
 }
 
 bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

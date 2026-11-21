@@ -26,6 +26,8 @@ SRCS(
 
 PEERDIR(
     contrib/libs/zstd
+    library/cpp/json
+    library/cpp/string_utils/base64
     ydb/public/sdk/cpp/src/client/import
     yql/essentials/types/binary_json
     library/cpp/threading/local_executor

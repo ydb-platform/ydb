@@ -8,6 +8,17 @@ description: >-
 
 # YDB Documentation Skill
 
+## Required shared policy
+
+Before planning or writing YDB documentation:
+
+1. Read `ydb/docs/.ruler/DOCUMENTATION_POLICY.md` completely. If the workspace root is `ydb/docs`, use `.ruler/DOCUMENTATION_POLICY.md`.
+2. Read every normative file it lists, in order.
+3. Treat those files as the only source of shared writing rules.
+4. If a workflow instruction conflicts with the policy, follow the policy and report the conflict.
+
+Do not copy or summarize the shared rules in this skill.
+
 This skill helps developers write documentation for YDB while following all structure, style, and language rules.
 
 **Usage:** A developer describes what needs to be documented, the skill automatically determines where and how to place it, which sections to propagate to, and generates articles in RU and EN simultaneously.
@@ -233,111 +244,20 @@ When user confirms plan, skill generates ALL files simultaneously in one call.
 
 **Mandatory rules during generation:**
 
-#### Audience (from GENERAL_RULES.md)
-When writing, skill must remember:
-- **Concepts section** — written for people NOT familiar with YDB → everything explained simply with examples
-- **Other documentation** — assumes developer familiar with SQL/DB, but not expert
-- **Automatic correction** — skill fixes grammatical and spelling errors
+#### Shared documentation policy
 
-#### Formatting (from FORMAT_RULES.md)
-
-**Markdown Linting (mandatory to check):**
-- **MD032** — Empty lines around lists
-  - ❌ Wrong: `Read more about functions:\n- [Func1]`
-  - ✅ Correct: `Read more about functions:\n\n- [Func1]`
-- **MD051** — Link anchors must exist
-  - Anchors set: `## Heading {#my-anchor}` or automatically from text
-  - Every link `[text](file.md#anchor)` must have corresponding anchor in target file
-- **MD009** — No trailing whitespace
-  - Lines must not end with spaces
-  - Exception: two spaces for line break (but better to use empty line)
-
-**Specific rules:**
-- SQL code: use `yql` dialect (` ```yql `)
-- "Read more about functions" blocks: should be formatted as list with marker `-`
-- Include files: use `{% include 'path/to/file.md' %}` for reusable chunks
-- All links: relative paths (no `https://ydb.tech`), ending with `.md`
-
-#### Content (from DOCUMENTATION_RULES.md - 15 rules)
-
-**CRITICAL RULES (block PR if violated):**
-
-**Rule 1** — First paragraph defines the concept
-- First paragraph of article must contain definition through more general, widely known terms
-- ❌ Wrong: start with use-cases or examples
-- ✅ Correct: definition → then applications
-
-**Rule 2** — Task explained BEFORE technical content
-- Before first code block, parameter table, or diagram must be text explaining the task
-- ❌ Wrong: start with code without context
-- ✅ Correct: "here's the task" → then code/table
-
-**Rule 3** — Term defined BEFORE first use
-- Each specific term, parameter, concept must be defined or have link BEFORE first meaningful use
-- In code examples: if parameter is used (e.g. `FORCE = TRUE`), it must be described in syntax/parameters section
-
-**Rule 4** — Logical connectivity of sections
-- Each section must logically follow from context
-- First sentence of section must explain connection to article topic
-
-**Rule 5** — Correct hierarchy in lists
-- Special case/subtype must not be at same level as general case
-- Must have explicit hierarchy (subsections or "special case of X" marking)
-
-**Rule 6** — Limitations accompanied by explanation
-- Each mentioned limitation must be accompanied by explanation of reason or status
-- ❌ Wrong: "operation is not supported"
-- ✅ Correct: "operation is not supported (temporary limitation, planned for v2.0)"
-
-**Rule 7** — Code examples contain no unexplained constructs
-- Each function, operator, keyword in example must be explained on page or have link
-- If construct not explained → either simplify example or add link
-
-**Rule 8** — Syntactic correctness and consistency of examples
-- Code examples must be syntactically correct
-- Order of constructs in example must match order in syntax description
-- If example is fragment, not complete command → explicitly state this
-
-**Rule 9** — Complete behavior description
-- If mechanism/behavior is described → must include:
-  - Main scenario
-  - What happens on data update
-  - What happens on error
-  - What happens on restart
-
-**Rule 10** — Prerequisites accompanied by verification method
-- If prerequisite mentioned → must be way to check it or link to instruction
-- ❌ Wrong: "requires enabled flag enable_streaming_queries"
-- ✅ Correct: "requires enabled flag enable_streaming_queries (check with command...)"
-
-**Rule 11** — Differentiation of alternative methods
-- If multiple methods described → must explicitly state what differs and when to use which
-- ❌ Wrong: just list methods
-- ✅ Correct: "method A for..., method B for..., choose based on..."
-
-**Rule 12** — Accuracy of formulations
-- Nouns must be concrete (e.g. "YDB table", not just "table")
-- Verbs must precisely describe action ("creates", "executes", not "manages")
-- Definition must not contain defined term (tautology)
-
-**Rule 13** — Visual consistency
-- All diagrams and images must be in unified style
-- Mermaid preferred for diagrams (text source, version-controllable)
-
-**Rule 14** — Formatting requirements
-- Article must start with introductory block describing its content
-- In code examples: either only templates (`<endpoint>`), or only concrete values
-- If templates used → after code block must be "Where:" section describing each
+Apply `ydb/docs/.ruler/DOCUMENTATION_POLICY.md` and every normative file it
+lists. Do not rely on an embedded summary.
 
 #### Propagation by rules
 
 When deciding what to generate, skill should follow these priorities:
 
-| Place | When to generate | Checks |
-|-------|------------------|--------|
-| **Glossary** | Always if new terms exist | Term defined before use (Rule 3) |
-| **Reference** | If API/parameters exist | Syntax correct (Rule 8), examples explained (Rule 7) |
-| **Recipes** | If code examples exist | Task explained before code (Rule 2), constructs explained (Rule 7) |
+| Place | When to generate | Workflow action |
+|-------|------------------|-----------------|
+| **Glossary** | Always if new terms exist | Add or update the RU and EN glossary entries |
+| **Reference** | If API or parameters exist | Add or update the RU and EN reference pages |
+| **Recipes** | If practical examples exist | Add or update the RU and EN recipes |
 | **Include files** | If reusable chunks exist | Extract reusable content |
 | **Cross-references** | Always where logically connected | Based on DOCUMENTATION_MODEL |
 | **TOC** | If new level added | Update navigation in both languages |
@@ -391,7 +311,7 @@ Files are in branch. Next:
 
 1️⃣  Check changes (git status, git diff)
 2️⃣  Commit:
-    git add .
+    git add -- <changed-documentation-paths>
     git commit -m "Add JDBC driver documentation
 
     - Main guide: dev/jdbc/jdbc-driver.md
@@ -460,37 +380,11 @@ Files are in branch. Next:
 - ✅ Always verify user agrees with plan before generating
 - ✅ Generate RU and EN simultaneously, independently of each other
 - ✅ Don't forget glossary, include-files, cross-references, redirects, TOC, model
-- ✅ Follow ALL rules from FORMAT_RULES.md:
-  - MD032 (empty lines around lists)
-  - MD051 (valid link anchors)
-  - MD009 (no trailing whitespace)
-  - SQL code in `yql` dialect
-  - All links relative and ending with `.md`
-- ✅ Follow ALL critical and high priority rules from DOCUMENTATION_RULES.md:
-  - Rule 1: First paragraph defines concept
-  - Rule 2: Task explained BEFORE code
-  - Rule 3: Terms defined BEFORE use
-  - Rule 4: Logical connectivity of sections
-  - Rule 5: Correct list hierarchy
-  - Rule 6: Limitations with explanation
-  - Rule 7: Code examples explained
-  - Rule 8: Code syntactically correct
-  - Rule 9: Complete behavior description
-  - Rule 10: Prerequisites with verification
-  - Rule 11: Alternative methods differentiated
-  - Rule 12: Accurate formulations
-  - Rule 13: Visual consistency
-  - Rule 14: Proper formatting (templates vs concrete values)
-- ✅ Consider GENERAL_RULES.md:
-  - For "Concepts" write for people NOT familiar with YDB
-  - For other content write for developers familiar with SQL/DB
-  - Fix grammatical errors
+- ✅ Re-read `ydb/docs/.ruler/DOCUMENTATION_POLICY.md` and verify the generated files against every normative file it lists.
 
 **Prohibited:**
 - ❌ Generate without user confirmation
 - ❌ Forget any parts (glossary, reference, cross-references, etc.)
-- ❌ Violate critical rules (Rule 1, 2, 3 from DOCUMENTATION_RULES)
+- ❌ Violate any rule or priority from the shared documentation policy
 - ❌ Create duplicate content instead of reuse through include
 - ❌ Ignore redirects on file moves
-- ❌ Use HTML in markdown without necessity
-- ❌ Use inline code for visual highlighting (only for console/IDE content)

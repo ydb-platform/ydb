@@ -97,6 +97,7 @@ public:
 
         virtual bool IsExpectedDstCreator(const TActorId& actorId) const = 0;
         virtual bool IsExpectedDstAlterer(const TActorId& actorId) const = 0;
+        virtual bool IsExpectedWorkerRegistar(const TActorId& actorId) const = 0;
 
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
@@ -110,6 +111,10 @@ public:
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
+        bool HasMissingIndexStream() const {
+            return GetKind() == ETargetKind::IndexTable && GetStreamState() == EStreamState::Removed
+                && GetDstState() != EDstState::Removing;
+        }
         virtual bool IsExpectedStreamCreator(const TActorId& actorId) const = 0;
 
         virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
@@ -121,6 +126,7 @@ public:
         virtual void AddWorker(ui64 id) = 0;
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
+        virtual bool HasWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
         virtual void InvalidateLag(ui64 workerId) = 0;
         virtual const std::optional<TDuration> GetLag() const = 0;
@@ -141,6 +147,7 @@ public:
     };
 
     friend class TTargetBase;
+    void UpdateMissingIndexStream(const ITarget& target);
     void AddPendingAlterTarget(ui64 id);
     void RemovePendingAlterTarget(ui64 id);
     void UpdateLag(ui64 targetId, std::optional<TDuration> lag);
@@ -162,6 +169,7 @@ public:
     const ITarget* FindBaseTableTarget(const ITarget& indexTarget) const;
     void RemoveTarget(ui64 id);
     TVector<ITarget*> GetTargets() const;
+    const THashSet<ui64>& GetMissingIndexStreams() const;
     TVector<TString> GetTargetTablePaths() const;
 
     bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
@@ -182,6 +190,8 @@ public:
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
+    EState GetOperationalState() const;
+    bool IsReconcilingIndexStreams() const;
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
@@ -193,7 +203,12 @@ public:
     ui64 GetNextTargetId() const;
 
     bool IsCredentialsReady() const;
-    void UpdateSecret(const TString& secretValue);
+    void UpdateSecret(const TString& secretValue, const TString& revision = {}, const TString& credentialInstanceId = {});
+    const TString& GetSecretRevision() const;
+    const TString& GetAuthenticationErrorRevision() const;
+    void SetAuthenticationErrorRevision(const TString& revision);
+    bool CanRecoverAuthenticationError() const;
+    bool IsExpectedSecretRefresh(const TActorId& actorId) const;
     bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 
     void UpdateResourceId(const TString& value);

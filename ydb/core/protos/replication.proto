@@ -73,6 +73,8 @@ message TConnectionParams {
         TOAuthToken OAuthToken = 4;
         TIamCredentials IamCredentials = 7;
     }
+    // Identifies one resolution of the source credential, even when its value is unchanged.
+    optional string CredentialInstanceId = 8;
 }
 
 message TConsistencySettings {
@@ -486,6 +488,12 @@ message TWorkerStats {
 }
 
 message TEvWorkerStatus {
+    enum EErrorKind {
+        ERROR_KIND_UNSPECIFIED = 0;
+        ERROR_KIND_SOURCE_AUTHENTICATION = 1;
+    }
+    optional EErrorKind ErrorKind = 8;
+    optional string CredentialInstanceId = 9;
     enum EStatus {
         STATUS_UNSPECIFIED = 0;
         STATUS_RUNNING = 1;

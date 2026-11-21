@@ -26,6 +26,23 @@ namespace {
 
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        const auto status = ev->Get()->Result.GetStatus();
+        if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+            // Classify before logging the response: remote issues can contain credentials.
+            const bool remoteStaticLogin = !ConnectionParams.GetEndpoint().empty()
+                && ConnectionParams.GetCredentialsCase() == NKikimrReplication::TConnectionParams::kStaticCredentials;
+            if (status == NYdb::EStatus::UNAUTHORIZED || remoteStaticLogin) {
+                auto result = MakeHolder<TEvPrivate::TEvWorkerRegistrationError>(ReplicationId, TargetId, status);
+                YDB_LOG_ERROR("Source authentication failed during worker registration", {"status", status});
+                Send(Parent, result.Release());
+                return PassAway();
+            }
+            // IAM initialization may exhaust one retry budget and recover later.
+            YDB_LOG_WARN("Source credentials initialization failed during worker registration",
+                {"status", status}, {"outcome", "retry"});
+            return Retry();
+        }
+
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 

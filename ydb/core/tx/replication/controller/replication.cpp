@@ -69,6 +69,35 @@ class TReplication::TImpl: public TLagProvider {
         return false;
     }
 
+    TVector<TSecretProbeTopic> GetSecretProbeTopics() const {
+        THashSet<TString> basesWithSchemaChanges;
+        for (const auto& [_, target] : Targets) {
+            if (target->GetKind() == ETargetKind::Table && target->GetStreamState() == EStreamState::Ready
+                && target->GetStreamSchemaChanges().value_or(false))
+            {
+                basesWithSchemaChanges.insert(CanonizePath(target->GetSrcPath()));
+            }
+        }
+
+        TVector<TSecretProbeTopic> topics(::Reserve(Targets.size()));
+        for (const auto& [_, target] : Targets) {
+            // Pending feeds can finish setup only after the replication leaves Error.
+            if (target->GetStreamState() != EStreamState::Ready) {
+                continue;
+            }
+            auto& topic = topics.emplace_back();
+            topic.Path = target->GetStreamPath();
+            if (target->GetKind() == ETargetKind::IndexTable) {
+                const auto indexPath = target->GetSrcIndexPath();
+                auto base = CanonizePath(TString(ExtractParent(indexPath)));
+                if (basesWithSchemaChanges.contains(base)) {
+                    topic.SchemaManagedIndex = TSecretProbeTopic::TIndex{target->GetId(), std::move(base), TString(ExtractBase(indexPath))};
+                }
+            }
+        }
+        return topics;
+    }
+
     bool CanApplyResolvedCredentials() const {
         // DROP still needs source credentials to remove retained streams after DONE.
         return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing)
@@ -169,6 +198,7 @@ public:
         const auto it = Targets.find(id);
         if (it != Targets.end()) {
             TLagProvider::RemoveLag(it->second, id);
+            MissingIndexStreams.erase(id);
             Targets.erase(it);
             NotifyLagChanged(previousLag);
         }
@@ -209,9 +239,31 @@ public:
             return ProgressTargets(ctx);
         }
 
+        const auto& params = Config.GetSrcConnectionParams();
+        if (State == EState::Error && DesiredState == EState::Ready
+            && AuthenticationErrorRevision == MissingIndexStreamRecoveryMarker
+            && (!params.HasStaticCredentials() || params.GetStaticCredentials().GetPasswordSecretName().empty()))
+        {
+            // PAUSE allows replacing the password secret with another credential
+            // type. Resume its normal provider while the missing index stays fenced.
+            State = EState::Ready;
+        }
+
+        // A persisted authentication error owns its secret lookups across restarts.
+        // The bootstrap resolver would turn a transient lookup failure into a generic error.
+        if (State == EState::Error && DesiredState == EState::Ready && !AuthenticationErrorRevision.empty()) {
+            if (!Database) {
+                return ResolveDatabase(ctx);
+            }
+            if (!SecretRefresh) {
+                SecretRefresh = ctx.Register(CreateSecretRefresh(ctx.SelfID, ReplicationId, PathId,
+                    Database, Config.GetSrcConnectionParams(), AuthenticationErrorRevision, GetSecretProbeTopics()));
+            }
+            return;
+        }
+
         if (!YdbProxy && !(State == EState::Removing && !HasSourceStreams())) {
             THolder<IActor> ydbProxy;
-            const auto& params = Config.GetSrcConnectionParams();
             const auto& endpoint = params.GetEndpoint();
             const auto& database = params.GetDatabase();
             const bool ssl = params.GetEnableSsl();
@@ -274,13 +326,14 @@ public:
             } else {
                 return ProgressTargets(ctx);
             }
-        case EState::Done:
         case EState::Error:
+        case EState::Done:
             return;
         }
     }
 
     void Shutdown(const TActorContext& ctx) {
+        CancelSecretRefresh();
         StopTargetDescribers(ctx);
         for (auto& [_, target] : Targets) {
             target->Shutdown(ctx);
@@ -293,8 +346,21 @@ public:
         }
     }
 
+    void CancelSecretRefresh() {
+        if (SecretRefresh) {
+            TActivationContext::AsActorContext().Send(std::exchange(SecretRefresh, {}), new TEvents::TEvPoison());
+        }
+    }
+
     void SetState(EState state, TString issue = {}) {
+        AuthenticationErrorRevision.clear();
+        CancelSecretRefresh();
         State = state;
+        if (state == EState::Ready && DesiredState == EState::Ready && !MissingIndexStreams.empty()) {
+            AuthenticationErrorRevision = MissingIndexStreamRecoveryMarker;
+            issue = TStringBuilder() << "Source changefeed is missing for index target #" << *MissingIndexStreams.begin()
+                << ". Waiting for the base table to report DROP INDEX.";
+        }
         Issue = TruncatedIssue(issue);
     }
 
@@ -326,6 +392,10 @@ public:
     }
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        if (AuthenticationErrorRevision != MissingIndexStreamRecoveryMarker) {
+            AuthenticationErrorRevision.clear();
+        }
+        CancelSecretRefresh();
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
         if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
@@ -346,6 +416,7 @@ public:
     }
 
     void ResetCredentials(const TActorContext& ctx) {
+        CancelSecretRefresh();
         ++CredentialsRevision;
         TargetDiscoveryComplete = false;
         StopTargetDescribers(ctx);
@@ -395,6 +466,10 @@ private:
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
+    THashSet<ui64> MissingIndexStreams;
+    TActorId SecretRefresh;
+    TString SecretRevision;
+    TString AuthenticationErrorRevision;
     TActorId SecretResolver;
     ui64 SecretResolverCookie = 0;
     ui64 CredentialsRevision = 0;
@@ -446,6 +521,18 @@ const TReplication::ITarget* TReplication::FindTarget(ui64 id) const {
 
 TReplication::ITarget* TReplication::FindTarget(ui64 id) {
     return Impl->FindTarget(id);
+}
+
+void TReplication::UpdateMissingIndexStream(const ITarget& target) {
+    if (target.HasMissingIndexStream()) {
+        Impl->MissingIndexStreams.insert(target.GetId());
+    } else {
+        Impl->MissingIndexStreams.erase(target.GetId());
+    }
+}
+
+const THashSet<ui64>& TReplication::GetMissingIndexStreams() const {
+    return Impl->MissingIndexStreams;
 }
 
 void TReplication::RemoveTarget(ui64 id) {
@@ -556,7 +643,17 @@ void TReplication::SetState(EState state, TString issue) {
 }
 
 TReplication::EState TReplication::GetState() const {
+    // Error is also the on-disk state: on restart the credentials are checked
+    // again, and older controllers cannot run workers for an unknown marker.
+    return IsReconcilingIndexStreams() ? EState::Error : Impl->State;
+}
+
+TReplication::EState TReplication::GetOperationalState() const {
     return Impl->State;
+}
+
+bool TReplication::IsReconcilingIndexStreams() const {
+    return Impl->State == EState::Ready && Impl->AuthenticationErrorRevision == MissingIndexStreamRecoveryMarker;
 }
 
 const TString& TReplication::GetIssue() const {
@@ -568,6 +665,10 @@ TReplication::EState TReplication::GetDesiredState() const {
 }
 
 void TReplication::SetDesiredState(EState state) {
+    if (state != EState::Ready) {
+        Impl->AuthenticationErrorRevision.clear();
+        Impl->CancelSecretRefresh();
+    }
     if (state == EState::Done && Impl->DesiredState != state) {
         // Even a deferred DONE retires source lookups immediately. A subsequent
         // DROP may need fresh lookups before the deferred reset has run.
@@ -602,8 +703,10 @@ bool TReplication::IsCredentialsReady() const {
     }
 }
 
-void TReplication::UpdateSecret(const TString& secretValue) {
+void TReplication::UpdateSecret(const TString& secretValue, const TString& revision, const TString& credentialInstanceId) {
+    Impl->SecretRevision = revision;
     auto& params = *Impl->Config.MutableSrcConnectionParams();
+    params.SetCredentialInstanceId(credentialInstanceId);
     switch (params.GetCredentialsCase()) {
     case NKikimrReplication::TConnectionParams::kStaticCredentials:
         params.MutableStaticCredentials()->SetPassword(secretValue);
@@ -617,6 +720,23 @@ void TReplication::UpdateSecret(const TString& secretValue) {
     default:
         Y_ABORT("unreachable");
     }
+}
+
+const TString& TReplication::GetSecretRevision() const { return Impl->SecretRevision; }
+const TString& TReplication::GetAuthenticationErrorRevision() const { return Impl->AuthenticationErrorRevision; }
+void TReplication::SetAuthenticationErrorRevision(const TString& revision) { Impl->AuthenticationErrorRevision = revision; }
+
+bool TReplication::CanRecoverAuthenticationError() const {
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    return Impl->DesiredState == EState::Ready
+        && params.HasStaticCredentials() && !params.GetStaticCredentials().GetPasswordSecretName().empty()
+        && !Impl->SecretRevision.empty()
+        && (Impl->State == EState::Ready || !Impl->AuthenticationErrorRevision.empty());
+}
+
+bool TReplication::IsExpectedSecretRefresh(const TActorId& actorId) const {
+    return actorId && actorId == Impl->SecretRefresh && Impl->State == EState::Error
+        && Impl->DesiredState == EState::Ready && !Impl->AuthenticationErrorRevision.empty();
 }
 
 bool TReplication::IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const {

@@ -3,6 +3,7 @@ YQL_LIBRARY()
 PEERDIR(
     contrib/libs/zstd
     ydb/core/backup/common
+    ydb/library/actors/async
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
@@ -80,6 +81,8 @@ SRCS(
     tx_resolve_secret_result.cpp
     tx_run_worker.cpp
     tx_worker_error.cpp
+    tx_worker_registration_error.cpp
+    tx_refresh_credentials.cpp
     tx_source_offset_report.cpp
     worker_lag_expiry_queue.cpp
 )

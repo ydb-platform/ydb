@@ -93,7 +93,8 @@ EDstState TTargetBase::GetDstState() const {
 }
 
 void TTargetBase::SetDstState(const EDstState value) {
-    DstState = value;
+    DstState = value == EDstState::Ready && HasMissingIndexStream() ? EDstState::Error : value;
+    Replication->UpdateMissingIndexStream(*this);
     switch (DstState) {
     case EDstState::Alter:
         Replication->AddPendingAlterTarget(Id);
@@ -132,6 +133,10 @@ bool TTargetBase::IsExpectedDstAlterer(const TActorId& actorId) const {
     return DstAlterer && DstAlterer == actorId;
 }
 
+bool TTargetBase::IsExpectedWorkerRegistar(const TActorId& actorId) const {
+    return WorkerRegistar && WorkerRegistar == actorId;
+}
+
 void TTargetBase::SetDstPathId(const TPathId& value) {
     DstPathId = value;
 }
@@ -158,6 +163,7 @@ EStreamState TTargetBase::GetStreamState() const {
 
 void TTargetBase::SetStreamState(EStreamState value) {
     StreamState = value;
+    Replication->UpdateMissingIndexStream(*this);
 }
 
 std::optional<bool> TTargetBase::GetStreamSchemaChanges() const {
@@ -268,7 +274,7 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             // Restart this read-only actor so both its proxy and settings refresh.
             Reset(WorkerRegistar);
         }
-        if (Replication->GetState() == TReplication::EState::Ready && !WorkerRegistar) {
+        if (Replication->GetOperationalState() == TReplication::EState::Ready && !WorkerRegistar) {
             WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
             WorkerRegistarProxy = Replication->GetYdbProxy();
         }

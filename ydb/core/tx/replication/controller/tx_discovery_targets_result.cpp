@@ -36,7 +36,7 @@ public:
             return true;
         }
 
-        if (Replication->GetState() != TReplication::EState::Ready
+        if (Replication->GetOperationalState() != TReplication::EState::Ready
             && Replication->GetState() != TReplication::EState::Paused)
         {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
@@ -99,6 +99,7 @@ public:
 
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::AuthenticationErrorRevision>(Replication->GetAuthenticationErrorRevision()),
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue()),
             NIceDb::TUpdate<Schema::Replications::NextTargetId>(Replication->GetNextTargetId())
         );

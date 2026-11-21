@@ -14,11 +14,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
+    library/cpp/deprecated/atomic
     ydb/core/base
+    ydb/core/kqp/common/events
+    ydb/core/kqp/runtime/common
     ydb/core/protos
     ydb/core/tablet_flat
-    library/cpp/deprecated/atomic
+    ydb/library/actors/core
 )
 
 END()

@@ -235,9 +235,6 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                 }
             }
 
-            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
-                continue;
-            }
 
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
             if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
@@ -5962,6 +5959,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableBackgroundCompactionServerless = appData->FeatureFlags.GetEnableBackgroundCompactionServerless();
     EnableBorrowedSplitCompaction = appData->FeatureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
+    EnableRebuildIndex = appData->FeatureFlags.GetEnableRebuildIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
     EnableWasmCompileController = appData->FeatureFlags.GetEnableWasmCompileController();
@@ -9113,6 +9111,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableBackgroundCompactionServerless = featureFlags.GetEnableBackgroundCompactionServerless();
     EnableBorrowedSplitCompaction = featureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
+    EnableRebuildIndex = featureFlags.GetEnableRebuildIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnableStatistics = featureFlags.GetEnableStatistics();
     EnableWasmCompileController = featureFlags.GetEnableWasmCompileController();

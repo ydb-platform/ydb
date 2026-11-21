@@ -26,6 +26,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/audit
     ydb/core/kafka_proxy
     ydb/core/security/certificate_check/test_utils
     ydb/core/persqueue/public/schema

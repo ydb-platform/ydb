@@ -110,7 +110,7 @@ private:
     void HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleLoginResult(const NYql::TIssue& issue, const std::string& reason, const std::string& token,
-        const std::string& sanitizedToken, bool isAdmin, const NActors::TActorContext& ctx);
+        const std::string& sanitizedToken, bool isAdmin, const TString& userSID, const NActors::TActorContext& ctx);
     void HandleLoginResult(NSasl::TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleLoginResult(NSasl::TEvSasl::TEvSaslPlainLdapLoginResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleLoginResult(NSasl::TEvSasl::TEvSaslScramFinalServerResponse::TPtr& ev, const NActors::TActorContext& ctx);

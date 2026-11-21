@@ -1,10 +1,14 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/log.h>
+#include <library/cpp/threading/future/future.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include "kafka_test_client.h"
 #include "test_server.h"
 
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/audit/audit_log_service.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/library/testlib/helpers.h>
@@ -15,6 +19,30 @@ using namespace NKafka;
 using namespace NYdb;
 
 namespace {
+
+class TLoginAuditLogBackend : public TLogBackend {
+public:
+    explicit TLoginAuditLogBackend(NThreading::TPromise<TString> line)
+        : Line(std::move(line))
+    {}
+
+    void WriteData(const TLogRecord& record) override {
+        if (TStringBuf(record.Data, record.Len).Contains("component=kafka-login")) {
+            Line.TrySetValue(TString(record.Data, record.Len));
+        }
+    }
+
+    void ReopenLog() override {}
+
+private:
+    NThreading::TPromise<TString> Line;
+};
+
+NKikimr::Tests::TServerSettings::TLoggerInitializer CreateLoginAuditLogger(NThreading::TPromise<TString> line) {
+    return [line](NKikimr::TTestActorRuntime& runtime) {
+        runtime.AuditLogBackends[NKikimrConfig::TAuditConfig::TXT].emplace_back(new TLoginAuditLogBackend(line));
+    };
+}
 
 class TFailingTicketParser : public NActors::TActorBootstrapped<TFailingTicketParser> {
 public:
@@ -44,6 +72,23 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
+    Y_UNIT_TEST_TWIN(AuditSubjectFromAuthentication, ValidPassword) {
+        auto auditLine = NThreading::NewPromise<TString>();
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .LoggerInitializer = CreateLoginAuditLogger(auditLine),
+        });
+        TKafkaTestClient client(testServer.Port);
+        client.SaslHandshake("PLAIN");
+        // SASLprep removes the soft hyphen from the authentication identity.
+        const auto response = client.SaslPlainAuthenticate("our\u00ADuser@/Root",
+            ValidPassword ? "ourUserPassword" : "wrong-password");
+        UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(ValidPassword
+            ? EKafkaErrors::NONE_ERROR : EKafkaErrors::SASL_AUTHENTICATION_FAILED));
+        UNIT_ASSERT_C(auditLine.GetFuture().Wait(TDuration::Seconds(10)), "LOGIN audit record was not emitted");
+        UNIT_ASSERT_STRING_CONTAINS(auditLine.GetFuture().GetValue(), ValidPassword ? "subject=ouruser," : "subject={none},");
+    }
+
     Y_UNIT_TEST_TWIN(TicketParserErrorAllowsAnonymousAuthentication, Retryable) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
@@ -375,7 +420,11 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
 
     // Test successful final SCRAM message with correct credentials
     Y_UNIT_TEST(FinalMsgCorrectCredentials) {
-        TInsecureTestServer testServer("2");
+        auto auditLine = NThreading::NewPromise<TString>();
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .LoggerInitializer = CreateLoginAuditLogger(auditLine),
+        });
         TKafkaTestClient client(testServer.Port);
 
         TString userName = "ouruser";
@@ -404,6 +453,8 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT(!response2->ErrorMessage.has_value() || response2->ErrorMessage->empty());
         UNIT_ASSERT(response2->AuthBytes.has_value());
+        UNIT_ASSERT_C(auditLine.GetFuture().Wait(TDuration::Seconds(10)), "LOGIN audit record was not emitted");
+        UNIT_ASSERT_STRING_CONTAINS(auditLine.GetFuture().GetValue(), "subject=ouruser,");
 
         const auto& authBytes2 = response2->AuthBytes.value();
         std::string serverFinalMessage(reinterpret_cast<const char*>(authBytes2.data()), authBytes2.size());
@@ -449,7 +500,12 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
 
     // Test final SCRAM message with incorrect client proof
     Y_UNIT_TEST_TWIN(FinalMsgIncorrectProof, HideAuthenticationFailureReasons) {
-        TInsecureTestServer testServer({ .KafkaApiMode = "2", .HideAuthenticationFailureReasons = HideAuthenticationFailureReasons});
+        auto auditLine = NThreading::NewPromise<TString>();
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .HideAuthenticationFailureReasons = HideAuthenticationFailureReasons,
+            .LoggerInitializer = CreateLoginAuditLogger(auditLine),
+        });
         TKafkaTestClient client(testServer.Port);
 
         TString userName = "ouruser";
@@ -468,6 +524,9 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
 
         UNIT_ASSERT_VALUES_UNEQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
+
+        UNIT_ASSERT_C(auditLine.GetFuture().Wait(TDuration::Seconds(10)), "LOGIN audit record was not emitted");
+        UNIT_ASSERT_STRING_CONTAINS(auditLine.GetFuture().GetValue(), "subject={none},");
 
         UNIT_ASSERT(response2->ErrorMessage.has_value());
         if (HideAuthenticationFailureReasons) {

@@ -79,6 +79,7 @@ private:
         response->Issue = MakeIssue(NKikimrIssues::TIssuesIds::SUCCESS);
         response->Token = loginResult.GetToken();
         response->SanitizedToken = loginResult.GetSanitizedToken();
+        response->UserSID = TStringBuilder() << AuthcId << "@" << AppData()->AuthConfig.GetLdapAuthenticationDomain();
         response->IsAdmin = loginResult.GetIsAdmin();
 
         SendResponse(std::move(response));

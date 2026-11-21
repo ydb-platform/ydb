@@ -27,6 +27,7 @@ namespace NKikimr::NSasl {
             NYql::TIssue Issue;
             std::string Token;
             std::string SanitizedToken;
+            TString UserSID;
             bool IsAdmin;
         };
 
@@ -35,6 +36,7 @@ namespace NKikimr::NSasl {
             std::string Reason;
             std::string Token;
             std::string SanitizedToken;
+            TString UserSID;
             bool IsAdmin;
         };
 
@@ -52,6 +54,7 @@ namespace NKikimr::NSasl {
             std::string AuthcId;
             std::string Token;
             std::string SanitizedToken;
+            TString UserSID;
             bool IsAdmin;
         };
     };

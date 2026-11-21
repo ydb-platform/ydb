@@ -62,11 +62,11 @@ public:
     }
 
     void ProcessLoginResult(const NYql::TIssue& issue, const std::string& reason, const std::string& token,
-        const std::string& sanitizedToken, bool isAdmin)
+        const std::string& sanitizedToken, bool isAdmin, const TString& userSID)
     {
         switch (issue.GetCode()) {
         case NKikimrIssues::TIssuesIds::SUCCESS:
-            return ReplyAndPassAway(token, sanitizedToken, isAdmin);
+            return ReplyAndPassAway(token, sanitizedToken, isAdmin, userSID);
         case NKikimrIssues::TIssuesIds::ACCESS_DENIED:
             return ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issue.GetMessage(), TString(reason));
         case NKikimrIssues::TIssuesIds::UNEXPECTED:
@@ -89,13 +89,13 @@ public:
     void HandleResult(TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev) {
         const auto& loginResult = *ev->Get();
         ProcessLoginResult(loginResult.Issue, "", loginResult.Token, loginResult.SanitizedToken,
-            loginResult.IsAdmin);
+            loginResult.IsAdmin, loginResult.UserSID);
     }
 
     void HandleResult(TEvSasl::TEvSaslPlainLdapLoginResponse::TPtr& ev) {
         const auto& loginResult = *ev->Get();
         ProcessLoginResult(loginResult.Issue, loginResult.Reason, loginResult.Token, loginResult.SanitizedToken,
-            loginResult.IsAdmin);
+            loginResult.IsAdmin, loginResult.UserSID);
     }
 
     STATEFN(StateWork) {
@@ -106,7 +106,7 @@ public:
         }
     }
 
-    void ReplyAndPassAway(const std::string& token, const std::string& sanitizedToken, bool isAdmin) {
+    void ReplyAndPassAway(const std::string& token, const std::string& sanitizedToken, bool isAdmin, const TString& userSID) {
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
@@ -119,7 +119,7 @@ public:
         }
 
         AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response,
-            /* errorDetails */ "", TString(sanitizedToken), isAdmin);
+            /* errorDetails */ "", TString(sanitizedToken), isAdmin, userSID);
 
         return Reply(response);
     }

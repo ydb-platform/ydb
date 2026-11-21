@@ -286,6 +286,7 @@ private:
         response->Msg = BuildFinalServerMsg(loginResult.GetServerSignature());
         response->Token = loginResult.GetToken();
         response->SanitizedToken = loginResult.GetSanitizedToken();
+        response->UserSID = AuthcId;
         response->IsAdmin = loginResult.GetIsAdmin();
 
         SendFinalResponse(std::move(response));

@@ -1,6 +1,6 @@
 #include "cache_base.h"
-#include "rpc.h"
 #include "config.h"
+#include "rpc.h"
 
 #include <yt/yt/client/api/options.h>
 
@@ -23,23 +23,6 @@ std::string GetNormalClusterName(TStringBuf clusterName)
     return std::string(NNet::InferYTClusterFromClusterUrlRaw(clusterName).value_or(clusterName));
 }
 
-// TODO(ignat): move this logic to ads/bsyeti/libs/ytex/client/
-TClientsCacheConfigPtr GetClustersConfigWithNormalClusterName(const TClientsCacheConfigPtr& config)
-{
-    YT_VERIFY(config);
-    auto newConfig = New<TClientsCacheConfig>();
-
-    newConfig->DefaultConnection = CloneYsonStruct(
-        config->DefaultConnection,
-        /*postprocess*/ false,
-        /*setDefaults*/ false);
-    for (const auto& [cluster, connection] : config->PerClusterConnection) {
-        newConfig->PerClusterConnection[ToString(GetNormalClusterName(cluster))] =
-            CloneYsonStruct(connection, /*postprocess*/ false, /*setDefaults*/ false);
-    }
-    return newConfig;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TClientsCache
@@ -47,7 +30,7 @@ class TClientsCache
 {
 public:
     TClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthenticationOptionsPtr& clientsOptions)
-        : Config_(GetClustersConfigWithNormalClusterName(config))
+        : Config_(CloneConfigWithNormalizedClusterNames(config))
         , ClientsOptions_(clientsOptions)
     { }
 
@@ -68,6 +51,25 @@ private:
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// TODO(ignat): move this logic to ads/bsyeti/libs/ytex/client/.
+TClientsCacheConfigPtr CloneConfigWithNormalizedClusterNames(const TClientsCacheConfigPtr& config)
+{
+    YT_VERIFY(config);
+
+    auto newConfig = New<TClientsCacheConfig>();
+
+    newConfig->DefaultConnection = CloneYsonStruct(
+        config->DefaultConnection,
+        /*postprocess*/ false,
+        /*setDefaults*/ false);
+    for (const auto& [cluster, connection] : config->PerClusterConnection) {
+        newConfig->PerClusterConnection[ToString(GetNormalClusterName(cluster))] =
+            CloneYsonStruct(connection, /*postprocess*/ false, /*setDefaults*/ false);
+    }
+
+    return newConfig;
+}
 
 IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthenticationOptionsPtr& options)
 {

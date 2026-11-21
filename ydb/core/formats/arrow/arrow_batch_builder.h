@@ -179,6 +179,7 @@ public:
     void AddRow(const TConstArrayRef<TCell>& key, const TConstArrayRef<TCell>& value);
     void AddRow(const TConstArrayRef<TCell>& row);
     void AddRow(const NYql::NUdf::TUnboxedValue& row, size_t membersCount, const TVector<ui32>* columnOrder);
+    [[nodiscard]] arrow::Status TryAddRow(const TConstArrayRef<TCell>& row);
 
     // You have to call it before Start()
     void Reserve(size_t numRows) {
@@ -205,6 +206,7 @@ public:
 
 protected:
     void AppendCell(const TCell& cell, ui32 colNum);
+    [[nodiscard]] arrow::Status TryAppendCell(const TCell& cell, ui32 colNum);
     void AppendValue(const NYql::NUdf::TUnboxedValue& value, ui32 colNum);
 
     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& GetYdbSchema() const {

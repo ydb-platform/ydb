@@ -3,6 +3,7 @@ import json
 import os
 from hashlib import md5
 
+import coverage
 import ymake
 from _common import (
     stripext,
@@ -169,7 +170,12 @@ def mangle(name):
     return ''.join('{}{}'.format(len(s), s) for s in name.split('.'))
 
 
-def parse_pyx_includes(filename, path, source_root, seen=None, py3=True):
+def parse_pyx_includes(filename, path, source_root, seen=None, py3=True, root_relative=False, resource_cython=False):
+    """
+    Yields (root relative name, path) of the files textually included into the cython source.
+    Arcadia root relative includes belong to another module and are yielded only on root_relative demand.
+    """
+
     def normpath(*args):
         return os.path.normpath(os.path.join(*args))
 
@@ -198,25 +204,73 @@ def parse_pyx_includes(filename, path, source_root, seen=None, py3=True):
             incname, incpath = normpath(file_dirname, incfile), normpath(path_dirname, incfile)
             yield (incname, incpath)
             # search for includes in the included files
-            for e in parse_pyx_includes(incname, incpath, source_root, seen, py3):
-                yield e
-        else:
-            # There might be arcadia root or cython relative include.
-            # Don't treat such file as missing, because there must be PEERDIR on py_library
-            # which contains it.
-            cython_dir = "/contrib/tools/cython/" if py3 else "/contrib/tools/cython_py2/"
-            for path in [
+            for e in parse_pyx_includes(
+                incname,
+                incpath,
                 source_root,
-                source_root + cython_dir + "Cython/Includes",
-            ]:
-                if os.path.exists(normpath(path, incfile)):
+                seen,
+                py3=py3,
+                root_relative=root_relative,
+                resource_cython=resource_cython,
+            ):
+                yield e
+        elif root_relative or not resource_cython:
+            # Root-relative textual includes belong to another project module.
+            # Only legacy mode validates files from the source compiler inventory.
+            include_dirs = [source_root]
+            if not resource_cython:
+                cython_dir = "/contrib/tools/cython/" if py3 else "/contrib/tools/cython_py2/"
+                include_dirs.append(source_root + cython_dir + "Cython/Includes")
+            for base_dir in include_dirs:
+                if os.path.exists(normpath(base_dir, incfile)):
+                    if root_relative and base_dir == source_root:
+                        incname, incpath = os.path.normpath(incfile), '${ARCADIA_ROOT}/' + incfile
+                        yield (incname, incpath)
+                        for e in parse_pyx_includes(
+                            incname,
+                            incpath,
+                            source_root,
+                            seen,
+                            py3=py3,
+                            root_relative=root_relative,
+                            resource_cython=resource_cython,
+                        ):
+                            yield e
                     break
             else:
-                ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path))
+                if not resource_cython:
+                    ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path))
 
 
 def has_pyx(args):
     return any(arg.endswith('.pyx') for arg in args)
+
+
+def is_cython_coverage_enabled(unit, pyxs, py3):
+    """
+    Tracing slows a module down and changes its uids, so only modules with sources to report get it.
+    The report is filtered per file at runtime, that is why sources, textually included ones as well,
+    are checked here instead of the module path.
+    """
+    if unit.get('CYTHON_COVERAGE') != 'yes':
+        return False
+    filters = coverage.get_coverage_filters(unit)
+    source_root = unit.resolve('$S')
+    for path, _ in pyxs:
+        filename = rootrel_arc_src(path, unit)
+        if coverage.should_be_covered(unit, filters, filename):
+            return True
+        for include, _ in parse_pyx_includes(
+            filename,
+            path,
+            source_root,
+            py3=py3,
+            root_relative=True,
+            resource_cython=unit.get('_USE_RESOURCE_CYTHON') == 'yes',
+        ):
+            if coverage.should_be_covered(unit, filters, include):
+                return True
+    return False
 
 
 def get_srcdir(path, unit):
@@ -302,9 +356,6 @@ def py_program(unit, py3):
     if unit.get('OS_WINDOWS') == 'yes':
         unit.onwindows_long_path_manifest()
 
-    if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
-        unit.onadd_check_py_imports()
-
 
 @ymake.macro
 def PY_SRCS(unit: ymake.Unit, *args: str):
@@ -370,13 +421,10 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
     else:
         ns = (unit.get('PY_NAMESPACE_VALUE') or upath.replace('/', '.')) + '.'
 
-    cython_coverage = unit.get('CYTHON_COVERAGE') == 'yes'
     cythonize_py = False
     optimize_proto = unit.get('OPTIMIZE_PY_PROTOS_FLAG') == 'yes'
 
     cython_directives = []
-    if cython_coverage:
-        cython_directives += ['-X', 'linetrace=True']
 
     pyxs_c = []
     pyxs_c_h = []
@@ -528,7 +576,14 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
         # for currently processing pyx file.
         include_map = collections.defaultdict(set)
 
+        cython_coverage = is_cython_coverage_enabled(
+            unit, pyxs_c + pyxs_c_h + pyxs_c_api_h + pyxs_cpp + pyxs_cpp_h + pyxs_cpp_api_h, py3
+        )
         if cython_coverage:
+            # The last directive wins, so CYTHON_DIRECTIVE linetrace=False still turns tracing off
+            cython_directives = ['-X', 'linetrace=True'] + cython_directives
+            # linetrace=True only emits the trace calls, these defines compile them in
+            unit.oncflags(['-DCYTHON_TRACE=1', '-DCYTHON_TRACE_NOGIL=1', '-DCYTHON_USE_SYS_MONITORING=0'])
 
             def process_pyx(filename, path, out_suffix, with_ext):
                 # skip generated files
@@ -547,7 +602,13 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))
                 # used includes
-                for entry in parse_pyx_includes(filename, path, unit.resolve('$S'), None, py3):
+                for entry in parse_pyx_includes(
+                    filename,
+                    path,
+                    unit.resolve('$S'),
+                    py3=py3,
+                    resource_cython=unit.get('_USE_RESOURCE_CYTHON') == 'yes',
+                ):
                     py_files2res.add(entry)
                     include_arc_rel = entry[0]
                     include_map[filename].add(include_arc_rel)

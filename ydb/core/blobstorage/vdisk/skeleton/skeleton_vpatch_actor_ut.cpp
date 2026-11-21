@@ -424,6 +424,20 @@ namespace NKikimr {
             testData.WaitEndTest();
         }
 
+        Y_UNIT_TEST(RejectsDistributedPatchBlock82) {
+            TVPatchTestGeneralData testData(TErasureType::Erasure8Plus2Block, 10);
+            auto edge = testData.EdgeActors[0];
+            auto ev = CreateEventHandle(edge, edge, testData.CreateVPatchStart(0));
+            auto actor = testData.CreateTVPatchActor<TVPatchDecorator>(std::move(ev));
+            TAutoPtr<IEventHandle> handle;
+            auto result = testData.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchFoundParts>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrProto::ERROR);
+            auto dying = testData.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(dying->PatchedBlobId, testData.PatchedBlobId);
+            testData.Runtime.Send(new IEventHandle(actor, edge, new TEvVPatchDyingConfirm));
+            testData.WaitEndTest();
+        }
+
         Y_UNIT_TEST(FiniteDeadlineIsPreserved) {
             TBlobStorageGroupType type(TErasureType::Erasure4Plus2Block);
             TVPatchTestGeneralData testData(type, 10);

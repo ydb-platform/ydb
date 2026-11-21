@@ -35,8 +35,8 @@ ui64 IColumnEngine::GetMetadataLimit() {
 }
 
 void IColumnEngine::FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
-    AFL_VERIFY(!!request);
-    AFL_VERIFY(!request->IsEmpty());
+    YDB_LOG_VERIFY(!!request);
+    YDB_LOG_VERIFY(!request->IsEmpty());
     DoFetchDataAccessors(request);
 }
 

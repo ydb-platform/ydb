@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    buffered_yson_writer_ut.cpp
     depth_limiting_yson_consumer_ut.cpp
     filter_ut.cpp
     lexer_ut.cpp

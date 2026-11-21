@@ -2,6 +2,7 @@
 #include "change_record.h"
 #include "type_serialization.h"
 
+#include <ydb/core/change_exchange/visitor.h>
 #include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -836,6 +837,31 @@ IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSeriali
 
 IChangeRecordSerializer* CreateChangeRecordDebugSerializer() {
     return new TYdbJsonSerializer(TChangeRecordSerializerOpts::DebugOpts());
+}
+
+namespace {
+
+class TSerializeVisitor: public NChangeExchange::TBaseVisitor {
+    IChangeRecordSerializer& Serializer;
+    NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& Cmd;
+
+public:
+    explicit TSerializeVisitor(IChangeRecordSerializer& serializer, NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd)
+        : Serializer(serializer)
+        , Cmd(cmd)
+    {
+    }
+
+    void Visit(const TChangeRecord& record) override {
+        Serializer.Serialize(Cmd, record);
+    }
+};
+
+} // anonymous
+
+void IChangeRecordSerializer::Serialize(TCmdWrite& cmd, const NChangeExchange::IChangeRecord& record) {
+    TSerializeVisitor visitor(*this, cmd);
+    record.Accept(visitor);
 }
 
 TString TChangeRecord::GetPartitionKey() const {

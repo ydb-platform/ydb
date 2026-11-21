@@ -1,5 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -844,10 +845,20 @@ void THive::BuildLocalConfig() {
 
 void THive::BuildCurrentConfig() {
     const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
+    const auto previousCountersExportMode = CurrentConfig.GetCountersExportMode();
+    const bool previousTrackResourceBrokerUsage = CurrentConfig.GetTrackResourceBrokerUsage();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
     CurrentConfig.SetNodeEventHistorySize(std::min(CurrentConfig.GetNodeEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
+    bool broadcastLocalSettings = false;
+    if (CurrentConfig.GetCountersExportMode() != previousCountersExportMode) {
+        UpdateCountersExportMode();
+        broadcastLocalSettings = true;
+    }
+    if (CurrentConfig.GetTrackResourceBrokerUsage() != previousTrackResourceBrokerUsage) {
+        broadcastLocalSettings = true;
+    }
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
         TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
@@ -930,6 +941,10 @@ void THive::BuildCurrentConfig() {
                 }
             }
         }
+    }
+
+    if (broadcastLocalSettings) {
+        UpdateLocalSettings();
     }
 }
 
@@ -2013,6 +2028,9 @@ void THive::DeleteTablet(TTabletId tabletId) {
 void THive::DeleteNode(TNodeId nodeId) {
     TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Sub(1);
     RemoveNodeFromSegments(nodeId);
+    if (TNodeInfo* node = FindNode(nodeId)) {
+        node->DropCounters();
+    }
     Nodes.erase(nodeId);
 }
 
@@ -2217,13 +2235,18 @@ void THive::OnShrinkMoveDataFinished() {
     }
 }
 
-void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo, EHiveEventReason reason, TString details) {
-    if (const TTabletInfo* tablet = FindTablet(moveInfo.Tablet)) {
-        RecordTabletEvent(*tablet, EHiveEventType::Moved, reason,
-            TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
-    }
+void THive::RecordTabletMove(TInstant timestamp, const TTabletInfo& tablet, const TNodeInfo& from, const TNodeInfo& to, EHiveEventReason reason, TString details) {
+    const TTabletMoveInfo moveInfo(timestamp, tablet, from.Id, to.Id);
+    RecordTabletEvent(tablet, EHiveEventType::Moved, reason,
+        TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
+    if (from.Counters) {
+        from.Counters->TabletsMovedFromNode->Inc();
+    }
+    if (to.Counters) {
+        to.Counters->TabletsMovedToNode->Inc();
+    }
     if (TabletMoveSamplesForLog.size() < MOVE_SAMPLES_PER_LOG_ENTRY) {
         TabletMoveSamplesForLog.push_back(moveInfo);
         std::push_heap(TabletMoveSamplesForLog.begin(), TabletMoveSamplesForLog.end(), std::greater<TTabletMoveInfo>{});
@@ -3023,7 +3046,23 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
+    OnBridgeTabletPlacementChanged(previousConfig.GetBridgeTabletPlacement());
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+}
+
+void THive::OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous) {
+    if (!BridgeInfo || previous == GetBridgeTabletPlacement()) {
+        return;
+    }
+    // the tablets waiting for a node may fit in the piles that became allowed
+    ProcessWaitQueue();
+    // pending pile drains may now have targets to move tablets to, or nothing left to move
+    ProcessPileDrains();
+    // the tablets in the piles that are not allowed anymore are moved away by the pile drain;
+    // switching to a wider placement needs nothing more: running tablets spread out lazily
+    if (GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
+        UpdatePiles();
+    }
 }
 
 void THive::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
@@ -3086,6 +3125,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
     stats.MinResourceNormValues = minValues;
+    stats.MaxResourceNormValues = maxValues;
     auto discrepancy = maxValues - minValues;
     auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
     if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
@@ -3702,8 +3742,8 @@ void THive::RemoveFromPingInProgress(TNodeId node) {
 }
 
 void THive::FillLocalSettings(NKikimrLocal::THiveSettings* settings) const {
-    Y_UNUSED(settings);
-    // Select the relevant CurrentConfig fields here when settings are added.
+    settings->SetCountersExportMode(CurrentConfig.GetCountersExportMode());
+    settings->SetTrackResourceBrokerUsage(CurrentConfig.GetTrackResourceBrokerUsage());
 }
 
 void THive::SendPing(const TNodePing& nodePing) {
@@ -4710,6 +4750,29 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MIN].Set(stats.MinUsage * 100);
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MAX].Set(stats.MaxUsage * 100);
 
+    if (BalanceCounters) {
+        auto setPerResource = [&](auto resource) {
+            auto& counters = BalanceCounters->ByResource[resource()];
+            const double usageScale = resource() == NMetrics::EResource::Counter ? CurrentConfig.GetMaxResourceCounter() : 100;
+            counters.Scatter->Set(std::get<resource>(stats.ScatterByResource) * 100);
+            counters.UsageMin->Set(std::llround(std::get<resource>(stats.MinResourceNormValues) * usageScale));
+            counters.UsageMax->Set(std::llround(std::get<resource>(stats.MaxResourceNormValues) * usageScale));
+        };
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::CPU>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Memory>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Network>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Counter>());
+
+        // counted as Handle(TEvProcessTabletBalancer) counts it
+        ui64 nodesOverloaded = 0;
+        for (const auto& [nodeId, nodeInfo] : Nodes) {
+            if (nodeInfo.IsAlive() && !nodeInfo.Down && nodeInfo.IsOverloaded()) {
+                ++nodesOverloaded;
+            }
+        }
+        BalanceCounters->NodesOverloaded->Set(nodesOverloaded);
+    }
+
     auto& nodeUsageHistogram = TabletCounters->Percentile()[NHive::COUNTER_NODE_USAGE];
     nodeUsageHistogram.Clear();
     for (const auto& record : stats.Values) {
@@ -5194,6 +5257,83 @@ bool THive::IsItPossibleToStartBalancer(EBalancerType balancerType) {
         }
     }
     return true;
+}
+
+void THive::UpdateNodeCounters(TNodeInfo& node) {
+    if (!ExportHivePerNodeCounters()) {
+        return;
+    }
+    if (!PerNodeCountersGroup) {
+        PerNodeCountersGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("type", "HIVE");
+    }
+    // nodes get their counters as they report, so switching the export on spreads the work over the metrics messages
+    node.CreateCounters(PerNodeCountersGroup);
+    node.UpdateCounters();
+}
+
+void THive::UpdateCountersExportMode() {
+    if (!ExportPerResourceCounters()) {
+        BalanceCounters.reset();
+    } else if (!BalanceCounters) {
+        BalanceCounters = std::make_unique<TBalanceCounters>(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("type", "HIVE"));
+    }
+    if (!ExportHivePerNodeCounters() && PerNodeCountersGroup) {
+        for (auto& [_, node] : Nodes) {
+            node.DropCounters();
+        }
+        PerNodeCountersGroup.Reset();
+    }
+}
+
+namespace {
+
+// metric name suffix per EBalancerType; Storage has none, see TBalanceCounters
+consteval std::array<TStringBuf, EBalancerTypeSize> BalancerTypeCounterSuffixes() {
+    std::array<TStringBuf, EBalancerTypeSize> suffixes = {};
+    suffixes[static_cast<size_t>(EBalancerType::Manual)] = "Manual";
+    suffixes[static_cast<size_t>(EBalancerType::Scatter)] = "Scatter";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterCounter)] = "ScatterCtr";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterCPU)] = "ScatterCpu";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterMemory)] = "ScatterMem";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterNetwork)] = "ScatterNet";
+    suffixes[static_cast<size_t>(EBalancerType::Emergency)] = "Emergency";
+    suffixes[static_cast<size_t>(EBalancerType::SpreadNeighbours)] = "Spread";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterNamed)] = "ScatterNamed";
+    return suffixes;
+}
+
+consteval bool OnlyStorageHasNoSuffix(const std::array<TStringBuf, EBalancerTypeSize>& suffixes) {
+    for (size_t i = 0; i < suffixes.size(); ++i) {
+        if ((suffixes[i] == nullptr) != (i == static_cast<size_t>(EBalancerType::Storage))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(OnlyStorageHasNoSuffix(BalancerTypeCounterSuffixes()));
+
+constexpr std::array<TStringBuf, NMetrics::EResource::Counter + 1> RESOURCE_COUNTER_SUFFIXES = {"Cpu", "Mem", "Net", "Ctr"};
+static_assert(NMetrics::EResource::CPU == 0 && NMetrics::EResource::Memory == 1 && NMetrics::EResource::Network == 2 && NMetrics::EResource::Counter == 3);
+
+} // anonymous namespace
+
+THive::TBalanceCounters::TBalanceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group) {
+    for (size_t resource = 0; resource < ByResource.size(); ++resource) {
+        TStringBuf suffix = RESOURCE_COUNTER_SUFFIXES[resource];
+        ByResource[resource].Scatter = group->GetExpiringCounter(TStringBuilder() << "BalanceScatter" << suffix);
+        ByResource[resource].UsageMin = group->GetExpiringCounter(TStringBuilder() << "BalanceUsageMin" << suffix);
+        ByResource[resource].UsageMax = group->GetExpiringCounter(TStringBuilder() << "BalanceUsageMax" << suffix);
+    }
+    NodesOverloaded = group->GetExpiringCounter("NodesOverloaded");
+    static constexpr auto typeSuffixes = BalancerTypeCounterSuffixes();
+    for (size_t type = 0; type < typeSuffixes.size(); ++type) {
+        if (TStringBuf suffix = typeSuffixes[type]) {
+            BalancerExecuted[type] = group->GetExpiringCounter(TStringBuilder() << "BalancerExecuted" << suffix, true);
+            BalancerFailed[type] = group->GetExpiringCounter(TStringBuilder() << "BalancerFailed" << suffix, true);
+            TabletsMoved[type] = group->GetExpiringCounter(TStringBuilder() << "TabletsMoved" << suffix, true);
+        }
+    }
 }
 
 void THive::LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason) {

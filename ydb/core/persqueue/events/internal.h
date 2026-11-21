@@ -6,6 +6,7 @@
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/common/write_stats.h>
 #include <ydb/core/persqueue/common/partitioning_keys_manager.h>
@@ -253,6 +254,7 @@ struct TEvPQ {
         EvReplicationData,
         EvReplicationDataAck,
         EvPersistDone,
+        EvEmitHeartbeat,
         EvEnd,
     };
 
@@ -721,6 +723,7 @@ struct TEvPQ {
 
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
+        TVector<TString> ConsumersToResendOffsets;
     };
 
     struct TEvPartitionConfigChanged : public TEventLocal<TEvPartitionConfigChanged, EvPartitionConfigChanged> {
@@ -897,6 +900,16 @@ struct TEvPQ {
         const ui64 Cookie;
         TVector<TDeregisterBody> Deregistrations;
         TVector<TRegisterBody> Registrations;
+    };
+
+    struct TEvEmitHeartbeat : TEventLocal<TEvEmitHeartbeat, EvEmitHeartbeat> {
+        TEvEmitHeartbeat(ui64 cookie, NPQ::THeartbeat&& heartbeat)
+            : Cookie(cookie)
+            , Heartbeat(std::move(heartbeat))
+        {}
+
+        const ui64 Cookie;
+        NPQ::THeartbeat Heartbeat;
     };
 
     struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {

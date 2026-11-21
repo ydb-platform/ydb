@@ -22,7 +22,7 @@ public:
     }
 
     void FinishSharingSession() {
-        AFL_VERIFY(SharingSessions.Dec() >= 0);
+        YDB_LOG_VERIFY(SharingSessions.Dec() >= 0);
     }
 
     bool IsSharingInProgress() const {

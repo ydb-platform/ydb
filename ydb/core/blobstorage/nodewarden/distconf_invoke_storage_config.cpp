@@ -2,6 +2,7 @@
 #include "distconf_quorum.h"
 #include "node_warden_impl.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 
@@ -264,6 +265,21 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
+        if (ev->Cookie == DataCenterRetryCookie) {
+            if (DataCenterReconciliationDeadline) {
+                SendDataCenterSnapshot();
+            }
+            return;
+        }
+        if (ev->Cookie == DataCenterTimeoutCookie) {
+            if (DataCenterReconciliationDeadline && TActivationContext::Monotonic() >= DataCenterReconciliationDeadline) {
+                if (DataCenterPreflight) {
+                    throw TExError() << "Timed out waiting for BSC to acknowledge the previous DC state snapshot";
+                }
+                throw TExError() << "Timed out waiting for BSC to acknowledge the committed DC state snapshot";
+            }
+            return;
+        }
         if (ev->Cookie == VStatusTimeoutCookie) {
             if (!PendingVDiskIds.empty()) {
                 throw TExError() << "Timed out waiting for VDisk status before group reassignment";
@@ -748,6 +764,22 @@ namespace NKikimr::NStorage {
         });
     }
 
+    void TInvokeRequestHandlerActor::StartDataCenterReconciliation() {
+        DataCenterReconciliationDeadline = TActivationContext::Monotonic() + TDuration::Minutes(10);
+        TActivationContext::Schedule(DataCenterReconciliationDeadline, new IEventHandle(TEvents::TSystem::Wakeup, 0,
+            SelfId(), {}, nullptr, DataCenterTimeoutCookie));
+        ControllerPipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(),
+            NTabletPipe::TClientRetryPolicy::WithRetries()));
+        SendDataCenterSnapshot();
+    }
+
+    void TInvokeRequestHandlerActor::SendDataCenterSnapshot() {
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
+        command->MutableDataCenter()->CopyFrom(Self->StorageConfig->GetDataCenterStates().GetDataCenter());
+        NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
+    }
+
     void TInvokeRequestHandlerActor::ConnectToController() {
         WaitingForConfigValidation = true;
         TActivationContext::Schedule(TDuration::Minutes(10), new IEventHandle(TEvents::TSystem::Wakeup, 0,
@@ -815,6 +847,28 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
+        if (DataCenterReconciliationDeadline) {
+            if (!response.GetSuccess()) {
+                TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                    SelfId(), {}, nullptr, DataCenterRetryCookie));
+                return;
+            }
+            std::expected<TDataCenterStates, TString> applied = ParseDataCenterStates(response.GetAppliedDataCenterStates());
+            std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(Self->StorageConfig->GetDataCenterStates());
+            if (!response.HasAppliedDataCenterStates() || !applied || !desired || *applied != *desired) {
+                throw TExError() << "BSC did not acknowledge the current DC state snapshot";
+            }
+            DataCenterReconciliationDeadline = {};
+            if (DataCenterPreflight) {
+                DataCenterPreflight = false;
+                NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
+                return StartProposition(&ProposedStorageConfig);
+            }
+            return Finish(TResult::OK, std::nullopt, [&](TResult *result) {
+                *result->MutableAppliedDataCenterStates() = response.GetAppliedDataCenterStates();
+            });
+        }
+
         YDB_LOG_DEBUG("Received TEvControllerConfigResponse",
             {"marker", "NWDC80"},
             {"selfId", SelfId()},

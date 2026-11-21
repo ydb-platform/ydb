@@ -126,14 +126,14 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             auto rows = CollectRows(it);
-            AFL_VERIFY(rows.size() == 3);
-            AFL_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT")) == 0);
-            AFL_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) >= 440000);
-            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) <= 550000);
-            AFL_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT")) == 0);
+            YDB_LOG_VERIFY(rows.size() == 3);
+            YDB_LOG_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT")) == 0);
+            YDB_LOG_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) >= 440000);
+            YDB_LOG_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) <= 550000);
+            YDB_LOG_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT")) == 0);
 
             for (auto&& i : rows) {
                 Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT")) << Endl;
@@ -154,7 +154,56 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        csController->WaitCompactions(TDuration::Seconds(10));
+        // WaitCompactions only notices a pause between compaction starts. Under ASan that pause
+        // is longer than the timeout while level 1 is still overloaded, so wait for the level stats.
+        {
+            auto readLevelRows = [&]() {
+                auto it = tableClient
+                              .StreamExecuteScanQuery(R"(
+                    --!syntax_v1
+                    SELECT CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS Uint64) AS LEVEL,
+                           CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.selectivity.default.records_count") AS Uint64) AS RECORDS_COUNT_DEFAULT,
+                           CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.selectivity.slice.records_count") AS Uint64) AS RECORDS_COUNT_SLICE
+                    FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
+                    ORDER BY LEVEL
+                )")
+                              .GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                return CollectRows(it);
+            };
+            auto describeLevels = [](const TVector<THashMap<TString, NYdb::TValue>>& rows) {
+                TStringBuilder sb;
+                for (auto&& i : rows) {
+                    sb << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT_DEFAULT")) << "/"
+                       << GetUint64(i.at("RECORDS_COUNT_SLICE")) << "\n";
+                }
+                return TString(sb);
+            };
+            auto levelsSettled = [](const TVector<THashMap<TString, NYdb::TValue>>& rows) {
+                if (rows.size() != 3) {
+                    return false;
+                }
+                return GetUint64(rows[0].at("LEVEL")) == 0 && GetUint64(rows[0].at("RECORDS_COUNT_DEFAULT")) == 0 &&
+                       GetUint64(rows[1].at("LEVEL")) == 1 && GetUint64(rows[1].at("RECORDS_COUNT_DEFAULT")) == 0 &&
+                       GetUint64(rows[2].at("LEVEL")) == 2 && GetUint64(rows[2].at("RECORDS_COUNT_SLICE")) == 109000;
+            };
+
+            const TInstant deadline = Now() + TDuration::Minutes(3);
+            TString previous;
+            while (true) {
+                auto rows = readLevelRows();
+                const TString current = describeLevels(rows);
+                if (current != previous) {
+                    Cerr << current << Endl;
+                    previous = current;
+                }
+                if (levelsSettled(rows)) {
+                    break;
+                }
+                UNIT_ASSERT_C(Now() < deadline, TStringBuilder() << "compaction did not move records to one layer:\n" << current);
+                Sleep(TDuration::Seconds(1));
+            }
+        }
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -200,12 +249,12 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
                 Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT_DEFAULT")) << "/"
                      << GetUint64(i.at("RECORDS_COUNT_SLICE")) << Endl;
             }
-            AFL_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT_DEFAULT")) == 0);
-            AFL_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT_DEFAULT")) == 0);
-            AFL_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
-            AFL_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT_SLICE")) == 109000);
+            YDB_LOG_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT_DEFAULT")) == 0);
+            YDB_LOG_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT_DEFAULT")) == 0);
+            YDB_LOG_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
+            YDB_LOG_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT_SLICE")) == 109000);
         }
     }
     Y_UNIT_TEST(MultiLayersOptimization) {
@@ -272,8 +321,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             ui32 levelIdx = 0;
             const std::vector<ui32> maxVal = { 100000, 100000, 200000, 300000, 100000000 };
             for (auto&& i : rows) {
-                AFL_VERIFY(levelIdx == GetUint64(i.at("LEVEL")));
-                AFL_VERIFY(GetUint64(i.at("BYTES")) < maxVal[levelIdx]);
+                YDB_LOG_VERIFY(levelIdx == GetUint64(i.at("LEVEL")));
+                YDB_LOG_VERIFY(GetUint64(i.at("BYTES")) < maxVal[levelIdx]);
                 Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("BYTES")) << Endl;
                 ++levelIdx;
             }

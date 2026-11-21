@@ -3824,14 +3824,29 @@ TExprNode::TPtr MakeWideTableSource(const TExprNode& tableSource, TExprContext& 
         columns.push_back(TString(item->GetName()));
     }
 
-    auto innerFlow = ctx.NewCallable(tableSource.Pos(), "ToFlow", { tableSource.HeadPtr() });
-    auto expandMap = MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx);
-    auto source = ctx.NewCallable(tableSource.Pos(), "WideTableSource", { expandMap });
+    // clang-format off
+    const auto innerFlow = ctx.Builder(tableSource.Pos())
+        .Callable("ToFlow")
+            .Add(0, tableSource.HeadPtr())
+        .Seal()
+        .Build();
+
+    auto wideFlow = ctx.Builder(tableSource.Pos())
+        .Callable("ToFlow")
+            .Callable(0, "WideTableSource")
+                .Callable(0, "FromFlow")
+                    .Add(0, MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+    // clang-format on
+
     if (narrowMapColumns) {
         *narrowMapColumns = columns;
-        return source;
+        return wideFlow;
     } else {
-        return MakeNarrowMap(tableSource.Pos(), columns, source, ctx);
+        return MakeNarrowMap(tableSource.Pos(), columns, wideFlow, ctx);
     }
 }
 
@@ -8546,8 +8561,9 @@ TExprNode::TPtr SqlCompareVariants(const TExprNode& node, TExprContext& ctx) {
             const auto& lItems = lTuple->GetItems();
             const auto& rItems = rTuple->GetItems();
             for (ui32 i = 0U; i < tupleType->GetSize(); ++i) {
+                const auto comparison = CanCompare<true>(lItems[i], rItems[i]);
                 variants.emplace_back(ctx.NewAtom(node.Pos(), i),
-                    !IsDistinct && ECompareOptions::Optional == CanCompare<true>(lItems[i], rItems[i]));
+                                      !IsDistinct && (comparison == ECompareOptions::Optional || comparison == ECompareOptions::Null));
             }
 
             break;
@@ -8839,6 +8855,49 @@ TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     return node;
+}
+
+template <bool Equals>
+TExprNode::TPtr ExpandOptAggrEquals(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto callable = Equals ? "AggrEquals" : "AggrNotEquals";
+    if (input->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
+        return ctx.RenameNode(*input, callable);
+    }
+    // clang-format off
+    return ctx.Builder(input->Pos())
+        .Callable("FlatMap")
+            .Add(0, input->HeadPtr())
+            .Lambda(1)
+                .Param("left")
+                .Callable("FlatMap")
+                    .Add(0, input->TailPtr())
+                    .Lambda(1)
+                        .Param("right")
+                        .Callable("Just")
+                            .Callable(0, callable)
+                                .Arg(0, "left")
+                                .Arg(1, "right")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr ExpandJoinEquals(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto type = input->Head().GetTypeAnn();
+    if (!type->HasYqlNaN()) {
+        return ctx.RenameNode(*input, "==");
+    }
+    if (!type->HasOptionalOrNull()) {
+        return ctx.RenameNode(*input, "AggrEquals");
+    }
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        return ReduceBothArgs<true>(*input, ctx);
+    }
+    return ExpandSqlEqual<true, false>(input, ctx);
 }
 
 template<bool Asc, bool Equals>
@@ -9294,6 +9353,9 @@ struct TPeepHoleRules {
         {"<=", &ExpandSqlCompare<true, true>},
         {">=", &ExpandSqlCompare<false, true>},
         {"AggrEquals", &ExpandAggrEqual<true>},
+        {"JoinEquals", &ExpandJoinEquals},
+        {"OptAggrEquals", &ExpandOptAggrEquals<true>},
+        {"OptAggrNotEquals", &ExpandOptAggrEquals<false>},
         {"AggrNotEquals", &ExpandAggrEqual<false>},
         {"AggrLess", &ExpandAggrCompare<true, false>},
         {"AggrGreater", &ExpandAggrCompare<false, false>},

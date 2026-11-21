@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_join.h>
@@ -407,6 +408,103 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
         .Build()
         .OutIndex().Value(0U).Build()
         .Done();
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassIdentityMapWithSysColumns(TExprBase node, TExprContext& ctx) const {
+    if (node.Ref().StartsExecution() || node.Ref().HasResult()) {
+        return node;
+    }
+    auto op = node.Cast<TYtTransientOpBase>();
+    if (auto mapReduce = op.Maybe<TYtMapReduce>(); mapReduce && mapReduce.Cast().Mapper().Maybe<TCoVoid>()) {
+        return node; // MapReduce without a mapper cannot read SysColumns.
+    }
+
+    for (size_t i = 0; i < op.Ref().ChildrenSize(); ++i) {
+        const auto& child = op.Ref().ChildPtr(i);
+        if (!child->IsLambda() || (op.Maybe<TYtMapReduce>() && i != TYtMapReduce::idx_Mapper)) {
+            continue;
+        }
+        if (HasYtRowNumber(*child) || HasYtTableIndex(*child)) {
+            return node;
+        }
+    }
+
+    const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(
+        IsAvailableLangVersion(NFeature::ConvertDynamicTablesToStaticBeforeJoin.MinLangVer, State_->Types->LangVer) ? EConvertDynamicTablesToStatic::Join : EConvertDynamicTablesToStatic::Disable
+    );
+    const bool keepDynamicInputMap = !op.Maybe<TYtMap>()
+        && (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::All
+            || (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Join && op.Maybe<TYtEquiJoin>()));
+
+    bool hasUpdates = false;
+    TVector<TYtSection> updatedSections(op.Input().begin(), op.Input().end());
+    TSyncMap syncList;
+    for (auto& section : updatedSections) {
+        if (section.Paths().Size() != 1
+            || NYql::HasSetting(section.Settings().Ref(), EYtSettingType::SysColumns)
+            || HasNonEmptyKeyFilter(section)) {
+            continue;
+        }
+        auto path = section.Paths().Item(0);
+        if (!path.Columns().Maybe<TCoVoid>() || !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>()) {
+            continue;
+        }
+        auto maybeMap = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtMap>();
+        if (!maybeMap) {
+            continue;
+        }
+        auto map = maybeMap.Cast();
+        if (map.Ref().StartsExecution() || map.Ref().HasResult()
+            || map.Input().Size() != 1 || map.Output().Size() != 1
+            || map.Mapper().Body().Raw() != map.Mapper().Args().Arg(0).Raw()
+            || map.DataSink().Cluster().Value() != op.DataSink().Cluster().Value()
+            || NYql::HasSettingsExcept(map.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::Ordered | EYtSettingType::KeepSorted)) {
+            continue;
+        }
+        auto input = map.Input().Item(0);
+        if (NYql::HasSettingsExcept(input.Settings().Ref(), EYtSettingType::SysColumns | EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2)
+            || HasNonEmptyKeyFilter(input)) {
+            continue;
+        }
+        const auto sysColumns = NYql::GetSettingAsColumnList(input.Settings().Ref(), EYtSettingType::SysColumns);
+        if (sysColumns.empty() || AnyOf(sysColumns, [](const TString& column) { return column != "path" && column != "record" && column != "num"; })) {
+            continue;
+        }
+        const auto outRowSpec = TYqlRowSpecInfo(map.Output().Item(0).RowSpec());
+        if (AnyOf(input.Paths(), [&outRowSpec, keepDynamicInputMap](const TYtPath& source) {
+            if (!source.Table().Maybe<TYtTable>() || !source.QLFilter().Maybe<TCoVoid>()) {
+                return true;
+            }
+            const TYtPathInfo sourceInfo(source);
+            return sourceInfo.RequiresRemap()
+                || (keepDynamicInputMap && sourceInfo.Table->Meta->IsDynamic)
+                || (outRowSpec.IsSorted() && (!sourceInfo.Table->RowSpec || !outRowSpec.CompareSortness(*sourceInfo.Table->RowSpec)));
+        })) {
+            continue;
+        }
+
+        section = Build<TYtSection>(ctx, section.Pos())
+            .InitFrom(section)
+            .Paths(input.Paths())
+            .Settings(NYql::AddSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns, sysColumns, ctx))
+            .Done();
+        hasUpdates = true;
+        if (!map.World().Ref().IsWorld()) {
+            syncList.emplace(map.World().Ptr(), syncList.size());
+        }
+    }
+    if (!hasUpdates) {
+        return node;
+    }
+
+    auto inputs = Build<TYtSectionList>(ctx, op.Input().Pos())
+        .Add(updatedSections)
+        .Done();
+    auto result = ctx.ChangeChild(node.Ref(), TYtTransientOpBase::idx_Input, inputs.Ptr());
+    if (!syncList.empty()) {
+        result = ctx.ChangeChild(*result, TYtTransientOpBase::idx_World, ApplySyncListToWorld(op.World().Ptr(), syncList, ctx));
+    }
+    return TExprBase(result);
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExprBase node, TExprContext& ctx) const {

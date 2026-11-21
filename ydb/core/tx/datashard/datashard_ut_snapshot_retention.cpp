@@ -992,6 +992,82 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
+    Y_UNIT_TEST(KqpDelayedSnapshotAcquisitionKeepsFirstRemoteReadConsistent) {
+        TSnapshotRetentionTest test(true, 2);
+        auto& runtime = test.GetRuntime();
+        using TService = NLongTxService::TEvLongTxService;
+        test.WriteVersion(1);
+
+        TActorId snapshotManager, acquireActor;
+        TRowVersion acquiredSnapshot = TRowVersion::Min();
+        bool acquiredWithHandle = false;
+        auto requestObserver = runtime.AddObserver<TService::TEvAcquireReadSnapshot>([&](auto& ev) {
+            if (!snapshotManager && !ev->Get()->Snapshot && ev->Get()->TableIds.empty()) {
+                snapshotManager = ev->Sender;
+            }
+        });
+        auto stepObserver = runtime.AddObserver<TEvTxProxy::TEvAcquireReadStep>([&](auto& ev) {
+            if (snapshotManager && !acquireActor) {
+                acquireActor = ev->Sender;
+            }
+        });
+        TBlockEvents<TEvTxProxy::TEvAcquireReadStepResult> delayed(runtime, [&](const auto& ev) {
+            return acquireActor && ev->GetRecipientRewrite() == acquireActor;
+        });
+        auto resultObserver = runtime.AddObserver<TService::TEvAcquireReadSnapshotResult>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == snapshotManager && ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+                acquiredSnapshot = ev->Get()->Snapshot;
+                acquiredWithHandle = bool(ev->Get()->SnapshotHandle);
+            }
+        });
+
+        const TString sessionId = NKqpHelpers::CreateSessionRPC(runtime);
+        auto request = NKqpHelpers::MakeSimpleRequestRPC(
+            "SELECT key, value FROM `/Root/table-a` ORDER BY key;", sessionId, {}, false);
+        request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
+        auto pending = NKqpHelpers::SendRequest(runtime, std::move(request));
+        runtime.WaitFor("the original coordinator reply is delayed", [&] {
+            return !delayed.empty();
+        }, TDuration::Seconds(30));
+        const TRowVersion delayedSnapshot(delayed.front()->Get()->Record.GetStep(), Max<ui64>());
+
+        // No retention handle exists yet. The target may legitimately remove
+        // history at this version while the coordinator reply is in transit.
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-b` (key, value) VALUES (1, 2);");
+        test.RunCleanup();
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, delayedSnapshot));
+        UNIT_ASSERT(!acquiredSnapshot);
+
+        delayed.Stop().Unblock();
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::KqpSimpleBeginWait(runtime, txId, std::move(pending)),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+        UNIT_ASSERT(acquiredWithHandle);
+        UNIT_ASSERT(delayedSnapshot < acquiredSnapshot);
+        UNIT_ASSERT(!test.IsRemoved(test.ShardB, acquiredSnapshot));
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-b` (key, value) VALUES (1, 3);");
+        runtime.WaitFor("the replacement snapshot is published to the remote node", [&] {
+            const auto registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            return registry && registry->HasSnapshot(test.TableB, acquiredSnapshot);
+        }, TDuration::Seconds(30));
+        test.RunCleanup();
+        UNIT_ASSERT(acquiredSnapshot < test.GetCleanupBoundary(test.ShardB));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardB, acquiredSnapshot));
+
+        // The transaction first visits the target after its MVCC window has
+        // expired, using the safely reacquired version rather than the removed one.
+        UNIT_ASSERT_VALUES_EQUAL(NKqpHelpers::KqpSimpleContinue(runtime, sessionId, txId,
+            "SELECT key, value FROM `/Root/table-b` ORDER BY key;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 2 } }");
+        NKqpHelpers::CloseSession(runtime, sessionId);
+    }
+
     Y_UNIT_TEST(ExplicitSnapshotSurvivesDelayedPublication) {
         TSnapshotRetentionTest test(true, 2);
         auto& runtime = test.GetRuntime();

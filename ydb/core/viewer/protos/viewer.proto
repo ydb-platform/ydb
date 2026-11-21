@@ -12,6 +12,7 @@ import "ydb/core/protos/kqp.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/public/api/protos/ydb_bridge_common.proto";
 import "ydb/core/protos/sys_view.proto";
+import "ydb/core/protos/subdomains.proto";
 
 package NKikimrViewer;
 option java_package = "ru.yandex.kikimr.proto";
@@ -351,10 +352,6 @@ message TBridgePileInfo {
     optional uint32 AliveStorageNodes = 9;
     optional uint32 ComputeNodes = 10; // Known dynamic nodes.
     optional uint32 AliveComputeNodes = 11;
-    // Storage-owning databases with fully bridged pools, keyed by synchronization status.
-    // Serverless databases without own storage pools do not increase these counts.
-    // Shares completeness with TBridgeInfo.BridgeDatabasesComplete.
-    map<string, uint64> DatabaseCountsBySyncStatus = 12;
 }
 
 message TBridgeInfo {
@@ -363,8 +360,11 @@ message TBridgeInfo {
     // Serverless databases without own storage pools do not increase this count.
     // A lower bound while BridgeDatabasesComplete is false.
     optional uint64 BridgeDatabases = 2;
-    // False if pool ownership is incomplete or the matching BSC snapshot is unavailable/incomplete.
+    // False if pool ownership is incomplete or the matching global BSC counts are unavailable.
     optional bool BridgeDatabasesComplete = 3;
+    // Each fully bridged storage-owning database is counted once, using all required copies in all piles.
+    // Shares completeness with BridgeDatabasesComplete; omitted when the BSC snapshot lacks global counts.
+    map<string, uint64> DatabaseCountsBySyncStatus = 4;
 }
 
 message TClusterInfo {
@@ -463,6 +463,11 @@ message TTenant {
     // Omitted when the database's storage mode is unavailable or mixed.
     optional bool BridgeMode = 56;
     optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 57;
+    // Copied as is from the SchemeShard description of the database (with storage=true), when it has them.
+    // DomainState contains only the flags that are true; DiskQuotaExceeded means that writes are blocked.
+    // DiskSpaceQuotaUsage is absent when the SchemeShard is too old to report it.
+    optional NKikimrSubDomains.TDomainState DomainState = 58;
+    optional NKikimrSubDomains.TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 59;
 }
 
 message TTenants {

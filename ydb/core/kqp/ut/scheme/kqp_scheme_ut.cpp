@@ -6710,6 +6710,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(RebuildVectorIndexSameColumnsSql) {
         // Rebuild without changing the column set (columns omitted entirely) must still work.
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -6751,6 +6752,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(RebuildVectorIndexInvalidClustersAndLevelsSql) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -10089,7 +10091,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"Value1\"}`))";
+                NAME=min_max_value1, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"Value1\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             result = session.ExecuteSchemeQuery(query2).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -10098,7 +10101,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value2, TYPE=MAX, FEATURES=`{\"column_name\": \"Value2\"}`))";
+                NAME=min_max_value2, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"Value2\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             result = session.ExecuteSchemeQuery(query2).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -10358,7 +10362,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "_serial_column_Key");
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 9223372036854775807);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 2147483647);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 50);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 1);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 11);
@@ -16421,7 +16425,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+                NAME=min_max_value1, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"created_at\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
 
@@ -17078,7 +17083,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"created_at\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17389,7 +17395,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"timestamp\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17428,7 +17435,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"timestamp\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }

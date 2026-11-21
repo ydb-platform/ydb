@@ -246,7 +246,7 @@ WINDOW <window_name> AS (
 | [`PARTITION BY`](window.md#partition) | Divides rows into independent partitions. Without `PARTITION BY`, all input rows form a single partition. The key can be a column or expression; an alias can be assigned to an expression. |
 | [`ORDER BY`](window.md#partition) | Sets the row order within a partition. `ASC` is the default direction, `DESC` specifies reverse order. To order the query result, a separate `ORDER BY` is needed after the `WINDOW` clause. |
 | [`ROWS`](window.md#frame) | Sets a frame by row offsets relative to the current row. Aggregate functions, as well as `FIRST_VALUE`, `LAST_VALUE`, and `NTH_VALUE`, are computed over the frame. The functions `ROW_NUMBER`, `LAG`, and `LEAD` operate over the entire partition regardless of the frame. |
-| Default frame | If no frame is specified, `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used when there is a window `ORDER BY`, and `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` otherwise. To get the last value of the entire partition via `LAST_VALUE`, explicitly set the frame end to `UNBOUNDED FOLLOWING`. |
+| Default frame | In the Query Service, the [`AnsiCurrentRow`](../pragma.md#ansicurrentrow) pragma is enabled by default. If no frame is specified, then, when a window `ORDER BY` is present, `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used: it includes all rows from the start of the partition up to the last row with the same sort key values as the current one. When the pragma is disabled, `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used. Without a window `ORDER BY`, `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` is used. To get the last value of the entire partition via `LAST_VALUE`, explicitly set the frame end to `UNBOUNDED FOLLOWING`. |
 | [`COMPACT`](window.md) | Selects in-memory execution for the `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` frame. Memory consumption depends on the partition size. |
 
 Instead of `<frame_bound>`, `<frame_start>`, and `<frame_end>`, one of the following forms is specified:
@@ -259,7 +259,7 @@ CURRENT ROW
 UNBOUNDED FOLLOWING
 ```
 
-The `PRECEDING` forms count backward, `FOLLOWING` forms count forward; `UNBOUNDED` means the partition boundary. If only one boundary is specified, it sets the start, and the end is considered `CURRENT ROW`. The start cannot be `UNBOUNDED FOLLOWING`, and the end cannot be `UNBOUNDED PRECEDING`. `<frame_offset>` is a non-negative integer. For an unambiguous row order with equal `<sort_key>` values, add a key that distinguishes those rows to the window `ORDER BY`.
+The `PRECEDING` forms count backward, `FOLLOWING` forms count forward; `UNBOUNDED` means the partition boundary. If only one boundary is specified, it sets the start, and the end is considered `CURRENT ROW`. `<frame_offset>` is a non-negative integer. For an unambiguous row order with equal `<sort_key>` values, add a key that distinguishes those rows to the window `ORDER BY`.
 
 ### Other notation forms {#select-alternative-overview}
 
@@ -322,7 +322,8 @@ The result of the `SELECT` query is computed as follows:
 
 ## Column order in YQL {#orderedcolumns}
 
-In standard SQL, the order of columns specified in the projection (in `SELECT`) matters. Besides the fact that the column order must be preserved when displaying query results or when writing to a new table, some SQL constructs use this order. This applies in particular to [UNION ALL](union.md#union-all) and positional [ORDER BY](order_by.md) (ORDER BY ordinal).
+In standard SQL, the order of columns specified in the projection (in `SELECT`) matters. Besides the fact that the column order must be preserved when displaying query results or when writing to a new table, some SQL constructs use this order.
+This applies in particular to [UNION ALL](union.md#union-all) and positional [ORDER BY](order_by.md) (ORDER BY ordinal).
 
 By default, the order of columns is ignored in YQL:
 
@@ -536,6 +537,7 @@ SELECT * FROM FILTER(
 {% if feature_secondary_index %}
 
 * [VIEW secondary_index](secondary_index.md)
+
 * [VIEW vector_index](vector_index.md)
 * [VIEW fulltext_index](fulltext_index.md)
 * [Hybrid search](hybrid_search.md)

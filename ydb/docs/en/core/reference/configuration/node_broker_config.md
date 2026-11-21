@@ -1,5 +1,7 @@
 # node_broker_config
 
+## Configuration {#node-broker-config}
+
 The `node_broker_config` section configures stable node names for dynamic nodes in {{ ydb-short-name }} clusters. Node names are assigned through the Node Broker, which is a system tablet that registers dynamic nodes in the cluster.
 
 Node Broker assigns names to dynamic nodes when they register in the cluster. By default, a node name consists of the hostname and the port on which the node is running.
@@ -8,7 +10,7 @@ In a dynamic environment where hostnames often change, such as in Kubernetes, us
 
 A stable name identifies a node within the tenant. It consists of a prefix and a node's sequential number within its tenant. If a dynamic node has been shut down, after a timeout, its stable name can be taken by a new dynamic node serving the same tenant.
 
-To enable stable node names, you need to add the following to the cluster configuration:
+To enable stable node names, set the `enable_stable_node_names` [feature flag](feature_flags.md) in the cluster configuration:
 
 ```yaml
 feature_flags:

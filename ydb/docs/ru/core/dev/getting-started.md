@@ -21,7 +21,7 @@
 Кроме того, рекомендуется настроить хотя бы один из доступных способов запуска произвольных запросов в целях отладки. Выберите часть из них по своим предпочтениям:
 
 * [YDB CLI](../reference/ydb-cli/install.md)
-* [Встроенный пользовательский интерфейс](../reference/embedded-ui/index.md)
+* [{{ ydb-ui-name }}](../reference/ydb-ui/index.md)
 * Любая среда разработки SQL, поддерживающая [JDBC](https://github.com/ydb-platform/ydb-jdbc-driver).
 
 ## Начать писать код

@@ -695,11 +695,11 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### CMS {#cms}
 
-**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of a [cluster {{ ydb-short-name }}](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, etc. CMS includes Sentinel, a component that implements [SelfHeal](#self-heal).
+**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used for performing rolling restarts of the cluster without affecting user workloads, maintenance, cluster reconfiguration, etc. CMS includes Sentinel, a component that implements [SelfHeal](#self-heal).
 
 #### SelfHeal {#self-heal}
 
-**SelfHeal** is a mechanism for automatically maintaining and restoring cluster fault tolerance. SelfHeal of [storage](../maintenance/manual/selfheal.md) moves [VDisk](#vdisk) of storage groups after prolonged failures of nodes or disks. SelfHeal of [State Storage](../maintenance/manual/selfheal_statestorage.md) moves replicas of the metadata distribution subsystem after failures and adds replicas when new nodes appear.
+[**SelfHeal**](../devops/concepts/selfheal.md) is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../devops/concepts/selfheal-storage.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) relocates [State Storage](#state-storage), [Board](#board), and [SchemeBoard](#scheme-board) replicas after failures and can add replicas when new nodes appear.
 
 #### NodeBroker {#node-broker}
 
@@ -952,3 +952,7 @@ MiniKQL is a low-level language. End users of the system only see queries in [YQ
 ### KiKiMR {#kikimr}
 
 **KiKiMR** is the legacy name of {{ ydb-short-name }}, used before it became an [open-source product](https://github.com/ydb-platform/ydb) (open source). It may still be found in source code, old articles, videos, and so on.
+
+### Tablet Recovery Mode {#tablet-recovery-mode}
+
+**Recovery mode** is a mode in which a tablet is started and accessible via the [{{ ydb-ui-name }}](../reference/ydb-ui/index.md), but **does not respond to requests**, **does not perform any background activities**, and **does not read data from the distributed storage**, allowing recovery operations to be performed. Other tablets continue to operate normally, allowing the cluster to keep functioning, but operations and UI related to the tablet placed in Recovery mode will be unavailable.

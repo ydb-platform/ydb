@@ -1,5 +1,7 @@
 # auth_config
 
+## Configuration {#auth-config}
+
 {{ ydb-short-name }} allows using various methods of user authentication in the system. Authentication settings and authentication providers are set in the `auth_config` section of the {{ ydb-short-name }} configuration file.
 
 ## Configuring authentication for local users {{ ydb-short-name }} {#local-auth-config}

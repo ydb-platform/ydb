@@ -2,7 +2,7 @@
 
 {% include [_](../_includes/experimental_v2.md) %}
 
-When using [configuration V2](index.md), [SelfHeal](../../../maintenance/manual/selfheal.md) can automatically move a static group VDisk from a faulty PDisk and restore the group's fault tolerance.
+When using [configuration V2](index.md), [SelfHeal](../../concepts/selfheal-storage.md) can automatically move a static group VDisk from faulty PDisks and restore the group's fault tolerance.
 
 The general SelfHeal mechanism detects a faulty PDisk and initiates VDisk relocation. For dynamic groups, the Blob Storage Controller changes the configuration, while distributed configuration changes the static group configuration.
 
@@ -12,8 +12,8 @@ To allow distributed configuration to change the static group automatically, ena
 
 Static group SelfHeal requires the following components to be enabled:
 
-* the distributed configuration mechanism in configuration V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
-* the general SelfHeal mechanism, which is [enabled by default](../../../maintenance/manual/selfheal.md#on-off).
+* [distributed configuration](../../../concepts/glossary.md#distributed-configuration) V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
+* the general SelfHeal mechanism, which is [enabled by default](../../concepts/selfheal-storage.md#on-off).
 
 To enable or disable automatic static group management:
 

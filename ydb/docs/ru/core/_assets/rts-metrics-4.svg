@@ -1,0 +1,12 @@
+<svg width='800' height='80' xmlns='http://www.w3.org/2000/svg'>
+
+<style type='text/css'>
+  rect { stroke-width:0; fill:#5781B9; }
+  polygon { stroke-width:0; fill:#5781B9; }
+  polygon.light { fill:#6F93C3; }
+</style>
+
+<rect x='100' y='10' width='600' height='60' />
+<polygon points='100,10 175,52 700,58 700,10 ' class='light' />
+
+</svg>

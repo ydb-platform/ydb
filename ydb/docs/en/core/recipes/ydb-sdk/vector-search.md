@@ -1,10 +1,10 @@
-# Vector search
+# Vector search {#vector-search}
 
 This section contains code recipes in different programming languages for [vector search](../../concepts/query_execution/vector_search.md) tasks using the {{ ydb-short-name }} SDK.
 
 The following operations are covered in detail:
 
-- [Vector search](#vector-search)
+- Vector search
   - [Connecting to {{ ydb-short-name }}](#connect-ydb)
   - [Creating a table](#create-table)
   - [Inserting vectors](#insert-vectors)
@@ -357,16 +357,10 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
     - Recommended approach
 
+        Use `NYdb::NValueHelpers::Embedding` from C++ SDK v3.24.0 or later to serialize the vector.
+
         ```cpp
-        std::string ConvertVectorToBytes(const std::vector<float>& vector)
-        {
-            std::string result;
-            for (const auto& value : vector) {
-                const char* bytes = reinterpret_cast<const char*>(&value);
-                result += std::string(bytes, sizeof(float));
-            }
-            return result + "\x01";
-        }
+        #include <ydb-cpp-sdk/client/value/embedding.h>
 
         void InsertItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
@@ -377,7 +371,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 DECLARE $items AS List<Struct<
                     id: Utf8,
                     document: Utf8,
-                    embedding: String
+                    embedding: Bytes
                 >>;
                 UPSERT INTO `{0}`
                 (
@@ -400,7 +394,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 valueBuilder.BeginStruct();
                 valueBuilder.AddMember("id").Utf8(item.Id);
                 valueBuilder.AddMember("document").Utf8(item.Document);
-                valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+                valueBuilder.AddMember("embedding", NYdb::NValueHelpers::Embedding(item.Embedding));
                 valueBuilder.EndStruct();
             }
             valueBuilder.EndList();
@@ -413,12 +407,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
             std::cout << items.size() << " items inserted" << std::endl;
         }
         ```
-
-        {% note info %}
-
-        The `ConvertVectorToBytes` function assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) byte order on the client (e.g. x86_64). If a different byte order is used, adapt the `ConvertVectorToBytes` function accordingly.
-
-        {% endnote %}
 
     - Alternative approach
 
@@ -484,22 +472,10 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
 - Go
 
-    The function converts a float32 vector to the binary layout and runs a parameterized query:
+    Use `sugar.Embedding` from Go SDK v3.153.0 or later to serialize the vector. Then execute a parameterized query:
 
     ```go
-    import (
-        "encoding/binary"
-        "math"
-    )
-
-    func convertVectorToBytes(vector []float32) []byte {
-        buf := make([]byte, len(vector)*4+1)
-        for i, v := range vector {
-        binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
-        }
-        buf[len(buf)-1] = 0x01
-        return buf
-    }
+    import "github.com/ydb-platform/ydb-go-sdk/v3/sugar"
 
     func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
         query := fmt.Sprintf(`
@@ -520,7 +496,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
         rows = append(rows, types.StructValue(
             types.StructFieldValue("id", types.UTF8Value(item.ID)),
             types.StructFieldValue("document", types.UTF8Value(item.Document)),
-            types.StructFieldValue("embedding", types.BytesValue(convertVectorToBytes(item.Embedding))),
+            types.StructFieldValue("embedding", sugar.Embedding(item.Embedding...)),
         ))
         }
 
@@ -704,6 +680,8 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
     - Recommended approach
 
+        Use `ydb.convert_floats_to_embedding_bytes` from Python SDK 3.33.1 or later to serialize vectors.
+
         The method accepts an array of dictionaries `items`, where each dictionary contains `id` (identifier), `document` (text), and `embedding` (vector representation of the text, pre-serialized to a byte sequence).
 
         The example below creates `items_struct_type = ydb.StructType()` with field types. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
@@ -713,13 +691,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
         - Native SDK
 
             ```python
-            import struct
             import ydb
-
-
-            def convert_vector_to_bytes(vector: list[float]) -> bytes:
-                b = struct.pack("f" * len(vector), *vector)
-                return b + b"\x01"
 
             def insert_items_vector_as_bytes(
                 pool: ydb.QuerySessionPool,
@@ -752,7 +724,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
                 for item in items:
-                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+                    item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
                 pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -764,12 +736,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
         - Native SDK (Asyncio)
 
             ```python
-            import struct
             import ydb
-
-            def convert_vector_to_bytes(vector: list[float]) -> bytes:
-                b = struct.pack("f" * len(vector), *vector)
-                return b + b"\x01"
 
             async def insert_items_vector_as_bytes(
                 pool: ydb.aio.QuerySessionPool,
@@ -802,7 +769,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
                 for item in items:
-                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+                    item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
                 await pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -1042,7 +1009,7 @@ Available strategies:
 * `distance=euclidean`;
 * `distance=manhattan`.
 
-Each strategy defines the function used for subsequent search. For details on these functions, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance).
+Each strategy defines the function used for subsequent search. For details on these functions, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
 
 Parameters for the `vector_kmeans_tree` index type are described in the [vector index](../../dev/vector-indexes.md#kmeans-tree-type).
 
@@ -1304,7 +1271,7 @@ Supported values:
 * `ManhattanDistance`;
 * `EuclideanDistance`.
 
-For details, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance).
+For details, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
 
 You can specify the index name. If set, the query will include the `VIEW index_name` expression so that the vector index is used for search.
 
@@ -1319,6 +1286,8 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
     - Recommended approach
 
         ```cpp
+        #include <ydb-cpp-sdk/client/value/embedding.h>
+
         std::vector<TResultItem> SearchItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
             const std::string& tableName,
@@ -1333,7 +1302,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
             std::string query = std::format(R"(
                 PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-                DECLARE $embedding as String;
+                DECLARE $embedding as Bytes;
                 SELECT
                     id,
                     document,
@@ -1344,9 +1313,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
             )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
             auto params = NYdb::TParamsBuilder()
-                .AddParam("$embedding")
-                    .String(ConvertVectorToBytes(embedding))
-                    .Build()
+                .AddParam("$embedding", NYdb::NValueHelpers::Embedding(embedding))
                 .Build();
 
             std::vector<TResultItem> result;
@@ -1474,7 +1441,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
         row, err := db.Query().Query(ctx, q,
         query.WithParameters(
-            ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
+            ydb.ParamsBuilder().Param("$embedding").Any(sugar.Embedding(embedding...)).Build(),
         ),
         )
         if err != nil {
@@ -1695,7 +1662,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
                     query,
                     {
                         "$embedding": (
-                            convert_vector_to_bytes(embedding),
+                            ydb.convert_floats_to_embedding_bytes(embedding),
                             ydb.PrimitiveType.String,
                         ),
                     },
@@ -1749,7 +1716,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
                     query,
                     {
                         "$embedding": (
-                            convert_vector_to_bytes(embedding),
+                            ydb.convert_floats_to_embedding_bytes(embedding),
                             ydb.PrimitiveType.String,
                         ),
                     },

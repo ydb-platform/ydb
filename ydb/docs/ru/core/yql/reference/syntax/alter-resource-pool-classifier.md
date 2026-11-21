@@ -1,6 +1,6 @@
 # ALTER RESOURCE POOL CLASSIFIER
 
-`ALTER RESOURCE POOL CLASSIFIER` изменяет определение [классификатора пула ресурсов](../../../concepts/glossary.md#resource-pool-classifier.md).
+`ALTER RESOURCE POOL CLASSIFIER` изменяет определение [классификатора пула ресурсов](../../../concepts/glossary.md#resource-pool-classifier).
 
 ## Синтаксис
 
@@ -53,5 +53,5 @@ GRANT 'ALL' ON `/my_db` TO `user1@domain`;
 ## См. также
 
 * [{#T}](../../../dev/resource-consumption-management.md)
-* [{#T}](create-resource-pool-classifier.md)
+* [CREATE RESOURCE POOL CLASSIFIER](create-resource-pool-classifier.md)
 * [{#T}](drop-resource-pool-classifier.md)

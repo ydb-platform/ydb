@@ -126,6 +126,12 @@ common:
     to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
   - from: /maintenance/manual/cms.md
     to: /devops/configuration-management/configuration-v1/cms.md
+  - from: /maintenance/manual/selfheal.md
+    to: /devops/concepts/selfheal-storage.md
+  - from: /maintenance/manual/selfheal_statestorage.md
+    to: /devops/concepts/selfheal-metadata-distribution.md
+  - from: /devops/concepts/selfheal-state-storage.md
+    to: /devops/concepts/selfheal-metadata-distribution.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
   - from: /devops/manual/backup-and-recovery.md
@@ -175,11 +181,19 @@ common:
   - from: /operations/manage-users-attr.md
     to: /dev/custom-attributes.md
   - from: /operations/query_plans_optimization.md
-    to: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
   - from: /dev/query-plans-optimization.md
-    to: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
   - from: /dev/query-hints.md
-    to: /dev/query-execution-optimization/query-hints.md
+    to: /dev/optimization/hints.md
+  - from: /dev/query-execution-optimization/index.md
+    to: /dev/optimization/index.md
+  - from: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
+  - from: /dev/query-execution-optimization/query-hints.md
+    to: /dev/optimization/hints.md
+  - from: /dev/query-execution-optimization/parameterized-queries.md
+    to: /dev/optimization/parameterized-queries.md
   - from: /best_practices/cdc.md
     to: /dev/cdc.md
   - from: /best_practices/pk-olap-scalability.md
@@ -337,21 +351,27 @@ common:
   - from: /administration/ydb-dstool-setup.md
     to: /reference/ydb-dstool/install.md
 
-# Redirects for Embedded UI
+# Redirects for YDB UI
   - from: /maintenance/embedded_monitoring/ydb_monitoring.md
-    to: /reference/embedded-ui/ydb-monitoring.md
+    to: /reference/ydb-ui/ydb-monitoring.md
   - from: /maintenance/embedded_monitoring/overview.md
-    to: /reference/embedded-ui/overview.md
+    to: /reference/ydb-ui/overview.md
   - from: /maintenance/embedded_monitoring/hive.md
-    to: /reference/embedded-ui/hive.md
+    to: /reference/ydb-ui/hive.md
   - from: /maintenance/embedded_monitoring/logs.md
-    to: /reference/embedded-ui/logs.md
+    to: /reference/ydb-ui/logs.md
   - from: /maintenance/embedded_monitoring/interconnect_overview.md
-    to: /reference/embedded-ui/interconnect-overview.md
+    to: /reference/ydb-ui/interconnect-overview.md
   - from: /maintenance/embedded_monitoring/charts.md
-    to: /reference/embedded-ui/charts.md
+    to: /reference/ydb-ui/charts.md
   - from: /maintenance/embedded_monitoring/index.md
-    to: /reference/embedded-ui/index.md
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui$
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui/$
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui/(.*)$
+    to: /reference/ydb-ui/$1
 
 # Redirects for recipes
   - from: reference/ydb-sdk/recipes/auth-access-token.md

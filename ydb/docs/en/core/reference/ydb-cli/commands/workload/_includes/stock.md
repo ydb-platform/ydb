@@ -60,6 +60,14 @@ Creating a database with 10 products, 100 items of each product, 10 orders, and 
 {{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 --min-partitions 100
 ```
 
+## Deleting tables {#clean}
+
+To delete the tables created during load test initialization, run:
+
+```bash
+{{ ydb-cli }} [global options...] workload stock clean [options...]
+```
+
 ## Running a load test {#run}
 
 To run the load, execute the command:

@@ -23,7 +23,7 @@ Three command modes are supported:
 
 `<topic-path>`: Topic path
 
-### Basic optional parameters
+### Basic optional parameters {#basic-optional-parameters}
 
 `-c VAL`, `--consumer VAL`: Topic consumer name.
 

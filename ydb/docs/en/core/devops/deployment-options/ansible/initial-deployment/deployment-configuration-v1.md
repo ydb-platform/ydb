@@ -263,6 +263,8 @@ Encrypt this file with the command `ansible-vault encrypt inventory/99-inventory
 
 ## Prepare the {{ ydb-short-name }} configuration file {#ydb-config-prepare}
 
+The examples below contain a `feature_flags` section. Before changing its values, read about [feature flags and guidelines for changing them](../../../../reference/configuration/feature_flags.md).
+
 Create the file `files/config.yaml` and fill it according to the chosen topology (see [topology selection](./deployment-preparation.md#topology-select)). Examples for each supported topology are in the tabs below — choose the one that fits.
 
 {% list tabs %}
@@ -889,15 +891,15 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-name }} cluster. It will contain a [domain](../../../../concepts/glossary.md#domain) named from the `ydb_domain` setting (default `Root`), a [database](../../../../concepts/glossary.md#database) named from the `ydb_dbname` setting (default `database`), and an initial [user](../../../../concepts/glossary.md#access-user) named from the `ydb_user` setting (default `root`).
+Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-name }} cluster. It will contain a domain named from the `ydb_domain` setting (default `Root`), a [database](../../../../concepts/glossary.md#database) named from the `ydb_dbname` setting (default `database`), and an initial [user](../../../../concepts/glossary.md#access-user) named from the `ydb_user` setting (default `root`).
 
 ## Additional steps {#additional-steps}
 
-The easiest way to explore the newly deployed cluster is [Embedded UI](../../../../reference/embedded-ui/index.md), which runs on port 8765 on each server. If you do not have direct browser access to that port, set up SSH tunneling by running `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` on your local machine (add more options if needed). After the connection is established, open [localhost:8765](http://localhost:8765) in your browser. The browser may ask you to accept a security exception. Example:
+The easiest way to explore the newly deployed cluster is [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md), which runs on port 8765 on each server. If you do not have direct browser access to that port, set up SSH tunneling by running `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` on your local machine (add more options if needed). After the connection is established, open [localhost:8765](http://localhost:8765) in your browser. The browser may ask you to accept a security exception. Example:
 
 ![ydb-web-ui](../../../../_assets/ydb-web-console.png)
 
-After the {{ ydb-short-name }} cluster is created, check its state on this Embedded UI page: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). It might look like this:
+After the {{ ydb-short-name }} cluster is created, check its state on this {{ ydb-ui-name }} page: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). It might look like this:
 
 ![ydb-cluster-check](../../../../_assets/ydb-cluster-check.png)
 
@@ -912,7 +914,7 @@ You can check the storage group state in the `storage` section — [http://local
 
 ![ydb-storage-gr-check](../../../../_assets/ydb-storage-gr-check.png)
 
-The `VDisks` indicators should be green, and the `state` status (in the tooltip when hovering over the Vdisk indicator) should be `Ok`. For more on cluster state indicators and monitoring, see [{#T}](../../../../reference/embedded-ui/ydb-monitoring.md).
+The `VDisks` indicators should be green, and the `state` status (in the tooltip when hovering over the Vdisk indicator) should be `Ok`. For more on cluster state indicators and monitoring, see [{#T}](../../../../reference/ydb-ui/ydb-monitoring.md).
 
 ### Cluster testing {#testing}
 

@@ -186,7 +186,7 @@ WITH (
 
 Suppose there are two resource pool classifiers with conflicting conditions, and user `user1@domain` matches both resource pools: `olap1` and `olap2`. If no classifier existed in the system before, then `olap1` is set for `RANK=1000`, and `olap2` for `RANK=2000`. Resource pool classifiers with a lower `RANK` value have higher priority. In this example, since `olap1` has a higher priority `RANK` than `olap2`, it will be selected.
 
-You can also set `RANK` for resource pool classifiers when creating them using the [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md) syntax construct, or change `RANK` for existing resource pool classifiers using [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
+You can also set `RANK` for resource pool classifiers when creating them using the [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md) syntax construct, or change `RANK` for existing resource pool classifiers using [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
 
 The system cannot have two classifiers with the same `RANK` value, which makes it possible to uniquely determine which resource pool will be selected in case of conflicting conditions.
 
@@ -232,7 +232,7 @@ A weight of 80 for `the_ceo` effectively means that when competing for resources
 
 If necessary, the user can explicitly specify in which pool a given query should be executed. Currently, this can be done as follows:
 
-- **Embedded UI** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
+- **{{ ydb-ui-name }}** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
 - **YDB CLI** — in the [`ydb sql`](../reference/ydb-cli/sql.md) command with the `--resource-pool` parameter, for example, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — using the [command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
 - **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
@@ -322,6 +322,6 @@ Information about system views related to resource pools and resource pool class
 - [{#T}](../yql/reference/syntax/create-resource-pool.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

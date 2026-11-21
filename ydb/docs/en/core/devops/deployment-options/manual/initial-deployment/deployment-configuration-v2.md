@@ -92,13 +92,19 @@ config:
   client_certificate_authorization:
     request_client_certificate: true
     client_certificate_definitions:
-        - member_groups: ["ADMINS"]
+        - member_groups: ["ADMINS", "databaseNodes@cert"]
           subject_terms:
           - short_name: "O"
             values: ["YDB"]
 ```
 
-To speed up and simplify the initial deployment of {{ ydb-short-name }}, the configuration file already contains most of the cluster setup settings. You only need to replace the default host FQDNs in the `hosts` section and disk paths in the `host_configs` section with your actual values.
+{% note info  %}
+
+The configuration shown above is prepared for running {{ ydb-short-name }} on 3 physical or virtual servers using mirror-3-dc [cluster operating mode](../../../../concepts/topology.md#cluster-config).
+
+{% endnote %}
+
+To speed up and simplify the initial deployment of {{ ydb-short-name }}, the provided configuration file example already contains most of the cluster setup settings. You only need to replace the default host FQDNs in the `hosts` section and disk paths in the `host_configs` section with your actual values.
 
 * The `hosts` section:
 
@@ -226,7 +232,7 @@ After running this command, the source file `/tmp/config.yaml` is no longer used
 
 {% endlist %}
 
-After starting the static nodes, verify they are working via the {{ ydb-short-name }} built-in web interface (Embedded UI):
+After starting the static nodes, verify they are working via {{ ydb-ui-name }}:
 
 1. Open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static node;
 2. Go to the **Nodes** tab;
@@ -357,7 +363,7 @@ The example commands above use the following parameters:
   ```
 
   In the example above, `<ydb-static-node1>`, `<ydb-static-node2>`, and `<ydb-static-node3>` are the FQDNs of any three servers running static cluster nodes.
-  
+
   Start the {{ ydb-short-name }} dynamic node for the `/Root/testdb` database:
 
   ```bash
@@ -423,17 +429,17 @@ When running user account creation and group assignment commands, the {{ ydb-sho
 
 Where `<node.ydb.tech>` is the FQDN of the server running the dynamic node that serves the `/Root/testdb` database.
 
-## Verifying Access to the Built-in Web Interface
+## Verifying Access to {{ ydb-ui-name }}
 
-To verify access to the {{ ydb-short-name }} built-in web interface, open `https://<node.ydb.tech>:8765` in a web browser, where `<node.ydb.tech>` is the FQDN of the server running any {{ ydb-short-name }} static node.
+To verify access to {{ ydb-ui-name }}, open `https://<node.ydb.tech>:8765` in a web browser, where `<node.ydb.tech>` is the FQDN of the server running any {{ ydb-short-name }} static node.
 
 The web browser must be configured to trust the Certificate Authority that issued the certificates for the {{ ydb-short-name }} cluster; otherwise, a warning about using an untrusted certificate will be displayed.
 
-If authentication is enabled in the cluster, the web browser will display a login and password prompt. After entering valid authentication credentials, the built-in web interface home page should appear. A description of the available features and user interface is provided in [{#T}](../../../../reference/embedded-ui/index.md).
+If authentication is enabled in the cluster, the web browser will display a login and password prompt. After entering valid authentication credentials, the {{ ydb-ui-name }} home page should appear. A description of the available features and user interface is provided in [{#T}](../../../../reference/ydb-ui/index.md).
 
 {% note info %}
 
-Typically, to provide access to the {{ ydb-short-name }} built-in web interface, a fault-tolerant HTTP load balancer is configured using software such as `haproxy`, `nginx`, or similar. HTTP load balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation instructions.
+Typically, to provide access to {{ ydb-ui-name }}, a fault-tolerant HTTP load balancer is configured using software such as `haproxy`, `nginx`, or similar. HTTP load balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation instructions.
 
 {% endnote %}
 

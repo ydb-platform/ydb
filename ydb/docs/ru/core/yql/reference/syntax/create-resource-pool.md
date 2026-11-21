@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL
 
-`CREATE RESOURCE POOL` создаёт [пул ресурсов](../../../concepts/glossary.md#resource-pool.md).
+`CREATE RESOURCE POOL` создаёт [пул ресурсов](../../../concepts/glossary.md#resource-pool).
 
 ## Синтаксис
 

@@ -53,5 +53,5 @@ GRANT 'ALL' ON `/my_db` TO `user1@domain`;
 ## See also
 
 * [{#T}](../../../dev/resource-consumption-management.md)
-* [{#T}](create-resource-pool-classifier.md)
+* [CREATE RESOURCE POOL CLASSIFIER](create-resource-pool-classifier.md)
 * [{#T}](drop-resource-pool-classifier.md)

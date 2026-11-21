@@ -44,6 +44,8 @@ VALUES
 
 Описание функции `Knn::ToBinaryStringFloat` см. [здесь](../../yql/reference/udf/list/knn.md).
 
+В этих примерах преобразуются векторы, заданные в YQL. Если векторы передаются параметрами запроса из C++ SDK, сериализуйте их на клиенте с помощью `NYdb::NValueHelpers::Embedding` (C++ SDK v3.24.0 или новее) и объявляйте параметры как `Bytes`; см. [рецепт для SDK](../ydb-sdk/vector-search.md#insert-vectors).
+
 ## Шаг 3. Построение векторного индекса {#step3}
 
 Для создания векторного индекса `EmbeddingIndex` на таблице `Vectors` нужно использовать команду:

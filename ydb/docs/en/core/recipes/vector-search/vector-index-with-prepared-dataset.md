@@ -130,6 +130,8 @@ This step runs exact search for the 3 nearest neighbors of a given vector **with
 
 First, the target vector is encoded to binary with [`Knn::ToBinaryStringFloat`](../../yql/reference/udf/list/knn.md#functions-convert).
 
+Here the search vector is a YQL literal. When passing it as a C++ SDK query parameter, serialize it on the client with `NYdb::NValueHelpers::Embedding` (C++ SDK v3.24.0 or later) and declare the parameter as `Bytes`; see the [SDK recipe](../ydb-sdk/vector-search.md#search-by-vector).
+
 Then cosine distance is computed from each row’s `embedding` to the target vector.
 
 Rows are ordered by distance ascending, and the first three (`$K`) rows are returned as the nearest neighbors.

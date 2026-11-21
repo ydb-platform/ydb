@@ -4,6 +4,10 @@
 
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic), использующего {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk).
 
+## Параметризованные запросы {#param-queries}
+
+См. [параметризованные запросы](../../optimization/parameterized-queries.md).
+
 ## Скачивание и запуск {#download}
 
 Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Go](https://go.dev/doc/install). Предварительно должен быть установлен [{{ ydb-short-name }} Go SDK](../../../reference/ydb-sdk/install.md).

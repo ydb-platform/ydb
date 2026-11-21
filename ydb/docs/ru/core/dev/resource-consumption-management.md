@@ -170,7 +170,7 @@ WITH (
 
 Допустим, имеются два классификатора пулов ресурсов с конфликтующими условиями, и пользователь `user1@domain` подходит под оба пула ресурсов: `olap1` и `olap2`. Если до этого в системе не существовало ни одного классификатора, то для `olap1` устанавливается `RANK=1000`, а для `olap2` — `RANK=2000`. Классификаторы пулов ресурсов с меньшим значением `RANK` имеют более высокий приоритет. В данном примере, так как у `olap1` более приоритетный `RANK`, чем у `olap2`, будет выбран именно он.
 
-Также можно самостоятельно задавать `RANK` для классификаторов пулов ресурсов при создании с помощью синтаксической конструкции [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md), либо изменять `RANK` для существующих классификаторов пулов ресурсов с помощью [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
+Также можно самостоятельно задавать `RANK` для классификаторов пулов ресурсов при создании с помощью синтаксической конструкции [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md), либо изменять `RANK` для существующих классификаторов пулов ресурсов с помощью [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
 
 В системе не может существовать два классификатора с одинаковым значением `RANK`, что позволяет однозначно определить, какой пул ресурсов будет выбран в случае конфликтующих условий.
 
@@ -215,7 +215,7 @@ CREATE RESOURCE POOL the_ceo WITH (
 
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
 
-- **Embedded UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
+- **{{ ydb-ui-name }}** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
 - **YDB CLI** — в команде [`ydb sql`](../reference/ydb-cli/sql.md) с параметром `--resource-pool`, например, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI ([интерактивный режим](../reference/ydb-cli/interactive-cli.md))** — [командой](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.
 - **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
@@ -299,6 +299,6 @@ where State = 'EXECUTING'
 - [{#T}](../yql/reference/syntax/create-resource-pool.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

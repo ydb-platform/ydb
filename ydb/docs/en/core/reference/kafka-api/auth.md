@@ -27,7 +27,7 @@ These parameters form the following variables, which you can use in the `sasl.ja
 
 {% note info %}
 
-The `<sasl.username>` and `<sasl.password>` parameters are formed differently. See [examples](./examples#authentication-in-cloud-examples) for details.
+The `<sasl.username>` and `<sasl.password>` parameters are formed differently. See [examples](./examples.md#authentication-examples) for details.
 
 {% endnote %}
 

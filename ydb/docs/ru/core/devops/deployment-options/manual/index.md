@@ -6,4 +6,4 @@
 
 - [{#T}](initial-deployment/index.md)
 - [{#T}](../../../maintenance/manual/index.md)
-- [{#T}](../../../reference/embedded-ui/index.md)
+- [{#T}](../../../reference/ydb-ui/index.md)

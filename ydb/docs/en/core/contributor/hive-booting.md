@@ -23,7 +23,7 @@ The boot queue, or *Boot queue*, is stored in Hive's memory and is prioritized. 
 
 When processing the queue, a limited number of tablets are processed at once (`max_boot_batch_size` in [configuration](../reference/configuration/hive.md#boot)). This is necessary so that when starting a large number of tablets, Hive does not stop responding to other requests for a long time.
 
-If when processing a tablet it turns out that it cannot be started on any of the nodes, then this tablet is postponed to a separate *Wait queue*. When node availability changes (a new node connects, or a restriction is removed from a node in [Hive UI](../reference/embedded-ui/hive.md)), Hive returns to these tablets and when processing the boot queue alternates tablets from the Boot Queue and tablets from the Wait Queue.
+If when processing a tablet it turns out that it cannot be started on any of the nodes, then this tablet is postponed to a separate *Wait queue*. When node availability changes (a new node connects, or a restriction is removed from a node in [Hive UI](../reference/ydb-ui/hive.md)), Hive returns to these tablets and when processing the boot queue alternates tablets from the Boot Queue and tablets from the Wait Queue.
 
 ```mermaid
 stateDiagram-v2
@@ -50,7 +50,7 @@ There are strict restrictions on which nodes are allowed to start a tablet: not 
 
 1. From all suitable nodes, nodes with maximum priority are selected. Priority is determined based on the data center where the node is located. You can explicitly specify data center priorities in the [`default_tablet_preference`](../reference/configuration/hive.md#boot) subsection in the configuration. For [coordinators](../concepts/glossary.md#coordinator) and [mediators](../concepts/glossary.md#mediator), priorities are determined dynamically to maintain them in the same data center when possible. Additionally, if a tablet terminates with an error on a certain node, the priority of that node is lowered for the next start of this tablet.
 
-1. For nodes with maximum priority, a target metric is calculated, which almost matches the [Node usage](hive.md#node-usage) metric. It differs in that only those resources consumed by this particular tablet are considered, as well as the presence of a penalty for the number of tablets of the same [schema object](../concepts/glossary.md#schema-object).
+1. For nodes with maximum priority, a target metric is calculated, which almost matches the [Node usage](hive.md#node-usage) metric. It differs in that only those resources consumed by this particular tablet are considered, as well as the presence of a penalty for the number of tablets of the same [schema object](../concepts/glossary.md#scheme-object).
 
 1. Finally, based on this metric, a node is selected. The selection algorithm at this stage is determined by the `node_select_strategy` parameter in the configuration. By default, a random node is selected from 7% of nodes with the minimum metric value.
 

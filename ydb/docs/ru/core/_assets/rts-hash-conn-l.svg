@@ -1,0 +1,11 @@
+<svg width='20' height='15' xmlns='http://www.w3.org/2000/svg'>
+
+<style type='text/css'>
+  path.conn { stroke-width:1; stroke:#BFBFBF; fill:#BFBFBF; }
+  text.conn { text-anchor:middle; font-family:Verdana; font-size:8px; fill:#393939; }
+</style>
+
+<path d='M20,15l-14,0l-4,-7l4,-7l14,0z' class='conn' />
+<text x='13' y='11' class='conn'>H</text>
+
+</svg>

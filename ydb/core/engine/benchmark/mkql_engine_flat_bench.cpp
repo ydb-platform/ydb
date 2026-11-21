@@ -17,6 +17,8 @@
 #include <benchmark/benchmark.h>
 
 #include <util/string/builder.h>
+#include <util/string/type.h>
+#include <util/system/env.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -149,7 +151,7 @@ namespace {
     };
 
     void PrepareAndSerialize(benchmark::State& state, const TProgramFactory& factory, ui32 keyCount, TShardLayout layout) {
-        TShareShardedMkqlProgramContext context(true);
+        TShareShardedMkqlProgramContext context(IsTrue(GetEnv("MKQL_SHARE_SHARDED_PROGRAM")));
         const TString program = CompileProgram(factory, keyCount);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         auto randomProvider = CreateDeterministicRandomProvider(1);

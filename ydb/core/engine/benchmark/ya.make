@@ -13,6 +13,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+ENV(MKQL_SHARE_SHARDED_PROGRAM=1)
+
 SRCS(
     mkql_engine_flat_bench.cpp
 )

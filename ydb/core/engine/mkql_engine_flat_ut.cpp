@@ -7063,6 +7063,7 @@ Value {
     // A SelectRow on Shard1 feeds an UpdateRow whose dynamic key spans three write shards with the same program.
     Y_UNIT_TEST(ReadsFeedWritesAcrossSiblingShards) {
         const ui64 writeShards[] = {201, 202, 203};
+        TShareShardedMkqlProgramContext context(true);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         for (ui64 shard : writeShards) {
@@ -7100,6 +7101,7 @@ Value {
         const ui64 shardB = 202;
         const ui64 shardC = 203;
         const ui64 shardD = 204;
+        TShareShardedMkqlProgramContext context(true);
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);

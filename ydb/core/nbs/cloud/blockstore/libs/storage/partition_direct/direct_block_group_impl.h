@@ -300,6 +300,8 @@ private:
     const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
+    // Taken from StorageConfig at construction. Later config edits are ignored.
+    const EChecksumMode ChecksumMode;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;

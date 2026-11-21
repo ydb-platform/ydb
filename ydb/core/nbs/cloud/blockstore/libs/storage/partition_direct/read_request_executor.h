@@ -5,6 +5,7 @@
 #include "direct_block_group.h"
 #include "request_executor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
@@ -23,6 +24,13 @@ public:
     struct TResponse
     {
         NProto::TError Error;
+
+        // Same contract as TDBGReadBlocksResponse::Checksums. A single-location
+        // read forwards the DBG vector. A multi-location read joins pieces by
+        // byte offset. With checksums enabled every piece is complete, so the
+        // joined vector is complete. With checksums disabled every piece is
+        // empty, so this stays empty.
+        TBlockChecksums Checksums;
     };
 
     [[nodiscard]] virtual NThreading::TFuture<TResponse> GetFuture() const = 0;

@@ -8,9 +8,11 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/null.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr::NCmsTest {
@@ -22,6 +24,90 @@ using namespace NKikimrCms;
 using namespace NKikimrBlobStorage;
 
 namespace {
+
+class TFakeMonHttpRequest: public NMonitoring::IMonHttpRequest {
+public:
+    TFakeMonHttpRequest(HTTP_METHOD method, TString uri, THttpHeaders headers, TString body)
+        : Method(method)
+        , Uri(std::move(uri))
+        , Headers(std::move(headers))
+        , Body(std::move(body))
+        , Params(TStringBuf(Uri).After('?'))
+        , PostParams(Body)
+    {
+    }
+
+    IOutputStream& Output() override {
+        return Cnull;
+    }
+
+    HTTP_METHOD GetMethod() const override {
+        return Method;
+    }
+
+    TStringBuf GetPath() const override {
+        return TStringBuf(Uri).Before('?');
+    }
+
+    TStringBuf GetPathInfo() const override {
+        return GetPath();
+    }
+
+    TStringBuf GetUri() const override {
+        return Uri;
+    }
+
+    const TCgiParameters& GetParams() const override {
+        return Params;
+    }
+
+    const TCgiParameters& GetPostParams() const override {
+        return PostParams;
+    }
+
+    TStringBuf GetPostContent() const override {
+        return Body;
+    }
+
+    const THttpHeaders& GetHeaders() const override {
+        return Headers;
+    }
+
+    TStringBuf GetHeader(TStringBuf name) const override {
+        if (const auto* header = Headers.FindHeader(name)) {
+            return header->Value();
+        }
+        return {};
+    }
+
+    TStringBuf GetCookie(TStringBuf) const override {
+        return {};
+    }
+
+    TString GetRemoteAddr() const override {
+        return {};
+    }
+
+    TString GetServiceTitle() const override {
+        return {};
+    }
+
+    NMonitoring::IMonPage* GetPage() const override {
+        return nullptr;
+    }
+
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override {
+        return nullptr;
+    }
+
+private:
+    const HTTP_METHOD Method;
+    const TString Uri;
+    const THttpHeaders Headers;
+    const TString Body;
+    const TCgiParameters Params;
+    const TCgiParameters PostParams;
+};
 
 void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
                         const TString &host,

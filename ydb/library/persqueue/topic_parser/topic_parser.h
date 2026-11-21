@@ -38,7 +38,8 @@ TString MakeConsumerPath(const TString& consumer);
     if (!Valid) {                         \
         return TString();                 \
     } else {                              \
-        AFL_ENSURE(!result.empty())("original_topic", OriginalTopic); \
+        YDB_LOG_ENSURE(!result.empty(),
+            {"originalTopic", OriginalTopic}); \
         return result;                    \
     }
 
@@ -126,14 +127,18 @@ public:
     }
 
     void RestorePrimaryPath() {
-        AFL_ENSURE(!OriginalPath.empty())("original_path", OriginalPath)("primary_path", PrimaryPath);
+        YDB_LOG_ENSURE(!OriginalPath.empty(),
+            {"originalPath", OriginalPath},
+            {"primaryPath", PrimaryPath});
         PrimaryPath = OriginalPath;
         OriginalPath.clear();
     }
 
     // Only for control plane
     const TString& GetFullModernName() const {
-        AFL_ENSURE(!FullModernName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+        YDB_LOG_ENSURE(!FullModernName.empty(),
+            {"originalTopic", OriginalTopic},
+            {"primaryPath", PrimaryPath});
         return FullModernName;
     }
 

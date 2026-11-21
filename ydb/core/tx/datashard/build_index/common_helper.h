@@ -6,6 +6,7 @@
 #include <ydb/core/tx/datashard/upload_stats.h>
 #include <ydb/core/tx/tx_proxy/erase_rows.h>
 #include <ydb/library/actors/core/log.h>
+#include <utility>
 
 namespace NKikimr::NDataShard {
 using namespace NTableIndex;
@@ -70,6 +71,14 @@ public:
     };
 
 private:
+    struct TUploadAttempt {
+        std::shared_ptr<void> Reservation;
+        bool Completed = false;
+        explicit TUploadAttempt(std::shared_ptr<void> reservation)
+            : Reservation(std::move(reservation))
+        {}
+    };
+
     struct TDestination {
         TBufferData Buffer;
         TEraseBuffer EraseBuffer;
@@ -183,7 +192,12 @@ public:
             return;
         }
 
-        ++RetryCount;
+        if (WaitForPreviousAttempt()) {
+            return;
+        }
+        if (!UploadStatus.IsNone() && !UploadStatus.IsSuccess()) {
+            ++RetryCount;
+        }
         StartUploadInternal();
     }
 
@@ -245,6 +259,21 @@ public:
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
 
+        if constexpr (requires { response.GetRequiredRowBytes(); }) {
+            if (response.GetRequiredRowBytes()) {
+                response.SetStatus(NKikimrIndexBuilder::ABORTED);
+            }
+        }
+        if (CleanupTimedOut) {
+            response.SetStatus(NKikimrIndexBuilder::ABORTED);
+            if constexpr (requires { response.SetRetryAfterMs(1000); }) {
+                response.SetRetryAfterMs(1000);
+            }
+        }
+        if constexpr (requires { response.SetUploadStatus(Ydb::StatusIds::SUCCESS); }) {
+            response.SetUploadStatus(CleanupTimedOut ? Ydb::StatusIds::TIMEOUT
+                : UploadStatus.IsNone() ? Ydb::StatusIds::SUCCESS : UploadStatus.StatusCode);
+        }
         NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
     }
 
@@ -254,6 +283,12 @@ public:
 
     bool IsSuccess() const {
         return UploadStatus.IsSuccess();
+    }
+
+    void SetResourceReservation(std::shared_ptr<void> reservation,
+        std::function<std::shared_ptr<void>(ui64)> retain = {}) {
+        ResourceReservation = std::move(reservation);
+        RetainResource = std::move(retain);
     }
 
     void SetOwner(const TActorId& owner) {
@@ -333,6 +368,10 @@ private:
             return false;
         }
 
+        if (auto attempt = PreviousAttempt.lock()) {
+            attempt->Completed = true;
+        }
+
         if (kind == EDestinationKind::Erase) {
             UploadBytes += Uploading.EraseBuffer.GetBufferBytes();
             Uploading.EraseBuffer.Clear();
@@ -391,32 +430,113 @@ private:
         Y_ENSURE(!UploaderId);
         Y_ENSURE(Owner);
 
+        // Queued pipe requests may outlive a child. Bound the number of
+        // attempts retaining copies of a batch before allocating another.
+        if (WaitForPreviousAttempt()) {
+            return;
+        }
+
         if (Uploading.Kind == EDestinationKind::Erase) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row erase",
                 {"debug", Debug()});
 
             Y_ENSURE(!Uploading.EraseBuffer.IsEmpty());
+            std::shared_ptr<void> attempt;
+            if (ResourceReservation) {
+                const auto keys = Uploading.EraseBuffer.GetKeysData();
+                ui64 bytes = 3 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * 256 + 4_KB
+                    + (keys->capacity() - keys->size()) * sizeof(NTxProxy::TEraseKeys::value_type);
+                for (const auto& key : *keys) {
+                    bytes += key.GetCells().size() * sizeof(TCell) * 2;
+                }
+                bytes += 2 * (Database.size() + Uploading.Table.size());
+                attempt = RetainAttempt(bytes);
+            }
             auto actor = NTxProxy::CreateEraseRowsInternal(
                 Owner, Database, Uploading.Table, Uploading.EraseBuffer.GetKeysData(),
                 true /*writeToTableShadow*/,
                 true /*writeToPrivateTable*/,
-                true /*writeToIndexImplTable*/);
+                true /*writeToIndexImplTable*/, 0, TBackoff(0), std::move(attempt));
             UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
         } else {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row upload",
-                {"debug", Debug()});
-
-            Y_ENSURE(!Uploading.Buffer.IsEmpty());
-            auto actor = NTxProxy::CreateUploadRowsInternal(
-                Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
-                NTxProxy::EUploadRowsMode::WriteToTableShadow,
-                true /*writeToPrivateTable*/,
-                true /*writeToIndexImplTable*/);
-            UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+            StartUploadRowsInternal();
         }
     }
 
+    void StartUploadRowsInternal() {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row upload",
+            {"debug", Debug()});
+
+        Y_ENSURE(Uploading);
+        Y_ENSURE(!Uploading.Buffer.IsEmpty());
+        Y_ENSURE(!UploaderId);
+        Y_ENSURE(Owner);
+        std::shared_ptr<void> attempt;
+        if (ResourceReservation) {
+            // Include the canonical rows, protobuf payload, and row/container
+            // overhead still owned by this attempt after the scan stops.
+            const auto rows = Uploading.Buffer.GetRowsData();
+            ui64 bytes = 2 * Uploading.Buffer.GetBufferBytes() + rows->size() * 256 + 4_KB
+                + (rows->capacity() - rows->size()) * sizeof(NTxProxy::TUploadRows::value_type);
+            for (const auto& [key, _] : *rows) {
+                bytes += key.GetCells().size() * sizeof(TCell) * 2;
+            }
+            for (const auto& [name, type] : *Uploading.Types) {
+                bytes += 2 * (name.size() + type.SpaceUsedLong() + 64);
+            }
+            bytes += 2 * (Database.size() + Uploading.Table.size());
+            attempt = RetainAttempt(bytes);
+        }
+        auto actor = NTxProxy::CreateUploadRowsInternal(
+            Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
+            NTxProxy::EUploadRowsMode::WriteToTableShadow,
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/, false, 0, TBackoff(0), std::move(attempt));
+
+        UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
+    }
+
+    std::shared_ptr<void> RetainAttempt(ui64 bytes) {
+        auto attempt = std::make_shared<TUploadAttempt>(RetainResource ? RetainResource(bytes) : ResourceReservation);
+        PreviousAttempt = attempt;
+        return attempt;
+    }
+
+    bool WaitForPreviousAttempt() {
+        // Completion may race actor/event destruction in another mailbox.
+        // Allow one completed attempt to retire while the next one starts;
+        // two retained attempts remain the independent bound on overlap.
+        if (const auto attempt = PreviousAttempt.lock(); attempt && attempt->Completed && RetiringAttempt.expired()) {
+            RetiringAttempt = attempt;
+            PreviousAttempt.reset();
+        }
+        if (PreviousAttempt.expired()) {
+            CleanupWaitStarted.reset();
+            return false;
+        }
+        const auto now = TActivationContext::Now();
+        if (!CleanupWaitStarted) {
+            CleanupWaitStarted = now;
+        }
+        // Keep the retained payload charged, but do not leave its scan waiting
+        // forever for a disconnected pipe or a stalled destination mailbox.
+        if (now >= *CleanupWaitStarted + TDuration::Minutes(1)) {
+            CleanupTimedOut = true;
+            ythrow yexception() << "Timed out waiting for previous upload payload cleanup";
+        }
+        const auto attempt = PreviousAttempt.lock();
+        const auto delay = attempt && attempt->Completed ? TDuration::MilliSeconds(1) : TDuration::MilliSeconds(100);
+        TActivationContext::ActorContextFor(Owner).Schedule(delay, new TEvents::TEvWakeup());
+        return true;
+    }
+
 private:
+    std::shared_ptr<void> ResourceReservation;
+    std::function<std::shared_ptr<void>(ui64)> RetainResource;
+    std::weak_ptr<TUploadAttempt> PreviousAttempt;
+    std::weak_ptr<TUploadAttempt> RetiringAttempt;
+    std::optional<TInstant> CleanupWaitStarted;
+    bool CleanupTimedOut = false;
     const TString Database;
     const TIndexBuildScanSettings ScanSettings;
     TActorId Owner;

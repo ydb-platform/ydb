@@ -6,7 +6,11 @@
 #include "util_fmt_line.h"
 #include "util_fmt_abort.h"
 #include "flat_util_misc.h"
+#include <atomic>
+#include <util/system/spinlock.h>
+#include <util/system/guard.h>
 #include "tablet_flat_executor.h"
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -33,6 +37,10 @@ namespace NTabletFlatExecutor {
             Gone    = 5,    /* Internal termination     */
         };
 
+        // Repeated volatile waits must eventually yield a retry. Broker queue
+        // time never consumes this budget.
+        static constexpr ui32 MaxReadmissionAttempts = 8;
+
         enum class EType {
             Client,
             System,
@@ -47,6 +55,141 @@ namespace NTabletFlatExecutor {
             }
 
             const ui64 Serial;
+            bool ManagedLease = false;
+        };
+
+        // The scan owns the full working-set reservation. Once it stops, only
+        // bytes retained by asynchronous payload owners remain charged, with no
+        // CPU slot. The broker cookie never owns this state.
+        struct TTaskLease {
+            struct TState {
+                TActorSystem* const System;
+                const TActorId Client;
+                const ui64 TaskId;
+                const TString Type;
+                const ui32 Priority;
+                const ui64 Memory;
+                TSpinLock Lock;
+                ui64 Retained = 0;
+                ui64 ChargedMemory;
+                ui64 ChargedCpu = 1;
+                bool Running = true;
+                bool SubmitRejected = false;
+                bool WasAcquired = false;
+                bool OverrunReported = false;
+                std::atomic<bool> Cancel{true};
+
+                TState(TActorSystem* system, TActorId client, ui64 taskId, TString type, ui32 priority, ui64 memory)
+                    : System(system), Client(client), TaskId(taskId), Type(std::move(type)), Priority(priority), Memory(memory)
+                    , ChargedMemory(memory)
+                {}
+
+                ~TState() {
+                    if (WasAcquired || !SubmitRejected) {
+                        System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
+                            new TEvResourceBroker::TEvFinishTask(TaskId, Cancel.load(std::memory_order_acquire))));
+                    }
+                }
+
+                void UpdateRetained() {
+                    const ui64 memory = Running ? Max(Memory, Retained) : Retained;
+                    const ui64 cpu = Running ? 1 : 0;
+                    if ((WasAcquired || !SubmitRejected) && memory && (memory != ChargedMemory || cpu != ChargedCpu)) {
+                        System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), Client,
+                            new TEvResourceBroker::TEvUpdateTask(TaskId, {{cpu, memory}}, Type, Priority)));
+                        ChargedMemory = memory;
+                        ChargedCpu = cpu;
+                    }
+                }
+            };
+
+            struct TPayload {
+                const std::shared_ptr<TState> State;
+                const ui64 Bytes;
+                bool Armed = false;
+
+                TPayload(std::shared_ptr<TState> state, ui64 bytes)
+                    : State(std::move(state)), Bytes(bytes)
+                {}
+
+                ~TPayload() {
+                    if (Armed) {
+                        with_lock(State->Lock) {
+                            Y_ABORT_UNLESS(State->Retained >= Bytes);
+                            State->Retained -= Bytes;
+                            State->UpdateRetained();
+                        }
+                    }
+                }
+            };
+
+            const std::shared_ptr<TState> State;
+
+            TTaskLease(TActorSystem* system, TActorId client, ui64 taskId, TString type, ui32 priority, ui64 memory)
+                : State(std::make_shared<TState>(system, client, taskId, std::move(type), priority, memory))
+            {}
+
+            ~TTaskLease() {
+                with_lock(State->Lock) {
+                    State->Running = false;
+                    State->UpdateRetained();
+                }
+            }
+
+            void Acquired() {
+                with_lock(State->Lock) {
+                    State->WasAcquired = true;
+                    State->ChargedMemory = State->Memory;
+                    State->ChargedCpu = 1;
+                }
+            }
+
+            void Rejected() {
+                with_lock(State->Lock) {
+                    // A rejected submit created no task. A rejected readmission
+                    // still owns the task from its earlier grant.
+                    State->SubmitRejected = true;
+                }
+            }
+
+            void Suspend() {
+                with_lock(State->Lock) {
+                    State->System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), State->Client,
+                        new TEvResourceBroker::TEvUpdateTask(State->TaskId, {{0, 0}}, State->Type, State->Priority)));
+                    State->ChargedMemory = 0;
+                    State->ChargedCpu = 0;
+                }
+            }
+
+            void Readmit() {
+                State->System->Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), State->Client,
+                    new TEvResourceBroker::TEvUpdateTask(State->TaskId, {{1, State->Memory}}, State->Type,
+                        State->Priority, true)));
+            }
+
+            std::shared_ptr<void> Retain(ui64 bytes) {
+                if (!bytes) {
+                    return {};
+                }
+                auto payload = std::make_shared<TPayload>(State, bytes);
+                with_lock(State->Lock) {
+                    // The payload already exists, including when retained from
+                    // Finish(). Charge estimate overruns instead of throwing in
+                    // the scan's teardown path or hiding their memory usage.
+                    State->Retained += bytes;
+                    payload->Armed = true;
+                    if (!State->OverrunReported && State->Retained > State->Memory) {
+                        State->OverrunReported = true;
+                        YDB_LOG_WARN_CTX_COMP(*State->System, NKikimrServices::TABLET_OPS_HOST,
+                            "Retained scan payload exceeds admitted memory reservation",
+                            {"scanType", State->Type}, {"client", State->Client}, {"taskId", State->TaskId},
+                            {"admittedBytes", State->Memory}, {"retainedBytes", State->Retained},
+                            {"overrunBytes", State->Retained - State->Memory});
+                    }
+                    State->UpdateRetained();
+                }
+                return payload;
+            }
         };
 
         struct TOne : public TIntrusiveListItem<TOne> {
@@ -79,9 +222,16 @@ namespace NTabletFlatExecutor {
 
             const ui64 Serial;
             const ui32 Table;
+            std::shared_ptr<TTaskLease> Lease;
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
+            std::optional<ui64> PreparedSnapshotId;
             EState State = EState::None;
+            bool NeedsReadmission = false;
+            // Owns expiry of the readiness state chosen at a broker grant.
+            TInstant ReadinessDeadline;
+            ui32 ReadmissionAttempts = 0;
+            ui64 TimeoutGeneration = 0;
             TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
             ui64 Cookie = Max<ui64>();
@@ -108,6 +258,7 @@ namespace NTabletFlatExecutor {
         struct TCancelled {
             ui64 Serial = 0;
             ui32 Table = Max<ui32>();
+            std::shared_ptr<TTaskLease> Lease;
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
 
@@ -117,19 +268,26 @@ namespace NTabletFlatExecutor {
         };
 
     public:
+        enum class EReadiness { Ready, Waiting, TimedOut, RetryLimitExceeded };
+
         /**
          * followerId must outlive TScans, it is read on every task submission
          * since executor learns its follower id only during boot.
          */
         TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter,
-                    ITablet *owner, const TActorId& ownerActorId, const ui32& followerId)
+                    ITablet *owner, const TActorId& ownerActorId,
+                    const TActorId& brokerClient, TActorSystem* actorSystem, const ui32& followerId,
+                    std::function<void(THolder<TScanSnapshot>)> releaseSnapshot)
             : Logger(logger)
             , Ops(ops)
             , Owner(owner)
             , OwnerActorId(ownerActorId)
+            , BrokerClient(brokerClient)
+            , ActorSystem(actorSystem)
             , Tablet(Owner->TabletID())
             , FollowerId(followerId)
             , Emitter(std::move(emitter))
+            , ReleaseSnapshot(std::move(releaseSnapshot))
         {
 
         }
@@ -159,11 +317,25 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        static void ValidateOptions(const TScanOptions& options) {
+            const auto* broker = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker);
+            if (options.Factory) {
+                Y_ENSURE(!options.IsResourceBrokerDisabled(), "Deferred scans require broker admission");
+                Y_ENSURE(broker && broker->Memory, "Deferred scans must declare memory before construction");
+            } else {
+                Y_ENSURE(!broker || !broker->Memory || options.OnAdmissionFailure,
+                    "Eager scans declaring memory require an admission failure callback");
+            }
+        }
+
         ui64 Queue(ui32 table, TAutoPtr<IScan> scan, ui64 cookie, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
         {
             auto &one = Make(table, scan, EType::Client, options, std::move(snapshot));
 
             one.Cookie = cookie;
+            if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
+                one.PreparedSnapshotId = byId->SnapshotId;
+            }
 
             if (options.IsResourceBrokerDisabled()) {
                 // A call to Start is expected now
@@ -176,14 +348,25 @@ namespace NTabletFlatExecutor {
 
                 const auto* overrides = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker);
 
+                auto cookie = MakeIntrusive<TCookie>(one.Serial);
+                const ui64 memory = overrides ? overrides->Memory : 0;
+                if (options.Factory) {
+                    one.Lease = std::make_shared<TTaskLease>(ActorSystem, BrokerClient, one.TaskId,
+                        overrides ? overrides->Type : Tables[table].Type,
+                        overrides ? overrides->Prio : Tables[table].Prio, memory);
+                    cookie->ManagedLease = true;
+                }
                 auto submit = MakeHolder<TEvResourceBroker::TEvSubmitTask>(
-                            one.TaskId, MakeLabelFor(one),
-                            NResourceBroker::TResourceValues{{ 1, 0 }},
-                            overrides ? overrides->Type : Tables[table].Type,
-                            overrides ? overrides->Prio : Tables[table].Prio,
-                            new TCookie(one.Serial));
+                    one.TaskId, MakeLabelFor(one), NResourceBroker::TResourceValues{{1, memory}},
+                    overrides ? overrides->Type : Tables[table].Type,
+                    overrides ? overrides->Prio : Tables[table].Prio, cookie);
+                submit->Task.KeepOnClientDeath = bool(one.Lease);
+                if (one.Lease) {
+                    submit->Task.OwnerLease = one.Lease;
+                }
                 submit->SetOwner(Tablet, FollowerId);
                 ToBroker(submit.Release());
+                ScheduleAdmissionTimeout(one);
             }
 
             return one.Serial;
@@ -194,24 +377,178 @@ namespace NTabletFlatExecutor {
             auto *one = Lookup(CheckedCast<TCookie*>(cookie)->Serial, false);
 
             if (one == nullptr) {
-                ToBroker(new TEvResourceBroker::TEvFinishTask(task));
+                if (!CheckedCast<TCookie*>(cookie)->ManagedLease) {
+                    ToBroker(new TEvResourceBroker::TEvFinishTask(task));
+                }
 
                 return { };
             } else if (one->State != EState::Task) {
                 Y_TABLET_ERROR(NFmt::Do(*one) << " acquired an unexpected resource");
             } else {
+                // An overdue grant must discard the old readiness state
+                // before selecting a new one, even if its timer is delayed.
+                ExpireReadiness(*one);
                 // A call to Start is expected now
                 one->State = EState::Ready;
+                ++one->TimeoutGeneration;
+                if (one->Lease) {
+                    one->Lease->Acquired();
+                }
 
                 return { one->Serial, one->Table };
+            }
+        }
+
+        EReadiness AwaitReadiness(ui64 serial) {
+            auto& one = *Lookup(serial, true);
+            if (one.ReadinessDeadline && TActivationContext::Now() >= one.ReadinessDeadline) {
+                return EReadiness::TimedOut;
+            }
+            if (!one.Options.OnAdmissionReady) {
+                return EReadiness::Ready;
+            }
+            if (!one.ReadinessDeadline && one.Options.QueueTimeout) {
+                one.ReadinessDeadline = TActivationContext::Now() + one.Options.QueueTimeout;
+            }
+            auto resume = std::make_unique<IEventHandle>(BrokerClient, TActorId(), new NOps::TEvResumeScan(serial));
+            if (!one.Options.OnAdmissionReady(one.Options, std::move(resume))) {
+                if (!one.NeedsReadmission) {
+                    if (one.ReadmissionAttempts++ >= MaxReadmissionAttempts) {
+                        return EReadiness::RetryLimitExceeded;
+                    }
+                    // Only the bounded descriptor is needed while waiting.
+                    // Transactions being waited on may need broker resources.
+                    one.Lease->Suspend();
+                    one.NeedsReadmission = true;
+                    ScheduleAdmissionTimeout(one);
+                }
+                return EReadiness::Waiting;
+            }
+            if (one.NeedsReadmission) {
+                // Updating the same task preserves its original submit time,
+                // unlike cancelling it and submitting a new request.
+                one.Lease->Readmit();
+                one.NeedsReadmission = false;
+                one.State = EState::Task;
+                ScheduleAdmissionTimeout(one);
+                return EReadiness::Waiting;
+            }
+            return EReadiness::Ready;
+        }
+
+        TAcquired Resume(ui64 serial) {
+            const auto* one = Lookup(serial, false);
+            if (!one || one->State != EState::Ready || !one->Options.Factory) {
+                return {};
+            }
+            return {one->Serial, one->Table};
+        }
+
+        bool Initialize(ui64 serial) {
+            auto& one = *Lookup(serial, true);
+            if (one.Options.Factory) {
+                auto factory = std::move(one.Options.Factory);
+                one.Scan = factory(one.Options);
+                one.Options.PendingReservation.reset();
+            }
+            return bool(one.Scan);
+        }
+
+        TScanOptions& GetOptions(ui64 serial) {
+            return Lookup(serial, true)->Options;
+        }
+
+        bool NeedsSnapshot(ui64 serial) {
+            const auto& one = *Lookup(serial, true);
+            if (one.PreparedSnapshotId) {
+                const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&one.Options.Snapshot);
+                Y_ENSURE(byId && byId->SnapshotId == *one.PreparedSnapshotId,
+                    "Cannot replace a prepared scan snapshot during admission");
+            }
+            return !one.Snapshot;
+        }
+
+        void SetSnapshot(ui64 serial, THolder<TScanSnapshot> snapshot) {
+            Lookup(serial, true)->Snapshot = std::move(snapshot);
+        }
+
+        void AdmissionFailed(ui64 serial, const TString& reason, std::optional<ui64> memoryLimit = {}) {
+            auto* one = Lookup(serial, false);
+            if (!one || one->State > EState::Ready) {
+                return;
+            }
+            auto cancelled = Cancel(serial);
+            ReleaseSnapshot(std::move(cancelled.Snapshot));
+            if (memoryLimit && cancelled.Options.OnMemoryLimitExceeded) {
+                cancelled.Options.OnMemoryLimitExceeded(*memoryLimit);
+            }
+            if (cancelled.Options.OnAdmissionFailure) {
+                cancelled.Options.OnAdmissionFailure(reason, true);
+            }
+        }
+
+        void AdmissionTimedOut(ui64 serial, ui64 generation) {
+            auto* one = Lookup(serial, false);
+            if (!one || (one->State != EState::Task && one->State != EState::Ready) ||
+                one->TimeoutGeneration != generation) {
+                return;
+            }
+            if (one->State == EState::Ready && one->ReadinessDeadline &&
+                TActivationContext::Now() >= one->ReadinessDeadline) {
+                return AdmissionFailed(serial, "Timed out waiting for scan readiness");
+            }
+            if (one->State == EState::Task) {
+                ExpireReadiness(*one);
+            }
+            if (one->State == EState::Task && one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout()) {
+                // A heartbeat must not cancel and reinsert a queued task: that
+                // would lose its FIFO position under a sustained backlog.
+                ScheduleAdmissionTimeout(*one);
+                return;
+            }
+            return AdmissionFailed(serial, "Timed out waiting for scan admission");
+        }
+
+        void Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
+            if (error.Status.Code == TEvResourceBroker::TStatus::UNKNOWN_TASK) {
+                // UpdateTask errors have no cookie. Match the live deferred
+                // task by id, ignoring errors for running or unrelated work.
+                for (const auto& [serial, one] : Scans) {
+                    if (one.TaskId == error.TaskId && one.Lease && one.Options.Factory && one.State <= EState::Ready) {
+                        // A delayed error may refer to an earlier update, while
+                        // the broker still owns a previously acquired task.
+                        one.Lease->Rejected();
+                        return AdmissionFailed(serial, error.Status.Message);
+                    }
+                }
+            }
+            if (error.Status.Code == TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED && error.Cookie) {
+                const auto* resource = CheckedCast<TResource*>(error.Cookie.Get());
+                if (resource->Source == TResource::ESource::Scan) {
+                    const ui64 serial = CheckedCast<const TCookie*>(resource)->Serial;
+                    if (auto* one = Lookup(serial, false)) {
+                        if (one->Lease) {
+                            one->Lease->Rejected();
+                        } else {
+                            // The broker already removed the eager task.
+                            one->TaskId = 0;
+                        }
+                    }
+                    // Limits may be applied asynchronously. Teach admission the
+                    // actual capacity, then retry fitting against that value.
+                    return AdmissionFailed(serial, error.Status.Message, error.Status.MemoryLimit);
+                }
             }
         }
 
         void Start(ui64 serial)
         {
             auto &one = *Lookup(serial, true);
-
             Start(one, { });
+            one.Options.OnAdmissionReady = {};
+            one.Options.OnReadinessExpired = {};
+            one.Options.OnAdmissionFailure = {};
+            one.Options.OnAdmissionTimeout = {};
         }
 
         ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, THolder<TScanSnapshot> snapshot)
@@ -259,7 +596,7 @@ namespace NTabletFlatExecutor {
                 return { };
             }
 
-            TCancelled cancelled{ one->Serial, one->Table, std::move(one->Options), std::move(one->Snapshot) };
+            TCancelled cancelled{ one->Serial, one->Table, one->Lease, std::move(one->Options), std::move(one->Snapshot) };
 
             if (!Cancel(*one, EState::Forget)) {
                 return { };
@@ -351,19 +688,31 @@ namespace NTabletFlatExecutor {
             }
 
             Y_ENSURE(one.Snapshot);
-            auto *actor = new NOps::TDriver(one.Serial, one.Scan, conf, std::move(one.Snapshot));
+            if (one.Lease) {
+                one.Scan->HoldResourceReservation(one.Lease, [lease = std::weak_ptr<TTaskLease>(one.Lease)](ui64 bytes) {
+                    const auto owner = lease.lock();
+                    Y_ENSURE(owner, "Scan reservation has already been released");
+                    return owner->Retain(bytes);
+                });
+            }
+            auto actor = MakeHolder<NOps::TDriver>(one.Serial, one.Scan, conf, one.Snapshot);
 
-            if (auto logl = Logger->Log(NUtil::ELnLev::Info))
-                logl << NFmt::Do(*Ops) << " starting " << NFmt::Do(*actor);
+            try {
+                if (auto logl = Logger->Log(NUtil::ELnLev::Info))
+                    logl << NFmt::Do(*Ops) << " starting " << NFmt::Do(*actor);
+            } catch (...) {
+                actor->RestoreUnstartedScan(one.Scan, one.Snapshot);
+                throw;
+            }
 
             ui32 pool = AppData()->BatchPoolId;
             if (const auto* overrides = std::get_if<TScanOptions::TActorPoolById>(&one.Options.ActorPool)) {
                 pool = overrides->PoolId;
             }
 
-            CounterAlive += 1;
+            one.Actor = Ops->Register(actor.Release(), TMailboxType::HTSwap, pool);
             one.State = EState::Scan;
-            one.Actor = Ops->Register(actor, TMailboxType::HTSwap, pool);
+            CounterAlive += 1;
 
             return one.Serial;
         }
@@ -388,7 +737,10 @@ namespace NTabletFlatExecutor {
 
         TScanOutcome Throw(TOne &one, EState last, EStatus status, TAutoPtr<IDestructable> &result)
         {
-            if (auto task = std::exchange(one.TaskId, 0)) {
+            if (one.Lease && status == EStatus::Done) {
+                one.Lease->State->Cancel.store(false, std::memory_order_release);
+            }
+            if (auto task = std::exchange(one.TaskId, 0); task && !one.Lease) {
                 if (one.State == EState::Task) {
                     ToBroker(new TEvResourceBroker::TEvRemoveTask(task));
                 } else if (one.State > EState::Task) {
@@ -438,6 +790,26 @@ namespace NTabletFlatExecutor {
             return out.Str();
         }
 
+        void ExpireReadiness(TOne& one) {
+            if (one.ReadinessDeadline && TActivationContext::Now() >= one.ReadinessDeadline) {
+                one.ReadinessDeadline = {};
+                if (one.Options.OnReadinessExpired) {
+                    one.Options.OnReadinessExpired();
+                }
+            }
+        }
+
+        void ScheduleAdmissionTimeout(TOne& one) {
+            ++one.TimeoutGeneration;
+            if (one.Options.Factory && one.Options.QueueTimeout) {
+                const auto delay = one.ReadinessDeadline
+                    ? Min(one.Options.QueueTimeout, one.ReadinessDeadline - TActivationContext::Now())
+                    : one.Options.QueueTimeout;
+                TActivationContext::ActorContextFor(BrokerClient).Schedule(delay,
+                    new NOps::TEvAdmissionTimeout(one.Serial, one.TimeoutGeneration));
+            }
+        }
+
         void ToBroker(TAutoPtr<IEventBase> event)
         {
             using namespace NResourceBroker;
@@ -450,12 +822,15 @@ namespace NTabletFlatExecutor {
         IOps * const Ops;
         ITablet * const Owner;
         const TActorId OwnerActorId;
+        const TActorId BrokerClient;
+        TActorSystem* const ActorSystem;
         const ui64 Tablet;
         const ui32& FollowerId;
 
         ui64 Serial = 0;
 
         const TIntrusivePtr<TIdEmitter> Emitter;
+        const std::function<void(THolder<TScanSnapshot>)> ReleaseSnapshot;
         ui32 CounterAlive = 0;
         THashMap<ui64, TOne> Scans;
         THashMap<ui32, TTable> Tables;  /* only alive scans */

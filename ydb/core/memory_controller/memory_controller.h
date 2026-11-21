@@ -17,6 +17,7 @@ TString HumanReadableBytes(std::optional<ui64> bytes);
 struct TResourceBrokerConfig {
     ui64 LimitBytes = 0;
     TMap<TString, ui64> QueueLimits;
+    TString IndexBuildQueue = "queue_build_index";
 
     auto operator<=>(const TResourceBrokerConfig&) const = default;
 

@@ -263,6 +263,27 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         FinishTask(runtime, broker, sender, 6);
     }
 
+    Y_UNIT_TEST(ParkedTaskAllowsIdleBrokerOvercommit) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+
+        SubmitTask(runtime, broker, sender, 1, 1, 100, "scan", 5);
+        WaitForResourceAllocation(runtime, 1);
+        SubmitTask(runtime, broker, sender, 2, 501, 0, "scan", 5);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 1, 100, 0, 1, 1);
+
+        UpdateTask(runtime, broker, sender, 1, 0, 0, 5, "scan");
+        WaitForResourceAllocation(runtime, 2);
+        CheckCounters(counters, "queue", "queue_scan", 501, 0, 0, 0, 2);
+        FinishTask(runtime, broker, sender, 2);
+        FinishTask(runtime, broker, sender, 1);
+    }
+
     Y_UNIT_TEST(StrictMemoryUpdateRejectsOversizeWithoutChangingTask) {
         for (const bool resubmit : {false, true}) {
             TTestBasicRuntime runtime;

@@ -7,8 +7,17 @@
 #include <ydb/core/protos/tablet_pipe.pb.h>
 #include <ydb/library/actors/core/event_local.h>
 
+#include <memory>
+
 
 namespace NKikimr {
+
+    namespace NTabletPipe {
+        // Use as the first base so the reservation outlives the event payload.
+        struct TEventMemoryReservation {
+            std::shared_ptr<void> MemoryReservation;
+        };
+    }
 
     struct TEvTabletPipe {
         enum EEv {
@@ -73,7 +82,7 @@ namespace NKikimr {
             }
         };
 
-        struct TEvPush : public TEventPB<TEvPush, NKikimrTabletPipe::TEvPush, EvPush> {
+        struct TEvPush : public NTabletPipe::TEventMemoryReservation, public TEventPB<TEvPush, NKikimrTabletPipe::TEvPush, EvPush> {
             TEvPush() {}
 
             TEvPush(ui64 tabletId, ui32 type, const TActorId& sender, const TIntrusivePtr<TEventSerializedData>& buffer,

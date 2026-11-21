@@ -21,7 +21,7 @@ public:
         bool writeToIndexImplTable,
         bool disableChangeCollection,
         ui64 cookie,
-        TBackoff backoff)
+        TBackoff backoff, std::shared_ptr<void> memoryReservation)
         : TUploadRowsBase(std::move(rows), userCtx)
         , Sender(sender)
         , Database(database)
@@ -29,6 +29,7 @@ public:
         , ColumnTypes(types)
         , Cookie(cookie)
     {
+        MemoryReservation = std::move(memoryReservation);
         AllowWriteToPrivateTable = writeToPrivateTable;
         AllowWriteToIndexImplTable = writeToIndexImplTable;
         DisableChangeCollection = disableChangeCollection;
@@ -111,7 +112,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     bool writeToIndexImplTable,
     bool disableChangeCollection,
     ui64 cookie,
-    TBackoff backoff)
+    TBackoff backoff, std::shared_ptr<void> memoryReservation)
 {
     return new TUploadRowsInternal(sender,
         database,
@@ -124,7 +125,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         writeToIndexImplTable,
         disableChangeCollection,
         cookie,
-        backoff);
+        backoff, std::move(memoryReservation));
 }
 
 } // namespace NTxProxy

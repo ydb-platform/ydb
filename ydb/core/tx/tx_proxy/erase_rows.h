@@ -28,6 +28,7 @@ IActor* CreateEraseRowsInternal(const TActorId& sender,
                                 bool writeToPrivateTable = false,
                                 bool writeToIndexImplTable = false,
                                 ui64 cookie = 0,
-                                TBackoff backoff = TBackoff(0));
+                                TBackoff backoff = TBackoff(0),
+                                std::shared_ptr<void> memoryReservation = {});
 } // namespace NTxProxy
 } // namespace NKikimr

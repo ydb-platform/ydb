@@ -719,9 +719,9 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
 
         // If task is out of total limits then we have to wait until
         // resources are released.
-        // Allow resource over-usage if no tasks are running.
+        // Allow over-usage when no resources are held, including with parked tasks.
         if (!ResourceLimit->HasResources(task->RequiredResources)
-            && *TotalCounters->InFlyTasks) {
+            && ResourceLimit->Used != TResourceValues{}) {
             YDB_LOG_DEBUG_CTX(as, "Not enough resources to start task",
                 {"taskId", task->GetIdString().data()});
             blockedResources |= task->GetRequiredResourcesMask();
@@ -729,9 +729,9 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         }
 
         // If task is out of queue limits then skip it.
-        // Allow resource over-usage if no tasks are running in this queue.
+        // Allow over-usage if this queue holds no resources.
         if (!queue->QueueLimit.HasResources(task->RequiredResources)
-            && *queue->QueueCounters.InFlyTasks) {
+            && queue->QueueLimit.Used != TResourceValues{}) {
             YDB_LOG_DEBUG_CTX(as, "Skipping queue due to exceeded limits",
                 {"queueName", queue->Name.data()});
             continue;
@@ -1376,13 +1376,18 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     TString error;
     for (auto &queue : config.GetQueues())
         queues.insert(queue.GetName());
+    const auto& expectedIndexBuildQueue = ev->Get()->ExpectedIndexBuildQueue;
+    bool indexBuildQueueMatches = expectedIndexBuildQueue.empty();
     for (auto &task : config.GetTasks()) {
         if (!queues.contains(task.GetQueueName())) {
             error = Sprintf("task '%s' uses unknown queue '%s'", task.GetName().data(), task.GetQueueName().data());
             success = false;
             break;
         }
-        tasks.insert(task.GetName());
+        const bool first = tasks.insert(task.GetName()).second;
+        if (first && task.GetName() == "build_index" && task.GetQueueName() == expectedIndexBuildQueue) {
+            indexBuildQueueMatches = true;
+        }
     }
     if (success && !queues.contains(NLocalDb::DefaultQueueName)) {
         error = Sprintf("queue '%s' is required", NLocalDb::DefaultQueueName.c_str());
@@ -1390,6 +1395,11 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     }
     if (success && !tasks.contains(NLocalDb::UnknownTaskName)) {
         error = Sprintf("task '%s' is required", NLocalDb::UnknownTaskName.c_str());
+        success = false;
+    }
+
+    if (success && !indexBuildQueueMatches) {
+        error = Sprintf("build_index does not use expected queue '%s'", expectedIndexBuildQueue.c_str());
         success = false;
     }
 

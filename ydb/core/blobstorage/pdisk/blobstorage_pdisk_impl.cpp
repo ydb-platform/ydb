@@ -2600,6 +2600,13 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
         ReplyErrorYardInitResult(evYardInit, str.Str());
         return false;
     }
+    if (evYardInit.GroupSizeInUnits > TPDiskConfig::MaxGroupSizeInUnits) {
+        TStringStream str;
+        str << "GroupSizeInUnits# " << evYardInit.GroupSizeInUnits
+            << " is greater than the maximum# " << TPDiskConfig::MaxGroupSizeInUnits << " the PDisk can store";
+        ReplyErrorYardInitResult(evYardInit, str.Str());
+        return false;
+    }
 
     // Make sure owner round is always higher than the NextOwnerRound
     if (evYardInit.OwnerRound <= NextOwnerRound) {
@@ -2777,6 +2784,13 @@ void TPDisk::YardResize(TYardResize &ev) {
     if (errStatus != NKikimrProto::OK) {
         Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardResizeResult(errStatus, {}, errorReason.Str()));
+        return;
+    }
+    if (ev.GroupSizeInUnits > TPDiskConfig::MaxGroupSizeInUnits) {
+        Mon.YardResize.CountResponse();
+        PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::ERROR, {},
+            TStringBuilder() << "GroupSizeInUnits# " << ev.GroupSizeInUnits << " is greater than the maximum# "
+                << TPDiskConfig::MaxGroupSizeInUnits << " the PDisk can store"));
         return;
     }
 

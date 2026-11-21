@@ -54,6 +54,89 @@ Y_UNIT_TEST_SUITE(GroupSizeInUnits) {
         return ret;
     }
 
+    Y_UNIT_TEST(SlainVDisksDoNotTakeSlots) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(env.PDiskMockStates.size(), 1);
+        const TPDiskMockState& pdiskMockState = *env.PDiskMockStates.begin()->second;
+        UNIT_ASSERT_VALUES_EQUAL(pdiskMockState.GetNumActiveSlots(), 1);
+
+        env.CreatePoolInBox(1, 2, "pool2", 2);
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(pdiskMockState.GetNumActiveSlots(), 3);
+
+        // deleting the pool slays its VDisk
+        NKikimrBlobStorage::TConfigRequest readRequest;
+        auto* readCmd = readRequest.AddCommand()->MutableReadStoragePool();
+        readCmd->SetBoxId(1);
+        readCmd->AddStoragePoolId(2);
+        const NKikimrBlobStorage::TConfigResponse readResponse = env.Invoke(readRequest);
+        UNIT_ASSERT_C(readResponse.GetSuccess(), readResponse.GetErrorDescription());
+        UNIT_ASSERT_VALUES_EQUAL(readResponse.GetStatus(0).StoragePoolSize(), 1);
+        const TDefineStoragePool& pool = readResponse.GetStatus(0).GetStoragePool(0);
+
+        NKikimrBlobStorage::TConfigRequest deleteRequest;
+        auto* deleteCmd = deleteRequest.AddCommand()->MutableDeleteStoragePool();
+        deleteCmd->SetBoxId(1);
+        deleteCmd->SetStoragePoolId(2);
+        deleteCmd->SetItemConfigGeneration(pool.GetItemConfigGeneration());
+        const NKikimrBlobStorage::TConfigResponse deleteResponse = env.Invoke(deleteRequest);
+        UNIT_ASSERT_C(deleteResponse.GetSuccess(), deleteResponse.GetErrorDescription());
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(pdiskMockState.GetNumActiveSlots(), 1);
+
+        // a VDisk created after that takes its slots again
+        env.CreatePoolInBox(1, 3, "pool3", 2);
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(pdiskMockState.GetNumActiveSlots(), 3);
+    }
+
+    Y_UNIT_TEST(SizeAboveMaxIsRejected) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+
+        NKikimrBlobStorage::TConfigRequest readRequest;
+        readRequest.AddCommand()->MutableReadStoragePool()->SetBoxId(1);
+        const NKikimrBlobStorage::TConfigResponse readResponse = env.Invoke(readRequest);
+        UNIT_ASSERT_C(readResponse.GetSuccess(), readResponse.GetErrorDescription());
+        UNIT_ASSERT_VALUES_EQUAL(readResponse.GetStatus(0).StoragePoolSize(), 1);
+        const TDefineStoragePool storagePool = readResponse.GetStatus(0).GetStoragePool(0);
+
+        // the PDisk stores the group size in one byte
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* cmd = request.AddCommand()->MutableDefineStoragePool();
+            cmd->CopyFrom(storagePool);
+            cmd->SetDefaultGroupSizeInUnits(256u);
+            const NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRINGS_EQUAL(response.GetErrorDescription(),
+                "DefaultGroupSizeInUnits# 256 is greater than the maximum# 255");
+        }
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* cmd = request.AddCommand()->MutableChangeGroupSizeInUnits();
+            cmd->SetBoxId(1);
+            cmd->SetStoragePoolId(storagePool.GetStoragePoolId());
+            cmd->SetItemConfigGeneration(storagePool.GetItemConfigGeneration());
+            cmd->SetSizeInUnits(256u);
+            const NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRINGS_EQUAL(response.GetErrorDescription(),
+                "SizeInUnits# 256 is greater than the maximum# 255");
+        }
+    }
+
     Y_UNIT_TEST(SimplestErasureNone) {
         TEnvironmentSetup env({
             .NodeCount = 1,

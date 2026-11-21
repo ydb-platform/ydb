@@ -501,6 +501,9 @@ struct TPDiskConfig : public TThrRefBase {
         }
     }
 
+    // The sys log record stores the group size in units of an owner in one byte
+    static constexpr ui32 MaxGroupSizeInUnits = 255;
+
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
         return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
     }

@@ -28,6 +28,7 @@ SRCS(
     defrag.cpp
     discover.cpp
     ds_proxy_lwtrace.cpp
+    dsproxy_lifecycle.cpp
     encryption.cpp
     extra_block_checks.cpp
     gc.cpp

@@ -1,4 +1,6 @@
 items:
+- name: Чтение из Object Storage с делегированием IAM
+  href: iam-delegation-external-source.md
 - name: Рецепты резервного копирования
   href: backup/index.md
   include:

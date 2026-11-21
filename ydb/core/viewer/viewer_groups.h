@@ -183,6 +183,7 @@ public:
     TString Filter;
     std::unordered_set<TString> DatabaseStoragePools; // storage pools of the requested database
     bool DatabaseStoragePoolsApplied = false; // the pre-filter by DatabaseStoragePools is already applied
+    bool DatabaseDescriptionReceived = false; // the description of the requested database (with its storage pools) was received
     std::unordered_set<TString> FilterStoragePools;
     TIdsFilter<TGroupId> FilterGroupIds;
     TIdsFilter<TNodeId> FilterNodeIds;
@@ -1957,6 +1958,7 @@ public:
                     }
                 }
                 if (Database && firstNavigate) { // filter by database
+                    DatabaseDescriptionReceived = true;
                     for (const auto& storagePool : domainDescription->Description.GetStoragePools()) {
                         TString storagePoolName = storagePool.GetName();
                         DatabaseStoragePools.emplace(storagePoolName);
@@ -2368,6 +2370,7 @@ public:
             auto itVDiskStateResponse = VDiskStateResponse.find(nodeId);
             if (itVDiskStateResponse != VDiskStateResponse.end()) {
                 if (itVDiskStateResponse->second.Error("NodeDisconnected")) {
+                    AddWhiteboardDisksProblemOnFallback();
                     VDiskRequestDone();
                 }
             }
@@ -2376,6 +2379,7 @@ public:
             auto itPDiskStateResponse = PDiskStateResponse.find(nodeId);
             if (itPDiskStateResponse != PDiskStateResponse.end()) {
                 if (itPDiskStateResponse->second.Error("NodeDisconnected")) {
+                    AddWhiteboardDisksProblemOnFallback();
                     PDiskRequestDone();
                 }
             }
@@ -2384,9 +2388,26 @@ public:
             auto itBSGroupStateResponse = BSGroupStateResponse.find(nodeId);
             if (itBSGroupStateResponse != BSGroupStateResponse.end()) {
                 if (itBSGroupStateResponse->second.Error("NodeDisconnected")) {
+                    AddWhiteboardGroupsProblemOnFallback();
                     BSGroupRequestDone();
                 }
             }
+        }
+    }
+
+    void AddWhiteboardGroupsProblemOnFallback() {
+        // without BSC data the whiteboard is the only source of the groups,
+        // so the groups known only to the lost node are missing from the response
+        if (FallbackToWhiteboard) {
+            AddProblem("wb-incomplete-groups");
+        }
+    }
+
+    void AddWhiteboardDisksProblemOnFallback() {
+        // with BSC data the disks of a disconnected node are still listed from BSC,
+        // without it the whiteboard is the only source and they are lost
+        if (FallbackToWhiteboard) {
+            AddProblem("wb-incomplete-disks");
         }
     }
 
@@ -2568,12 +2589,40 @@ public:
         }
     }
 
+    void AddNotAppliedProblems() {
+        // The groups of a database are the groups of its storage pools, which are taken from the description
+        // of the database. Without the description the pre-filter is skipped and NeedFilter is recalculated
+        // without it, so the groups of the whole cluster are returned. A database whose description was
+        // received and has no storage pools is not such a case.
+        const bool databaseUnknown = Database && !DatabaseDescriptionReceived;
+        if (databaseUnknown) {
+            AddProblem("no-database-info");
+        }
+        // An empty list can be neither unfiltered nor unsorted, the same as in /viewer/nodes. FoundGroups is
+        // counted before the limit, so a page beyond the end of the list is not taken for an empty list.
+        if (FoundGroups == 0) {
+            return;
+        }
+        // a flag is still set here when the requested operation could not be applied, usually because
+        // the data it needs was not received, so the response is a page of unfiltered / ungrouped / unsorted data
+        if (NeedFilter || databaseUnknown) {
+            AddProblem("filter-not-applied");
+        }
+        if (NeedGroup) {
+            AddProblem("group-not-applied");
+        }
+        if (NeedSort) {
+            AddProblem("sort-not-applied");
+        }
+    }
+
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
         if (IsStrictDatabaseOnlyRequest() && DenyRequestIfStorageIdsAreOutOfDatabase()) {
             return;
         }
         ApplyEverything();
+        AddNotAppliedProblems();
         ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TStorageGroupsInfo json;
         json.SetVersion(Viewer->GetCapabilityVersion("/storage/groups"));

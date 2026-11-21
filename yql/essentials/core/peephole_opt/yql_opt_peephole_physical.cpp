@@ -3824,14 +3824,29 @@ TExprNode::TPtr MakeWideTableSource(const TExprNode& tableSource, TExprContext& 
         columns.push_back(TString(item->GetName()));
     }
 
-    auto innerFlow = ctx.NewCallable(tableSource.Pos(), "ToFlow", { tableSource.HeadPtr() });
-    auto expandMap = MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx);
-    auto source = ctx.NewCallable(tableSource.Pos(), "WideTableSource", { expandMap });
+    // clang-format off
+    const auto innerFlow = ctx.Builder(tableSource.Pos())
+        .Callable("ToFlow")
+            .Add(0, tableSource.HeadPtr())
+        .Seal()
+        .Build();
+
+    auto wideFlow = ctx.Builder(tableSource.Pos())
+        .Callable("ToFlow")
+            .Callable(0, "WideTableSource")
+                .Callable(0, "FromFlow")
+                    .Add(0, MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+    // clang-format on
+
     if (narrowMapColumns) {
         *narrowMapColumns = columns;
-        return source;
+        return wideFlow;
     } else {
-        return MakeNarrowMap(tableSource.Pos(), columns, source, ctx);
+        return MakeNarrowMap(tableSource.Pos(), columns, wideFlow, ctx);
     }
 }
 

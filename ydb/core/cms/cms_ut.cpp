@@ -3338,6 +3338,43 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
     }
 
+    Y_UNIT_TEST(WalleDrainDataRequiresCmsSupport)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        ui32 createRequests = 0;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                auto *msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeCmsID()) {
+                    // Older CMS tablets do not provide version information on connection.
+                    msg->VersionInfo.clear();
+                }
+            } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
+                ++createRequests;
+            }
+            return prev(ev);
+        });
+
+        for (const TString uri : {"/api/walle/v11/tasks", "/api/walle/v11/tasks?dry_run=true"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri, MakeWalleDrainDataJson(nodeId));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("CMS does not support drain_data"), response);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
+        env.CheckWalleListTasks(0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckListRequests(WALLE_CMS_USER, 0);
+
+        // Ordinary tasks do not require the support check.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
+    }
+
     Y_UNIT_TEST(WalleDrainDataDisabledEvictVDisks)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());

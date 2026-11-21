@@ -520,7 +520,7 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             break;
         }
         case TRule_literal_value::kAltLiteralValue10: {
-            result.Expr = BuildEmptyAction(Ctx_.Pos());
+            result.Expr = BuildEmptyAction(Ctx_.Position(node));
             break;
         }
         case TRule_literal_value::ALT_NOT_SET:

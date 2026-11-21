@@ -115,7 +115,8 @@ public:
     virtual IEventBase* PrepareEvent(bool last, TStats& stats) = 0;
     virtual void Clear() = 0;
     virtual bool IsFilled() const = 0;
-    // Bytes currently held in memory by the buffer (i.e. what a flush would release)
+    // Bytes the buffer accounts for: the output held for the next part and the cell bytes
+    // of the rows a format keeps unencoded (a flush before the last keeps the latter).
     virtual ui64 GetMemoryBytes() const = 0;
     virtual TString GetError() const = 0;
 };

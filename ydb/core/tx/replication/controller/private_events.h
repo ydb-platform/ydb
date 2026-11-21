@@ -1,6 +1,7 @@
 #pragma once
 
 #include "replication.h"
+#include <ydb/core/tx/replication/controller/protos/cdc_target.pb.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
@@ -13,6 +14,7 @@
 #include <util/generic/hash.h>
 
 #include <optional>
+#include <vector>
 
 namespace NKikimr::NReplication::NController {
 
@@ -58,6 +60,7 @@ struct TEvPrivate {
         struct TAddEntry {
             TReplication::ETargetKind Kind;
             TReplication::ITarget::IConfig::TPtr Config;
+            std::vector<NYdb::NTable::TChangefeedDescription> CdcStreams;
 
             explicit TAddEntry(TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config);
         };
@@ -160,8 +163,15 @@ struct TEvPrivate {
     struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {
         const TPathId DstPathId;
         const bool WaitingImport = false;
+        const TPathId CdcStreamPathId;
+        const bool ActivateCdcOnDetach = false;
+
+        // Enrollment binds ParentTargetId and persists this with DstPathId before START.
+        std::optional<NKikimrReplicationController::TCdcTarget> CdcState;
 
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId, bool waitingImport);
+        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& topicPathId,
+            const TPathId& streamPathId, bool activateOnDetach);
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error);
         TString ToString() const override;
     };

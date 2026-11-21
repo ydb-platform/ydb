@@ -45,7 +45,6 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
 
 
 class TKeyLevel;
-struct TMirrorerInfo;
 
 enum class ECommitState {
     Pending,
@@ -1181,6 +1180,14 @@ private:
     TDuration PartitionQuotaWaitTimeForCurrentBlob;
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
+
+    struct TMirrorerInfo {
+        explicit TMirrorerInfo(const TActorId& actor)
+            : Actor(actor)
+        {}
+
+        TActorId Actor;
+    };
 
     THolder<TMirrorerInfo> Mirrorer;
 

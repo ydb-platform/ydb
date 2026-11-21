@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_cdc.h"
 
 #include <util/generic/algorithm.h>
 
@@ -294,6 +295,20 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        if (alter && desiredState == TReplication::EState::Done
+            && record.GetSwitchState().GetDone().GetFailoverMode()
+                == NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE)
+        {
+            for (auto* target : Replication->GetTargets()) {
+                if (auto* cdc = GetCdcTarget(target);
+                    cdc && cdc->GetCdc().GetPhase() == NKikimrReplicationController::TCdcTarget::RUNNING)
+                {
+                    cdc->GetCdc().SetPhase(NKikimrReplicationController::TCdcTarget::STOPPING);
+                    db.Table<Schema::Targets>().Key(Replication->GetId(), target->GetId()).Update(
+                        NIceDb::TUpdate<Schema::Targets::Cdc>(cdc->GetCdc().SerializeAsString()));
+                }
+            }
+        }
         if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
             issue.clear();
         }
@@ -355,6 +370,13 @@ public:
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
+                continue;
+            }
+
+            if (desiredState == TReplication::EState::Done
+                && target->GetDstState() == TReplication::EDstState::Done
+                && (GetCdcTarget(target) || !GetCdcChildren(*Replication, tid).empty()))
+            {
                 continue;
             }
 

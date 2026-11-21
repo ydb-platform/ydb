@@ -443,6 +443,10 @@ message TTableDescription {
 
     // Local graph of the logical index owning this physical posting table.
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
+
+    // Internal ALTER command: activate these streams atomically with replica detach.
+    // Persisted only in pending AlterData, never in the resulting table schema.
+    repeated NKikimrProto.TPathID ActivateCdcStreams = 57;
 }
 
 message TCompressionOptions {
@@ -1230,6 +1234,10 @@ message TCreateCdcStream {
     // Topic autopartitioning settings
     optional bool TopicAutoPartitioning = 5 [default = false]; // we always can split and merge of topic partitions
     optional uint32 MaxPartitionCount = 6;
+
+    // Internal creation of a disabled destination CDC stream for async replication.
+    optional string ReplicationSourceConsumer = 7;
+    repeated Ydb.Topic.Consumer ReplicationConsumers = 8;
 }
 
 message TAlterCdcStream {

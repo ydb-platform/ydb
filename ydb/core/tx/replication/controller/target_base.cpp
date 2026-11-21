@@ -24,7 +24,7 @@ bool CanAttachDestination(const TReplication* replication, ETargetKind kind) {
     }
 
     if (replication->GetDesiredState() == TReplication::EState::Paused) {
-        return kind != ETargetKind::Topic && replication->GetConfig().GetInitialScan();
+        return !IsTopicTarget(kind) && replication->GetConfig().GetInitialScan();
     }
 
     return true;
@@ -252,15 +252,15 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
-        if (Kind == ETargetKind::Topic && Replication->GetDesiredState() == TReplication::EState::Paused) {
+        if (IsTopicTarget(Kind) && Replication->GetDesiredState() == TReplication::EState::Paused) {
             break;
         }
-        if (!DstCreator) {
+        if (!DstCreator && Kind != ETargetKind::CdcTopic) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
         break;
     case EDstState::Ready:
-        if (Kind == ETargetKind::Topic) {
+        if (IsTopicTarget(Kind)) {
             break;
         }
         if (WorkerRegistar && WorkerRegistarProxy != Replication->GetYdbProxy()) {
@@ -277,6 +277,12 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         if (Workers) {
             RemoveWorkers(ctx);
         } else if (!DstCreator) {
+            if ((Replication->GetDesiredState() == TReplication::EState::Done
+                    || Replication->GetState() == TReplication::EState::Removing)
+                && !Replication->AreCdcChildrenPrepared(Id))
+            {
+                break;
+            }
             const bool canAttach = !DstPathId && CanAttachDestination(Replication, Kind);
             if (canAttach) {
                 DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));

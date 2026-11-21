@@ -2,6 +2,9 @@
 #include "logging.h"
 #include "private_events.h"
 #include "topic_mirror.h"
+#include "target_cdc.h"
+
+#include <util/generic/algorithm.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -43,13 +46,67 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (Kind == TReplication::ETargetKind::Topic) {
-            Send(PipeCache, new TEvPipeCache::TEvForward(
-                new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId));
+        if (!CdcStreams.empty()) {
+            DescribeDst();
+            Become(&TThis::StateDescribeCdcTable);
+        } else if (Kind == TReplication::ETargetKind::Topic) {
+            DescribeDst();
             Become(&TThis::StateDescribeTopic);
         } else {
             AlterDst();
         }
+    }
+
+    void DescribeDst() {
+        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(DstPathId);
+        request->Record.MutableOptions()->SetShowPrivateTable(Kind == TReplication::ETargetKind::Topic);
+        Send(PipeCache, new TEvPipeCache::TEvForward(request.Release(), SchemeShardId));
+    }
+
+    STATEFN(StateDescribeCdcTable) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, HandleCdcTable);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleCdcTable(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        const auto& record = ev->Get()->GetRecord();
+        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+            return Error(record.GetStatus(), record.GetReason());
+        }
+        const auto& desc = record.GetPathDescription();
+        const auto& self = desc.GetSelf();
+        if (!desc.HasTable() || TPathId(self.GetSchemeshardId(), self.GetPathId()) != DstPathId) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC parent identity changed");
+        }
+        if (!self.GetCreateFinished() || self.GetPathState() != NKikimrSchemeOp::EPathStateNoChanges) {
+            return Retry();
+        }
+        const auto& table = desc.GetTable();
+        const auto& replication = table.GetReplicationConfig();
+        const bool detached = replication.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE;
+        if ((!detached && (replication.GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                || TPathId::FromProto(replication.GetOwnerPathId()) != ReplicationPathId))
+            || (detached && replication.HasOwnerPathId()))
+        {
+            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC parent ownership changed");
+        }
+        for (const auto& expected : CdcStreams) {
+            const auto stream = FindIf(table.GetCdcStreams(), [&](const auto& entry) {
+                return TPathId::FromProto(entry.GetPathId()) == expected.PathId;
+            });
+            const auto state = detached && expected.Activate
+                ? NKikimrSchemeOp::ECdcStreamStateReady : NKikimrSchemeOp::ECdcStreamStateDisabled;
+            if (stream == table.GetCdcStreams().end() || stream->GetState() != state) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC handoff identities or states changed");
+            }
+        }
+        if (detached) {
+            return Success();
+        }
+        AlterDst();
     }
 
     STATEFN(StateDescribeTopic) {
@@ -103,10 +160,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     void AlterDst() {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
-        tx.SetInternal(true);
-        if (ReplicationPathId) {
-            ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwnerPathId());
-        }
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -115,13 +168,23 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
             tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
                 NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            for (const auto& stream : CdcStreams) {
+                if (stream.Activate) {
+                    stream.PathId.ToProto(tx.MutableAlterTable()->AddActivateCdcStreams());
+                }
+            }
             break;
+        case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             tx.CopyFrom(TopicTx);
-            tx.SetInternal(true);
             break;
         case TReplication::ETargetKind::Transfer:
             break;
+        }
+
+        tx.SetInternal(true);
+        if (ReplicationPathId) {
+            ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwnerPathId());
         }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
@@ -167,8 +230,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             // An already collected path id resolves to an empty path, which
             // ALTER reports as a name conflict. Confirm that it is absent.
             AlterError = record.GetReason();
-            Send(PipeCache, new TEvPipeCache::TEvForward(
-                new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId));
+            DescribeDst();
             return Become(&TThis::StateCheckDst);
         default:
             return Error(record.GetStatus(), record.GetReason());
@@ -298,6 +360,14 @@ public:
     {
     }
 
+    TDstAlterer(const TActorId& parent, ui64 schemeShardId, ui64 rid, ui64 tid,
+            const TPathId& dstPathId, const TPathId& replicationPathId, TVector<TCdcDetachStream>&& streams)
+        : TDstAlterer(parent, schemeShardId, rid, tid, TReplication::ETargetKind::Table,
+            dstPathId, TReplication::EState::Done, replicationPathId, {})
+    {
+        CdcStreams = std::move(streams);
+    }
+
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (Kind == TReplication::ETargetKind::Topic) {
@@ -312,6 +382,7 @@ public:
                 case TReplication::ETargetKind::Table:
                 case TReplication::ETargetKind::IndexTable:
                     return AllocateTxId();
+                case TReplication::ETargetKind::CdcTopic:
                 case TReplication::ETargetKind::Topic:
                 case TReplication::ETargetKind::Transfer:
                     return Success();
@@ -345,6 +416,7 @@ private:
     const TPathId ReplicationPathId;
     const TReplication::EState DesiredState;
     const TTopicMirrorSettings TopicMirror;
+    TVector<TCdcDetachStream> CdcStreams;
     NKikimrSchemeOp::TModifyScheme TopicTx;
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -362,11 +434,23 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
 
     const auto desiredState = replication->GetState() == TReplication::EState::Removing
         ? TReplication::EState::Done : replication->GetDesiredState();
-    if (target->GetKind() == TReplication::ETargetKind::Topic) {
+    if (IsTopicTarget(target->GetKind())) {
         TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
             target->GetSrcPath(), target->GetStreamConsumerName());
         return CreateDstTopicAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-            replication->GetId(), target->GetId(), target->GetDstPathId(), desiredState, std::move(topicMirror));
+            replication->GetId(), target->GetId(), target->GetDstPathId(), desiredState,
+            replication->GetPathId(), std::move(topicMirror));
+    }
+
+    TVector<TCdcDetachStream> streams;
+    if (desiredState == TReplication::EState::Done) {
+        for (const auto* child : GetCdcChildren(*replication, targetId)) {
+            streams.push_back({TPathId::FromProto(child->GetCdc().GetStreamPathId()), child->ActivateOnDetach()});
+        }
+    }
+    if (!streams.empty()) {
+        return CreateDstCdcDetacher(ctx.SelfID, replication->GetSchemeShardId(), replication->GetId(), targetId,
+            target->GetDstPathId(), replication->GetPathId(), std::move(streams));
     }
 
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
@@ -383,10 +467,17 @@ IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
 
 IActor* CreateDstTopicAlterer(const TActorId& parent, ui64 schemeShardId,
         ui64 rid, ui64 tid, const TPathId& dstPathId, TReplication::EState desiredState,
-        TTopicMirrorSettings&& topicMirror)
+        const TPathId& replicationPathId, TTopicMirrorSettings&& topicMirror)
 {
     return new TDstAlterer(parent, schemeShardId, rid, tid, TReplication::ETargetKind::Topic,
-        dstPathId, desiredState, {}, std::move(topicMirror));
+        dstPathId, desiredState, replicationPathId, std::move(topicMirror));
+}
+
+IActor* CreateDstCdcDetacher(const TActorId& parent, ui64 schemeShardId,
+        ui64 rid, ui64 tid, const TPathId& dstPathId, const TPathId& replicationPathId,
+        TVector<TCdcDetachStream>&& streams)
+{
+    return new TDstAlterer(parent, schemeShardId, rid, tid, dstPathId, replicationPathId, std::move(streams));
 }
 
 }

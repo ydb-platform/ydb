@@ -4,6 +4,7 @@
 #include "stream_creator.h"
 #include "stream_remover.h"
 #include "target_with_stream.h"
+#include "target_cdc.h"
 #include "util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -240,8 +241,9 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
-    if (GetKind() == TReplication::ETargetKind::Topic
-        && replication->GetState() == TReplication::EState::Removing)
+    if (replication->GetState() == TReplication::EState::Removing
+        && (IsTopicTarget(GetKind())
+            || (GetDstState() == EDstState::Alter && !GetCdcChildren(*replication, GetId()).empty())))
     {
         switch (GetDstState()) {
         case EDstState::Alter:

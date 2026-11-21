@@ -185,14 +185,6 @@ bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const 
          GetStartOffset() == GetEndOffset());
 }
 
-struct TMirrorerInfo {
-    TMirrorerInfo(const TActorId& actor)
-    : Actor(actor) {
-    }
-
-    TActorId Actor;
-};
-
 const TString& TPartition::TopicName() const {
     return TopicConverter->GetClientsideName();
 }

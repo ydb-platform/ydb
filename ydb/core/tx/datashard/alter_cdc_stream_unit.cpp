@@ -46,7 +46,8 @@ public:
             DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
             break;
 
-        case NKikimrSchemeOp::ECdcStreamStateReady:
+        case NKikimrSchemeOp::ECdcStreamStateReady: {
+            const auto previousState = DataShard.GetUserTables().at(pathId.LocalPathId)->CdcStreams.at(streamPathId).State;
             tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
 
             if (params.HasDropSnapshot()) {
@@ -55,7 +56,7 @@ public:
 
                 const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
                 DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
-            } else {
+            } else if (previousState != NKikimrSchemeOp::ECdcStreamStateDisabled) {
                 Y_DEBUG_ABORT("Absent snapshot");
             }
 
@@ -63,6 +64,7 @@ public:
                 DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
             }
             break;
+        }
 
         default:
             Y_ENSURE(false, "Unexpected alter cdc stream"

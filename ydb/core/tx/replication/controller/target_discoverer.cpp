@@ -148,8 +148,13 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe table succeeded",
                 {"path", path.first});
 
-            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
+            auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
+            target.CdcStreams = result.GetTableDescription().GetChangefeedDescriptions();
+            EraseIf(target.CdcStreams, [](const auto& stream) {
+                return stream.GetAttributes().contains("__async_replication");
+            });
+
             YDB_LOG_INFO("Add target",
                 {"srcPath", target.Config->GetSrcPath()},
                 {"dstPath", target.Config->GetDstPath()},

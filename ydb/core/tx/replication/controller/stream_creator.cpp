@@ -91,6 +91,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 ++RequestCookie);
             break;
         case TReplication::ETargetKind::Transfer:
+        case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             return CreateConsumer();
         }
@@ -151,7 +152,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         switch (operation) {
         case ETopicOperation::CreateConsumer: {
             auto& consumer = settings.BeginAddConsumer(SrcConsumerName);
-            if (Kind == TReplication::ETargetKind::Topic) {
+            if (IsTopicTarget(Kind)) {
                 consumer.Important(true);
                 settings.BeginAlterAttributes().Add("_ydb_replication_consumer", SrcConsumerName);
             }

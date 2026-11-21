@@ -6,7 +6,10 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/persqueue/public/schema/common.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+
+#include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -15,6 +18,68 @@ namespace NKikimr::NSchemeShard {
 namespace NCdc {
 
 namespace {
+
+TString CheckReplicationStream(const TTxTransaction& tx, const TPath& tablePath, const TOperationContext& context) {
+    const auto& op = tx.GetCreateCdcStream();
+    if (op.ReplicationConsumersSize() && (!tx.GetInternal() || !op.HasReplicationSourceConsumer())) {
+        return "CDC replication consumers require an internal managed stream";
+    }
+    if (!op.HasReplicationSourceConsumer()) {
+        return {};
+    }
+
+    const auto& stream = op.GetStreamDescription();
+    if (!tx.GetInternal()
+        || op.GetReplicationSourceConsumer().empty()
+        || stream.GetState() != NKikimrSchemeOp::ECdcStreamStateDisabled)
+    {
+        return "Replication CDC creation requires an internal Disabled stream with a nonempty source consumer";
+    }
+
+    if (!EqualToOneOf(stream.GetFormat(),
+        NKikimrSchemeOp::ECdcStreamFormatJson,
+        NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson,
+        NKikimrSchemeOp::ECdcStreamFormatDebeziumJson))
+    {
+        return "Replication CDC creation supports public JSON formats only";
+    }
+
+    if (stream.GetSchemaChanges()) {
+        return "Replication CDC creation does not support schema changes";
+    }
+
+    if (!op.GetTopicPartitions()
+        || op.GetTopicAutoPartitioning())
+    {
+        return "Replication CDC creation requires an explicit static partition count";
+    }
+
+    const auto& attributes = stream.GetUserAttributes();
+    if (FindIf(attributes.begin(), attributes.end(), [](const auto& attribute) {
+        return attribute.GetKey() == ATTR_ASYNC_REPLICATION;
+    }) != attributes.end()) {
+        return "Replication service CDC streams cannot be mirrored";
+    }
+
+    if (!tablePath.IsAsyncReplicaTable()
+        || !tx.HasExpectedReplicationOwnerPathId())
+    {
+        return "Replication CDC creation requires an owned async replica table";
+    }
+
+    const auto expectedOwner = TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId());
+    const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
+    if (!expectedOwner
+        || !expectedOwner.OwnerId
+        || !expectedOwner.LocalPathId
+        || !config.HasOwnerPathId()
+        || TPathId::FromProto(config.GetOwnerPathId()) != expectedOwner)
+    {
+        return "Replication CDC owner does not match the table owner";
+    }
+
+    return {};
+}
 
 class TPropose: public TSubOperationState {
 public:
@@ -138,7 +203,8 @@ public:
                 .NotBackupTable()
                 .NotUnderDeleting();
 
-            if (checks && (!Transaction.GetInternal() || !tablePath.IsImportingReplica())) {
+            const bool replicationStream = Transaction.GetInternal() && op.HasReplicationSourceConsumer();
+            if (checks && !replicationStream && (!Transaction.GetInternal() || !tablePath.IsImportingReplica())) {
                 checks.NotAsyncReplicaTable();
             }
 
@@ -150,6 +216,11 @@ public:
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
+        }
+
+        if (const auto error = CheckReplicationStream(Transaction, tablePath, context)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, error);
+            return result;
         }
 
         auto streamPath = tablePath.Child(streamName);
@@ -603,16 +674,23 @@ public:
         const auto tablePath = workingDirPath.Child(tableName);
         {
             const auto checks = tablePath.Check();
+            const bool replicationStream = Transaction.GetInternal() && op.HasReplicationSourceConsumer();
             NCdcStreamAtTable::CheckSrcDirOnPropose(
                 checks,
                 tablePath,
                 InitialScan ? OperationId.GetTxId() : InvalidTxId,
-                Transaction.GetInternal());
+                Transaction.GetInternal(),
+                replicationStream);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
+        }
+
+        if (const auto error = CheckReplicationStream(Transaction, tablePath, context)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, error);
+            return result;
         }
 
         TString errStr;
@@ -776,7 +854,8 @@ void DoCreatePqPart(
         const TString& streamName,
         TTableInfo::TCPtr table,
         const TVector<TString>& boundaries,
-        const bool acceptExisted)
+        const bool acceptExisted,
+        const NKikimrPQ::TPQTabletConfig& consumers)
 {
     auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
     outTx.SetFailOnExist(!acceptExisted);
@@ -790,6 +869,9 @@ void DoCreatePqPart(
 
     auto& pqConfig = *desc.MutablePQTabletConfig();
     pqConfig.SetTopicName(streamName);
+    if (op.HasReplicationSourceConsumer()) {
+        pqConfig.SetReplicationSourceConsumer(op.GetReplicationSourceConsumer());
+    }
     pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
     pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
 
@@ -798,6 +880,8 @@ void DoCreatePqPart(
     partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
+    *pqConfig.MutableConsumers() = consumers.GetConsumers();
+    *partitionConfig.MutableReadQuota() = consumers.GetPartitionConfig().GetReadQuota();
 
     if (pqParams.ReplicationAutoPartitioning) {
         auto * ps = pqConfig.MutablePartitionStrategy();
@@ -811,7 +895,7 @@ void DoCreatePqPart(
         ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
         ps->SetMinPartitionCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : 1);
         ps->SetScaleThresholdSeconds(30);
-    } else {
+    } else if (!op.HasReplicationSourceConsumer()) {
         for (const auto& tag : table->KeyColumnIds) {
             Y_ABORT_UNLESS(table->Columns.contains(tag));
             const auto& column = table->Columns.at(tag);
@@ -852,9 +936,13 @@ static void FillModifySchemaForCdc(
         const NKikimrSchemeOp::TCreateCdcStream& op,
         const TOperationId& opId,
         bool acceptExisted,
-        bool initialScan)
+        bool initialScan,
+        const TPathId& expectedReplicationOwner)
 {
     outTx.SetFailOnExist(!acceptExisted);
+    if (expectedReplicationOwner) {
+        expectedReplicationOwner.ToProto(outTx.MutableExpectedReplicationOwnerPathId());
+    }
     outTx.MutableCreateCdcStream()->CopyFrom(op);
     if (initialScan) {
         outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
@@ -868,10 +956,11 @@ void DoCreateStreamImpl(
         const TPath& tablePath,
         const bool acceptExisted,
         const bool initialScan,
-        const bool internal)
+        const bool internal,
+        const TPathId& expectedReplicationOwner)
 {
     auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
-    FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+    FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan, expectedReplicationOwner);
     outTx.SetInternal(internal);
     result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
 }
@@ -884,13 +973,14 @@ void DoCreateStream(
         const TPath& tablePath,
         const bool acceptExisted,
         const bool initialScan,
-        const bool internal)
+        const bool internal,
+        const TPathId& expectedReplicationOwner)
 {
-    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan, internal);
+    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan, internal, expectedReplicationOwner);
 
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
-        FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+        FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan, expectedReplicationOwner);
         outTx.SetInternal(internal);
         result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
     }
@@ -928,7 +1018,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationContext& context, const TO
     return nullptr;
 }
 
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationContext& context, const TOperationId& opId, const TPath& tablePath, bool internal) {
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationContext& context, const TOperationId& opId, const TPath& tablePath, bool internal, bool allowAsyncReplica) {
     const auto checks = tablePath.Check();
     checks
         .NotEmpty()
@@ -940,7 +1030,7 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationContext& context, co
         .NotUnderDeleting()
         .NotUnderOperation();
 
-    if (checks && (!internal || !tablePath.IsImportingReplica())) {
+    if (checks && !allowAsyncReplica && (!internal || !tablePath.IsImportingReplica())) {
         checks.NotAsyncReplicaTable();
     }
 
@@ -1086,10 +1176,11 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool internal)
+    bool internal,
+    bool allowAsyncReplica)
 {
     const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
-    if (auto reject = RejectOnTablePathChecks(context, opId, tablePath, internal)) {
+    if (auto reject = RejectOnTablePathChecks(context, opId, tablePath, internal, allowAsyncReplica)) {
         return reject;
     }
 
@@ -1142,12 +1233,17 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& streamName = streamDesc.GetName();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted, tx.GetInternal());
+    const bool replicationStream = tx.GetInternal() && op.HasReplicationSourceConsumer();
+    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName,
+        acceptExisted, tx.GetInternal(), replicationStream);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
     const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
+    if (const auto error = CheckReplicationStream(tx, tablePath, context)) {
+        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, error)};
+    }
 
     switch (streamDesc.GetMode()) {
     case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
@@ -1213,12 +1309,26 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
     TVector<TString> boundaries;
-    if (!FillBoundaries(*table, op, boundaries, errStr)) {
+    if (!replicationStream && !FillBoundaries(*table, op, boundaries, errStr)) {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
     }
 
-    DoCreateStream(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan, tx.GetInternal());
-    DoCreatePqPart(result, op, opId, streamPath, streamName, table, boundaries, acceptExisted);
+    NKikimrPQ::TPQTabletConfig consumers;
+    const auto serviceTypes = NPQ::NSchema::GetSupportedClientServiceTypes();
+    for (const auto& consumer : op.GetReplicationConsumers()) {
+        auto added = NPQ::NSchema::AddConsumer(&consumers, consumer, serviceTypes, true, nullptr);
+        if (!added) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, added.GetErrorMessage())};
+        }
+    }
+    if (auto valid = NPQ::NSchema::ValidateConsumersConfig(consumers, NPQ::NSchema::EOperation::Create); !valid) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, valid.GetErrorMessage())};
+    }
+
+    const auto expectedOwner = tx.HasExpectedReplicationOwnerPathId()
+        ? TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId()) : TPathId{};
+    DoCreateStream(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan, tx.GetInternal(), expectedOwner);
+    DoCreatePqPart(result, op, opId, streamPath, streamName, table, boundaries, acceptExisted, consumers);
 
     return result;
 }

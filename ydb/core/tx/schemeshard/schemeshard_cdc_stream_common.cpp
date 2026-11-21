@@ -143,7 +143,8 @@ void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
     const TPath& path,
     TTxId op,
-    bool internal)
+    bool internal,
+    bool allowAsyncReplica)
 {
     checks
         .NotEmpty()
@@ -155,7 +156,7 @@ void CheckSrcDirOnPropose(
         .NotUnderDeleting();
 
     if (checks) {
-        if (!internal || !path.IsImportingReplica()) {
+        if (!allowAsyncReplica && (!internal || !path.IsImportingReplica())) {
             checks.NotAsyncReplicaTable();
         }
 

@@ -390,7 +390,7 @@ message TPQTabletConfig {
     // Present only on a topic backing a changefeed managed by replication.
     message TCdcReplication {
     }
-    optional TCdcReplication CdcReplication = 51;
+    optional TCdcReplication CdcReplication = 52;
 
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory

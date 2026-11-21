@@ -76,6 +76,7 @@ private:
         hFunc(TEvPhantomFlagStorageWriteItems, Handle)
         hFunc(TEvPhantomFlagExtractedFromChunk, Handle)
         hFunc(TEvPhantomFlagStorageDrop, Handle)
+        hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
         hFunc(TEvChunkKeeperDiscoverResult, HandleInit)
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
     )
@@ -130,9 +131,16 @@ private:
             break;
         }
         default: {
-            // ChunkKeeper is disabled, unable to manage chunks, terminate this actor
-            PassAway();
-            return;
+            // ChunkKeeper is disabled and has dropped the chunks it kept, so nothing can be stored on disk. Stay alive:
+            // full syncs wait for the snapshot answer, which now comes from the sync log alone, and the extracted
+            // sync log chunks must still be retired to be freed
+            YDB_LOG_ERROR(VDISKP(Ctx.SyncLogCtx->VCtx, "ChunkKeeper is disabled, PhantomFlagStorage keeps no chunks"),
+                {"marker", "BSPFP15"},
+                {"chunkCount", Data.Chunks.size()});
+            ChunkKeeperDisabled = true;
+            Data.Chunks.clear();
+            CommitState();
+            break;
         }
         }
 
@@ -321,13 +329,30 @@ private:
                 [&](TGetSnapshot& req) { ServeSnapshotRequest(std::move(req)); },
                 [&](const TDeleteChunk& req) { DeleteChunk(req.ChunkIdx); },
             }, request);
-            return;
+            if (RequestInFlight) {
+                return;
+            }
+            // the request was done at once (a chunk that is already gone), go on with the queues
         }
         ProcessWriteQueue();
     }
 
     void ProcessWriteQueue() {
         if (RequestInFlight) {
+            return;
+        }
+
+        if (ChunkKeeperDisabled) {
+            // nowhere to write the items; only retire the sync log chunks they were extracted from
+            for (TWriteBatch& batch : BatchQueue) {
+                if (batch.SourceChunkIdx) {
+                    PendingRetiredChunks.push_back(*batch.SourceChunkIdx);
+                }
+            }
+            BatchQueue.clear();
+            if (!PendingRetiredChunks.empty()) {
+                CommitState();
+            }
             return;
         }
 
@@ -536,6 +561,8 @@ private:
 
     std::optional<ui32> TailChunkIdx;
     ui64 TailAvailableSize = 0;
+
+    bool ChunkKeeperDisabled = false;
 };
 
 NActors::IActor* CreatePhantomFlagStorageProcessor(TPhantomFlagStorageData&& data,

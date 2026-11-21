@@ -291,24 +291,24 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             UNIT_ASSERT_EQUAL(state->Val(), 0);
         }
 
-        { // Seqno overflow and reorderings with max possible size
-            i64 cnt = count->Val();
-            i64 cntStart = cnt;
-            ui16 missedSeqno = ++seqno;
-            bool st = false;
-            UNIT_ASSERT(missedSeqno > 10);
-            while (seqno != missedSeqno - 2) { // one for missed and one for initial
-                bool stPrev = st;
-                st = (seqno % 5 == 0);
-                l.Set(st, ++seqno);
-                if (st && !stPrev) {
-                    cnt++;
-                }
-                UNIT_ASSERT_EQUAL(count->Val(), cntStart);
+        { // Reordering across ui16 wrap within the bounded window
+            while (seqno != 65520) {
+                l.Set(false, ++seqno);
             }
-            l.Set(false, missedSeqno); // place missed one
-            UNIT_ASSERT_EQUAL((bool)state->Val(), st);
-            UNIT_ASSERT_EQUAL(count->Val(), cnt);
+            i64 cnt = count->Val();
+            const i64 cntStart = cnt;
+            const ui16 missedSeqno = ++seqno;
+            bool st = false;
+            for (ui32 i = 0; i < 100; ++i) {
+                const bool prev = st;
+                st = i % 5 == 0;
+                l.Set(st, ++seqno);
+                cnt += st && !prev;
+                UNIT_ASSERT_VALUES_EQUAL(count->Val(), cntStart);
+            }
+            l.Set(false, missedSeqno);
+            UNIT_ASSERT_VALUES_EQUAL(bool(state->Val()), st);
+            UNIT_ASSERT_VALUES_EQUAL(count->Val(), cnt);
         }
     }
 
@@ -328,6 +328,98 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             }
             UNIT_ASSERT_EQUAL(state->Val(), 0);
         }
+    }
+
+    Y_UNIT_TEST(LightInitialReordering) {
+        for (ui16 base : {ui16(0), ui16(65534), ui16(65535)}) {
+            TLight light;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
+            light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("light"));
+            NMonitoring::TDynamicCounters::TCounterPtr state = counters->GetCounter("light_state");
+            NMonitoring::TDynamicCounters::TCounterPtr count = counters->GetCounter("light_count");
+
+            // Seqno issuance and Set can be reordered by the producer threads.
+            // The first arrival establishes the baseline, even across ui16 wrap.
+            light.Set(false, ui16(base + 1));
+            light.Set(true, base);
+            UNIT_ASSERT_VALUES_EQUAL(state->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(count->Val(), 0);
+
+            ui64 expectedCount = 0;
+            for (ui32 i = 2; i <= 96; ++i) {
+                const bool expectedState = i % 2 == 0;
+                expectedCount += expectedState;
+                light.Set(expectedState, ui16(base + i));
+                UNIT_ASSERT_VALUES_EQUAL(state->Val(), expectedState);
+                UNIT_ASSERT_VALUES_EQUAL(count->Val(), expectedCount);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LightOldSamplesDoNotOccupyPendingSlots) {
+        TLight light;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
+        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("light"));
+        NMonitoring::TDynamicCounters::TCounterPtr state = counters->GetCounter("light_state");
+        NMonitoring::TDynamicCounters::TCounterPtr count = counters->GetCounter("light_count");
+
+        light.Set(false, 100);
+        light.Set(true, 102); // wait for 101
+        light.Set(true, 99);
+        light.Set(true, 98);
+        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 0);
+        light.Set(false, 101);
+        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
+        light.Set(false, 103);
+        light.Set(true, 104);
+        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
+    }
+
+    Y_UNIT_TEST(LightReorderingAcrossBufferGrowth) {
+        TLight light;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
+        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("light"));
+        NMonitoring::TDynamicCounters::TCounterPtr state = counters->GetCounter("light_state");
+        NMonitoring::TDynamicCounters::TCounterPtr count = counters->GetCounter("light_count");
+
+        for (ui16 seqno = 0; seqno <= 31; ++seqno) {
+            light.Set(false, seqno);
+        }
+        light.Set(true, 40); // a pending entry in the wrapped part of the ring
+        light.Set(false, 131); // requires growing by more than a factor of two
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 0);
+
+        for (ui16 seqno = 32; seqno <= 130; ++seqno) {
+            if (seqno != 40) {
+                light.Set(seqno == 100, seqno);
+            }
+            // Processing 39 also drains the already queued 40.
+            const bool expectedState = seqno == 39 || seqno == 40 || seqno == 100;
+            UNIT_ASSERT_VALUES_EQUAL(state->Val(), expectedState);
+            UNIT_ASSERT_VALUES_EQUAL(count->Val(), ui64(seqno >= 39) + ui64(seqno >= 100));
+        }
+        light.Set(true, 132); // 131 was drained after 130
+        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 3);
+    }
+
+    Y_UNIT_TEST(LightDuplicatesDoNotChangePendingCount) {
+        TLight light;
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("l"));
+        light.Set(false, 1);
+        light.Set(true, 1); // duplicate head
+        light.Set(true, 3);
+        light.Set(false, 3); // duplicate pending observation
+        light.Set(false, 2);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("l_state")->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(light.GetCount(), 1);
+        light.Set(false, 4);
+        light.Set(true, 5);
+        UNIT_ASSERT_VALUES_EQUAL(light.GetCount(), 2);
     }
 
     Y_UNIT_TEST(DriveEstimator) {

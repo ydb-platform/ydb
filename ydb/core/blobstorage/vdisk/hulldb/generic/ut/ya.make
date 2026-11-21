@@ -17,6 +17,7 @@ SRCS(
     blobstorage_hullwritesst_ut.cpp
     blobstorage_hullwritesst_estimate_ut.cpp
     blobstorage_hullwritesst_space_model_ut.cpp
+    blobstorage_hulldatamerger_ut.cpp
 )
 
 END()

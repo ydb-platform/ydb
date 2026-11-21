@@ -25,6 +25,7 @@ private:
     TString Message;
 };
 
+IComputationNode* WrapKqpVectorSearchLimit(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapKqpEnsure(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapKqpIndexLookupJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapFulltextAnalyze(TCallable& callable, const TComputationNodeFactoryContext& ctx);

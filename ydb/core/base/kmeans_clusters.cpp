@@ -106,6 +106,16 @@ namespace {
         return result;
     }
 
+    ui64 ParseUInt64(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
+        ui64 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
+        }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+
     double ParseDouble(const TString& name, const TString& value, TString& error) {
         double result = 0;
         if (!TryFromString(value, result)) {
@@ -675,6 +685,14 @@ private:
     }
 };
 
+Ydb::Table::VectorIndexSettings MakeDistanceSettings(Ydb::Table::VectorIndexSettings settings) {
+    settings.clear_m();
+    settings.clear_ef_construction();
+    settings.clear_min_rows();
+    settings.clear_delta_rows();
+    return settings;
+}
+
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error, EClustersMode mode) {
     if (!ValidateSettings(settings, error)) {
         return nullptr;
@@ -1023,6 +1041,40 @@ bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataS
         settings.set_clusters(clusters);
     }
     return ValidateHnswSettingsPartial(settings, error);
+}
+
+bool FillHnswSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower,
+        const TString& value, TString& error) {
+    error.clear();
+    if (nameLower == "clusters") {
+        const auto parsed = ParseUInt32(nameLower, value, 1, MaxClusters, error);
+        if (error.empty()) {
+            settings.set_clusters(parsed);
+        }
+    } else if (nameLower == "min_rows") {
+        const auto parsed = ParseUInt64(nameLower, value, 0, Max<ui64>(), error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_min_rows(parsed);
+        }
+    } else if (nameLower == "m") {
+        const auto parsed = ParseUInt32(nameLower, value, MinHnswM, MaxHnswM, error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_m(parsed);
+        }
+    } else if (nameLower == "ef_construction") {
+        const auto parsed = ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_ef_construction(parsed);
+        }
+    } else if (nameLower == "delta_rows") {
+        const auto parsed = ParseUInt64(nameLower, value, 0, Max<ui64>(), error);
+        if (error.empty()) {
+            settings.mutable_settings()->set_delta_rows(parsed);
+        }
+    } else {
+        return FillSetting(settings, nameLower, value, error);
+    }
+    return error.empty();
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {

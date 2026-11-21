@@ -383,6 +383,18 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
+    compiler->AddCallable(TKqpVectorSearchLimit::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            const TKqpVectorSearchLimit limit(&node);
+            auto& builder = ctx.PgmBuilder();
+            return TRuntimeNode(TCallableBuilder(builder.GetTypeEnvironment(), TKqpVectorSearchLimit::CallableName(),
+                    builder.NewDataType(NUdf::TDataType<ui64>::Id))
+                .Add(MkqlBuildExpr(limit.Count().Ref(), buildCtx))
+                .Add(MkqlBuildExpr(limit.TargetVector().Ref(), buildCtx))
+                .Add(builder.NewDataLiteral<NUdf::EDataSlot::String>(limit.Settings().Value()))
+                .Build(), false);
+        });
+
     compiler->AddCallable(TKqpEnsure::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpEnsure ensure(&node);

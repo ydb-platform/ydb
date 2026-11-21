@@ -2130,6 +2130,23 @@ TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateKqpVectorSearchLimit(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3, ctx)
+            || !EnsureSpecificDataType(node->Child(0)->Pos(), *node->Child(0)->GetTypeAnn(), EDataSlot::Uint64, ctx)
+            || !EnsureAtom(*node->Child(2), ctx)) {
+        return TStatus::Error;
+    }
+    auto* targetType = RemoveOptionalType(node->Child(1)->GetTypeAnn());
+    if (targetType->GetKind() == ETypeAnnotationKind::Tagged) {
+        targetType = targetType->Cast<TTaggedExprType>()->GetBaseType();
+    }
+    if (!EnsureSpecificDataType(node->Child(1)->Pos(), *targetType, EDataSlot::String, ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(node->Child(0)->GetTypeAnn());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 4, ctx)) {
         return TStatus::Error;
@@ -2588,7 +2605,7 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             TStringBuilder() << "Index does not exist"));
         return TStatus::Error;
     }
-    if (indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (!TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_Index)->Pos()),
             TStringBuilder() << "Index is not a vector index"));
         return TStatus::Error;
@@ -2654,6 +2671,19 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     }
 
     if (node->Child(TKqpCnVectorResolve::idx_WithData)->Content() == "true") {
+        const auto& embeddingColumn = indexDesc->KeyColumns.back();
+        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                && !outputColSet.contains(embeddingColumn)) {
+            auto type = tableDesc->GetColumnType(embeddingColumn);
+            YQL_ENSURE(type, "No embedding column: " << embeddingColumn);
+            auto itemType = ctx.MakeType<TItemExprType>(embeddingColumn, type);
+            if (!itemType->Validate(node->Pos(), ctx)) {
+                return TStatus::Error;
+            }
+            rowItems.push_back(itemType);
+            outputColSet.insert(embeddingColumn);
+        }
+
         // Then index data columns which are not also part of the PK
         for (const auto& dataColumn : indexDesc->DataColumns) {
             YQL_ENSURE(inputColSet.contains(dataColumn), "No data column in input: " << dataColumn);
@@ -4190,6 +4220,7 @@ public:
         AddHandler({TKqlSequencer::CallableName()}, HndlInt(&AnnotateSequencer));
         AddHandler({TKqpProgram::CallableName()}, Hndl(&AnnotateKqpProgram));
         AddHandler({TKqpEnsure::CallableName()}, Hndl(&AnnotateKqpEnsure));
+        AddHandler({TKqpVectorSearchLimit::CallableName()}, Hndl(&AnnotateKqpVectorSearchLimit));
         AddHandler({TKqpLockAndCheck::CallableName()}, HndlInt(&AnnotateKqpLockAndCheck));
         AddHandler({TFulltextAnalyze::CallableName()}, Hndl(&AnnotateFulltextAnalyze));
         AddHandler({TKqpStreamEnumerate::CallableName()}, Hndl(&AnnotateKqpStreamEnumerate));

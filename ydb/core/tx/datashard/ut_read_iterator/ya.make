@@ -4,6 +4,12 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(10)
 
+# This executable's debug sections exceed DWARF32 relocation limits.
+# Strip only this test executable, retaining debug information in libraries.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

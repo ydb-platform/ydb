@@ -2,6 +2,7 @@
 #include "kqp_opt_log_impl.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
@@ -162,7 +163,7 @@ bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& index
 }
 
 bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBuf methodName, bool ascending, TString* expectedUsage = nullptr) {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "Unsupported index type");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "Unsupported index type");
 
     const auto& col = indexDesc.KeyColumns.back();
     const auto& desc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
@@ -209,7 +210,7 @@ bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBu
 }
 
 bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
     const auto& col = indexDesc.KeyColumns.back();
     auto checkMember = [&] (const TExprBase& expr) {
@@ -309,7 +310,7 @@ struct TReadMatch {
                 return {};
             }
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
                 return {};
             }
 
@@ -329,7 +330,7 @@ struct TReadMatch {
                 return {};
             }
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
                 return {};
             }
 
@@ -347,7 +348,7 @@ struct TReadMatch {
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-        if (indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+        if (!TIndexDescription::IsVectorIndex(indexDesc->Type)) {
             return {};
         }
 
@@ -840,7 +841,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
     YQL_ENSURE(!implTable.Next->Next);
@@ -939,7 +940,7 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
     TExprContext& ctx, const TIndexDescription& indexDesc)
 {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "expected a distributed vector index");
 
     const auto pos = match.Pos();
 
@@ -984,6 +985,153 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     return TExprBase{read};
 }
 
+// The extracted target can contain its own lambdas, but it must not
+// reference a row argument outside the target expression.
+bool HasFreeArguments(const TExprNode::TPtr& expr) {
+    TNodeSet bound;
+    VisitExpr(expr, [&](const TExprNode::TPtr& node) {
+        if (node->IsLambda()) {
+            for (const auto& arg : node->Head().Children()) {
+                bound.insert(arg.Get());
+            }
+        }
+        return true;
+    });
+    return bool(FindNode(expr, [&](const TExprNode::TPtr& node) {
+        return node->IsArgument() && !bound.contains(node.Get());
+    }));
+}
+
+TExprBase RewriteFilteredHnswScan(const TReadMatch& match, const TCoFlatMap& flatMap,
+    const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
+    TExprContext& ctx, const TKikimrTableDescription& tableDesc,
+    const TKikimrTableDescription& posting, const TIndexDescription& indexDesc)
+{
+    // Scan index members exactly so WHERE runs before LIMIT.
+    const auto pos = match.Pos();
+    TVector<TCoAtom> coveredColumns;
+    TVector<TCoAtom> lookupColumns;
+    for (const auto& column : match.Columns()) {
+        auto& columns = posting.Metadata->Columns.contains(column.StringValue()) ? coveredColumns : lookupColumns;
+        columns.push_back(column);
+    }
+    const auto columns = MergeColumns(Build<TCoAtomList>(ctx, pos).Add(coveredColumns).Done(),
+        tableDesc.Metadata->KeyColumnNames, ctx);
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
+        indexDesc.SpecializedIndexDescription).GetSettings();
+    TNodeOnNodeOwnedMap replaces;
+    TExprNode::TPtr target;
+    LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, target);
+    YQL_ENSURE(target, "failed to extract the HNSW target vector");
+    const auto postingTable = BuildTableMeta(*posting.Metadata, pos, ctx);
+    auto rows = match.BuildRead(ctx, postingTable, columns);
+    if (!HasFreeArguments(target)) {
+        const auto validation = Build<TKqpVectorSearchLimit>(ctx, pos)
+            .Count(top.Count())
+            .TargetVector(TExprBase(target))
+            .Settings().Build(NKMeans::MakeDistanceSettings(settings.settings()).SerializeAsString())
+            .Done();
+
+        // Evaluate validation before opening the scan. A NULL or empty
+        // target yields no ranges, and a valid target keeps normal read credit.
+        TExprNode::TListType boundaryItems;
+        for (const auto& key : posting.Metadata->KeyColumnNames) {
+            const auto* type = ctx.MakeType<TOptionalExprType>(posting.GetColumnType(key));
+            boundaryItems.push_back(ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *type, ctx)}));
+        }
+        boundaryItems.push_back(Build<TCoInt32>(ctx, pos).Literal().Build("0").Done().Ptr());
+        const auto boundary = ctx.NewList(pos, std::move(boundaryItems));
+        const auto fullRange = ctx.NewCallable(pos, "AsRange", {ctx.NewList(pos, {boundary, boundary})});
+        const auto zero = Build<TCoUint64>(ctx, pos).Literal().Build("0").Done();
+        const auto ranges = ctx.NewCallable(pos, "RangeFinalize", {
+            ctx.NewCallable(pos, "If", {
+                ctx.NewCallable(pos, "!=", {validation.Ptr(), zero.Ptr()}),
+                fullRange,
+                ctx.NewCallable(pos, "RangeEmpty", {})})});
+        rows = Build<TKqlReadTableRanges>(ctx, pos)
+            .Table(postingTable)
+            .Columns(columns)
+            .Ranges(ranges)
+            .Settings(match.Settings())
+            .ExplainPrompt(TKqpReadTableExplainPrompt().BuildNode(ctx, pos))
+            .Done();
+    }
+
+    if (settings.overlap_clusters() > 1) {
+        // Group by the full primary key. Covered values are identical across
+        // a row's postings; SOME preserves them without using them as hash keys.
+        // Aggregate lowers to the distributed grouping pipeline.
+        const THashSet<TString> keyColumns(tableDesc.Metadata->KeyColumnNames.begin(),
+            tableDesc.Metadata->KeyColumnNames.end());
+        TExprNode::TListType handlers;
+        for (const auto& column : columns) {
+            if (keyColumns.contains(TString(column.Value()))) {
+                continue;
+            }
+            handlers.push_back(ctx.Builder(pos)
+                .List()
+                    .Atom(0, column.Value())
+                    .Callable(1, "AggApply")
+                        .Atom(0, "some")
+                        .Callable(1, "ListItemType").Callable(0, "TypeOf").Add(0, rows.Ptr()).Seal().Seal()
+                        .Lambda(2).Param("row").Callable("Member").Arg(0, "row").Atom(1, column.Value()).Seal().Seal()
+                    .Seal()
+                .Seal().Build());
+        }
+        rows = TExprBase(ctx.NewCallable(pos, "Aggregate", {
+            rows.Ptr(), BuildKeyColumnsList(tableDesc, pos, ctx).Ptr(),
+            ctx.NewList(pos, std::move(handlers)), ctx.NewList(pos, {})}));
+    }
+
+    if (lookupColumns.empty()) {
+        rows = Build<TCoExtractMembers>(ctx, pos)
+            .Input(rows)
+            .Members(match.Columns())
+            .Done();
+    } else {
+        // Carry all covered values through the lookup so a projection of
+        // uncovered columns cannot change the predicate or ranking.
+        const auto postingArg = ctx.NewArgument(pos, "postingRow");
+        TExprNode::TListType keyMembers;
+        for (const auto& key : tableDesc.Metadata->KeyColumnNames) {
+            keyMembers.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, key),
+                ctx.NewCallable(pos, "Member", {postingArg, ctx.NewAtom(pos, key)})}));
+        }
+        const auto input = ctx.NewCallable(pos, "Map", {rows.Ptr(),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {postingArg}), ctx.NewList(pos, {
+                postingArg, ctx.NewCallable(pos, "Just", {ctx.NewCallable(pos, "AsStruct", std::move(keyMembers))})}))});
+        TKqpStreamLookupSettings lookupSettings;
+        lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+        lookupSettings.AllowNullKeysPrefixSize = tableDesc.Metadata->KeyColumnNames.size();
+        const auto joined = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(match.Table())
+            .LookupKeys(TExprBase(input))
+            .Columns<TCoAtomList>().Add(lookupColumns).Build()
+            .Settings(lookupSettings.BuildNode(ctx, pos))
+            .Done();
+        const auto joinArg = ctx.NewArgument(pos, "joinedRow");
+        const auto mainArg = ctx.NewArgument(pos, "mainRow");
+        const auto postingRow = ctx.NewCallable(pos, "Nth", {joinArg, ctx.NewAtom(pos, "0")});
+        TExprNode::TListType members;
+        for (const auto& column : match.Columns()) {
+            members.push_back(ctx.NewList(pos, {column.Ptr(), ctx.NewCallable(pos, "Member", {
+                posting.Metadata->Columns.contains(column.StringValue()) ? postingRow : mainArg, column.Ptr()})}));
+        }
+        const auto mainBody = ctx.NewCallable(pos, "Just", {ctx.NewCallable(pos, "AsStruct", std::move(members))});
+        const auto joinBody = ctx.NewCallable(pos, "FlatMap", {
+            ctx.NewCallable(pos, "Nth", {joinArg, ctx.NewAtom(pos, "1")}),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {mainArg}), TExprNode::TPtr(mainBody))});
+        rows = TExprBase(ctx.NewCallable(pos, "FlatMap", {joined.Ptr(),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {joinArg}), TExprNode::TPtr(joinBody))}));
+    }
+    auto read = Build<TCoFlatMap>(ctx, flatMap.Pos())
+        .Input(rows)
+        .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+        .Done().Ptr();
+    VectorTopMain(ctx, top, read);
+    return TExprBase(read);
+}
+
 template<typename T>
 TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHandle pos) {
     auto leafFlag = Build<TCoUint64>(ctx, pos)
@@ -1016,7 +1164,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     Y_ASSERT(indexDesc.KeyColumns.size() > 1);
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
@@ -1203,7 +1351,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "expected a distributed vector index");
     YQL_ENSURE(indexDesc.KeyColumns.size() > 1, "expected a prefixed vector index");
 
     const auto* prefixTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Next->Name);
@@ -1348,7 +1496,7 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
         const auto indexName = indexRead.Index().Value();
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
         // TODO(mbkkt) instead of ensure should be warning and main table read?
-        YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+        YQL_ENSURE(!TIndexDescription::IsVectorIndex(indexDesc->Type),
             "index read doesn't support vector index: " << indexName);
 
         return DoRewriteIndexRead(indexRead, ctx, tableDesc, implTable, {});
@@ -1369,7 +1517,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     const auto indexName = streamLookupIndex.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
     // TODO(mbkkt) instead of ensure should be warning and main table lookup?
-    YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+    YQL_ENSURE(!TIndexDescription::IsVectorIndex(indexDesc->Type),
         "stream lookup doesn't support vector index: " << indexName);
 
     const bool isCovered = CheckIndexCovering(streamLookupIndex.Columns(), implTable);
@@ -3239,8 +3387,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             }
 
             auto checkVectorIndex = [&](const TIndexDescription& idx) -> TMaybe<TString> {
-                if (idx.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                    return TStringBuilder() << "index '" << idx.Name << "' is not a vector kmeans-tree index";
+                if (!TIndexDescription::IsVectorIndex(idx.Type)) {
+                    return TStringBuilder() << "index '" << idx.Name << "' is not a distributed vector index";
                 }
                 return Nothing();
             };
@@ -3283,7 +3431,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 const TIndexDescription* unboundPrefixedIndex = nullptr;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if (idx.State == TIndexDescription::EIndexState::Ready
-                        && idx.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                        && TIndexDescription::IsVectorIndex(idx.Type)
                         && idx.KeyColumns.back() == b.ScoredColumn
                         && IsVectorIndexMetricCompatible(idx, knnMethodName, !b.IsSimilarity))
                     {
@@ -4013,7 +4161,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
         const auto indexName = readTableIndex.Index().Value();
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-        YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+        YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc->Type));
 
         auto reject = [&] (std::string_view because) {
             auto message = TStringBuilder{} << "Given predicate is not suitable for used index: "
@@ -4047,7 +4195,11 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             if (!argument) {
                 return reject(TStringBuilder() << "sorting must contain distance: " << error);
             }
-            auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            const auto body = maybeFlatMap.Lambda().Body();
+            auto asStruct = body.Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            if (!asStruct && indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
+                asStruct = body.Maybe<TCoOptionalIf>().Value().Maybe<TCoAsStruct>();
+            }
             if (!asStruct) {
                 return reject("only simple projection with distance referenced in sorting supported for now");
             }
@@ -4083,7 +4235,19 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
-        if (kqpCtx.Config->GetEnableVectorSearchActor()) {
+        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                && maybeFlatMap && IsPredicateFlatMap(maybeFlatMap.Cast().Lambda().Body().Ref())) {
+            if (!readTableIndex.FullScan()) {
+                return reject("filtered HNSW search requires a full index scan");
+            }
+            const auto& posting = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Next->Name);
+            return RewriteFilteredHnswScan(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase, ctx,
+                tableDesc, posting, *indexDesc);
+        }
+        // Unprefixed HNSW uses the actor's all-partition search;
+        // the legacy lookup chain only implements k-means cluster traversal.
+        if (kqpCtx.Config->GetEnableVectorSearchActor()
+                || indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
             return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                                                 ctx, *indexDesc);
         }
@@ -4169,7 +4333,7 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
     const auto indexName = read.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         // TODO(mbkkt) some warning?
         return node;
     }
@@ -4244,7 +4408,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
     const auto indexName = readTableIndex.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         // TODO(mbkkt) some warning?
         return node;
     }

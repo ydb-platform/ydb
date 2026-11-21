@@ -1095,6 +1095,9 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         if (limit) {
             auto& out = *settings->MutableVectorTopK();
             out.SetColumn(in.GetColumn());
+            if (in.HasHnswEfSearch()) {
+                out.SetHnswEfSearch(in.GetHnswEfSearch());
+            }
             *out.MutableSettings() = in.GetSettings();
             if (in.HasHnswIndexId()) {
                 *out.MutableHnswIndexId() = in.GetHnswIndexId();
@@ -1128,6 +1131,7 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
     *settings->MutableIndexSettings() = vectorResolve.GetIndexSettings();
     settings->SetOverlapClusters(vectorResolve.GetOverlapClusters());
     settings->SetOverlapRatio(vectorResolve.GetOverlapRatio());
+    settings->SetHnswAllowEmptyRouting(vectorResolve.GetHnswAllowEmptyRouting());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 1);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas.back().TableConstInfo;
@@ -1211,8 +1215,12 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
         settings->SetTopK(static_cast<ui32>(std::min<ui64>(raw, Max<ui32>())));
     }
     settings->SetLevelTop(vectorSearch.GetLevelTop());
+    if (vectorSearch.HasHnswEfSearch()) {
+        settings->SetHnswEfSearch(vectorSearch.GetHnswEfSearch());
+    }
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());
     settings->SetHasPrefix(vectorSearch.GetHasPrefix());
+    settings->SetFullRangeHnsw(vectorSearch.GetFullRangeHnsw());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas[0].TableConstInfo;
@@ -3279,6 +3287,9 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
             if (limit) {
                 auto& out = *settings->MutableVectorTopK();
                 out.SetColumn(in.GetColumn());
+                if (in.HasHnswEfSearch()) {
+                    out.SetHnswEfSearch(in.GetHnswEfSearch());
+                }
                 *out.MutableSettings() = in.GetSettings();
                 if (in.HasHnswIndexId()) {
                     *out.MutableHnswIndexId() = in.GetHnswIndexId();

@@ -111,15 +111,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const bool needPrecompute = !useStreamIndex
         || !abortOnError
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            switch (index.second->Type) {
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-                case TIndexDescription::EType::GlobalFulltextPlain:
-                case TIndexDescription::EType::GlobalFulltextRelevance:
-                case TIndexDescription::EType::GlobalJson:
-                    return true;
-                default:
-                    return false;
-            }
+            return TIndexDescription::NeedsWritePrecompute(index.second->Type);
         });
 
     TVector<TStringBuf> insertColumns;
@@ -205,7 +197,10 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         }
 
         for (const auto& column : indexDesc->DataColumns) {
-            if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
+            // The vector resolver requires every covered column. INSERT gives
+            // omitted nullable columns their normal NULL value below.
+            if ((inputColumnsSet.contains(column) || TIndexDescription::IsVectorIndex(indexDesc->Type))
+                    && indexTableColumnsSet.emplace(column).second) {
                 indexTableColumns.emplace_back(column);
             }
         }
@@ -224,7 +219,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                     insert.Pos(), ctx, true);
                 break;
             }
-            case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalSyncHnsw: {
                 upsertIndexRows = MakeInsertIndexRows(*insertRows, table, inputColumnsSet, indexTableColumns,
                     insert.Pos(), ctx, true);
                 if (indexDesc->KeyColumns.size() > 1) {
@@ -242,7 +238,10 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 }
                 upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
                     upsertIndexRows.value(), true, insert.Pos(), ctx);
-                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                const auto& postingTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder()
+                    << insert.Table().Path().Value() << "/" << indexDesc->Name << "/"
+                    << NKikimr::NTableIndex::NKMeans::PostingTable);
+                indexTableColumns = BuildVectorIndexPostingColumns(table, postingTable, indexDesc);
                 break;
             }
             case TIndexDescription::EType::GlobalFulltextPlain:

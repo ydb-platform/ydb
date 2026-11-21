@@ -1,7 +1,11 @@
 #include "kqp_compute.h"
 #include "kqp_stream_lookup_join_helpers.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/kqp/runtime/streaming/kqp_streaming_aggregation.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
@@ -20,6 +24,9 @@ TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* c
         if (callable.GetType()->GetName() == "KqpStreamingAggregation") {
             return WrapKqpStreamingAggregation(callable, ctx, *computeCtx);
         }
+        if (callable.GetType()->GetName() == "KqpVectorSearchLimit") {
+            return WrapKqpVectorSearchLimit(callable, ctx);
+        }
         if (callable.GetType()->GetName() == "FulltextAnalyze") {
             return WrapFulltextAnalyze(callable, ctx);
         }
@@ -28,6 +35,49 @@ TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* c
 }
 
 namespace {
+
+// A scalar prerequisite of filtered HNSW top-K. Validate even when the
+// posting scan or the SQL predicate yields no rows, without truncating it.
+class TKqpVectorSearchLimitWrapper : public TMutableComputationNode<TKqpVectorSearchLimitWrapper> {
+    using TBase = TMutableComputationNode<TKqpVectorSearchLimitWrapper>;
+public:
+    TKqpVectorSearchLimitWrapper(TComputationMutables& mutables, IComputationNode* count,
+        IComputationNode* target, std::unique_ptr<NKMeans::IClusters> clusters)
+        : TBase(mutables, EValueRepresentation::Embedded)
+        , Count(count)
+        , Target(target)
+        , Clusters(std::move(clusters))
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto count = Count->GetValue(ctx);
+        if (!count.Get<ui64>()) {
+            return count;
+        }
+        const auto target = Target->GetValue(ctx);
+        // Match the search actor: NULL and empty targets produce no results.
+        if (!target || target.AsStringRef().Size() == 0) {
+            return NUdf::TUnboxedValuePod(ui64(0));
+        }
+        const auto bytes = target.AsStringRef();
+        const TArrayRef<const char> vector(bytes.Data(), bytes.Size());
+        if (!Clusters->IsExpectedFormat(vector)) {
+            throw TKqpEnsureFail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "Target vector has invalid format: " << Clusters->FormatError(vector));
+        }
+        return count;
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Count);
+        DependsOn(Target);
+    }
+
+    IComputationNode* const Count;
+    IComputationNode* const Target;
+    const std::unique_ptr<NKMeans::IClusters> Clusters;
+};
 
 class TKqpEnsureWrapper : public TMutableCodegeneratorNode<TKqpEnsureWrapper> {
     using TBaseComputation = TMutableCodegeneratorNode<TKqpEnsureWrapper>;
@@ -435,6 +485,18 @@ private:
 };
 
 } // namespace
+
+IComputationNode* WrapKqpVectorSearchLimit(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
+    const auto serialized = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef();
+    Ydb::Table::VectorIndexSettings settings;
+    MKQL_ENSURE(settings.ParseFromArray(serialized.Data(), serialized.Size()), "Invalid vector settings");
+    TString error;
+    auto clusters = NKMeans::CreateClusters(settings, 0, error);
+    MKQL_ENSURE(clusters, error);
+    return new TKqpVectorSearchLimitWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0),
+        LocateNode(ctx.NodeLocator, callable, 1), std::move(clusters));
+}
 
 IComputationNode* WrapKqpEnsure(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");

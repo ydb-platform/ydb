@@ -752,6 +752,11 @@ void TPDisk::ProcessLogReadQueue() {
         case ERequestType::RequestLogSectorRestore:
         {
             TLogSectorRestore *restore = static_cast<TLogSectorRestore*>(req);
+            if (Cfg->ReadOnly) {
+                // A read-only PDisk does not write, so the damaged copy stays as it is
+                restore->CompletionAction->Release(PCtx->ActorSystem);
+                break;
+            }
             BlockDevice->PwriteAsync(restore->Data, restore->Size, restore->Offset, restore->CompletionAction,
                     restore->ReqId, {});
             break;

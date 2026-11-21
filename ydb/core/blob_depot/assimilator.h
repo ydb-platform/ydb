@@ -55,6 +55,9 @@ namespace NKikimr::NBlobDepot {
         bool ResumeScanDataForCopyingInFlight = false;
         // source reads or destination channel allocation failed in this pass, so wait before trying those blobs again
         bool CopyRetryNeeded = false;
+        std::optional<TLogoBlobID> HotWriteBlockedBlob;
+        std::optional<TLogoBlobID> OversizedBlob;
+        bool WaitingForOversizedBlob = false;
         TBackoffTimer CopyRetryBackoff{10, 5000};
 
         std::optional<TLogoBlobID> LastPlanScannedKey;

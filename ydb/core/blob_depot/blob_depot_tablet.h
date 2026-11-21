@@ -5,10 +5,12 @@
 #include "types.h"
 #include "schema.h"
 #include "mon_main.h"
+#include "wakeup_timer.h"
 
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/core/util/token_bucket.h>
 
 namespace NKikimr::NTesting {
 
@@ -32,6 +34,8 @@ namespace NKikimr::NBlobDepot {
                 EvCommitCertainKeys,
                 EvDoGroupMetricsExchange,
                 EvKickSpaceMonitor,
+                EvRunHotWriteAdmission,
+                EvWakeHotWriteAdmission,
                 EvUpdateThroughputs,
                 EvDeliver,
                 EvJsonTimer,
@@ -39,11 +43,15 @@ namespace NKikimr::NBlobDepot {
                 EvUploadResult,
                 EvDeleteResult,
                 EvScanFound,
-                EvScanContinue,
                 EvDeleteThrottleWakeup,
                 EvPutThrottleWakeup,
                 EvMoveDataContinue,
                 EvMoveDataBlobCopied,
+                EvRunCooling,
+                EvResumeS3Scan,
+                EvCoolingTimer,
+                EvS3ProbeWakeup,
+                EvS3ProbeFinished,
             };
         };
 
@@ -104,6 +112,8 @@ namespace NKikimr::NBlobDepot {
         // EnableCollectByCompleteDeletionBlock, taken once at tablet start
         bool CollectByCompleteDeletionBlock = false;
 
+        bool IsDataCoolingEnabled() const { return bool(CoolingIndex); }
+
         struct TAgent {
             struct TConnection {
                 TActorId PipeServerId;
@@ -117,6 +127,9 @@ namespace NKikimr::NBlobDepot {
             TInstant ExpirationTimestamp;
             std::optional<ui64> AgentInstanceId;
             bool SupportsIdRangeExpiry = false;
+            bool SupportsHotWriteCredits = false;
+            ui64 HotWriteCreditBytes = 0;
+            TMonotonic LastHotWriteCreditRecall;
 
             // Channel -> highest step whose blob sequence numbers were reclaimed while this agent was away. Handed
             // to the agent in every TEvRegisterAgentResult (not just the first one after the expiry: the result may
@@ -238,11 +251,44 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
+        ui64 HotWriteCreditBytes = 0;
+        std::deque<TEvBlobDepot::TEvHotWriteCredit::TPtr> HotWriteCreditQueue;
+        std::map<TBlobSeqId, ui64> InternalHotWriteCredits;
+        // Smallest first so an unavailable large copy doesn't block another writer that fits.
+        std::map<std::pair<ui64, TActorId>, ui32> InternalHotWriteWaiters;
+        TTokenBucketBase<TMonotonic> HotWriteBucket;
+        bool HotWriteAdmissionScheduled = false;
+        TWakeupTimer HotWriteAdmissionTimer;
+
+        void Handle(TEvBlobDepot::TEvHotWriteCredit::TPtr ev);
+        bool IsHotWriteAdmissionEnabled() const;
+        ui64 GetHotWriteHeadroom() const;
+        ui64 GetHotWriteCoolingBytesNeeded() const;
+        void ScheduleHotWriteAdmission();
+        void RunHotWriteAdmission();
+        void WakeHotWriteAdmission(TAutoPtr<IEventHandle> ev);
+        void DropHotWriteCredits(TAgent& agent);
+        void RecallHotWriteCredits();
+        void RefreshHotWriteRate();
+        ui64 GetAvailableHotWriteBytes() const;
+        void ChargeHotWriteCredits(ui64 bytes);
+        void ReleaseHotWriteCredits(ui64 bytes);
+        enum class EInternalWriteError { Retry, TooLarge };
+        using TInternalAllocation = std::variant<TBlobSeqId, EInternalWriteError>;
+        bool IsInternalWriteTooLarge(ui64 bytes) const;
+        void WaitForInternalHotWrite(ui64 bytes, TActorId actor, ui32 eventType);
+        bool CancelInternalHotWriteWait(ui64 bytes, TActorId actor);
+        void ReleaseInternalBlobSeqId(const TBlobSeqId& blobSeqId);
+        TInternalAllocation TryAllocateInternalBlobSeqId(TChannelInfo& channel, ui64 bytes);
+        void ReleaseInternalHotWrite(const TBlobSeqId& id);
+
         void ProcessRegisterAgentQ();
 
-        bool ReadyForAgentQueries() const {
-            return Configured && (!Config.GetIsDecommittingGroup() || DecommitState >= EDecommitState::BlocksFinished);
+        bool HasAsyncS3History() const {
+            return Config.GetS3NamespacePinned() || Config.GetS3BackendSettings().HasAsyncMode();
         }
+
+        bool ReadyForAgentQueries() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -280,18 +326,20 @@ namespace NKikimr::NBlobDepot {
         void StartOperation() {
             JsonHandler.Setup(SelfId(), Executor()->Generation());
             InitChannelKinds();
+            InitDataCooling();
+            InitS3Manager();
             DoGroupMetricsExchange();
             ProcessRegisterAgentQ();
             KickSpaceMonitor();
             StartDataLoad();
             UpdateThroughputs();
-            InitS3Manager();
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 0;
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 1;
         }
 
         void StartDataLoad();
         void OnDataLoadComplete();
+        void InitDataCooling();
 
         void OnDetach(const TActorContext&) override {
             YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnDetach",
@@ -393,6 +441,12 @@ namespace NKikimr::NBlobDepot {
                 return Phase != EPhase::Idle;
             }
 
+            ui64 GetCopyBytes() const {
+                return ui64(BlobLocator.GetTotalDataLen()) + BlobLocator.GetFooterLen();
+            }
+
+            void ScanFromCurrentKey(ui32 valueChainIndex = 0);
+
             bool IsBlobMovingInProgress() const {
                 return Phase == EPhase::ScanningIndex ||
                     Phase == EPhase::CopyingBlob ||
@@ -415,7 +469,6 @@ namespace NKikimr::NBlobDepot {
         TMoveDataState::ETrashStatus GetTrashStatus();
         void CheckTrash();
         bool StartMoveDataBlobCopy();
-        void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
         void RestartMoveDataScan();
         void ProcessMoveDataQueue();
         void FinishMoveData(const TActorContext& ctx);
@@ -459,6 +512,8 @@ namespace NKikimr::NBlobDepot {
 
         class TData;
         std::unique_ptr<TData> Data;
+        class TCoolingIndex;
+        std::unique_ptr<TCoolingIndex> CoolingIndex;
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);

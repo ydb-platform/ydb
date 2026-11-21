@@ -812,8 +812,9 @@ namespace NKikimr::NStorage {
 
         struct TBlobDepotS3RouterRec {
             TActorId Router;
+            ui32 Generation = 0;
             NKikimrBlobDepot::TS3BackendSettings Settings;
-            THashSet<TActorId> Consumers;
+            THashMap<TActorId, ui32> Consumers;
         };
         THashMap<ui64 /*tabletId*/, TBlobDepotS3RouterRec> BlobDepotS3Routers;
 

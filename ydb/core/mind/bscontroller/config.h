@@ -77,6 +77,8 @@ namespace NKikimr {
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
             TCowHolder<std::set<std::pair<TBoxStoragePoolId, TGroupId>>> StoragePoolGroups;
             TCowHolder<TMap<TGroupId, TBlobDepotDeleteQueueInfo>> BlobDepotDeleteQueue;
+            TRetiredS3Namespaces NewRetiredS3Namespaces;
+            TBlobDepotOwners ChangedBlobDepotOwners;
 
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
@@ -250,6 +252,9 @@ namespace NKikimr {
                 StoragePools.Commit();
                 StoragePoolGroups.Commit();
                 BlobDepotDeleteQueue.Commit();
+                CommitBlobDepotOwners();
+                Self.RetiredS3Namespaces.merge(NewRetiredS3Namespaces);
+                Y_ABORT_UNLESS(NewRetiredS3Namespaces.empty());
                 PDisks.Commit();
                 DrivesSerials.Commit();
                 Nodes.Commit();
@@ -270,7 +275,8 @@ namespace NKikimr {
 
             bool Changed() const {
                 return DataCenterStates.Changed() || HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
-                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
+                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || !NewRetiredS3Namespaces.empty() ||
+                    PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
                     SerialManagementStage.Changed() || NextVirtualGroupId.Changed();
@@ -345,6 +351,8 @@ namespace NKikimr {
                 return res;
             }
 
+            void DetachBlobDepot(TGroupInfo& group, const NKikimrBlobDepot::TBlobDepotConfig& config);
+
             // delete the group along with its VDisks
             void DeleteExistingGroupWithVSlots(const TGroupInfo& group) {
                 const TGroupId groupId = group.ID;
@@ -363,10 +371,12 @@ namespace NKikimr {
                     NKikimrBlobDepot::TBlobDepotConfig config;
                     const bool success = config.ParseFromString(*group->BlobDepotConfig);
                     Y_ABORT_UNLESS(success);
+                    ChangeLiveBlobDepotClaims(*group, config, false);
                     if (config.GetHiveContacted()) {
                         const auto [it, inserted] = BlobDepotDeleteQueue.Unshare().try_emplace(groupId, group->HiveId,
                             config.HasTabletId() ? MakeMaybe(config.GetTabletId()) : Nothing());
                         Y_ABORT_UNLESS(inserted);
+                        RetireS3Namespace(groupId, config);
                     }
                 }
 
@@ -496,6 +506,13 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status);
+            void RetireS3Namespace(TGroupId groupId, const NKikimrBlobDepot::TBlobDepotConfig& config);
+            void ChangeBlobDepotClaim(const TBlobDepotClaim& key, TGroupId id, bool add);
+            void ChangeLiveBlobDepotClaims(const TGroupInfo& group, const NKikimrBlobDepot::TBlobDepotConfig& config, bool add);
+            void CommitBlobDepotOwners();
+            const std::set<TGroupId>& FindBlobDepotOwners(const TBlobDepotClaim& key) const;
+            void CheckBlobDepotS3Prefix(const NKikimrBlobDepot::TS3BackendSettings& settings, TStringBuf groupName,
+                TStringBuf storageName, std::optional<TGroupId> ownGroup = std::nullopt) const;
             void ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, TStatus& status);

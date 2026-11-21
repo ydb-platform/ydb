@@ -9,6 +9,7 @@ namespace NKikimr::NBlobDepot {
         struct TEvPrivate {
             enum {
                 EvTxComplete = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvRetryPut,
             };
         };
 
@@ -31,6 +32,14 @@ namespace NKikimr::NBlobDepot {
         static constexpr ui32 MaxGetBytesInFlight = 10'000'000;
 
         ui32 PutsInFlight = 0;
+
+        struct TPendingPut {
+            TKey Key;
+            TRope Buffer;
+            bool Keep;
+            bool DoNotKeep;
+        };
+        std::deque<TPendingPut> PendingPuts;
 
         THashMap<TLogoBlobID, TKey> IdToKey;
 
@@ -358,7 +367,8 @@ namespace NKikimr::NBlobDepot {
         }
 
         void ProcessGetQueue() {
-            while (!GetQ.empty() && GetsInFlight < MaxGetsInFlight && GetBytesInFlight + GetBytesFor(GetQ.front()) <= MaxGetBytesInFlight) {
+            while (PendingPuts.empty() && !GetQ.empty() && GetsInFlight < MaxGetsInFlight &&
+                    (!GetBytesInFlight || GetBytesInFlight + GetBytesFor(GetQ.front()) <= MaxGetBytesInFlight)) {
                 const auto [id, mustRestoreFirst] = GetQ.front();
                 ++GetsInFlight;
                 const ui32 bytes = GetBytesFor(GetQ.front());
@@ -386,11 +396,12 @@ namespace NKikimr::NBlobDepot {
                 {"putsInFlight", PutsInFlight},
                 {"GetQ.size", GetQ.size()});
 
+            const bool startPuts = PendingPuts.empty();
             for (ui32 i = 0; i < msg.ResponseSz; ++i) {
                 auto& r = msg.Responses[i];
                 if (r.Status == NKikimrProto::OK) {
                     if (r.Buffer) { // wasn't index read
-                        IssuePut(TKey(r.Id), std::move(r.Buffer), r.Keep, r.DoNotKeep);
+                        PendingPuts.push_back({TKey(r.Id), std::move(r.Buffer), r.Keep, r.DoNotKeep});
                     } else {
                         DecommitBlobs.push_back({r.Id, r.Keep, r.DoNotKeep});
                     }
@@ -409,19 +420,44 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(GetBytesInFlight >= ev->Cookie);
             --GetsInFlight;
             GetBytesInFlight -= ev->Cookie;
+            if (startPuts) {
+                ProcessPutQueue();
+            }
             ProcessGetQueue();
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PUT QUERIES are used to store retrieved MustRestoreFirst blobs in local storage
 
-        void IssuePut(TKey key, TRope&& buffer, bool keep, bool doNotKeep) {
+        void ProcessPutQueue() {
+            while (!PendingPuts.empty() && IssuePut(PendingPuts.front())) {
+                PendingPuts.pop_front();
+            }
+            if (!PendingPuts.empty() && !AssimilatedBlobs.empty()) {
+                IssueTxCommitAssimilatedBlob();
+            }
+        }
+
+        void HandleRetryPut() {
+            ProcessPutQueue();
+            ProcessGetQueue();
+        }
+
+        bool IssuePut(TPendingPut& pending) {
+            auto& [key, buffer, keep, doNotKeep] = pending;
             std::vector<ui8> channels(1);
             if (Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
                 TChannelInfo& channel = Self->Channels[channels.front()];
-                const ui64 value = channel.NextBlobSeqId++;
-                const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
-                const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, buffer.size());
+                const auto allocation = Self->TryAllocateInternalBlobSeqId(channel, buffer.size());
+                if (auto* error = std::get_if<TBlobDepot::EInternalWriteError>(&allocation)) {
+                    if (*error == TBlobDepot::EInternalWriteError::Retry) {
+                        Self->WaitForInternalHotWrite(buffer.size(), SelfId(), TEvPrivate::EvRetryPut);
+                        return false;
+                    }
+                    ResolutionErrors.insert(key.GetBlobId());
+                    return true;
+                }
+                const TLogoBlobID id = std::get<TBlobSeqId>(allocation).MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, buffer.size());
                 YDB_LOG_DEBUG("Going to TEvPut",
                     {"marker", "BDT91"},
                     {"id", Self->GetLogId()},
@@ -439,14 +475,13 @@ namespace NKikimr::NBlobDepot {
                         .WriteSource = TWriteSource::BlobDepotPut,
                         .DataKind = Ev->Get()->Record.GetDataKind(),
                     }), (ui64)keep | (ui64)doNotKeep << 1);
-                const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
+                const bool inserted = IdToKey.try_emplace(id, std::move(key)).second;
                 Y_ABORT_UNLESS(inserted);
-                const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;
-                Y_ABORT_UNLESS(inserted1);
                 ++PutsInFlight;
             } else { // we couldn't restore this blob -- there was no place to write it to
                 ResolutionErrors.insert(key.GetBlobId());
             }
+            return true;
         }
 
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
@@ -478,11 +513,11 @@ namespace NKikimr::NBlobDepot {
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
                 ResolutionErrors.insert(key.GetBlobId());
                 // this copy won't ever get its blob bound to the key, so it doesn't hold garbage collection back anymore
-                Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
+                Self->ReleaseInternalBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
             } else {
                 AssimilatedBlobs.push_back({std::move(key), TAssimilatedBlobInfo::TUpdate{
                     TBlobSeqId::FromLogoBlobId(msg.Id), keep, doNotKeep}});
-                if (AssimilatedBlobs.size() >= 10'000) {
+                if (!PendingPuts.empty() || AssimilatedBlobs.size() >= 10'000) {
                     IssueTxCommitAssimilatedBlob();
                 }
             }
@@ -508,7 +543,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void CheckIfDone() {
-            if (TxInFlight + RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight != 0) {
+            if (TxInFlight + RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight + PendingPuts.size() != 0) {
                 return;
             }
 
@@ -555,13 +590,16 @@ namespace NKikimr::NBlobDepot {
         void PassAway() override {
             ActorToken.reset(); // pending preparation transactions must stop issuing requests
             if (!Token.expired()) {
+                if (!PendingPuts.empty()) {
+                    Self->CancelInternalHotWriteWait(PendingPuts.front().Buffer.size(), SelfId());
+                }
                 // Transactions already submitted own their copies. These copies have no transaction to bind them.
                 for (const auto& [id, key] : IdToKey) {
-                    Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(id));
+                    Self->ReleaseInternalBlobSeqId(TBlobSeqId::FromLogoBlobId(id));
                 }
                 for (const auto& blob : AssimilatedBlobs) {
                     if (const auto *update = std::get_if<TAssimilatedBlobInfo::TUpdate>(&blob.Action)) {
-                        Self->ReleaseMoveDataBlobSeqId(update->BlobSeqId);
+                        Self->ReleaseInternalBlobSeqId(update->BlobSeqId);
                     }
                 }
             }
@@ -580,6 +618,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobStorage::TEvRangeResult, Handle);
                 hFunc(TEvBlobStorage::TEvPutResult, Handle);
                 cFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
+                cFunc(TEvPrivate::EvRetryPut, HandleRetryPut);
 
                 default:
                     Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);

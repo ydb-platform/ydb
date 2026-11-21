@@ -21,9 +21,10 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
             std::optional<TS3Locator> LocatorInFlight;
-            TActorId WriterActorId;
             ui64 ConnectionInstanceOnStart;
             ui32 S3SlowDownRetries = 0;
+            ui64 ReservedHotWriteBytes = 0;
+            ui64 HotWriteConnection = 0;
 
             NWilson::TSpan PrepareWriteS3Span;
             NWilson::TSpan WriteS3Span;
@@ -64,9 +65,10 @@ namespace NKikimr::NBlobDepot {
                     SendDiscardSpoiled(false);
                 }
 
-                if (WriterActorId) {
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, WriterActorId, Agent.SelfId(),
-                        nullptr, 0));
+                if (ReservedHotWriteBytes && Agent.IsConnected && HotWriteConnection == Agent.ConnectionInstance) {
+                    Y_DEBUG_ABORT_UNLESS((TIntrusiveListItem<TQuery, TPendingHotWriteCredit>::Empty()));
+                    Agent.HotWriteCreditAvailable += std::exchange(ReservedHotWriteBytes, 0);
+                    Agent.ProcessHotWriteCreditQueue();
                 }
 
                 TBlobStorageQuery::OnDestroy(success);
@@ -107,6 +109,9 @@ namespace NKikimr::NBlobDepot {
 
             void IssuePuts() {
                 Y_ABORT_UNLESS(!PutsIssued);
+                if (CheckDeadline(TActivationContext::Monotonic())) {
+                    return;
+                }
 
                 auto prepare = [&] {
                     Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
@@ -138,6 +143,11 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& kind = it->second;
 
+                const ui64 charge = Request.Buffer.size() + (SuppressFooter ? 0 : sizeof(TVirtualGroupBlobFooter));
+                if (!Agent.EnsureHotWriteCredit(this, charge, Request.FailOnSlowDown)) {
+                    return;
+                }
+
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
                 YDB_LOG_DEBUG("Allocated BlobSeqId",
                     {"marker", "BDA21"},
@@ -167,6 +177,13 @@ namespace NKikimr::NBlobDepot {
                     {"U.HandleClass", Request.HandleClass});
 
                 auto *commitItem = prepare();
+                if (Agent.HotWriteCreditEpoch) {
+                    Y_ABORT_UNLESS(charge <= Agent.HotWriteCreditAvailable);
+                    Agent.HotWriteCreditAvailable -= charge;
+                    ReservedHotWriteBytes = charge;
+                    HotWriteConnection = Agent.ConnectionInstance;
+                    commitItem->SetHotWriteCreditEpoch(Agent.HotWriteCreditEpoch);
+                }
                 auto *locator = commitItem->MutableBlobLocator();
                 BlobSeqId.ToProto(locator->MutableBlobSeqId());
                 //locator->SetChecksum(Crc32c(Request.Buffer.data(), Request.Buffer.size()));
@@ -253,6 +270,7 @@ namespace NKikimr::NBlobDepot {
                     "BlobDepotAgent.CommitBlobSeq", NWilson::EFlags::AUTO_END);
 
                 Agent.Issue(CommitBlobSeq, this, nullptr, CommitBlobSeqSpan.GetTraceId());
+                ReservedHotWriteBytes = 0; // The commit now owns the credit, including on failure.
 
                 Y_ABORT_UNLESS(!WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = true;
@@ -291,6 +309,10 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
+            void OnHotWriteCredit() override {
+                IssuePuts();
+            }
+
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
                 std::visit(TOverloaded{
                     [&](TEvBlobStorage::TEvPutResult *ev) {
@@ -298,6 +320,9 @@ namespace NKikimr::NBlobDepot {
                     },
                     [&](TEvBlobDepot::TEvCommitBlobSeqResult *ev) {
                         HandleCommitBlobSeqResult(std::move(context), ev->Record);
+                    },
+                    [&](TS3PutResult& result) {
+                        OnPutS3ObjectResponse(std::move(result.Error), result.SlowDown);
                     },
                     [&](TTabletDisconnected) {
                         EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
@@ -347,6 +372,8 @@ namespace NKikimr::NBlobDepot {
                     // however, if it did not, we can't try to commit this records as it may be already scheduled for
                     // garbage collection by the tablet
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet was restarting during write");
+                } else if (ReservedHotWriteBytes && HotWriteConnection != Agent.ConnectionInstance) {
+                    EndWithError(NKikimrProto::ERROR, "hot write credit was reclaimed after disconnect");
                 } else if (Agent.IsBlobSeqIdExpired(BlobSeqId)) {
                     // we were disconnected long enough for the tablet to reclaim this id and it may already have
                     // collected the blob we have just written, so this put cannot be committed
@@ -495,7 +522,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
-                WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
+                IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
 
                 ConnectionInstanceOnStart = Agent.ConnectionInstance;
 #else
@@ -504,15 +531,21 @@ namespace NKikimr::NBlobDepot {
 #endif
             }
 
-            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) override {
+            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) {
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Written_to_S3",
+                    {"marker", "BDEV37"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"blobId", Request.Id},
+                    {"locator", LocatorInFlight});
                 YDB_LOG_COMP(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, "OnPutS3ObjectResponse",
                     {"marker", "BDA53"},
                     {"agentId", Agent.LogId},
                     {"queryId", GetQueryId()},
                     {"error", error},
                     {"slowDown", slowDown});
-
-                WriterActorId = {};
 
                 if (WriteS3Span) {
                     if (error) {

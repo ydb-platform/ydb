@@ -50,6 +50,7 @@ public:
             auto scrubState = db.Table<Schema::ScrubState>().Select();
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
+            auto retiredS3Namespaces = db.Table<Schema::RetiredS3Namespaces>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
             auto databaseSpaceExhaustedPool = db.Table<Schema::DatabaseSpaceExhaustedPool>().Select();
             if (!state.IsReady()
@@ -73,6 +74,7 @@ public:
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
+                    || !retiredS3Namespaces.IsReady()
                     || !bridgeSyncState.IsReady()
                     || !databaseSpaceExhaustedPool.IsReady()) {
                 return false;
@@ -313,7 +315,8 @@ public:
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
                 || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)
-                || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)) {
+                || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)
+                || !NTableAdapter::FetchTable<Schema::RetiredS3Namespaces>(db, Self, Self->RetiredS3Namespaces)) {
             return false;
         }
         for (auto& [storagePoolId, storagePool] : Self->StoragePools) {

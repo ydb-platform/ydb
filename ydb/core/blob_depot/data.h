@@ -7,6 +7,8 @@
 
 #include <util/generic/hash_multi_map.h>
 
+#include <map>
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TData {
@@ -277,6 +279,8 @@ namespace NKikimr::NBlobDepot {
             bool GoingToAssimilate = false;
             ui32 ValueVersion = 0;
             bool UncertainWrite = false;
+            ui32 HotWriteGeneration = 0;
+            ui64 HotWriteSequence = 0;
 
             TValue() = default;
             TValue(TValue&&) = default;
@@ -294,6 +298,8 @@ namespace NKikimr::NBlobDepot {
                 , GoingToAssimilate(proto.GetGoingToAssimilate())
                 , ValueVersion(proto.GetValueVersion())
                 , UncertainWrite(uncertainWrite)
+                , HotWriteGeneration(proto.GetHotWriteGeneration())
+                , HotWriteSequence(proto.GetHotWriteSequence())
             {}
 
             explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
@@ -347,6 +353,10 @@ namespace NKikimr::NBlobDepot {
                 if (ValueVersion != proto->GetValueVersion()) {
                     proto->SetValueVersion(ValueVersion);
                 }
+                if (HotWriteSequence) {
+                    proto->SetHotWriteGeneration(HotWriteGeneration);
+                    proto->SetHotWriteSequence(HotWriteSequence);
+                }
             }
 
             static bool Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item);
@@ -385,7 +395,9 @@ namespace NKikimr::NBlobDepot {
                     Public != other.Public ||
                     GoingToAssimilate != other.GoingToAssimilate ||
                     ValueVersion != other.ValueVersion ||
-                    UncertainWrite != other.UncertainWrite;
+                    UncertainWrite != other.UncertainWrite ||
+                    HotWriteGeneration != other.HotWriteGeneration ||
+                    HotWriteSequence != other.HotWriteSequence;
             }
         };
 
@@ -477,14 +489,55 @@ namespace NKikimr::NBlobDepot {
         std::map<TKey, TValue> Data;
         TClosedIntervalSet<TKey> LoadedKeys; // keys that are already scanned and loaded in the local database
         THashMap<TLogoBlobID, ui32> RefCountBlobs;
-        THashMap<TS3Locator, ui32> RefCountS3;
+        struct TS3PartialReferences {
+            THashMap<TKey, ui32, TKey::THash> Keys;
+            THashMap<std::pair<ui32, ui32>, ui32> Ranges;
+            ui32 RefCount = 0;
+            ui64 LiveBytes = 0;
+        };
+
+        struct TS3References {
+            ui32 Len;
+            ui32 RefCount = 0;
+            std::unique_ptr<TS3PartialReferences> Partial;
+
+            ui64 GetLiveBytes() const {
+                if (!RefCount) {
+                    return 0;
+                }
+                return !Partial || Partial->RefCount < RefCount ? Len : Partial->LiveBytes;
+            }
+
+            TS3Locator GetLocator(const TS3ObjectKey& key) const {
+                return {.Len = Len, .Generation = key.first, .KeyId = key.second};
+            }
+        };
+
+        THashMap<TS3ObjectKey, TS3References> RefCountS3;
+        std::map<TS3ObjectKey, ui32> PendingS3RefChecks;
+        THashMap<TS3ObjectKey, TInstant> PublishedRetriedS3Puts;
+        bool S3ReferencesLoaded = false;
+        void CheckPendingS3References(NTabletFlatExecutor::TTransactionContext& txc, void* cookie);
+        enum class ES3ReferenceAction { Add, Remove, Discard };
+        void UpdateS3Reference(const TKey& key, const NKikimrBlobDepot::TValueChain& link, TS3Locator locator,
+            ES3ReferenceAction action,
+            std::vector<TS3ObjectKey>* unreferenced = nullptr);
+        template<typename TLocal>
+        bool AccountValueChain(const TKey& key, const TValueChain& chain, ES3ReferenceAction action,
+            TLocal&& accountLocal, std::vector<TS3ObjectKey>* unreferenced = nullptr);
+        void UpdateS3Counters();
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         THashSet<std::tuple<ui8, ui32>> AlreadyCutHistory;
         ui64 TotalStoredDataSize = 0;
         ui64 TotalStoredTrashSize = 0;
         ui64 InFlightTrashSize = 0;
+        ui64 HotBytesPendingTrashCommit = 0;
         ui64 TotalS3DataSize = 0;
+        ui64 TotalS3LiveBytes = 0;
+        ui64 NextHotWriteSequence = 1;
+
+        void SetHotWriteOrder(TValue& value);
 
         ui64 LoadRestartTx = 0;
         ui64 LoadRunSuccessorTx = 0;
@@ -501,7 +554,11 @@ namespace NKikimr::NBlobDepot {
         friend class TGroupAssimilator;
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrashBlobs; // being committed, but not yet confirmed
-        THashMultiMap<void*, TS3Locator> InFlightTrashS3; // being committed, but not yet confirmed
+        struct TS3TrashItem {
+            TS3Locator Locator;
+            bool WatchForLatePut;
+        };
+        THashMultiMap<void*, TS3TrashItem> InFlightTrashS3; // being committed, but not yet confirmed
         THashSet<TLogoBlobID> AllInFlightTrashBlobs;
 
         class TTxIssueGC;
@@ -719,10 +776,18 @@ namespace NKikimr::NBlobDepot {
         void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
+        bool ReplaceValueForCooling(const TKey& key, ui32 expectedVersion, const TValueChain& expectedChain,
+            TValueChain replacement, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+
         void BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
-        void AddToS3Trash(TS3Locator locator, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void TrackPublishedRetriedPut(TS3Locator locator, TInstant retireAt);
+        enum class ECoolingPutOutcome { NotSent, Sent, MayArriveLate };
+        void FinishCoolingPut(TS3Locator locator, ECoolingPutOutcome outcome, bool published,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void AddToS3Trash(TS3Locator locator, NTabletFlatExecutor::TTransactionContext& txc, void *cookie,
+            TInstant retireAt = {});
 
         void MakeKeyCertain(const TKey& key);
         void HandleCommitCertainKeys();
@@ -769,7 +834,6 @@ namespace NKikimr::NBlobDepot {
         void TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
 
         void AddFirstMentionedBlob(TLogoBlobID id);
-        void AddFirstMentionedBlob(TS3Locator locator);
         void AccountBlob(TLogoBlobID id, bool add);
 
         bool CanBeCollected(TBlobSeqId id) const;
@@ -782,7 +846,7 @@ namespace NKikimr::NBlobDepot {
                 callback(key, value);
             }
             for (const auto& [key, value] : RefCountS3) {
-                callback(key, value);
+                callback(value.GetLocator(key), value.RefCount);
             }
         }
 
@@ -804,7 +868,6 @@ namespace NKikimr::NBlobDepot {
 
         void StartLoad();
         ELoadTrashResult LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
-        bool LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress);
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
@@ -820,7 +883,6 @@ namespace NKikimr::NBlobDepot {
 
         std::optional<TString> CheckKeyAgainstBarrier(const TKey& key);
 
-        bool IsUseful(const TS3Locator& locator) const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -844,7 +906,11 @@ namespace NKikimr::NBlobDepot {
         ui64 GetTotalStoredDataSize() const { return TotalStoredDataSize; }
         ui64 GetTotalStoredTrashSize() const { return TotalStoredTrashSize; }
         ui64 GetInFlightTrashSize() const { return InFlightTrashSize; }
+        ui64 GetHotBytesPendingTrashCommit() const { return HotBytesPendingTrashCommit; }
         ui64 GetTotalS3DataSize() const { return TotalS3DataSize; }
+        ui64 GetTotalS3LiveBytes() const { return TotalS3LiveBytes; }
+        bool IsS3ObjectReferenced(const TS3Locator& locator) const;
+        const THashMap<TKey, ui32, TKey::THash>& GetS3PartialKeys(const TS3ObjectKey& key) const;
 
         void RenderMainPage(IOutputStream& s);
 
@@ -872,6 +938,8 @@ namespace NKikimr::NBlobDepot {
         void OnLoadTrashBatchComplete(ELoadTrashResult result);
 
         class TLoadCycleAccounting;
+        template<typename TTable, typename F>
+        void LoadS3Table(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, F&& process);
 
         void FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
         void RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress);

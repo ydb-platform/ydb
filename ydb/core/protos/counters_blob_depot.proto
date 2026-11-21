@@ -40,6 +40,11 @@ enum ESimpleCounters {
     COUNTER_S3_GET_MAX_READS_IN_FLIGHT = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/MaxReadsInFlight"}];
     COUNTER_S3_GET_PENDING_QUEUE_SIZE = 33 [(NKikimr.CounterOpts) = {Name: "S3/Get/PendingQueueSize"}];
     COUNTER_AGENTS_BLOCKING_GC = 34 [(NKikimr.CounterOpts) = {Name: "AgentsBlockingGC"}];
+    COUNTER_HOT_WRITE_CREDIT_BYTES = 35 [(NKikimr.CounterOpts) = {Name: "Cooling/HotWriteCreditBytes"}];
+    COUNTER_HOT_WRITE_WAITERS = 36 [(NKikimr.CounterOpts) = {Name: "Cooling/HotWriteWaiters"}];
+    COUNTER_COOLING_UPLOADS_IN_FLIGHT = 37 [(NKikimr.CounterOpts) = {Name: "Cooling/UploadsInFlight"}];
+    COUNTER_S3_LIVE_RANGE_BYTES = 38 [(NKikimr.CounterOpts) = {Name: "S3/LiveRangeBytes"}];
+    COUNTER_COOLING_UNFINISHED_PUT_WATCHES = 39 [(NKikimr.CounterOpts) = {Name: "Cooling/UnfinishedPutWatches"}];
 }
 
 enum ECumulativeCounters {
@@ -79,6 +84,7 @@ enum ECumulativeCounters {
     COUNTER_S3_ROUTER_RETIRING_WRAPPERS_ABORTED = 33 [(NKikimr.CounterOpts) = {Name: "S3/Router/RetiringWrappersAborted"}];
     COUNTER_MOVE_DATA_BLOBS_MOVED = 34 [(NKikimr.CounterOpts) = {Name: "MoveData/BlobsMoved"}];
     COUNTER_MOVE_DATA_BYTES_MOVED = 35 [(NKikimr.CounterOpts) = {Name: "MoveData/BytesMoved"}];
+    COUNTER_COOLING_UPLOAD_FAILURES = 36 [(NKikimr.CounterOpts) = {Name: "Cooling/UploadFailures"}];
 }
 
 enum EPercentileCounters {
@@ -209,4 +215,6 @@ enum ETxTypes {
     TXTYPE_MOVE_DATA_UPDATE_INDEX = 24 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataUpdateIndex"}];
     TXTYPE_DELETE_TABLET_DATA = 25 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTabletData"}];
     TXTYPE_QUERY_BLOCKS = 26 [(NKikimr.TxTypeOpts) = {Name: "TTxQueryBlocks"}];
+    TXTYPE_STAGE_COOLING_PACK = 27 [(NKikimr.TxTypeOpts) = {Name: "TTxStageCoolingPack"}];
+    TXTYPE_PUBLISH_COOLING_PACK = 28 [(NKikimr.TxTypeOpts) = {Name: "TTxPublishCoolingPack"}];
 }

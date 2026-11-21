@@ -142,10 +142,10 @@ After the export succeeds, start an [import from S3](../reference/ydb-cli/export
   --s3-endpoint storage.yandexcloud.net \
   --bucket mybucket \
   --item src=replication-bootstrap/original_table,dst=replica_table \
-  --index-population-mode import
+  --index-population-mode Import
 ```
 
-The `--item` option maps the table prefix in the backup to the `replica_table` target path specified in `CREATE ASYNC REPLICATION`. The `--index-population-mode import` mode loads the index data saved in the previous step. For multiple tables, specify a separate `--item` for each pair of paths.
+The `--item` option maps the table prefix in the backup to the `replica_table` target path specified in `CREATE ASYNC REPLICATION`. The `--index-population-mode Import` mode loads the index data saved in the previous step. For multiple tables, specify a separate `--item` for each pair of paths.
 
 Wait for the operation to complete successfully using [`operation get`](../reference/ydb-cli/export-import/import-s3.md#status):
 

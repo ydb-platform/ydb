@@ -8,7 +8,11 @@ To connect with S3, you need to specify an endpoint and bucket:
 
 `--s3-endpoint HOST`: An S3 endpoint. `HOST`: A valid host name, such as: `storage.yandexcloud.net`
 
+`--scheme SCHEME`: S3 endpoint URL scheme. Allowed values: `http`, `https`. Default value: `https`.
+
 `--bucket STR`: An S3 bucket. `STR`: A string containing the bucket name
+
+`--use-virtual-addressing BOOL`: Bucket URL style. The value `true` (default) selects [virtual-hosted-style](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html): the bucket name is part of the host name, for example `https://<bucket>.<endpoint>/<key>`. The value `false` selects path-style: the bucket name is part of the path, for example `https://<endpoint>/<bucket>/<key>`. Path-style is required for S3-compatible storages that do not support virtual-hosted-style requests.
 
 ## Authentication {#auth}
 

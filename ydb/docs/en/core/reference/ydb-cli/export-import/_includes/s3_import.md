@@ -56,9 +56,13 @@ Some features may not be available using the alternate syntax (like encryption a
 | `--description STRING` | A text description of the operation saved in the operation history. |
 | `--retries NUM` | The number of import retries to be made by the server. The default value is 10. |
 | `--skip-checksum-validation` | Skip the validating imported objects' [checksums](../file-structure.md#checksums) step. |
+| `--no-acl` | Do not import ACLs and object owners. Created objects get an empty ACL, and their owner is the user who started the import. |
+| `--index-population-mode STRING` | Index population mode during import.<br/>Allowed values:<br/><ul><li>`Build` — build indexes from scratch (default);</li><li>`Import` — load index table data (if the export was created with `--include-index-data`);</li><li>`Auto` — try to load index table data, and build indexes if the data is absent.</li></ul> |
 | `--encryption-key-file PATH` | File path containing the encryption key (only for encrypted exports). The file is binary and must contain exactly the number of bytes matching the key length for the chosen encryption algorithm (16 bytes for `AES-128-GCM`, 32 bytes for `AES-256-GCM` and `ChaCha20-Poly1305`). The key can also be provided using the `YDB_ENCRYPTION_KEY` environment variable, in hexadecimal string representation. |
 | `--list` | List objects in an existing export. |
 | `--format STRING` | Result format.<br/>Possible values:<br/><ul><li>`pretty`: Human-readable format (default).</li><li>`proto-json-base64`: [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |
+
+{% include [import-resource-broker-note.md](import-resource-broker-note.md) %}
 
 ## Importing {#exec}
 

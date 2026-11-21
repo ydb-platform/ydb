@@ -25,9 +25,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 //    later (host stays NotLocked until then).
 //  - ReadFromDDisk/WriteToDDisk/ReadFromPBuffer/WriteToPBuffer: configurable
 //    reply status (OK by default).
-//  - ListPBufferEntries: ListPBufferEntriesResult if set, otherwise an empty
-//    successful result (Run() would hang inside DoEstablishConnections ->
-//    DoListPBuffers without a reply).
+//  - ListPBufferEntries: uses the response for this PBuffer, or the default.
 //  - Everything else aborts until a test actually needs it.
 class TStorageTransportMock: public IStorageTransport
 {
@@ -58,10 +56,16 @@ public:
 
     // Every barrier erase sent: (pbuffer node id, barrier lsn).
     TVector<std::pair<ui32, ui64>> BarrierErases;
-    // Reply to ListPBufferEntries. When set, ListPBufferEntries returns this
-    // future as the listing response. When not set, it returns an empty
-    // successful listing.
+
+    // Per-PBuffer listing responses override ListPBufferEntriesResult.
+    TMap<TDDiskId, NThreading::TFuture<TEvListPersistentBufferResult>>
+        ListResponsesByPBufferId;
+
+    // Fallback response; an unset future gives an empty successful listing.
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntriesResult;
+
+    // PBuffer IDs requested for listing, in request order.
+    TVector<TDDiskId> RequestedPBufferIds;
 
     // Captures the ordered persistentBufferIds of the last WriteToManyPBuffers
     // call (the first element is expected to be the coordinator's DDisk).

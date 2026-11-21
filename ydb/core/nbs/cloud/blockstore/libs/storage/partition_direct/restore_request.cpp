@@ -67,6 +67,7 @@ void TRestoreRequestExecutor::OnResponse(
     TListPBufferResponse response)
 {
     if (HasError(response.Error)) {
+        // TODO(#55521): Retry failed lists; publish after all hosts succeed.
         Reply(response.Error);
         return;
     }

@@ -33,6 +33,9 @@ public:
     TResourceLimit(const NKikimrResourceBroker::TResources &limit);
 
     bool HasResources(const TResourceValues &values) const;
+    bool IsMemoryOvercommitted() const {
+        return Used[NKikimrResourceBroker::MEMORY] > Limit[NKikimrResourceBroker::MEMORY];
+    }
     void HoldResources(const TResourceValues &values);
     void ReleaseResources(const TResourceValues &values);
 

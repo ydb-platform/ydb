@@ -291,6 +291,7 @@ namespace {
         void RetryShardRequest(ui64 shardId, TShardEraseRetryState* state, const TActorContext& ctx) {
             Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
+            auto overhead = MemoryReservation.RetainRequestOverhead();
             auto ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
             ev->Record = state->Headers;
             for (const auto& key : state->Keys) {
@@ -301,12 +302,13 @@ namespace {
             ev->Record.SetOverloadSubscribe(seqNo);
             state->SentOverloadSeqNo = seqNo;
 
-            ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record);
+            ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record, std::move(overhead));
             ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
         }
 
         void MakeShardRequests(const TActorContext& ctx) {
             const auto* keyRange = GetKeyRange();
+            ResolvedTableId = keyRange->TableId;
             Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
 
             const size_t partitionCount = keyRange->GetPartitions().size();
@@ -337,7 +339,9 @@ namespace {
 
                 auto& ev = shardRequests[shardIdx];
                 if (!ev) {
+                    auto overhead = MemoryReservation.RetainRequestOverhead();
                     ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
+                    ev->MemoryReservation = std::move(overhead);
                     ++shardRequestCount;
                     ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                     if (keyRange->TableId.SchemaVersion) {
@@ -369,13 +373,13 @@ namespace {
                 ev->Record.SetOverloadSubscribe(seqNo);
                 eraseRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
-                ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record);
+                ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record, std::move(ev->MemoryReservation));
                 ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
                 ShardRepliesLeft.insert(shardId);
             }
 
-            MemoryReservation.FinishRouting();
+            ResolvePartitionsResult.Destroy();
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Erase rows: sending requests to shards",
                 {"selfId", ctx.SelfID},
@@ -414,7 +418,7 @@ namespace {
                     return ReplyWithError(YdbStatusForEraseStatus(status), shardResponse.GetErrorDescription(), ctx);
                 }
 
-                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(ResolvedTableId, TActorId()));
             }
 
             // Notify the cache that we are done with the pipe
@@ -443,7 +447,7 @@ namespace {
         }
 
         void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
-            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(ResolvedTableId, TActorId()));
 
             if (!Backoff.HasMore()) {
                 return ReplyWithError(Ydb::StatusIds::UNAVAILABLE,
@@ -579,6 +583,7 @@ namespace {
 
         std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
+        TTableId ResolvedTableId;
 
         TVector<ui32> KeyColumnIds;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;

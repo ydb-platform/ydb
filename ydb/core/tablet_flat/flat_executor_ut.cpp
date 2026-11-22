@@ -1756,6 +1756,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             const auto* resource = dynamic_cast<TResource*>(event->Get()->Cookie.Get());
             return resource && resource->Source == TResource::ESource::Scan;
         });
+        TBlockEvents<NOps::TEvAdmissionTimeout> timeouts(env.Env);
         env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
             TScanOptions options;
             options.SetResourceBroker("build_index", 10, 1_MB);
@@ -1780,6 +1781,49 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         grants.Stop().Unblock();
         env->WaitFor("expired eager scan finishes its broker task", [&] { return failed && taskFinished; });
         UNIT_ASSERT(!finished);
+    }
+
+    Y_UNIT_TEST(EagerScanTimesOutWhileBrokerQueueIsFull) {
+        TMyEnvScans env;
+        auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+        configure->Merge = true;
+        auto* queue = configure->Record.AddQueues();
+        queue->SetName("queue_build_index");
+        queue->MutableLimit()->SetMemory(1_MB);
+        env.SendEv(MakeResourceBrokerID(), configure.Release());
+        UNIT_ASSERT(env->GrabEdgeEventRethrow<TEvResourceBroker::TEvConfigureResult>(env.Edge)->Get()->Record.GetSuccess());
+        env.SendEv(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
+            1, "hold index memory", {{0, 1_MB}}, "build_index", 0, {}));
+        UNIT_ASSERT_VALUES_EQUAL(env->GrabEdgeEventRethrow<TEvResourceBroker::TEvResourceAllocated>(env.Edge)->Get()->TaskId, 1);
+
+        bool finished = false;
+        ui32 timeouts = 0;
+        ui32 failures = 0;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetSnapshotId(executor->MakeScanSnapshot(TRowsModel::TableId));
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.QueueTimeout = TDuration::Seconds(1);
+            options.OnAdmissionTimeout = [&] {
+                ++timeouts;
+                return false;
+            };
+            options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                UNIT_ASSERT(retry);
+                UNIT_ASSERT_STRING_CONTAINS(reason, "Timed out waiting for scan admission");
+                ++failures;
+            };
+            executor->QueueScan(TRowsModel::TableId, new TAdmissionReadyScan(finished), 12345, options);
+        }));
+        env->WaitFor("queued eager scan timed out", [&] { return failures == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(timeouts, 1);
+        env.SendEv(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(1));
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
+        UNIT_ASSERT(!finished);
+        UNIT_ASSERT_VALUES_EQUAL(failures, 1);
     }
 
     Y_UNIT_TEST_TWIN(ScanAdmissionTimeoutCallbackFailureFailsScan, GrantFirst) {

@@ -200,10 +200,10 @@ void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
         task->Counters->InFlyTasks->Inc();
     } else {
         Tasks.insert(task);
-        if (!task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
+        if (!task->TypeLimit && !task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
             MemorylessTasks.insert(task);
         }
-        if (HasTypeMemoryLimit && (!task->TypeLimit || !task->RequiredResources[NKikimrResourceBroker::MEMORY])) {
+        if (HasTypeMemoryLimit && !task->TypeLimit) {
             TasksWithoutTypeMemoryLimit.insert(task);
         }
 
@@ -710,8 +710,8 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         pending.erase(pending.begin());
 
         auto task = queue->FrontTask();
-        const ui64 bytes = task->RequiredResources[NKikimrResourceBroker::MEMORY];
-        if (task->TypeLimit && bytes && !task->TypeLimit->HasResources({{0, bytes}})) {
+        if (task->TypeLimit && (task->TypeLimit->IsMemoryOvercommitted() ||
+                !task->TypeLimit->HasResources({{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}}))) {
             // The index budget is independent of other work in this queue.
             task = queue->FrontTaskWithoutTypeMemoryLimit();
             if (!task) {
@@ -719,18 +719,19 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
             }
         }
         bool blocked = task->GetRequiredResourcesMask() & blockedResources;
-        if ((queue->StrictMemoryLimit || task->TypeLimit) && task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
-            const TResourceValues memory{{0, task->RequiredResources[NKikimrResourceBroker::MEMORY]}};
-            if (!queue->QueueLimit.HasResources(memory)) {
+        const ui64 bytes = task->RequiredResources[NKikimrResourceBroker::MEMORY];
+        if (task->TypeLimit || (queue->StrictMemoryLimit && bytes)) {
+            // Legacy index builds can consume memory even without a broker claim.
+            const TResourceValues memory{{0, bytes}};
+            if (queue->QueueLimit.IsMemoryOvercommitted() || !queue->QueueLimit.HasResources(memory)) {
                 blocked = true;
-            } else if (!ResourceLimit->HasResources(memory)) {
+            } else if (ResourceLimit->IsMemoryOvercommitted() || !ResourceLimit->HasResources(memory)) {
                 // Let global memory accumulate for this reservation before later queues use it.
                 blockedResources |= ui64(1) << NKikimrResourceBroker::MEMORY;
                 blocked = true;
             }
             if (blocked) {
-                // Legacy scans declare no memory. Keep their own priority
-                // ordering without letting a vector task monopolize the queue.
+                // Let CPU-only work proceed while memory is unavailable.
                 task = queue->FrontMemorylessTask();
                 if (!task) {
                     continue;

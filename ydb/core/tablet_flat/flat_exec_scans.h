@@ -7,6 +7,7 @@
 #include "util_fmt_abort.h"
 #include "flat_util_misc.h"
 #include <atomic>
+#include <util/generic/set.h>
 #include <util/system/spinlock.h>
 #include <util/system/guard.h>
 #include "tablet_flat_executor.h"
@@ -233,7 +234,7 @@ namespace NTabletFlatExecutor {
             TInstant ReadinessDeadline;
             TInstant BrokerDeadline;
             ui32 ReadinessChecks = 0;
-            ui64 TimeoutGeneration = 0;
+            TInstant AdmissionDeadline;
             TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
             ui64 Cookie = Max<ui64>();
@@ -349,7 +350,7 @@ namespace NTabletFlatExecutor {
 
                 auto cookie = MakeIntrusive<TCookie>(one.Serial);
                 const ui64 memory = overrides ? overrides->Memory : 0;
-                if (options.Factory) {
+                if (memory) {
                     one.Lease = std::make_shared<TTaskLease>(ActorSystem, BrokerClient, one.TaskId,
                         overrides ? overrides->Type : Tables[table].Type,
                         overrides ? overrides->Prio : Tables[table].Prio, memory);
@@ -396,7 +397,7 @@ namespace NTabletFlatExecutor {
                 }
                 // A call to Start is expected now
                 one->BrokerDeadline = {};
-                ++one->TimeoutGeneration;
+                SetAdmissionDeadline(*one, {});
 
                 return { one->Serial, one->Table };
             }
@@ -456,8 +457,7 @@ namespace NTabletFlatExecutor {
             const auto owner = Hold(serial);
             auto& one = *owner;
             if (one.Options.Factory) {
-                auto factory = std::move(one.Options.Factory);
-                auto scan = factory(one.Options);
+                auto scan = std::exchange(one.Options.Factory, {})(one.Options);
                 if (!Lookup(serial, false)) {
                     return false;
                 }
@@ -525,10 +525,21 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void AdmissionTimedOut(ui64 serial, ui64 generation) {
+        void AdmissionTimedOut() {
+            const auto now = TActivationContext::Now();
+            while (!AdmissionDeadlines.empty() && AdmissionDeadlines.begin()->first <= now) {
+                const auto serial = AdmissionDeadlines.begin()->second;
+                SetAdmissionDeadline(*Lookup(serial, true), {});
+                HandleAdmissionDeadline(serial);
+            }
+            AdmissionTimerScheduled = false;
+            ScheduleAdmissionTimer();
+        }
+
+    private:
+        void HandleAdmissionDeadline(ui64 serial) {
             const auto one = Hold(serial);
-            if (!one || (one->State != EState::Task && one->State != EState::Ready) ||
-                one->TimeoutGeneration != generation) {
+            if (!one || (one->State != EState::Task && one->State != EState::Ready)) {
                 return;
             }
             const auto now = TActivationContext::Now();
@@ -553,6 +564,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
+    public:
         void Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
             if (error.Status.Code == TEvResourceBroker::TStatus::UNKNOWN_TASK) {
                 // UpdateTask errors have no cookie. Match the live deferred
@@ -806,6 +818,7 @@ namespace NTabletFlatExecutor {
             }
 
             const ui64 serial = one.Serial;
+            SetAdmissionDeadline(one, {});
             one.Unlink();
             Scans.erase(serial);
             return outcome;
@@ -897,17 +910,34 @@ namespace NTabletFlatExecutor {
         }
 
         void ScheduleAdmissionTimeout(TOne& one) {
-            ++one.TimeoutGeneration;
-            if (one.Options.Factory) {
-                auto deadline = one.BrokerDeadline;
-                if (one.ReadinessDeadline) {
-                    deadline = deadline ? Min(deadline, one.ReadinessDeadline) : one.ReadinessDeadline;
-                }
-                if (deadline) {
-                    TActivationContext::ActorContextFor(BrokerClient).Schedule(deadline - TActivationContext::Now(),
-                        new NOps::TEvAdmissionTimeout(one.Serial, one.TimeoutGeneration));
-                }
+            auto deadline = one.BrokerDeadline;
+            if (one.ReadinessDeadline) {
+                deadline = deadline ? Min(deadline, one.ReadinessDeadline) : one.ReadinessDeadline;
             }
+            SetAdmissionDeadline(one, deadline);
+            ScheduleAdmissionTimer();
+        }
+
+        void SetAdmissionDeadline(TOne& one, TInstant deadline) {
+            if (one.AdmissionDeadline) {
+                AdmissionDeadlines.erase({one.AdmissionDeadline, one.Serial});
+            }
+            one.AdmissionDeadline = deadline;
+            if (deadline) {
+                AdmissionDeadlines.emplace(deadline, one.Serial);
+            }
+        }
+
+        void ScheduleAdmissionTimer() {
+            if (AdmissionTimerScheduled || AdmissionDeadlines.empty()) {
+                return;
+            }
+            // Keep at most one wakeup in the scheduler. Bound the delay for
+            // new, earlier deadlines added while that wakeup is pending.
+            const auto now = TActivationContext::Now();
+            const auto deadline = Min(AdmissionDeadlines.begin()->first, now + TDuration::MilliSeconds(100));
+            AdmissionTimerScheduled = true;
+            TActivationContext::ActorContextFor(BrokerClient).Schedule(deadline, new NOps::TEvAdmissionTimeout);
         }
 
         void ToBroker(TAutoPtr<IEventBase> event)
@@ -932,6 +962,8 @@ namespace NTabletFlatExecutor {
         const TIntrusivePtr<TIdEmitter> Emitter;
         const std::function<void(THolder<TScanSnapshot>)> ReleaseSnapshot;
         ui32 CounterAlive = 0;
+        TSet<std::pair<TInstant, ui64>> AdmissionDeadlines;
+        bool AdmissionTimerScheduled = false;
         THashMap<ui64, std::shared_ptr<TOne>> Scans;
         THashMap<ui32, TTable> Tables;  /* only alive scans */
     };

@@ -446,7 +446,7 @@ private:
                     bytes += key.GetCells().size() * sizeof(TCell) * 2;
                 }
                 bytes += 2 * (Database.size() + Uploading.Table.size());
-                attempt = RetainAttempt(bytes, keys->size());
+                attempt = RetainAttempt(bytes);
             }
             auto actor = NTxProxy::CreateEraseRowsInternal(
                 Owner, Database, Uploading.Table, Uploading.EraseBuffer.GetKeysData(),
@@ -481,7 +481,7 @@ private:
                 bytes += 2 * (name.size() + type.SpaceUsedLong() + 64);
             }
             bytes += 2 * (Database.size() + Uploading.Table.size());
-            attempt = RetainAttempt(bytes, rows->size());
+            attempt = RetainAttempt(bytes);
         }
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
@@ -492,10 +492,10 @@ private:
         UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 
-    NTxProxy::TUploadMemoryReservation RetainAttempt(ui64 bytes, ui64 rows) {
+    NTxProxy::TUploadMemoryReservation RetainAttempt(ui64 bytes) {
         auto attempt = std::make_shared<TUploadAttempt>();
         PreviousAttempt = attempt;
-        return {std::move(attempt), RetainResource ? RetainResource(bytes) : ResourceReservation, RetainResource, rows};
+        return {std::move(attempt), RetainResource ? RetainResource(bytes) : ResourceReservation, RetainResource};
     }
 
     bool WaitForPreviousAttempt() {

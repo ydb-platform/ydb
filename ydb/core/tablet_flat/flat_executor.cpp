@@ -3674,9 +3674,9 @@ void TExecutor::Handle(TEvResourceBroker::TEvTaskOperationError::TPtr& ev) {
     }
 }
 
-void TExecutor::Handle(NOps::TEvAdmissionTimeout::TPtr& ev) {
+void TExecutor::Handle(NOps::TEvAdmissionTimeout::TPtr&) {
     if (Scans) {
-        Scans->AdmissionTimedOut(ev->Get()->Serial, ev->Get()->Generation);
+        Scans->AdmissionTimedOut();
     }
 }
 

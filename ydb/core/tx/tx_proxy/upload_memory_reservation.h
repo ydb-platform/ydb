@@ -14,45 +14,50 @@ public:
 
     TUploadMemoryReservation() = default;
 
-    TUploadMemoryReservation(std::shared_ptr<void> attempt, std::shared_ptr<void> batch, TRetainer retain, ui64 rows)
+    TUploadMemoryReservation(std::shared_ptr<void> attempt, std::shared_ptr<void> batch, TRetainer retain)
         : Attempt(std::move(attempt))
         , Batch(std::move(batch))
         , Retain(std::move(retain))
-        , UnroutedSerialization(Retain ? Retain(rows * SerializationOverhead) : nullptr)
     {}
 
     explicit operator bool() const {
         return bool(Attempt);
     }
 
+    std::shared_ptr<void> RetainRequestOverhead() const {
+        return Retain ? Retain(SerializationOverhead) : nullptr;
+    }
+
     template <class TRecord>
-    std::shared_ptr<void> RetainRequest(const TRecord& record) const {
+    std::shared_ptr<void> RetainRequest(const TRecord& record, std::shared_ptr<void> overhead) const {
+        if (!Attempt) {
+            return {};
+        }
         if (!Retain) {
-            return Attempt;
+            return std::make_shared<TRequestReservation>(Attempt, Batch, nullptr);
         }
         // The protobuf and its sender-side serialization can coexist.
-        const ui64 bytes = record.SpaceUsedLong() + record.ByteSizeLong() + SerializationOverhead;
-        return std::make_shared<std::pair<std::shared_ptr<void>, std::shared_ptr<void>>>(
-            Attempt, Retain(bytes));
+        const ui64 bytes = record.SpaceUsedLong() + record.ByteSizeLong();
+        return std::make_shared<TRequestReservation>(Attempt, Retain(bytes), std::move(overhead));
     }
 
     std::shared_ptr<void> RetainRoutingMemory(ui64 bytes) const {
         return Retain ? Retain(bytes) : nullptr;
     }
 
-    void FinishRouting() {
-        // Each routed request must own its charge before the estimate is released.
-        UnroutedSerialization.reset();
-    }
-
 private:
+    struct TRequestReservation {
+        std::shared_ptr<void> Attempt;
+        std::shared_ptr<void> Payload;
+        std::shared_ptr<void> Overhead;
+    };
+
     static constexpr ui64 SerializationOverhead = 4_KB;
 
-    // Requests share the attempt marker. Only the actor holds the batch charge.
+    // Requests share the attempt marker. With byte accounting the batch charge is actor-owned.
     std::shared_ptr<void> Attempt;
     std::shared_ptr<void> Batch;
     TRetainer Retain;
-    std::shared_ptr<void> UnroutedSerialization;
 };
 
 } // namespace NKikimr::NTxProxy

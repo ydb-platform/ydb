@@ -23,9 +23,6 @@ namespace NOps {
     };
 
     struct TEvAdmissionTimeout : public TEventLocal<TEvAdmissionTimeout, ui32(EEv::AdmissionTimeout)> {
-        const ui64 Serial;
-        const ui64 Generation;
-        TEvAdmissionTimeout(ui64 serial, ui64 generation) : Serial(serial), Generation(generation) {}
     };
 
     struct TEvResumeScan : public TEventLocal<TEvResumeScan, ui32(EEv::ResumeScan)> {

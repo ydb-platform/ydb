@@ -3715,8 +3715,18 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
         const auto sender = runtime.AllocateEdgeActor();
+        bool useController = false;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateRequest) {
+            if (useController && ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(11);
+                entry->MutableInfo()->SetDDisk(true);
+            } else if (useController && ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                // Trigger Whiteboard fallback after the controller has supplied the group types.
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateRequest) {
                 const auto& fields = ev->Get<TEvWhiteboard::TEvBSGroupStateRequest>()->Record.GetFieldsRequired();
                 UNIT_ASSERT(std::ranges::find(fields, NKikimrWhiteboard::TBSGroupStateInfo::kDDiskFieldNumber) != fields.end());
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
@@ -3733,7 +3743,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     slot->SetNodeID(nodeId);
                     slot->SetPDiskID(1);
                     slot->SetVDiskSlotID(groupId);
-                    if (nodeId == runtime.GetNodeId(0) && groupId != 10) {
+                    if (!useController && nodeId == runtime.GetNodeId(0) && groupId != 10) {
                         group.SetDDisk(groupId == 11);
                     }
                     TEvWhiteboard::TEvBSGroupStateUpdate update(TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
@@ -3744,19 +3754,25 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
 
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
-            "GET /storage/groups?whiteboard_only=true&sort=GroupId HTTP/1.1\r\n\r\n", endpoint, {});
-        runtime.Send(new IEventHandle(MakeViewerID(0), sender,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
-        TAutoPtr<IEventHandle> handle;
-        const auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        NJson::TJsonValue json;
-        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), result->Response->Body);
-        UNIT_ASSERT_VALUES_EQUAL(json["TotalGroups"].GetUInteger(), 2);
-        const auto& groups = json["StorageGroups"].GetArray();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(groups[0]["GroupId"].GetString(), "10");
-        UNIT_ASSERT_VALUES_EQUAL(groups[1]["GroupId"].GetString(), "12");
+        for (bool withController : {false, true}) {
+            useController = withController;
+            const TString path = useController
+                ? "/storage/groups?fields_required=GroupId,PoolName&sort=GroupId&use_cache=false"
+                : "/storage/groups?whiteboard_only=true&sort=GroupId";
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), result->Response->Body);
+            UNIT_ASSERT_VALUES_EQUAL(json["TotalGroups"].GetUInteger(), 2);
+            const auto& groups = json["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(groups[0]["GroupId"].GetString(), "10");
+            UNIT_ASSERT_VALUES_EQUAL(groups[1]["GroupId"].GetString(), "12");
+        }
     }
 
     void CheckVDiskReplicationStatus(bool groups) {

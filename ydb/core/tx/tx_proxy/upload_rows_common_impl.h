@@ -499,7 +499,7 @@ private:
                     return TConclusionStatus::Fail(errorMessage);
                 }
                 errorStatus = Ydb::StatusIds::BAD_REQUEST;
-                return TConclusionStatus::Fail("PostgreSQL compatibility is disabled");
+                return TConclusionStatus::Fail(TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << name << "'");
             }
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);

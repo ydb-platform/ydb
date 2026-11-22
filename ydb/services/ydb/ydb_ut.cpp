@@ -3120,7 +3120,7 @@ tx_meta {
                         .Build();
         const auto bulk = client.BulkUpsert("/Root/Mixed", std::move(rows)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(bulk.GetStatus(), EStatus::BAD_REQUEST, bulk.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(bulk.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        UNIT_ASSERT_STRING_CONTAINS(bulk.GetIssues().ToString(), "PostgreSQL compatibility is disabled for column 'legacy'");
     }
 
     Y_UNIT_TEST(ReadTable) {

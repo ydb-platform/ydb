@@ -167,6 +167,7 @@ private:
         auto result = std::make_unique<NFq::TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(programHolder), settings);
 
         Send(CompileServiceId, result.release(), 0, ++InFlightCompilationId);
+        CompilationInFlight = true;
         Become(&TThis::StateCompileTransferLambda);
     }
 
@@ -206,6 +207,8 @@ private:
                 {"inFlightCompilationId", InFlightCompilationId});
             return;
         }
+
+        CompilationInFlight = false;
 
         if (!result->ProgramHolder) {
             Stats.ProcessingErrors++;
@@ -476,6 +479,10 @@ private:
     }
 
     void PassAway() override {
+        if (CompilationInFlight) {
+            Send(CompileServiceId, new NFq::TEvRowDispatcher::TEvPurecalcCompileAbort(), 0, InFlightCompilationId);
+        }
+
         if (TableState) {
             TableState->PassAway();
         }
@@ -543,6 +550,7 @@ private:
     ITableKindState::TPtr TableState;
 
     size_t InFlightCompilationId = 0;
+    bool CompilationInFlight = false;
     IProgramHolder::TPtr ProgramHolder;
 
     mutable bool WakeupScheduled = false;

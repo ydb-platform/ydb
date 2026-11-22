@@ -141,7 +141,8 @@ class LbrConversion:
         self._join(5)
 
     def finish(self):
-        self._join(self.timeout + 5)
+        # A snapshot runs perf script and llvm-profgen sequentially, each with its own timeout.
+        self._join(2 * (self.timeout + 5))
         if any(thread.is_alive() for thread in self.threads):
             self.abort()
         results = []

@@ -77,10 +77,25 @@ that experiment, retain binary mappings and samples with a nonempty branch stack
 
 ```bash
 # Convert each phase separately using the exact executable that was sampled.
+export BINARY=/absolute/path/baseline/ydbd
 perf script -G --show-mmap-events -F ip,brstack -i snap1.perf.data | \
-  awk '/PERF_RECORD_MMAP.*\/(ydbd|kikimr)$/ || /0x[[:xdigit:]]+\/0x[[:xdigit:]]+/' > snap1.lbr
-llvm-profgen --binary=/absolute/path/baseline/ydbd \
-  --perfscript=snap1.lbr --output=snap1.prof
+  python3 -c '
+import os
+from pathlib import Path
+import re
+import sys
+
+binary = Path(os.environ["BINARY"])
+paths = {os.fsencode(binary.absolute()), os.fsencode(binary.resolve())}
+mmap = re.compile(rb"\bPERF_RECORD_MMAP2?\s+\d+/\d+:\s+\[[^\]]+\]:\s+(?:[-rwxps]{4}\s+)?(.+)$")
+branch = re.compile(rb"0x[0-9a-fA-F]+/0x[0-9a-fA-F]+")
+for line in sys.stdin.buffer:
+    event = mmap.search(line.rstrip())
+    if branch.search(line) or (event is not None and event[1] in paths):
+        sys.stdout.buffer.write(line)
+' > snap1.lbr
+llvm-profgen --binary="$BINARY" \
+  --perfscript=snap1.lbr --output=snap1.prof --use-md5
 # Repeat for the remaining snapshots, then:
 llvm-profdata merge --sample -o local.prof snap1.prof snap2.prof snap3.prof
 llvm-profdata overlap --sample cluster-589.prof local.prof

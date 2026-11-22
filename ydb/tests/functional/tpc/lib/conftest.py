@@ -55,6 +55,7 @@ class FunctionalTestBase:
             overrided_actor_system_config=actor_system_config,
             **disk_options,
         )
+        # Override every pool kind, including those not requested by the current database.
         if storage_pool_erasure is not None:
             for domain in config_generator.yaml_config["domains_config"]["domain"]:
                 for pool in domain.get("storage_pool_types", []):

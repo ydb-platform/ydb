@@ -351,3 +351,30 @@ def test_mmap_filename_is_exact_and_can_contain_spaces(tmp_path, monkeypatch, wr
             conversion._convert(tmp_path / "data", tmp_path / "profiles/snap1")
     else:
         assert conversion._convert(tmp_path / "data", tmp_path / "profiles/snap1")["samples"] == 1
+
+
+def test_finish_allows_two_sequential_commands(tmp_path, monkeypatch):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles", timeout=6)
+    entered = threading.Event()
+
+    def convert(data, prefix):
+        entered.set()
+        for _ in range(2):
+            with conversion._process(["sleep", "5.7"], stdout=subprocess.DEVNULL) as process:
+                process.wait(timeout=11)
+        return fake_result(prefix.with_suffix(".prof"))
+
+    def merge(command, prefix):
+        Path(command[command.index("-o") + 1]).write_bytes(b"merged")
+
+    monkeypatch.setattr(conversion, "_convert", convert)
+    monkeypatch.setattr(conversion, "_run", merge)
+    try:
+        conversion.submit("workload", 1, tmp_path / "data")
+        assert entered.wait(5)
+        conversion.finish_phase("workload", True)
+        conversion.finish()
+        assert not conversion._aborted.is_set()
+        assert (tmp_path / "profiles/workload.prof").read_bytes() == b"merged"
+    finally:
+        conversion.abort()

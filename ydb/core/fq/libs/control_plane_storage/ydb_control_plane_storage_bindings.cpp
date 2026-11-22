@@ -426,17 +426,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(read)");
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("binding_id", bindingId);
-    readQueryBuilder.AddText("$selected = SELECT `" BINDING_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
-                             "` FROM `" BINDINGS_TABLE_NAME
-                             "`\n"
-                             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME
-                             "` = $binding_id;\n"
-                             "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME
-                             "` FROM $selected;\n"
-                             "SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM $selected;\n"
-                             "SELECT `" VISIBILITY_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
-                             "`\n"
-                             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
+    readQueryBuilder.AddText(
+        "$selected = SELECT `" BINDING_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME
+        "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME
+        "` = $binding_id;\n"
+        "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME
+        "` FROM $selected;\n"
+        "SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
+        "` FROM $selected;\n"
+        "SELECT `" VISIBILITY_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
+        "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
 
     if (checkCommitKey) {
         ReadIdempotencyKeyQuery(readQueryBuilder, scope, idempotencyKey);
@@ -451,8 +452,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                              commonCounters = requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         response->second = {};
         if (resultSets.size() != (checkCommitKey ? 3 : 2)) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
-                << "Unexpected number of result sets for binding update";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Unexpected number of result sets for binding update";
         }
 
         FederatedQuery::Binding binding;
@@ -504,7 +504,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             builder.AddString("scope", scope);
             builder.AddString("binding_id", bindingId);
             builder.AddString("internal", bindingInternal.SerializeAsString());
-            builder.AddText("UPDATE `" BINDINGS_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME "` = $internal"
+            builder.AddText("UPDATE `" BINDINGS_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME
+                            "` = $internal"
                             " WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;");
             auto query = builder.Build();
             return std::make_pair(query.Sql, query.Params);
@@ -542,8 +543,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                     }
                     break;
             }
-        } else if ((observedRevision && binding.meta().revision() != *observedRevision)
-            || (request.previous_revision() > 0 && binding.meta().revision() != request.previous_revision())) {
+        } else if ((observedRevision && binding.meta().revision() != *observedRevision) ||
+                   (request.previous_revision() > 0 && binding.meta().revision() != request.previous_revision())) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST)
                 << "Revision of the binding has been changed already. Please restart the request with a new revision";
         }
@@ -619,38 +620,39 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         TSqlQueryBuilder builder(YdbConnection->TablePathPrefix, "ModifyBinding(idempotency)");
         ReadIdempotencyKeyQuery(builder, scope, idempotencyKey);
         builder.AddString("binding_id", bindingId);
-        builder.AddText("SELECT `" INTERNAL_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME "`"
+        builder.AddText("SELECT `" INTERNAL_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME
+                        "`"
                         " WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;");
         const auto query = builder.Build();
-        validators.push_back({query.Sql, query.Params, [response, parseProtobufError = requestCounters.Common->ParseProtobufError](
-                                   NYdb::NTable::TDataQueryResult result) {
-            const auto& resultSets = result.GetResultSets();
-            if (resultSets.size() != 2) {
-                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Unexpected binding idempotency result";
-            }
-            TResultSetParser idempotency(resultSets.front());
-            if (!idempotency.TryNextRow()) {
-                return false;
-            }
-            TResultSetParser binding(resultSets.back());
-            if (binding.TryNextRow()) {
-                FederatedQuery::Internal::BindingInternal internal;
-                if (!internal.ParseFromString(binding.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString().value_or(""))) {
-                    parseProtobufError->Inc();
-                    ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing binding internal metadata";
+        validators.push_back({ query.Sql, query.Params,
+            [response, parseProtobufError = requestCounters.Common->ParseProtobufError](NYdb::NTable::TDataQueryResult result) {
+                const auto& resultSets = result.GetResultSets();
+                if (resultSets.size() != 2) {
+                    ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Unexpected binding idempotency result";
                 }
-                if (HasPendingBindingRename(internal)) {
+                TResultSetParser idempotency(resultSets.front());
+                if (!idempotency.TryNextRow()) {
                     return false;
                 }
-            }
-            if (!response->first.ParseFromString(*idempotency.ColumnParser(RESPONSE_COLUMN_NAME).GetOptionalString())) {
-                parseProtobufError->Inc();
-                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing binding idempotency result";
-            }
-            response->second = {};
-            response->second.IdempotencyResult = true;
-            return true;
-        }});
+                TResultSetParser binding(resultSets.back());
+                if (binding.TryNextRow()) {
+                    FederatedQuery::Internal::BindingInternal internal;
+                    if (!internal.ParseFromString(binding.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString().value_or(""))) {
+                        parseProtobufError->Inc();
+                        ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing binding internal metadata";
+                    }
+                    if (HasPendingBindingRename(internal)) {
+                        return false;
+                    }
+                }
+                if (!response->first.ParseFromString(*idempotency.ColumnParser(RESPONSE_COLUMN_NAME).GetOptionalString())) {
+                    parseProtobufError->Inc();
+                    ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing binding idempotency result";
+                }
+                response->second = {};
+                response->second.IdempotencyResult = true;
+                return true;
+            } });
     }
 
     if (requiresAccess) {
@@ -756,10 +758,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
     TSqlQueryBuilder checkBindingBuilder(YdbConnection->TablePathPrefix, "DeleteBinding(binding)");
     checkBindingBuilder.AddString("scope", scope);
     checkBindingBuilder.AddString("binding_id", bindingId);
-    checkBindingBuilder.AddText("SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME "`"
+    checkBindingBuilder.AddText("SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME
+                                "`"
                                 " WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;");
     const auto checkBinding = checkBindingBuilder.Build();
-    validators.push_back({checkBinding.Sql, checkBinding.Params,
+    validators.push_back({ checkBinding.Sql, checkBinding.Params,
         [response, parseProtobufError = requestCounters.Common->ParseProtobufError](NYdb::NTable::TDataQueryResult result) {
             const auto& resultSets = result.GetResultSets();
             if (resultSets.size() != 1) {
@@ -770,8 +773,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
                 return false;
             }
             FederatedQuery::Internal::BindingInternal internal;
-            if (!internal.ParseFromString(parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString().value_or(""))
-                || !response->second.Before.ConstructInPlace().ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
+            if (!internal.ParseFromString(parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString().value_or("")) ||
+                !response->second.Before.ConstructInPlace().ParseFromString(*parser.ColumnParser(BINDING_COLUMN_NAME).GetOptionalString())) {
                 parseProtobufError->Inc();
                 ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing binding metadata";
             }
@@ -779,7 +782,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
                 ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "A rename is pending for this binding";
             }
             return false;
-        }});
+        } });
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};

@@ -15,11 +15,10 @@ inline bool HasPendingBindingRename(const FederatedQuery::Internal::BindingInter
     return binding.has_rename() && binding.rename().state() != TBindingRename::FINISHED;
 }
 
-inline bool MatchesBindingRename(
-    const TBindingRename& rename, const FederatedQuery::ModifyBindingRequest& request, const TString& user) {
-    return rename.user() == user && rename.idempotency_key() == request.idempotency_key()
-        && (request.previous_revision() <= 0 || request.previous_revision() == rename.source_revision())
-        && google::protobuf::util::MessageDifferencer::Equals(rename.destination(), request.content());
+inline bool MatchesBindingRename(const TBindingRename& rename, const FederatedQuery::ModifyBindingRequest& request, const TString& user) {
+    return rename.user() == user && rename.idempotency_key() == request.idempotency_key() &&
+           (request.previous_revision() <= 0 || request.previous_revision() == rename.source_revision()) &&
+           google::protobuf::util::MessageDifferencer::Equals(rename.destination(), request.content());
 }
 
 enum class EBindingRenameWrite {
@@ -29,8 +28,8 @@ enum class EBindingRenameWrite {
     Forget,
 };
 
-inline EBindingRenameWrite AdvanceBindingRename(TBindingRename& rename, EBindingRenameAction action,
-    const TString& operationId, const TString& identity, const FederatedQuery::Binding& binding) {
+inline EBindingRenameWrite AdvanceBindingRename(TBindingRename& rename, EBindingRenameAction action, const TString& operationId,
+    const TString& identity, const FederatedQuery::Binding& binding) {
     if (operationId.empty() || rename.operation_id() != operationId) {
         ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding rename operation has changed";
     }
@@ -54,8 +53,8 @@ inline EBindingRenameWrite AdvanceBindingRename(TBindingRename& rename, EBinding
             if (rename.state() != TBindingRename::PREPARED) {
                 return EBindingRenameWrite::None;
             }
-            if (rename.source_identity().empty() || binding.meta().revision() != rename.source_revision()
-                || binding.content().name() != rename.source_name()) {
+            if (rename.source_identity().empty() || binding.meta().revision() != rename.source_revision() ||
+                binding.content().name() != rename.source_name()) {
                 ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding rename source has changed";
             }
             rename.set_candidate_identity(identity);
@@ -86,4 +85,4 @@ inline EBindingRenameWrite AdvanceBindingRename(TBindingRename& rename, EBinding
     Y_ABORT("Unknown binding rename action");
 }
 
-} // namespace NFq
+}   // namespace NFq

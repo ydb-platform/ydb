@@ -541,8 +541,7 @@ Y_UNIT_TEST_SUITE(TBindingRenameJournal) {
             *rename.mutable_destination() = Request.content();
         }
 
-        EBindingRenameWrite Advance(EBindingRenameAction action, const TString& operation = "operation",
-            const TString& identity = {}) {
+        EBindingRenameWrite Advance(EBindingRenameAction action, const TString& operation = "operation", const TString& identity = {}) {
             return AdvanceBindingRename(*Internal.mutable_rename(), action, operation, identity, Binding);
         }
     };

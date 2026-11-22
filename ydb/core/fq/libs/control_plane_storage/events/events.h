@@ -42,7 +42,7 @@ enum class EBindingRenameAction {
     Finish,
 };
 
-struct TBindingModifyAuditDetails : TAuditDetails<FederatedQuery::Binding> {
+struct TBindingModifyAuditDetails: TAuditDetails<FederatedQuery::Binding> {
     TBindingModifyAuditDetails() = default;
 
     TBindingModifyAuditDetails(const TAuditDetails<FederatedQuery::Binding>& audit)
@@ -392,8 +392,8 @@ struct TEvControlPlaneStorage {
         TString RenameIdentity;
     };
 
-    using TEvModifyBindingResponse =
-        TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding, EvModifyBindingResponse, TBindingModifyAuditDetails>;
+    using TEvModifyBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding,
+        EvModifyBindingResponse, TBindingModifyAuditDetails>;
     using TEvDeleteBindingRequest = TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>;
     using TEvDeleteBindingResponse =
         TControlPlaneAuditableResponse<FederatedQuery::DeleteBindingResult, FederatedQuery::Binding, EvDeleteBindingResponse>;

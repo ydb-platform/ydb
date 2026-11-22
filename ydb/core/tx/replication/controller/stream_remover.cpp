@@ -162,6 +162,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             return TStringBuf(entry.Name) == name;
         });
         return child == children.end()
+            || (ChildPath == CdcTablePath
+                && !EqualToOneOf(child->Type, EType::Table, EType::Unknown))
             || (ChildPath == SrcPath
                 && !EqualToOneOf(child->Type, EType::Topic, EType::PqGroup, EType::Unknown));
     }

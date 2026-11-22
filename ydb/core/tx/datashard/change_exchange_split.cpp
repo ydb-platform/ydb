@@ -16,6 +16,8 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
 namespace NKikimr {
@@ -362,7 +364,9 @@ class TCdcWorker
         THashMap<ui32, TActorId> workers;
 
         const auto& topic = entry.PQGroupInfo->Description;
-        const auto& replicationConsumer = topic.GetPQTabletConfig().GetReplicationSourceConsumer();
+        // Splits proposed by older SchemeShards have no producer snapshot.
+        const auto& replicationConsumer = ReplicationConsumer
+            ? *ReplicationConsumer : topic.GetPQTabletConfig().GetReplicationSourceConsumer();
         for (const auto& partition : topic.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
             const auto tabletId = partition.GetTabletId();
@@ -477,11 +481,12 @@ public:
     }
 
     explicit TCdcWorker(const TActorId& parent, const TPathId& pathId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const std::optional<TString>& replicationConsumer)
         : Parent(parent)
         , PathId(pathId)
         , SrcTabletId(srcTabletId)
         , DstTabletIds(dstTabletIds)
+        , ReplicationConsumer(replicationConsumer)
     {
     }
 
@@ -504,6 +509,7 @@ private:
     const TPathId PathId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
+    const std::optional<TString> ReplicationConsumer;
 
     THashMap<ui32, TActorId> Workers;
     THashMap<TActorId, ui32> Pending;
@@ -516,6 +522,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     struct TWorker {
         EWorkerType Type;
         TActorId ActorId;
+        std::optional<TString> ReplicationConsumer;
 
         explicit TWorker(EWorkerType type)
             : Type(type)
@@ -530,19 +537,15 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
             {"srcTabletId", DataShard.TabletId});
     }
 
-    TActorId RegisterWorker(const TPathId& pathId, EWorkerType type) const {
-        switch (type) {
+    TActorId RegisterWorker(const TPathId& pathId, TWorker& worker) const {
+        Y_DEBUG_ABORT_UNLESS(!worker.ActorId);
+        switch (worker.Type) {
         case EWorkerType::CdcStream:
-            return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards));
+            worker.ActorId = Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards, worker.ReplicationConsumer));
+            return worker.ActorId;
         case EWorkerType::AsyncIndex:
             Y_ENSURE(false, "unreachable");
         }
-    }
-
-    TActorId RegisterWorker(const TPathId& pathId, TWorker& worker) const {
-        Y_DEBUG_ABORT_UNLESS(!worker.ActorId);
-        worker.ActorId = RegisterWorker(pathId, worker.Type);
-        return worker.ActorId;
     }
 
     void Ack() {
@@ -588,7 +591,8 @@ public:
         return NKikimrServices::TActivity::CHANGE_EXCHANGE_SPLIT_ACTOR;
     }
 
-    explicit TChangeExchageSplit(const TDataShard* self, const TVector<ui64>& dstDataShards)
+    TChangeExchageSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
+            const NKikimrTxDataShard::TSplitMergeDescription* split)
         : TActorBootstrapped()
         , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
         , DstDataShards(dstDataShards)
@@ -596,6 +600,13 @@ public:
         for (const auto& [_, tableInfo] : self->GetUserTables()) {
             for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
                 Workers.emplace(streamPathId, EWorkerType::CdcStream);
+            }
+        }
+        if (split) {
+            for (const auto& producer : split->GetCdcProducers()) {
+                if (auto* worker = Workers.FindPtr(TPathId::FromProto(producer.GetStreamPathId()))) {
+                    worker->ReplicationConsumer = producer.GetReplicationConsumer();
+                }
             }
         }
     }
@@ -636,8 +647,9 @@ private:
 
 }; // TChangeExchageSplit
 
-IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards) {
-    return new TChangeExchageSplit(self, dstDataShards);
+IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
+        const NKikimrTxDataShard::TSplitMergeDescription* split) {
+    return new TChangeExchageSplit(self, dstDataShards, split);
 }
 
 } // NDataShard

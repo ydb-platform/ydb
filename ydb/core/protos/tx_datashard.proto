@@ -911,6 +911,13 @@ message TKeyRangeToTablet {
 message TSplitMergeDescription {
     repeated TKeyRangeToTablet SourceRanges = 1;
     repeated TKeyRangeToTablet DestinationRanges = 2;
+
+    message TCdcProducer {
+        optional NKikimrProto.TPathID StreamPathId = 1;
+        optional string ReplicationConsumer = 2;
+    }
+    // Producer namespace at split admission, including the empty namespace of ordinary feeds.
+    repeated TCdcProducer CdcProducers = 3;
 }
 
 // Schemeshard -> Dst datashard

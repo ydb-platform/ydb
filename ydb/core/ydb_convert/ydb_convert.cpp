@@ -1550,6 +1550,16 @@ void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
         return false; \
     }
 
+bool TupleContainsPgType(const Ydb::Type& type) {
+    for (const auto& element : type.tuple_type().elements()) {
+        const auto& item = element.has_optional_type() ? element.optional_type().item() : element;
+        if (item.has_pg_type()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // NOTE: TCell's can reference memory from tupleValue
 bool CellsFromTuple(const Ydb::Type* tupleType,
                     const Ydb::Value& tupleValue,

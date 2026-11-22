@@ -3323,6 +3323,7 @@ tx_meta {
     Y_UNIT_TEST(ReadTablePg) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableTablePgTypes(true);
+        appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
@@ -3355,6 +3356,7 @@ tx_meta {
                 "path: \"/Root/TheTable\""
                 "columns { name: \"Key\"             type: { pg_type { type_name: \"pgint8\" } } }"
                 "columns { name: \"Value\"           type: { pg_type { type_name: \"pgtext\" } } }"
+                "columns { name: \"NativeValue\" type: { optional_type { item { type_id: UINT64 } } } }"
                 "primary_key: [\"Key\", \"Value\"]");
             ::google::protobuf::TextFormat::ParseFromString(scheme, &request);
             Ydb::Table::CreateTableResponse response;
@@ -3387,9 +3389,9 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
             TStringBuilder requestBuilder;
-            requestBuilder << "UPSERT INTO `Root/TheTable` (Key, Value) VALUES";
+            requestBuilder << "UPSERT INTO `Root/TheTable` (Key, Value, NativeValue) VALUES";
             for (auto pair : data) {
-                requestBuilder << "(" << std::get<0>(pair) << "pi, \"" << std::get<1>(pair) << "\"pt),";
+                requestBuilder << "(" << std::get<0>(pair) << "pi, \"" << std::get<1>(pair) << "\"pt, " << std::get<0>(pair) << "ul),";
             }
             TString req(requestBuilder);
             req.back() = ';';
@@ -3516,6 +3518,74 @@ tx_meta {
                     }
                 }
             }
+        }
+        {
+            auto& featureFlags = server.Server_->GetRuntime()->GetAppData().FeatureFlags;
+            featureFlags.SetDisablePgCompatibility(true);
+
+            auto stub = Ydb::Table::V1::TableService::NewStub(Channel_);
+            Ydb::Table::ReadTableRequest request;
+            request.set_path("/Root/TheTable");
+            request.add_columns("NativeValue");
+
+            {
+                grpc::ClientContext context;
+                Ydb::Table::ReadTableResponse response;
+                auto reader = stub->StreamReadTable(&context, request);
+                size_t i = 0;
+                while (reader->Read(&response)) {
+                    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+                    for (const auto& row : response.result().result_set().rows()) {
+                        UNIT_ASSERT_VALUES_EQUAL(row.items_size(), 1);
+                        UNIT_ASSERT(i < data.size());
+                        UNIT_ASSERT_VALUES_EQUAL(row.items(0).uint64_value(), std::get<0>(data[i++]));
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(i, data.size());
+                UNIT_ASSERT(reader->Finish().ok());
+            }
+
+            const auto expectPgRejected = [&](const Ydb::Table::ReadTableRequest& deniedRequest, const TString& issue) {
+                grpc::ClientContext context;
+                Ydb::Table::ReadTableResponse response;
+                auto reader = stub->StreamReadTable(&context, deniedRequest);
+                UNIT_ASSERT(reader->Read(&response));
+                UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SCHEME_ERROR);
+                UNIT_ASSERT_C(!response.issues().empty(), response.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(), issue);
+                UNIT_ASSERT(!reader->Read(&response));
+                UNIT_ASSERT(reader->Finish().ok());
+            };
+
+            auto pgProjection = request;
+            pgProjection.add_columns("Value");
+            expectPgRejected(pgProjection, "PostgreSQL compatibility is disabled for column 'Value'");
+
+            auto pgBound = request;
+            auto* lowerBound = pgBound.mutable_key_range()->mutable_greater_or_equal();
+            lowerBound->mutable_type()->mutable_tuple_type()->add_elements()->mutable_pg_type()->set_type_name("pgint8");
+            lowerBound->mutable_value()->add_items()->set_text_value("50");
+            expectPgRejected(pgBound, "PostgreSQL compatibility is disabled for column 'Key'");
+
+            grpc::ClientContext nativeContext;
+            Ydb::Table::CreateTableRequest nativeTable;
+            nativeTable.set_session_id(sessionId);
+            nativeTable.set_path("/Root/NativeKey");
+            auto* nativeKey = nativeTable.add_columns();
+            nativeKey->set_name("Key");
+            nativeKey->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+            nativeTable.add_primary_key("Key");
+            Ydb::Table::CreateTableResponse nativeResponse;
+            UNIT_ASSERT(stub->CreateTable(&nativeContext, nativeTable, &nativeResponse).ok());
+            UNIT_ASSERT_VALUES_EQUAL(nativeResponse.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            pgBound.set_path("/Root/NativeKey");
+            pgBound.clear_columns();
+            auto* boundType = lowerBound->mutable_type()->mutable_tuple_type()->mutable_elements(0);
+            boundType->mutable_pg_type()->set_type_name("unrecognized_pg_type");
+            expectPgRejected(pgBound, "PostgreSQL compatibility is disabled for range key types");
+            boundType->mutable_optional_type()->mutable_item()->mutable_pg_type()->set_type_name("unrecognized_pg_type");
+            expectPgRejected(pgBound, "PostgreSQL compatibility is disabled for range key types");
         }
     }
 

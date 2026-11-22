@@ -39,7 +39,7 @@ namespace NTabletFlatExecutor {
 
         // Repeated volatile waits must eventually yield a retry. Broker queue
         // time never consumes this budget.
-        static constexpr ui32 MaxReadmissionAttempts = 8;
+        static constexpr ui32 MaxReadinessChecks = 8;
 
         enum class EType {
             Client,
@@ -230,7 +230,7 @@ namespace NTabletFlatExecutor {
             bool NeedsReadmission = false;
             // Owns expiry of the readiness state chosen at a broker grant.
             TInstant ReadinessDeadline;
-            ui32 ReadmissionAttempts = 0;
+            ui32 ReadinessChecks = 0;
             ui64 TimeoutGeneration = 0;
             TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
@@ -412,10 +412,10 @@ namespace NTabletFlatExecutor {
             }
             auto resume = std::make_unique<IEventHandle>(BrokerClient, TActorId(), new NOps::TEvResumeScan(serial));
             if (!one.Options.OnAdmissionReady(one.Options, std::move(resume))) {
+                if (one.ReadinessChecks++ >= MaxReadinessChecks) {
+                    return EReadiness::RetryLimitExceeded;
+                }
                 if (!one.NeedsReadmission) {
-                    if (one.ReadmissionAttempts++ >= MaxReadmissionAttempts) {
-                        return EReadiness::RetryLimitExceeded;
-                    }
                     // Only the bounded descriptor is needed while waiting.
                     // Transactions being waited on may need broker resources.
                     one.Lease->Suspend();
@@ -469,7 +469,11 @@ namespace NTabletFlatExecutor {
         }
 
         void SetSnapshot(ui64 serial, THolder<TScanSnapshot> snapshot) {
-            Lookup(serial, true)->Snapshot = std::move(snapshot);
+            auto& one = *Lookup(serial, true);
+            if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&one.Options.Snapshot)) {
+                one.PreparedSnapshotId = byId->SnapshotId;
+            }
+            one.Snapshot = std::move(snapshot);
         }
 
         void AdmissionFailed(ui64 serial, const TString& reason, std::optional<ui64> memoryLimit = {}) {
@@ -477,6 +481,7 @@ namespace NTabletFlatExecutor {
             if (!one || one->State > EState::Ready) {
                 return;
             }
+            const auto cookie = one->Cookie;
             auto cancelled = Cancel(serial);
             ReleaseSnapshot(std::move(cancelled.Snapshot));
             if (memoryLimit && cancelled.Options.OnMemoryLimitExceeded) {
@@ -484,6 +489,8 @@ namespace NTabletFlatExecutor {
             }
             if (cancelled.Options.OnAdmissionFailure) {
                 cancelled.Options.OnAdmissionFailure(reason, true);
+            } else {
+                Owner->ScanComplete(EStatus::Term, {}, cookie, TActivationContext::ActorContextFor(OwnerActorId));
             }
         }
 
@@ -549,6 +556,7 @@ namespace NTabletFlatExecutor {
             one.Options.OnReadinessExpired = {};
             one.Options.OnAdmissionFailure = {};
             one.Options.OnAdmissionTimeout = {};
+            one.Options.OnMemoryLimitExceeded = {};
         }
 
         ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, THolder<TScanSnapshot> snapshot)

@@ -74,6 +74,7 @@ public:
     TActorId Client;
     // Task queue task is currently attached to.
     TTaskQueuePtr Queue;
+    TResourceLimitPtr TypeLimit;
     // True if task has allocated resources.
     bool InFly;
     // When task was submitted.
@@ -230,6 +231,7 @@ public:
 
     TTaskPtr FrontTask();
     TTaskPtr FrontMemorylessTask();
+    TTaskPtr FrontTaskWithoutTypeMemoryLimit();
     void PopTask(TTaskPtr task);
 
     void UpdateRealResourceUsage(TInstant now);
@@ -329,13 +331,16 @@ public:
     bool FitsMemoryLimit(const TString& type, const TResourceValues& resources) const {
         const auto& queue = TaskConfig(type).Queue;
         const auto bytes = resources[NKikimrResourceBroker::MEMORY];
-        return !queue->StrictMemoryLimit ||
-            bytes <= GetMemoryLimit(type);
+        return (!queue->StrictMemoryLimit && type != "build_index") || bytes <= GetMemoryLimit(type);
     }
 
     ui64 GetMemoryLimit(const TString& type) const {
-        return Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
+        ui64 limit = Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
             ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]);
+        if (type == "build_index") {
+            limit = Min(limit, IndexBuildLimit->Limit[NKikimrResourceBroker::MEMORY]);
+        }
+        return limit;
     }
 
     /**
@@ -386,7 +391,8 @@ public:
      * unknown task). On re-configuration tasks may migrate between queues according
      * to new mapping. Returns queued tasks rejected by the new strict memory limits.
      */
-    TVector<TTaskPtr> Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as);
+    TVector<TTaskPtr> Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as,
+        std::optional<ui64> indexBuildMemoryLimit = {});
 
     /**
      * Update current scheduler time which is used for all resource consumption
@@ -424,6 +430,7 @@ private:
     THashMap<TString, TTaskQueuePtr> Queues;
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
+    const TResourceLimitPtr IndexBuildLimit;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
     // Contains exactly the task IDs in Tasks for each client; empty clients are removed.
     THashMap<TActorId, THashSet<ui64>> TasksByClient;
@@ -449,7 +456,8 @@ public:
 
     NKikimrResourceBroker::TResourceBrokerConfig GetConfig() const;
     TVector<TEvResourceBroker::TQueueUsage> GetQueueUsage() const;
-    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config);
+    ui64 Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config,
+        std::optional<ui64> indexBuildMemoryLimit = {});
 
     using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
 

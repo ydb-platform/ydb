@@ -222,12 +222,13 @@ struct TEvResourceBroker {
                                           NKikimrResourceBroker::TResourceBrokerConfig,
                                           EvConfigure> {
         bool Merge = false;
-        TString ExpectedIndexBuildQueue;
+        std::optional<ui64> IndexBuildMemoryLimit;
     };
 
     struct TEvConfigureResult : public TEventPB<TEvConfigureResult,
                                                 NKikimrResourceBroker::TResourceBrokerConfigResult,
                                                 EvConfigureResult> {
+        std::optional<ui64> IndexBuildMemoryLimit;
     };
 
     struct TEvConfigRequest : public TEventLocal<TEvConfigRequest, EvConfigRequest> {

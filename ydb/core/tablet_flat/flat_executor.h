@@ -590,6 +590,7 @@ class TExecutor
     ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
+    THolder<TScanSnapshot> TakeScanSnapshot(ui32 tableId, ui64 snapshotId);
     THolder<TScanSnapshot> ResolveScanSnapshot(ui32 tableId, const TScanOptions& options);
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
     void ReleaseScanLocks(THolder<TScanSnapshot>);

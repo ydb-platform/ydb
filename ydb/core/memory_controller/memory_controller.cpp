@@ -642,7 +642,7 @@ private:
         const auto *msg = ev->Get();
         if (const auto it = PendingIndexBuildLimits.find(ev->Cookie); it != PendingIndexBuildLimits.end()) {
             if (msg->Record.GetSuccess() && ev->Cookie > LastConfirmedBrokerConfig) {
-                AppData()->BuildIndexScanAdmission->ConfirmBrokerLimit(it->second);
+                AppData()->BuildIndexScanAdmission->ConfirmBrokerLimit(msg->IndexBuildMemoryLimit.value_or(it->second));
                 LastConfirmedBrokerConfig = ev->Cookie;
             } else if (!msg->Record.GetSuccess() && ev->Cookie == NextBrokerConfig) {
                 CurrentResourceBrokerConfig.reset();
@@ -754,7 +754,6 @@ private:
             },
             .IndexBuildQueue = ResourceBrokerSelfConfig.IndexBuildQueue,
         };
-        config.QueueLimits.try_emplace(config.IndexBuildQueue, Max<ui64>());
 
         for (auto &[name, limitBytes] : ResourceBrokerSelfConfig.QueueLimits) {
             if (config.QueueLimits.contains(name)) {
@@ -763,8 +762,11 @@ private:
         }
         // The index budget is a combined bound on active and pending scans.
         const ui64 pendingBudget = Max(pendingLimit, pendingBytes);
-        auto& activeIndexLimit = config.QueueLimits.at(config.IndexBuildQueue);
-        activeIndexLimit = Min(activeIndexLimit, indexBuildLimit - Min(indexBuildLimit, pendingBudget));
+        config.IndexBuildMemoryLimit = indexBuildLimit - Min(indexBuildLimit, pendingBudget);
+        const auto queueOverride = ResourceBrokerSelfConfig.QueueLimits.find(config.IndexBuildQueue);
+        const ui64 activeIndexLimit = queueOverride != ResourceBrokerSelfConfig.QueueLimits.end()
+            ? Min(config.IndexBuildMemoryLimit, queueOverride->second)
+            : config.IndexBuildMemoryLimit;
         admission.SetTotalLimit(indexBuildLimit, Min(activeIndexLimit, config.LimitBytes),
             config != CurrentResourceBrokerConfig);
 
@@ -796,7 +798,7 @@ private:
 
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;
-        configure->ExpectedIndexBuildQueue = config.IndexBuildQueue;
+        configure->IndexBuildMemoryLimit = config.IndexBuildMemoryLimit;
 
         auto& record = configure->Record;
         record.MutableResourceLimit()->SetMemory(config.LimitBytes);
@@ -805,14 +807,11 @@ private:
             auto queue = record.AddQueues();
             queue->SetName(name);
             queue->MutableLimit()->SetMemory(limitBytes);
-            if (name == config.IndexBuildQueue) {
-                queue->SetStrictMemoryLimit(true);
-            }
         }
 
         const ui64 cookie = ++NextBrokerConfig;
         PendingIndexBuildLimits.clear(); // Only the latest configuration can supersede a rejection hint.
-        PendingIndexBuildLimits[cookie] = Min(config.QueueLimits.at(config.IndexBuildQueue), config.LimitBytes);
+        PendingIndexBuildLimits[cookie] = Min(config.IndexBuildMemoryLimit, config.LimitBytes);
         Send(MakeResourceBrokerID(), configure.Release(), 0, cookie);
 
         CurrentResourceBrokerConfig.emplace(std::move(config));

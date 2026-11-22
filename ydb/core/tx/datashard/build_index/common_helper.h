@@ -71,6 +71,10 @@ public:
     };
 
 private:
+    // A shard request can retain its own partially filled serialization chunk.
+    // Before routing is known, each row or key can target a different shard.
+    static constexpr ui64 ShardSerializationOverhead = 4_KB;
+
     struct TUploadAttempt {
         std::shared_ptr<void> Reservation;
         bool Completed = false;
@@ -444,7 +448,7 @@ private:
             std::shared_ptr<void> attempt;
             if (ResourceReservation) {
                 const auto keys = Uploading.EraseBuffer.GetKeysData();
-                ui64 bytes = 3 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * 256 + 4_KB
+                ui64 bytes = 3 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * (256 + ShardSerializationOverhead) + 4_KB
                     + (keys->capacity() - keys->size()) * sizeof(NTxProxy::TEraseKeys::value_type);
                 for (const auto& key : *keys) {
                     bytes += key.GetCells().size() * sizeof(TCell) * 2;
@@ -476,7 +480,7 @@ private:
             // Include the canonical rows, protobuf payload, and row/container
             // overhead still owned by this attempt after the scan stops.
             const auto rows = Uploading.Buffer.GetRowsData();
-            ui64 bytes = 2 * Uploading.Buffer.GetBufferBytes() + rows->size() * 256 + 4_KB
+            ui64 bytes = 3 * Uploading.Buffer.GetBufferBytes() + rows->size() * (256 + ShardSerializationOverhead) + 4_KB
                 + (rows->capacity() - rows->size()) * sizeof(NTxProxy::TUploadRows::value_type);
             for (const auto& [key, _] : *rows) {
                 bytes += key.GetCells().size() * sizeof(TCell) * 2;

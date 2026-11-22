@@ -1632,7 +1632,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         }
     }
 
-    Y_UNIT_TEST(RepeatedReadinessCyclesYieldRetry) {
+    Y_UNIT_TEST_TWIN(RepeatedReadinessCyclesYieldRetry, Readmit) {
         TMyEnvScans env;
         bool ready = false;
         bool failed = false;
@@ -1647,8 +1647,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
             TScanOptions options;
             options.SetResourceBroker("build_index", 10, 1_MB);
-            options.QueueTimeout = TDuration::Hours(1);
-            options.OnAdmissionTimeout = [] { return true; };
+            if (Readmit) {
+                options.QueueTimeout = TDuration::Hours(1);
+                options.OnAdmissionTimeout = [] { return true; };
+            }
             options.OnAdmissionReady = [&](TScanOptions&, std::unique_ptr<IEventHandle> event) {
                 if (ready) {
                     return true;
@@ -1675,11 +1677,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             if (failed) {
                 break;
             }
-            ready = true;
+            ready = Readmit;
             env->Send(resume.release());
-            env->WaitFor("readmission queues without constructing a scan", [&] { return !grants.empty() || failed; });
-            ready = false;
-            grants.Unblock(1);
+            if (Readmit) {
+                env->WaitFor("readmission queues without constructing a scan", [&] { return !grants.empty() || failed; });
+                ready = false;
+                grants.Unblock(1);
+            }
         }
         env->WaitFor("bounded readiness retry", [&] { return failed; });
         UNIT_ASSERT_GT(suspended, 1);
@@ -1726,6 +1730,22 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             executor->StartVacuum(123ull);
         }));
         env.WaitFor<NFake::TEvDataCleaned>();
+    }
+
+    Y_UNIT_TEST(DeferredBrokerRejectionCompletesWithoutFailureCallback) {
+        TMyEnvScans env;
+        bool constructed = false;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, Max<ui64>());
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                constructed = true;
+                return {};
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, TTestFlatTablet::ScanCookie, options);
+        }));
+        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        UNIT_ASSERT(!constructed);
     }
 
     Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
@@ -1777,6 +1797,41 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             TScanOptions options;
             options.SetSnapshotId(snapshot);
             options.SetResourceBroker("build_index", 10, 1_MB);
+            options.Factory = [](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                if (ThrowFactory) {
+                    ythrow yexception() << "Cannot construct test scan";
+                }
+                return {};
+            };
+            options.OnAdmissionFailure = [&](const TString&, bool retry) {
+                UNIT_ASSERT(retry);
+                failed = true;
+                TActivationContext::Send(new IEventHandle(env.Edge, {}, new TEvents::TEvWakeup));
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 0, options);
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT(failed);
+        // A missing ReleaseScanLocks leaves the prepared snapshot's GC barrier
+        // behind even after its pointers die, and vacuum cannot complete.
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
+    }
+
+    Y_UNIT_TEST_TWIN(DeferredScanFailureReleasesLateSelectedSnapshot, ThrowFactory) {
+        TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
+        bool failed = false;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            const ui64 snapshot = executor->MakeScanSnapshot(TRowsModel::TableId);
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.OnAdmissionReady = [snapshot](TScanOptions& admitted, std::unique_ptr<IEventHandle>) {
+                admitted.SetSnapshotId(snapshot);
+                return true;
+            };
             options.Factory = [](TScanOptions&) -> TAutoPtr<NTable::IScan> {
                 if (ThrowFactory) {
                     ythrow yexception() << "Cannot construct test scan";

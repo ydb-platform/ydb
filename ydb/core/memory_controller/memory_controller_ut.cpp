@@ -524,11 +524,7 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
     auto observer = fixture.Runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvConfigure>([&](auto& event) {
         ++configurations;
         brokerLimit = event->Get()->Record.GetResourceLimit().GetMemory();
-        for (const auto& queue : event->Get()->Record.GetQueues()) {
-            if (queue.GetName() == "queue_build_index") {
-                activeLimit = queue.GetLimit().GetMemory();
-            }
-        }
+        activeLimit = event->Get()->IndexBuildMemoryLimit.value_or(0);
     });
     // The controller already configured the broker during bootstrap. Change
     // the pending slice to require a fresh update observable by this test.
@@ -690,7 +686,7 @@ Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
         new TEvResourceBroker::TEvConfigRequest("queue_custom_build_index")));
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 17_MB);
-    UNIT_ASSERT(config->Get()->QueueConfig->GetStrictMemoryLimit());
+    UNIT_ASSERT(!config->Get()->QueueConfig->GetStrictMemoryLimit());
     UNIT_ASSERT_VALUES_EQUAL(runtime.GetAppData().BuildIndexScanAdmission->GetActiveByteLimit(64_MB), 17_MB);
 
     // ensure that other settings are not affected:

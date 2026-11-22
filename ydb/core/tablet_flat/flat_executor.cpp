@@ -3766,27 +3766,48 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
         }
         return;
     }
+    const auto captureExplicitSnapshot = [&] {
+        const auto& options = Scans->GetOptions(serial);
+        if (Scans->NeedsSnapshot(serial) && std::holds_alternative<TScanOptions::TSnapshotById>(options.Snapshot)) {
+            Scans->SetSnapshot(serial, ResolveScanSnapshot(table, options));
+        }
+    };
+
+    TString failure;
     try {
         const auto readiness = Scans->AwaitReadiness(serial);
-        if (readiness != TScans::EReadiness::Ready) {
-            if (readiness == TScans::EReadiness::TimedOut || readiness == TScans::EReadiness::RetryLimitExceeded) {
-                const char* reason = readiness == TScans::EReadiness::TimedOut
-                    ? "Timed out waiting for scan readiness" : "Scan readiness retry limit exceeded";
-                Scans->AdmissionFailed(serial, reason);
+        captureExplicitSnapshot();
+        switch (readiness) {
+            case TScans::EReadiness::Waiting:
+                return;
+            case TScans::EReadiness::TimedOut:
+                failure = "Timed out waiting for scan readiness";
+                break;
+            case TScans::EReadiness::RetryLimitExceeded:
+                failure = "Scan readiness retry limit exceeded";
+                break;
+            case TScans::EReadiness::Ready: {
+                const bool initialized = Scans->Initialize(serial);
+                captureExplicitSnapshot();
+                if (!initialized) {
+                    failure = "Deferred scan factory returned no scan";
+                    break;
+                }
+                if (Scans->NeedsSnapshot(serial)) {
+                    Scans->SetSnapshot(serial, ResolveScanSnapshot(table, Scans->GetOptions(serial)));
+                }
+                Scans->Start(serial);
+                return;
             }
-            return;
         }
-        if (!Scans->Initialize(serial)) {
-            Scans->AdmissionFailed(serial, "Deferred scan factory returned no scan");
-            return;
+    } catch (...) {
+        failure = TStringBuilder() << "Cannot initialize admitted scan: " << CurrentExceptionMessage();
+        // A callback can select a snapshot and throw before it is transferred.
+        if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&Scans->GetOptions(serial).Snapshot)) {
+            ReleaseScanLocks(TakeScanSnapshot(table, byId->SnapshotId));
         }
-        if (Scans->NeedsSnapshot(serial)) {
-            Scans->SetSnapshot(serial, ResolveScanSnapshot(table, Scans->GetOptions(serial)));
-        }
-        Scans->Start(serial);
-    } catch (const std::exception& exc) {
-        Scans->AdmissionFailed(serial, TStringBuilder() << "Cannot initialize admitted scan: " << exc.what());
     }
+    Scans->AdmissionFailed(serial, failure);
 }
 
 void TExecutor::StartScan(ui64 task, TResource *cookie)
@@ -4610,14 +4631,22 @@ void TExecutor::DropScanSnapshot(ui64 snap)
     }
 }
 
+THolder<TScanSnapshot> TExecutor::TakeScanSnapshot(ui32 tableId, ui64 snapshotId)
+{
+    auto it = ScanSnapshots.find(snapshotId);
+    if (it == ScanSnapshots.end() || it->second->Table != tableId) {
+        return {};
+    }
+    auto snapshot = std::move(it->second);
+    ScanSnapshots.erase(it);
+    return snapshot;
+}
+
 THolder<TScanSnapshot> TExecutor::ResolveScanSnapshot(ui32 tableId, const TScanOptions& options)
 {
     if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
-        auto it = ScanSnapshots.find(byId->SnapshotId);
-        Y_ENSURE(it != ScanSnapshots.end() && it->second->Table == tableId,
-            NFmt::Do(*this) << " Unknown scan snapshot " << byId->SnapshotId << " for table " << tableId);
-        auto snapshot = std::move(it->second);
-        ScanSnapshots.erase(it);
+        auto snapshot = TakeScanSnapshot(tableId, byId->SnapshotId);
+        Y_ENSURE(snapshot, NFmt::Do(*this) << " Unknown scan snapshot " << byId->SnapshotId << " for table " << tableId);
         return snapshot;
     }
 

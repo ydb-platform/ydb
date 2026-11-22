@@ -18,6 +18,7 @@ struct TResourceBrokerConfig {
     ui64 LimitBytes = 0;
     TMap<TString, ui64> QueueLimits;
     TString IndexBuildQueue = "queue_build_index";
+    ui64 IndexBuildMemoryLimit = 0;
 
     auto operator<=>(const TResourceBrokerConfig&) const = default;
 

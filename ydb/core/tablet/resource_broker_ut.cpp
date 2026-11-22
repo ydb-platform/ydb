@@ -284,6 +284,42 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         FinishTask(runtime, broker, sender, 1);
     }
 
+    Y_UNIT_TEST(IndexBuildMemoryLimitInSharedQueue) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* indexTask = config.AddTasks();
+        indexTask->SetName("build_index");
+        indexTask->SetQueueName("queue_scan");
+        const auto broker = runtime.Register(CreateResourceBrokerActor(config, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+        WaitForBootstrap(runtime);
+
+        auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+        configure->Merge = true;
+        configure->IndexBuildMemoryLimit = 100;
+        runtime.Send(new IEventHandle(broker, sender, configure.Release()));
+        auto reply = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigureResult>(sender);
+        UNIT_ASSERT(reply->Get()->Record.GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->IndexBuildMemoryLimit.value_or(0), 100);
+
+        SubmitTask(runtime, broker, sender, 1, 1, 101, "build_index", 5);
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        SubmitTask(runtime, broker, sender, 2, 1, 60, "build_index", 5);
+        WaitForResourceAllocation(runtime, 2);
+        SubmitTask(runtime, broker, sender, 3, 1, 60, "build_index", 5);
+        SubmitTask(runtime, broker, sender, 4, 1, 101, "scan", 5);
+        WaitForResourceAllocation(runtime, 4);
+        FinishTask(runtime, broker, sender, 2);
+        WaitForResourceAllocation(runtime, 3);
+        FinishTask(runtime, broker, sender, 3);
+        FinishTask(runtime, broker, sender, 4);
+
+        SubmitTask(runtime, broker, sender, 5, 1, 501, "scan", 5);
+        WaitForResourceAllocation(runtime, 5);
+        FinishTask(runtime, broker, sender, 5);
+    }
+
     Y_UNIT_TEST(StrictMemoryUpdateRejectsOversizeWithoutChangingTask) {
         for (const bool resubmit : {false, true}) {
             TTestBasicRuntime runtime;

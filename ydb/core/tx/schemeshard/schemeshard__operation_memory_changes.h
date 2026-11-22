@@ -65,6 +65,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     TStack<std::pair<TExternalTableCreateTicketKey,
         std::optional<NKikimrSchemeOp::TExternalTableCreateTicket>>> ExternalTableCreateTickets;
+    std::optional<ui64> ExternalTableCreateLeaseCutoffMs;
 
     using TExternalDataSourceState = std::pair<TPathId, TExternalDataSourceInfo::TPtr>;
     TStack<TExternalDataSourceState> ExternalDataSources;
@@ -146,6 +147,7 @@ public:
     void GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabExternalTableCreateTicket(TSchemeShard* ss, const TExternalTableCreateTicketKey& key);
+    void GrabExternalTableCreateLeaseCutoff(TSchemeShard* ss);
 
     void GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
     void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);

@@ -61,7 +61,18 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto result = Write(query.Sql, query.Params, requestCounters, debugInfo);
+    TSqlQueryBuilder workQueryBuilder(YdbConnection->TablePathPrefix, "CheckFolderBindingRenameWork");
+    workQueryBuilder.AddString("scope", scope);
+    workQueryBuilder.AddText("SELECT `" OPERATION_ID_COLUMN_NAME "` FROM `" BINDING_RENAME_WORK_TABLE_NAME
+                             "` VIEW by_scope WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" RELEASABLE_COLUMN_NAME "` = false LIMIT 1;");
+    const auto workQuery = workQueryBuilder.Build();
+    auto result = Write(query.Sql, query.Params, requestCounters, debugInfo,
+        { { workQuery.Sql, workQuery.Params, [](NYdb::NTable::TDataQueryResult result) {
+               if (TResultSetParser(result.GetResultSet(0)).TryNextRow()) {
+                   ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "A binding rename is pending in this folder";
+               }
+               return false;
+           } } });
     auto prepare = [response] {
         return *response;
     };

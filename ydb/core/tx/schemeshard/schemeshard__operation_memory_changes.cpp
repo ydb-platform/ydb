@@ -132,6 +132,12 @@ void TMemoryChanges::GrabExternalTableCreateTicket(TSchemeShard* ss, const TExte
     }
 }
 
+void TMemoryChanges::GrabExternalTableCreateLeaseCutoff(TSchemeShard* ss) {
+    if (!ExternalTableCreateLeaseCutoffMs) {
+        ExternalTableCreateLeaseCutoffMs = ss->ExternalTableCreateLeaseCutoffMs;
+    }
+}
+
 void TMemoryChanges::GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->ExternalDataSources, ExternalDataSources);
 }
@@ -356,6 +362,9 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         TxStates.pop();
     }
 
+    if (ExternalTableCreateLeaseCutoffMs) {
+        ss->ExternalTableCreateLeaseCutoffMs = *ExternalTableCreateLeaseCutoffMs;
+    }
     while (ExternalTableCreateTickets) {
         auto& [key, ticket] = ExternalTableCreateTickets.top();
         ss->SetExternalTableCreateTicket(key, std::move(ticket));

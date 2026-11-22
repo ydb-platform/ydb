@@ -166,6 +166,9 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& key : ExternalTableCreateTickets) {
         ss->PersistExternalTableCreateTicket(db, key);
     }
+    if (ExternalTableCreateLeaseCutoffChanged) {
+        ss->PersistExternalTableCreateLeaseCutoff(db);
+    }
 
     for (const auto& pId : ExternalTables) {
         ss->PersistExternalTable(db, pId);

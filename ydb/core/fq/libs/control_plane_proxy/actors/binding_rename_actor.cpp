@@ -86,7 +86,7 @@ Fq::Private::MutateExternalTableRequest MakeCreateRequest(const TRename& rename)
     const auto& subset = rename.destination().setting().object_storage().subset(0);
     Fq::Private::MutateExternalTableRequest request;
     request.set_relative_path(rename.destination().name());
-    auto& create = *request.mutable_create();
+    auto& create = *(rename.lease_deadline_ms() ? request.mutable_leased_create() : request.mutable_create());
     create.set_key(rename.operation_id());
     create.set_relative_data_source_path(rename.connection_name());
     create.set_location(subset.path_pattern());
@@ -188,6 +188,15 @@ bool MatchesSource(
     return true;
 }
 
+Fq::Private::ExternalTableMutationScope MutationScope(const TRename& rename) {
+    Fq::Private::ExternalTableMutationScope scope;
+    scope.set_principal(rename.compute_principal());
+    scope.set_scheme_shard_id(rename.compute_scheme_shard_id());
+    scope.set_domain_owner_id(rename.compute_domain_owner_id());
+    scope.set_domain_path_id(rename.compute_domain_path_id());
+    return scope;
+}
+
 bool HasValidIdentity(const Fq::Private::ExternalTableIdentity& identity) {
     return identity.owner_id() && identity.local_path_id() && identity.version();
 }
@@ -199,10 +208,11 @@ public:
     static constexpr char ActorName[] = "YQ_RENAME_BINDING";
 
     TRenameBindingActor(const TActorId& proxy, TProxyRequest::TPtr request, TDuration timeout, const TRequestCommonCountersPtr& counters,
-        TPermissions permissions, std::unique_ptr<TPrivateClient> compute)
+        TPermissions permissions, std::unique_ptr<TPrivateClient> compute, bool recovery = false)
         : TBaseActor(proxy, std::move(request), timeout, counters)
         , Permissions(permissions)
         , Compute(std::move(compute))
+        , Recovery(recovery)
     {
     }
 
@@ -210,12 +220,19 @@ public:
         if (!Compute) {
             SendStorage(EBindingRenameAction::Probe);
         } else if (Request->Get()->Rename) {
-            Drive();
+            if (Recovery && Request->Get()->Rename->state() == TRename::PREPARED) {
+                SendStorage(EBindingRenameAction::Expire);
+            } else {
+                Drive();
+            }
         } else {
             if (!ValidateDestination(Request->Get()->Request.content())) {
                 return Reply(Failure);
             }
-            SendStorage(EBindingRenameAction::Prepare);
+            Fq::Private::DescribeExternalTableRequest request;
+            request.set_resolve_mutation_scope(true);
+            ComputeAction = EComputeAction::ResolveScope;
+            SendDescribe(std::move(request));
         }
     }
 
@@ -227,11 +244,13 @@ public:
 
 private:
     enum class EComputeAction {
+        ResolveScope,
         Describe,
         Create,
         Commit,
         DropSource,
         Abort,
+        Release,
     };
 
     void SendStorage(EBindingRenameAction action, const TString& identity = {}) {
@@ -240,9 +259,11 @@ private:
         auto event = std::make_unique<TStorageRequest>(request.Scope, request.Request, request.User, request.Token, request.CloudId, Permissions,
             request.Quotas, request.TenantInfo, request.ComputeDatabase.GetOrElse({}));
         event->RenameAction = action;
+        event->RecoverRename = Recovery;
         if (action == EBindingRenameAction::Prepare) {
             event->ObservedRevision = request.OldBindingRevision;
             event->RenameConnectionName = request.ConnectionContent->name();
+            event->RenameComputeScope = ComputeScope;
         }
         if (request.Rename) {
             event->RenameOperationId = request.Rename->operation_id();
@@ -294,7 +315,7 @@ private:
             CommitAudit.IdempotencyResult = !audit.Before;
         }
         if (StorageAction == EBindingRenameAction::Finish) {
-            if (request.Rename->state() == TRename::ABORTED) {
+            if (!Recovery && request.Rename->state() == TRename::ABORTED) {
                 if (Failure.Empty()) {
                     Failure.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Binding rename was aborted. Retry to start a new operation"));
                 }
@@ -317,7 +338,8 @@ private:
         const auto& request = *Request->Get();
         const auto& rename = *request.Rename;
         const auto& connection = request.ComputeDatabase->connection();
-        if (rename.compute_endpoint() != connection.endpoint() || rename.compute_database() != connection.database()) {
+        if (rename.compute_endpoint() != connection.endpoint() || rename.compute_database() != connection.database() ||
+            (rename.lease_deadline_ms() && rename.compute_ssl() != connection.usessl())) {
             return Fail("Compute database changed while the binding rename was pending");
         }
         switch (rename.state()) {
@@ -327,10 +349,14 @@ private:
                 }
                 if (rename.source_identity().empty()) {
                     Fq::Private::DescribeExternalTableRequest describe;
-                    describe.set_relative_path(rename.source_name());
                     ComputeAction = EComputeAction::Describe;
-                    return WaitFor(Compute->DescribeExternalTable(
-                        std::move(describe), TDescribeExternalTableSettings().ClientTimeout(RequestTimeout).OperationTimeout(RequestTimeout)));
+                    if (rename.lease_deadline_ms()) {
+                        describe.set_scoped_relative_path(rename.source_name());
+                        *describe.mutable_expected_scope() = MutationScope(rename);
+                    } else {
+                        describe.set_relative_path(rename.source_name());
+                    }
+                    return SendDescribe(std::move(describe));
                 }
                 Fq::Private::MutateExternalTableRequest create;
                 try {
@@ -351,16 +377,24 @@ private:
                 }
                 Fq::Private::MutateExternalTableRequest commit;
                 commit.set_relative_path(rename.destination().name());
-                commit.mutable_commit()->set_key(rename.operation_id());
+                auto* ticket = rename.lease_deadline_ms() ? commit.mutable_leased_commit() : commit.mutable_commit();
+                ticket->set_key(rename.operation_id());
                 return SendCompute(EComputeAction::Commit, std::move(commit));
             }
             case TRename::ABORTED: {
                 Fq::Private::MutateExternalTableRequest abort;
                 abort.set_relative_path(rename.destination().name());
-                abort.mutable_abort()->set_key(rename.operation_id());
+                auto* ticket = rename.lease_deadline_ms() ? abort.mutable_leased_abort() : abort.mutable_abort();
+                ticket->set_key(rename.operation_id());
                 return SendCompute(EComputeAction::Abort, std::move(abort));
             }
             case TRename::FINISHED:
+                if (Recovery) {
+                    Fq::Private::MutateExternalTableRequest release;
+                    release.set_relative_path(rename.destination().name());
+                    release.mutable_release()->set_key(rename.operation_id());
+                    return SendCompute(EComputeAction::Release, std::move(release));
+                }
                 CommitAudit.IdempotencyResult = true;
                 return ReplySuccess(CommitAudit);
             default:
@@ -368,8 +402,17 @@ private:
         }
     }
 
+    void SendDescribe(Fq::Private::DescribeExternalTableRequest request) {
+        WaitFor(Compute->DescribeExternalTable(
+            std::move(request), TDescribeExternalTableSettings().ClientTimeout(RequestTimeout).OperationTimeout(RequestTimeout)));
+    }
+
     void SendCompute(EComputeAction action, Fq::Private::MutateExternalTableRequest request) {
         ComputeAction = action;
+        const auto& rename = *Request->Get()->Rename;
+        if (rename.lease_deadline_ms()) {
+            *request.mutable_expected_scope() = MutationScope(rename);
+        }
         WaitFor(Compute->MutateExternalTable(
             std::move(request), TMutateExternalTableSettings().ClientTimeout(RequestTimeout).OperationTimeout(RequestTimeout)));
     }
@@ -387,11 +430,24 @@ private:
 
     void Handle(TPrivateSchemaResponse::TPtr& ev) {
         auto& request = *Request->Get();
-        const auto& rename = *request.Rename;
         const auto& response = *ev->Get();
         if (!response.Error.empty()) {
             return Fail(response.Error);
         }
+        if (ComputeAction == EComputeAction::ResolveScope) {
+            const auto& result = *response.Describe;
+            if (!result.IsSuccess() || !result.IsResultSet() || !result.GetResult().has_mutation_scope()) {
+                return Fail(result.GetIssues().ToOneLineString());
+            }
+            ComputeScope = result.GetResult().mutation_scope();
+            if (!ComputeScope.scheme_shard_id() || ComputeScope.principal().empty() || !ComputeScope.domain_owner_id() ||
+                !ComputeScope.domain_path_id()) {
+                return Fail("Compute did not return a mutation scope");
+            }
+            return SendStorage(EBindingRenameAction::Prepare);
+        }
+
+        const auto& rename = *request.Rename;
         if (ComputeAction == EComputeAction::Describe) {
             const auto& result = *response.Describe;
             if (result.GetStatus() == NYdb::EStatus::NOT_FOUND) {
@@ -443,7 +499,7 @@ private:
                 }
                 Fq::Private::MutateExternalTableRequest drop;
                 drop.set_relative_path(rename.source_name());
-                auto& identity = *drop.mutable_guarded_drop();
+                auto& identity = *(rename.lease_deadline_ms() ? drop.mutable_leased_guarded_drop() : drop.mutable_guarded_drop());
                 try {
                     if (!identity.ParseFromString(Base64Decode(rename.source_identity())) || !HasValidIdentity(identity)) {
                         return Fail("Invalid saved source table identity");
@@ -456,6 +512,9 @@ private:
             case EComputeAction::DropSource:
             case EComputeAction::Abort:
                 return SendStorage(EBindingRenameAction::Finish);
+            case EComputeAction::Release:
+                return ReplySuccess(CommitAudit);
+            case EComputeAction::ResolveScope:
             case EComputeAction::Describe:
                 Y_ABORT("Unexpected compute response");
         }
@@ -485,6 +544,8 @@ private:
 
     TPermissions Permissions;
     std::unique_ptr<TPrivateClient> Compute;
+    const bool Recovery;
+    Fq::Private::ExternalTableMutationScope ComputeScope;
     EBindingRenameAction StorageAction = EBindingRenameAction::None;
     EComputeAction ComputeAction = EComputeAction::Describe;
     TAuditDetails<FederatedQuery::Binding> CommitAudit;
@@ -496,18 +557,186 @@ NActors::IActor* MakeProbeBindingRenameActor(
     return new TRenameBindingActor(proxy, std::move(request), timeout, counters.GetCommonCounters(RTC_MODIFY_BINDING), permissions, {});
 }
 
-NActors::IActor* MakeRenameBindingActor(const TActorId& proxy, TProxyRequest::TPtr request, TCounters& counters, TDuration timeout,
-    TPermissions permissions, const TComputeConfig& compute, const TYqSharedResources::TPtr& resources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentials) {
-    auto settings = compute.GetSchemeConnection(request->Get()->Scope);
-    const auto& connection = request->Get()->ComputeDatabase->connection();
+namespace {
+
+std::unique_ptr<TPrivateClient> MakeRenameComputeClient(const TString& scope, const NFq::NConfig::TYdbStorageConfig& connection,
+    const TComputeConfig& compute, const TYqSharedResources::TPtr& resources, const NKikimr::TYdbCredentialsProviderFactory& credentials) {
+    auto settings = compute.GetSchemeConnection(scope);
     settings.set_endpoint(connection.endpoint());
     settings.set_database(connection.database());
     settings.set_usessl(connection.usessl());
-    auto client =
-        std::make_unique<TPrivateClient>(resources->UserSpaceYdbDriver, GetClientSettings<NYdb::TCommonClientSettings>(settings, credentials));
+    return std::make_unique<TPrivateClient>(
+        resources->UserSpaceYdbDriver, GetClientSettings<NYdb::TCommonClientSettings>(settings, credentials));
+}
+
+}   // namespace
+
+NActors::IActor* MakeRenameBindingActor(const TActorId& proxy, TProxyRequest::TPtr request, TCounters& counters, TDuration timeout,
+    TPermissions permissions, const TComputeConfig& compute, const TYqSharedResources::TPtr& resources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentials) {
+    auto client = MakeRenameComputeClient(request->Get()->Scope, request->Get()->ComputeDatabase->connection(), compute, resources, credentials);
     return new TRenameBindingActor(
         proxy, std::move(request), timeout, counters.GetCommonCounters(RTC_MODIFY_BINDING), permissions, std::move(client));
+}
+
+namespace {
+
+class TBindingRenameRecoveryActor final: public TActorBootstrapped<TBindingRenameRecoveryActor> {
+    using TWorkRequest = TEvControlPlaneStorage::TEvBindingRenameWorkRequest;
+    using TWorkResponse = TEvControlPlaneStorage::TEvBindingRenameWorkResponse;
+    using TDatabaseResponse = TEvControlPlaneStorage::TEvDescribeDatabaseResponse;
+
+public:
+    TBindingRenameRecoveryActor(TRequestCommonCountersPtr counters, TDuration timeout, const TComputeConfig& compute,
+        const TYqSharedResources::TPtr& resources, const NKikimr::TYdbCredentialsProviderFactory& credentials)
+        : Counters(std::move(counters))
+        , Timeout(timeout)
+        , Compute(compute)
+        , Resources(resources)
+        , Credentials(credentials)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TBindingRenameRecoveryActor::StateWork);
+        ScheduleNext();
+    }
+
+    STRICT_STFUNC(StateWork,
+        cFunc(TEvents::TSystem::Poison, PassAway);
+        hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
+        hFunc(TWorkResponse, Handle);
+        hFunc(TDatabaseResponse, Handle);
+        hFunc(TProxyResponse, Handle);
+    )
+
+private:
+    void ScheduleNext() {
+        Work.Clear();
+        ++Generation;
+        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+    }
+
+    ui64 StartWait() {
+        ++Generation;
+        Schedule(Timeout, new TEvents::TEvWakeup(Generation));
+        return Generation;
+    }
+
+    void SendStorage(IEventBase* event) {
+        Send(ControlPlaneStorageServiceActorId(), event, IEventHandle::FlagTrackDelivery, StartWait());
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (!ev->Get()->Tag) {
+            SendStorage(new TWorkRequest());
+        } else if (ev->Get()->Tag == Generation) {
+            ScheduleNext();
+        }
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Cookie == Generation) {
+            ScheduleNext();
+        }
+    }
+
+    void Handle(TWorkResponse::TPtr& ev) {
+        if (ev->Cookie != Generation) {
+            return;
+        }
+        const auto& response = *ev->Get();
+        if (response.Issues || !response.Result.has_rename()) {
+            return ScheduleNext();
+        }
+        Work = response.Result;
+        const auto& controlPlane = Compute.GetProto().GetYdb().GetControlPlane();
+        if (controlPlane.HasSingle()) {
+            FederatedQuery::Internal::ComputeDatabaseInternal database;
+            *database.mutable_connection() = controlPlane.GetSingle().GetConnection();
+            return Recover(database);
+        }
+
+        SendStorage(new TEvControlPlaneStorage::TEvDescribeDatabaseRequest({}, Work.scope()));
+    }
+
+    void Handle(TDatabaseResponse::TPtr& ev) {
+        if (ev->Cookie != Generation) {
+            return;
+        }
+        const auto& response = *ev->Get();
+        if (response.Issues) {
+            return ScheduleNext();
+        }
+        Recover(response.Record);
+    }
+
+    void Recover(const FederatedQuery::Internal::ComputeDatabaseInternal& database) {
+        const auto& rename = Work.rename();
+        const auto& connection = database.connection();
+        if (!rename.lease_deadline_ms() || rename.compute_principal().empty() || !rename.compute_scheme_shard_id() ||
+            !rename.compute_domain_owner_id() || !rename.compute_domain_path_id() || rename.compute_endpoint() != connection.endpoint() ||
+            rename.compute_database() != connection.database() || rename.compute_ssl() != connection.usessl()) {
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Unable to verify binding rename recovery route",
+                {"operation_id", rename.operation_id()});
+            return ScheduleNext();
+        }
+
+        std::unique_ptr<TPrivateClient> client;
+        try {
+            client = MakeRenameComputeClient(Work.scope(), connection, Compute, Resources, Credentials);
+        } catch (...) {
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Unable to create binding rename recovery client",
+                {"operation_id", rename.operation_id()});
+            return ScheduleNext();
+        }
+
+        FederatedQuery::ModifyBindingRequest content;
+        content.set_binding_id(Work.binding_id());
+        content.set_idempotency_key(rename.idempotency_key());
+        content.set_previous_revision(rename.source_revision());
+        *content.mutable_content() = rename.destination();
+        auto request = std::make_unique<TProxyRequest>(Work.scope(), content, rename.user(), "", TVector<TString>{});
+        request->ComputeDatabase = database;
+        request->Rename = rename;
+        auto event = IEventHandle::Downcast<TProxyRequest>(
+            TAutoPtr<IEventHandle>(new IEventHandle(SelfId(), SelfId(), request.release(), 0, StartWait())));
+        Register(new TRenameBindingActor(SelfId(), std::move(event), Timeout, Counters, {}, std::move(client), true));
+    }
+
+    void Handle(TProxyResponse::TPtr& ev) {
+        if (ev->Cookie != Generation) {
+            return;
+        }
+        if (ev->Get()->Issues) {
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Binding rename recovery failed",
+                {"operation_id", Work.rename().operation_id()}, {"issues", ev->Get()->Issues.ToOneLineString()});
+            return ScheduleNext();
+        }
+        if (Work.rename().state() == TRename::FINISHED) {
+            auto request = std::make_unique<TWorkRequest>();
+            request->Request.mutable_rename()->set_operation_id(Work.rename().operation_id());
+            SendStorage(request.release());
+        } else {
+            ScheduleNext();
+        }
+    }
+
+    const TRequestCommonCountersPtr Counters;
+    const TDuration Timeout;
+    const TComputeConfig Compute;
+    const TYqSharedResources::TPtr Resources;
+    const NKikimr::TYdbCredentialsProviderFactory Credentials;
+    FederatedQuery::Internal::BindingRenameWork Work;
+    ui64 Generation = 0;
+};
+
+}   // namespace
+
+NActors::IActor* MakeBindingRenameRecoveryActor(TCounters& counters, TDuration timeout, const TComputeConfig& compute,
+    const TYqSharedResources::TPtr& resources, const NKikimr::TYdbCredentialsProviderFactory& credentials) {
+    return new TBindingRenameRecoveryActor(counters.GetCommonCounters(RTC_MODIFY_BINDING), timeout, compute, resources, credentials);
 }
 
 }   // namespace NFq::NPrivate

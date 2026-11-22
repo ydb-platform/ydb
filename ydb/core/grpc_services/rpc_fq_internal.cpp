@@ -175,6 +175,22 @@ public:
         }
 
         const auto& request = *GetProtoRequest();
+        const bool scoped = request.has_leased_create() || request.has_release() || request.has_leased_abort() || request.has_leased_commit() ||
+                            request.has_leased_guarded_drop();
+        if (scoped != request.has_expected_scope()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+        }
+        if (scoped) {
+            const auto& scope = request.expected_scope();
+            if (scope.principal().empty() || !scope.scheme_shard_id() || !scope.domain_owner_id() || !scope.domain_path_id()) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            }
+            if (scope.principal() != Request_->GetInternalToken()->GetUserSID()) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "The authenticated principal differs from the expected FQ mutation scope",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+            }
+        }
+
         const auto path = ResolveFqSchemaPath(*Request_, request.relative_path());
         if (path.empty()) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Expected a path relative to the compute database",
@@ -186,16 +202,24 @@ public:
         auto& mutation = *modifyScheme.MutableExternalTableMutation();
         mutation.SetWorkingDir(TString(ExtractParent(path)));
         mutation.SetName(TString(ExtractBase(path)));
+        if (scoped) {
+            const auto& scope = request.expected_scope();
+            mutation.SetExpectedSchemeShardId(scope.scheme_shard_id());
+            auto& domain = *mutation.MutableExpectedDomainPathId();
+            domain.SetOwnerId(scope.domain_owner_id());
+            domain.SetLocalId(scope.domain_path_id());
+        }
 
         switch (request.action_case()) {
-            case TMutationRequest::kCreate: {
-                const auto& create = request.create();
+            case TMutationRequest::kCreate:
+            case TMutationRequest::kLeasedCreate: {
+                const auto& create = scoped ? request.leased_create() : request.create();
                 const auto dataSourcePath = ResolveFqSchemaPath(*Request_, create.relative_data_source_path());
                 if (create.key().empty() || dataSourcePath.empty()) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
                 }
 
-                mutation.SetAction(TMutation::CREATE);
+                mutation.SetAction(scoped ? TMutation::CREATE_LEASED : TMutation::CREATE);
                 mutation.SetKey(create.key());
                 auto& definition = *mutation.MutableDefinition();
                 definition.SetSourceType("General");
@@ -215,24 +239,33 @@ public:
                 break;
             }
             case TMutationRequest::kAbort:
-            case TMutationRequest::kCommit: {
-                const bool abort = request.has_abort();
-                const auto& ticket = abort ? request.abort() : request.commit();
-                if (ticket.key().empty()) {
-                    return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-                }
-
-                mutation.SetAction(abort ? TMutation::ABORT : TMutation::COMMIT);
-                mutation.SetKey(ticket.key());
+                mutation.SetAction(TMutation::ABORT);
+                mutation.SetKey(request.abort().key());
                 break;
-            }
-            case TMutationRequest::kGuardedDrop: {
-                const auto& identity = request.guarded_drop();
+            case TMutationRequest::kCommit:
+                mutation.SetAction(TMutation::COMMIT);
+                mutation.SetKey(request.commit().key());
+                break;
+            case TMutationRequest::kLeasedAbort:
+                mutation.SetAction(TMutation::ABORT_LEASED);
+                mutation.SetKey(request.leased_abort().key());
+                break;
+            case TMutationRequest::kLeasedCommit:
+                mutation.SetAction(TMutation::COMMIT_LEASED);
+                mutation.SetKey(request.leased_commit().key());
+                break;
+            case TMutationRequest::kRelease:
+                mutation.SetAction(TMutation::RELEASE);
+                mutation.SetKey(request.release().key());
+                break;
+            case TMutationRequest::kGuardedDrop:
+            case TMutationRequest::kLeasedGuardedDrop: {
+                const auto& identity = scoped ? request.leased_guarded_drop() : request.guarded_drop();
                 if (!identity.owner_id() || !identity.local_path_id() || !identity.version()) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
                 }
 
-                mutation.SetAction(TMutation::GUARDED_DROP);
+                mutation.SetAction(scoped ? TMutation::GUARDED_DROP_LEASED : TMutation::GUARDED_DROP);
                 auto& expected = *mutation.MutableExpectedTable();
                 expected.MutablePathId()->SetOwnerId(identity.owner_id());
                 expected.MutablePathId()->SetLocalId(identity.local_path_id());
@@ -241,6 +274,10 @@ public:
             }
             case TMutationRequest::ACTION_NOT_SET:
                 return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+        }
+
+        if (mutation.HasKey() && mutation.GetKey().empty()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
         ctx.Send(MakeTxProxyID(), proposal.release());
@@ -263,8 +300,8 @@ private:
             return Reply(Ydb::StatusIds::UNAUTHORIZED, record.GetIssues(), ctx);
         }
         using ETxStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus;
-        if (GetProtoRequest()->has_guarded_drop() && ev->Get()->Status() == ETxStatus::ExecError
-            && record.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist)
+        if ((GetProtoRequest()->has_guarded_drop() || GetProtoRequest()->has_leased_guarded_drop()) &&
+            ev->Get()->Status() == ETxStatus::ExecError && record.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist)
         {
             return Reply(Ydb::StatusIds::NOT_FOUND, record.GetIssues(), ctx);
         }
@@ -272,7 +309,9 @@ private:
         if (status == Ydb::StatusIds::SUCCESS && record.GetSchemeShardStatus() == NKikimrScheme::StatusAlreadyExists) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, record.GetIssues(), ctx);
         }
-        if (GetProtoRequest()->has_create() && (status == Ydb::StatusIds::SUCCESS || IsTxProxyInProgress(status))) {
+        if ((GetProtoRequest()->has_create() || GetProtoRequest()->has_leased_create()) &&
+            (status == Ydb::StatusIds::SUCCESS || IsTxProxyInProgress(status)))
+        {
             if (!record.GetSchemeShardTabletId() || !record.GetPathId() || !record.GetExternalTableVersion()) {
                 return Reply(IsTxProxyInProgress(status) ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::INTERNAL_ERROR, ctx);
             }
@@ -289,7 +328,7 @@ private:
     }
 
     void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) override {
-        if (GetProtoRequest()->has_create()) {
+        if (GetProtoRequest()->has_create() || GetProtoRequest()->has_leased_create()) {
             const auto& identity = Result_.created_table();
             return ForwardToSchemeShard(ctx,
                 std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(identity.owner_id(), identity.local_path_id()));
@@ -350,20 +389,60 @@ public:
         if (!IsTrustedFqSchemaCaller(*Request_)) {
             return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
         }
-        const auto path = ResolveFqSchemaPath(*Request_, GetProtoRequest()->relative_path());
-        if (path.empty()) {
+        const auto& request = *GetProtoRequest();
+        if ((request.resolve_mutation_scope() && (!request.relative_path().empty() || request.has_expected_scope())) ||
+            (request.has_expected_scope() && !request.relative_path().empty()) ||
+            (!request.has_expected_scope() && !request.scoped_relative_path().empty()))
+        {
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
+        if (!request.resolve_mutation_scope()) {
+            const auto& relativePath = request.has_expected_scope() ? request.scoped_relative_path() : request.relative_path();
+            TargetPath_ = ResolveFqSchemaPath(*Request_, relativePath);
+            if (TargetPath_.empty()) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            }
+        }
 
+        if (request.has_expected_scope()) {
+            const auto& scope = request.expected_scope();
+            if (scope.principal().empty() || !scope.scheme_shard_id() || !scope.domain_owner_id() || !scope.domain_path_id()) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            }
+            if (scope.principal() != Request_->GetInternalToken()->GetUserSID()) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "The authenticated principal differs from the expected FQ mutation scope",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+            }
+        }
+
+        if (request.resolve_mutation_scope() || request.has_expected_scope()) {
+            const auto& database = Request_->GetDatabaseName();
+            if (!database || database->empty()) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            }
+            Stage_ = EStage::Scope;
+            Navigate(*database, ctx);
+        } else {
+            Navigate(TargetPath_, ctx);
+        }
+        Become(&TFqPrivateDescribeExternalTableRPC::StateWork);
+    }
+
+private:
+    enum class EStage {
+        Scope,
+        Target,
+        ConfirmAbsence,
+    };
+
+    void Navigate(const TString& path, const TActorContext& ctx) {
         auto navigate = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         SetAuthToken(navigate, *Request_);
         SetDatabase(navigate.get(), *Request_);
         navigate->Record.MutableDescribePath()->SetPath(path);
         ctx.Send(MakeTxProxyID(), navigate.release());
-        Become(&TFqPrivateDescribeExternalTableRPC::StateWork);
     }
 
-private:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribe);
@@ -374,12 +453,34 @@ private:
 
     void HandleDescribe(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
+        const auto& request = *GetProtoRequest();
+        if (record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            if (Stage_ == EStage::Scope) {
+                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+            }
+            if (request.has_expected_scope() && Stage_ == EStage::Target) {
+                // TxProxy can synthesize an absent path before contacting the tablet.
+                Stage_ = EStage::ConfirmAbsence;
+                SetSchemeShardId(request.expected_scope().scheme_shard_id());
+                return ForwardToSchemeShard(ctx, std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(TargetPath_));
+            }
+            if (Stage_ == EStage::ConfirmAbsence) {
+                const auto& prefix = record.GetLastExistedPrefixDescription().GetSelf();
+                if (!IsEqualPaths(record.GetLastExistedPrefixPath(), *Request_->GetDatabaseName()) ||
+                    prefix.GetSchemeshardId() != ScopeRootId_.OwnerId || prefix.GetPathId() != ScopeRootId_.LocalPathId)
+                {
+                    return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+                }
+            }
+            if (record.HasReason()) {
+                Request_->RaiseIssue(NYql::TIssue(record.GetReason()));
+            }
+            return Reply(Ydb::StatusIds::NOT_FOUND, ctx);
+        }
         if (record.HasReason()) {
             Request_->RaiseIssue(NYql::TIssue(record.GetReason()));
         }
         switch (record.GetStatus()) {
-            case NKikimrScheme::StatusPathDoesNotExist:
-                return Reply(Ydb::StatusIds::NOT_FOUND, ctx);
             case NKikimrScheme::StatusAccessDenied:
                 return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
             case NKikimrScheme::StatusNotAvailable:
@@ -393,8 +494,47 @@ private:
                 return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
         }
 
+        if (Stage_ == EStage::ConfirmAbsence) {
+            return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+        }
+
         const auto& path = record.GetPathDescription();
         const auto& self = path.GetSelf();
+        const auto& domain = path.GetDomainDescription();
+        const auto& domainKey = domain.GetDomainKey();
+        if (Stage_ == EStage::Scope) {
+            const bool globalRoot = self.GetPathType() == NKikimrSchemeOp::EPathTypeDir && self.GetPathId() == self.GetParentPathId() &&
+                                    self.GetSchemeshardId() == domainKey.GetSchemeShard() && self.GetPathId() == domainKey.GetPathId();
+            if (!globalRoot && self.GetPathType() != NKikimrSchemeOp::EPathTypeSubDomain &&
+                self.GetPathType() != NKikimrSchemeOp::EPathTypeExtSubDomain)
+            {
+                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+            }
+            const auto& params = domain.GetProcessingParams();
+            const auto schemeShardId = params.HasSchemeShard() ? params.GetSchemeShard() : domainKey.GetSchemeShard();
+            if (!schemeShardId || !domainKey.GetSchemeShard() || !domainKey.GetPathId() || !self.GetCreateFinished()) {
+                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+            }
+            if (request.has_expected_scope()) {
+                const auto& scope = request.expected_scope();
+                if (schemeShardId != scope.scheme_shard_id() || domainKey.GetSchemeShard() != scope.domain_owner_id() ||
+                    domainKey.GetPathId() != scope.domain_path_id())
+                {
+                    return Reply(Ydb::StatusIds::PRECONDITION_FAILED, ctx);
+                }
+                ScopeRootId_ = TPathId(self.GetSchemeshardId(), self.GetPathId());
+                Stage_ = EStage::Target;
+                return Navigate(TargetPath_, ctx);
+            }
+
+            Fq::Private::DescribeExternalTableResult result;
+            auto& scope = *result.mutable_mutation_scope();
+            scope.set_principal(Request_->GetInternalToken()->GetUserSID());
+            scope.set_scheme_shard_id(schemeShardId);
+            scope.set_domain_owner_id(domainKey.GetSchemeShard());
+            scope.set_domain_path_id(domainKey.GetPathId());
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        }
         if (self.GetPathType() != NKikimrSchemeOp::EPathTypeExternalTable) {
             return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
@@ -411,6 +551,14 @@ private:
         if (!pathId.GetOwnerId() || !pathId.GetLocalId() || !table.GetVersion()) {
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
+        if (request.has_expected_scope()) {
+            const auto& scope = request.expected_scope();
+            if (pathId.GetOwnerId() != scope.scheme_shard_id() || domainKey.GetSchemeShard() != scope.domain_owner_id() ||
+                domainKey.GetPathId() != scope.domain_path_id())
+            {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, ctx);
+            }
+        }
 
         Fq::Private::DescribeExternalTableResult result;
         auto& identity = *result.mutable_identity();
@@ -425,6 +573,10 @@ private:
         }
         return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
+
+    EStage Stage_ = EStage::Target;
+    TString TargetPath_;
+    TPathId ScopeRootId_;
 };
 
 } // namespace

@@ -25,6 +25,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -303,7 +304,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
                 NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Invalid external table mutation");
         };
         if (transaction.HasExternalTableCreateKey() || transaction.HasExternalTableAbortCreateKey() ||
-            transaction.HasExternalTableCommitCreateKey() || transaction.GetDrop().HasExpectedExternalTable())
+            transaction.HasExternalTableCommitCreateKey() || transaction.HasExternalTableReleaseCreateKey() ||
+            transaction.HasExternalTableCreateLeaseDeadlineMs() || transaction.GetDrop().HasExpectedExternalTable())
         {
             return invalidMutation();
         }
@@ -331,13 +333,49 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
         {
             return invalidMutation();
         }
-        const bool create = mutation.GetAction() == TExternalTableMutation::CREATE;
-        const bool guardedDrop = mutation.GetAction() == TExternalTableMutation::GUARDED_DROP;
+        const auto action = mutation.GetAction();
+        const bool create = action == TExternalTableMutation::CREATE || action == TExternalTableMutation::CREATE_LEASED;
+        const bool guardedDrop = action == TExternalTableMutation::GUARDED_DROP || action == TExternalTableMutation::GUARDED_DROP_LEASED;
+        const bool leased = action == TExternalTableMutation::CREATE_LEASED || action == TExternalTableMutation::ABORT_LEASED ||
+                            action == TExternalTableMutation::COMMIT_LEASED || action == TExternalTableMutation::RELEASE ||
+                            action == TExternalTableMutation::GUARDED_DROP_LEASED;
         if (create != mutation.HasDefinition() || guardedDrop != mutation.HasExpectedTable() ||
             (guardedDrop ? mutation.HasKey() : mutation.GetKey().empty() || mutation.GetKey().size() > 128) ||
-            (create && mutation.GetDefinition().HasName()))
+            (create && mutation.GetDefinition().HasName()) || leased != mutation.HasExpectedSchemeShardId() ||
+            (leased && !mutation.GetExpectedSchemeShardId()) || (!leased && mutation.HasExpectedDomainPathId()))
         {
             return invalidMutation();
+        }
+        if (leased && mutation.GetExpectedSchemeShardId() != ui64(selfId)) {
+            return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId), "The external table lease belongs to another SchemeShard");
+        }
+        if (leased) {
+            const auto workingDir = TPath::Resolve(mutation.GetWorkingDir(), this);
+            const auto& expectedDomain = mutation.GetExpectedDomainPathId();
+            if (!workingDir.IsResolved() || !expectedDomain.GetOwnerId() || !expectedDomain.GetLocalId() ||
+                workingDir.GetDomainKey() != TPathId::FromProto(expectedDomain))
+            {
+                return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                    NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId), "The external table lease belongs to another database");
+            }
+        }
+        if (!guardedDrop) {
+            TStringBuf key = mutation.GetKey();
+            const bool reserved = key.SkipPrefix("fqv1:");
+            if (leased != reserved) {
+                return invalidMutation();
+            }
+            if (leased) {
+                TStringBuf deadline;
+                ui64 deadlineMs = 0;
+                if (!key.TrySplit(':', deadline, key) || key.empty() || deadline.empty() ||
+                    deadline.find_first_not_of("0123456789") != TStringBuf::npos || !TryFromString(deadline, deadlineMs) || !deadlineMs)
+                {
+                    return invalidMutation();
+                }
+                transaction.SetExternalTableCreateLeaseDeadlineMs(deadlineMs);
+            }
         }
 
         transaction.SetWorkingDir(mutation.GetWorkingDir());
@@ -352,8 +390,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
             drop->SetName(mutation.GetName());
             if (guardedDrop) {
                 *drop->MutableExpectedExternalTable() = mutation.GetExpectedTable();
-            } else if (mutation.GetAction() == TExternalTableMutation::ABORT) {
+            } else if (action == TExternalTableMutation::ABORT || action == TExternalTableMutation::ABORT_LEASED) {
                 transaction.SetExternalTableAbortCreateKey(mutation.GetKey());
+            } else if (action == TExternalTableMutation::RELEASE) {
+                transaction.SetExternalTableReleaseCreateKey(mutation.GetKey());
             } else {
                 transaction.SetExternalTableCommitCreateKey(mutation.GetKey());
             }

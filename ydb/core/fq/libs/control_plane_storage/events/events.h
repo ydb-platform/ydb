@@ -40,6 +40,7 @@ enum class EBindingRenameAction {
     RecordSource,
     Commit,
     Abort,
+    Expire,
     Finish,
 };
 
@@ -191,6 +192,8 @@ struct TEvControlPlaneStorage {
         EvModifyDatabaseRequest,
         EvModifyDatabaseResponse,
         EvFinalStatusReport,
+        EvBindingRenameWorkRequest,
+        EvBindingRenameWorkResponse,
         EvEnd,
     };
 
@@ -392,6 +395,8 @@ struct TEvControlPlaneStorage {
         TString RenameOperationId;
         TString RenameIdentity;
         TString RenameConnectionName;
+        Fq::Private::ExternalTableMutationScope RenameComputeScope;
+        bool RecoverRename = false;
     };
 
     using TEvModifyBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding,
@@ -401,6 +406,13 @@ struct TEvControlPlaneStorage {
         TControlPlaneAuditableResponse<FederatedQuery::DeleteBindingResult, FederatedQuery::Binding, EvDeleteBindingResponse>;
     using TEvDeleteFolderResourcesRequest = TControlPlaneRequest<google::protobuf::Empty, EvDeleteFolderResourcesRequest>;
     using TEvDeleteFolderResourcesResponse = TControlPlaneNonAuditableResponse<Ydb::Operations::Operation, EvDeleteFolderResourcesResponse>;
+
+    struct TEvBindingRenameWorkRequest: NActors::TEventLocal<TEvBindingRenameWorkRequest, EvBindingRenameWorkRequest> {
+        FederatedQuery::Internal::BindingRenameWork Request;
+    };
+
+    using TEvBindingRenameWorkResponse =
+        TControlPlaneNonAuditableResponse<FederatedQuery::Internal::BindingRenameWork, EvBindingRenameWorkResponse>;
 
     // internal messages
     struct TEvWriteResultDataRequest: NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {

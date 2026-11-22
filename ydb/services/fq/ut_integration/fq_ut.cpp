@@ -117,6 +117,19 @@ public:
 
 private:
     STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+            AllowRecovery = true;
+            if (PendingRecovery) {
+                Send(std::move(PendingRecovery));
+            }
+            return;
+        }
+        if (!AllowRecovery && ev->GetTypeRewrite() == TStorage::TEvBindingRenameWorkRequest::EventType &&
+            ev->Get<TStorage::TEvBindingRenameWorkRequest>()->Request.rename().operation_id().empty())
+        {
+            PendingRecovery = ev->Forward(Storage);
+            return;
+        }
         if (ev->GetTypeRewrite() == TStorage::TEvModifyBindingRequest::EventType &&
             ev->Get<TStorage::TEvModifyBindingRequest>()->RenameAction == ::NFq::EBindingRenameAction::Commit && !Dropped.HasValue())
         {
@@ -140,6 +153,8 @@ private:
     const NActors::TActorId Storage;
     NThreading::TPromise<void> Dropped;
     NActors::TActorId Requester;
+    TAutoPtr<NActors::IEventHandle> PendingRecovery;
+    bool AllowRecovery = false;
 };
 
 }   // namespace
@@ -196,6 +211,40 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
             column.set_type("Uint64");
             return request;
         };
+        Fq::Private::DescribeExternalTableRequest resolveScope;
+        resolveScope.set_resolve_mutation_scope(true);
+        const auto resolved = client.DescribeExternalTable(Fq::Private::DescribeExternalTableRequest(resolveScope)).ExtractValueSync();
+        UNIT_ASSERT_C(resolved.IsSuccess(), resolved.GetIssues().ToString());
+        UNIT_ASSERT(resolved.IsResultSet());
+        UNIT_ASSERT(resolved.GetResult().has_mutation_scope());
+        const auto& scope = resolved.GetResult().mutation_scope();
+        UNIT_ASSERT_VALUES_EQUAL(scope.principal(), "root@builtin");
+        UNIT_ASSERT(scope.scheme_shard_id());
+        UNIT_ASSERT_VALUES_EQUAL(scope.domain_owner_id(), scope.scheme_shard_id());
+        UNIT_ASSERT(scope.domain_path_id());
+
+        const auto rejectedScope = regularClient.DescribeExternalTable(std::move(resolveScope)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(rejectedScope.GetStatus(), EStatus::UNAUTHORIZED);
+
+        Fq::Private::MutateExternalTableRequest leasedCreate;
+        leasedCreate.set_relative_path("ExternalTable");
+        const TString leaseKey = TStringBuilder()
+                                 << "fqv1:" << (TInstant::Now() + TDuration::Minutes(30)).MilliSeconds() << ":0123456789abcdef0123456789abcdef";
+        *leasedCreate.mutable_leased_create() = createTable(leaseKey).create();
+        *leasedCreate.mutable_expected_scope() = scope;
+        leasedCreate.mutable_expected_scope()->set_scheme_shard_id(scope.scheme_shard_id() + 1);
+        const auto wrongRoute = client.MutateExternalTable(Fq::Private::MutateExternalTableRequest(leasedCreate)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(wrongRoute.GetStatus(), EStatus::PRECONDITION_FAILED, wrongRoute.GetIssues().ToString());
+
+        *leasedCreate.mutable_expected_scope() = scope;
+        leasedCreate.mutable_expected_scope()->set_domain_path_id(scope.domain_path_id() + 1);
+        const auto wrongDomain = client.MutateExternalTable(Fq::Private::MutateExternalTableRequest(leasedCreate)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(wrongDomain.GetStatus(), EStatus::PRECONDITION_FAILED, wrongDomain.GetIssues().ToString());
+
+        *leasedCreate.mutable_expected_scope() = scope;
+        const auto wrongPrincipal = otherClient.MutateExternalTable(std::move(leasedCreate)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(wrongPrincipal.GetStatus(), EStatus::PRECONDITION_FAILED, wrongPrincipal.GetIssues().ToString());
+
         UNIT_ASSERT_VALUES_EQUAL(regularClient.MutateExternalTable(createTable("first")).ExtractValueSync().GetStatus(), EStatus::UNAUTHORIZED);
 
         auto crossDatabase = createTable("first");
@@ -206,7 +255,7 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
         UNIT_ASSERT(created.IsResultSet());
         const auto& identity = created.GetResult().created_table();
-        UNIT_ASSERT(identity.owner_id());
+        UNIT_ASSERT_VALUES_EQUAL(identity.owner_id(), scope.scheme_shard_id());
         UNIT_ASSERT(identity.local_path_id());
         UNIT_ASSERT(identity.version());
 
@@ -250,6 +299,21 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         const auto dropped = client.MutateExternalTable(Fq::Private::MutateExternalTableRequest(drop)).ExtractValueSync();
         UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(client.MutateExternalTable(std::move(drop)).ExtractValueSync().GetStatus(), EStatus::NOT_FOUND);
+        Fq::Private::DescribeExternalTableRequest scopedDescribe;
+        scopedDescribe.set_scoped_relative_path("ExternalTable");
+        *scopedDescribe.mutable_expected_scope() = scope;
+        auto wrongScope = scopedDescribe;
+        wrongScope.mutable_expected_scope()->set_scheme_shard_id(scope.scheme_shard_id() + 1);
+        const auto wrongReadRoute = client.DescribeExternalTable(std::move(wrongScope)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(wrongReadRoute.GetStatus(), EStatus::PRECONDITION_FAILED, wrongReadRoute.GetIssues().ToString());
+
+        auto wrongDomainScope = scopedDescribe;
+        wrongDomainScope.mutable_expected_scope()->set_domain_path_id(scope.domain_path_id() + 1);
+        const auto wrongReadDomain = client.DescribeExternalTable(std::move(wrongDomainScope)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(wrongReadDomain.GetStatus(), EStatus::PRECONDITION_FAILED, wrongReadDomain.GetIssues().ToString());
+
+        const auto absent = client.DescribeExternalTable(std::move(scopedDescribe)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(absent.GetStatus(), EStatus::NOT_FOUND, absent.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(client.DescribeExternalTable(describeTable()).ExtractValueSync().GetStatus(), EStatus::NOT_FOUND);
 
         Fq::Private::MutateExternalTableRequest abort;
@@ -260,7 +324,7 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         UNIT_ASSERT_VALUES_EQUAL(
             client.MutateExternalTable(createTable("aborted")).ExtractValueSync().GetStatus(), EStatus::PRECONDITION_FAILED);
     }
-    Y_UNIT_TEST(BindingRenameRetriesAfterLostStorageCommitReply) {
+    void CheckBindingRenameAfterLostStorageCommitReply(bool recoverWithoutClientRetry) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetDisablePgCompatibility(false);
         auto& security = *config.MutableDomainsConfig()->MutableSecurityConfig();
@@ -337,7 +401,8 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         const auto storage = runtime.GetLocalServiceId(storageService);
         UNIT_ASSERT(storage);
         auto dropped = NThreading::NewPromise<void>();
-        runtime.RegisterService(storageService, runtime.Register(new TLoseRenameCommitReply(storage, dropped)));
+        const auto storageRelay = runtime.Register(new TLoseRenameCommitReply(storage, dropped));
+        runtime.RegisterService(storageService, storageRelay);
 
         ::NFq::NConfig::TConfig fqConfig;
         auto& computeConfig = *fqConfig.MutableCompute();
@@ -347,7 +412,11 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         computeYdb.SetEnable(true);
         auto& controlPlane = *computeYdb.MutableControlPlane();
         controlPlane.SetEnable(true);
-        controlPlane.MutableSingle()->MutableConnection()->SetToken(user);
+        auto& computeConnection = *controlPlane.MutableSingle()->MutableConnection();
+        computeConnection.SetEndpoint(endpoint);
+        computeConnection.SetDatabase("/Root");
+        computeConnection.SetToken(user);
+        fqConfig.MutableControlPlaneStorage()->SetEnabled(true);
         fqConfig.MutableControlPlaneStorage()->AddAvailableBinding("OBJECT_STORAGE");
         const auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         const auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -420,19 +489,26 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         const auto candidate = describeComputeTable("new_binding");
         UNIT_ASSERT_C(candidate.IsSuccess(), candidate.GetIssues().ToString());
 
-        const auto assertCommittedAudit = [&](const auto& response) {
-            UNIT_ASSERT_C(!response->Get()->Issues, response->Get()->Issues.ToString());
-            const auto& audit = response->Get()->AuditDetails;
-            UNIT_ASSERT(audit.IdempotencyResult);
-            UNIT_ASSERT(audit.After);
-            UNIT_ASSERT_VALUES_EQUAL(audit.After->meta().id(), bindingId);
-            UNIT_ASSERT_VALUES_EQUAL(audit.After->meta().revision(), revision + 1);
-            UNIT_ASSERT_VALUES_EQUAL(audit.After->content().name(), "new_binding");
-            UNIT_ASSERT_VALUES_EQUAL(audit.After->content().connection_id(), connectionId);
-            UNIT_ASSERT_VALUES_EQUAL(audit.CloudId, "mock_cloud");
-        };
-        assertCommittedAudit(rename(modify));
-        assertCommittedAudit(rename(modify));
+        if (recoverWithoutClientRetry) {
+            runtime.Send(new NActors::IEventHandle(storageRelay, runtime.AllocateEdgeActor(), new NActors::TEvents::TEvWakeup()));
+            UNIT_ASSERT_C(DoWithRetryOnRetCode([&] {
+                return describeComputeTable("old_binding").GetStatus() == EStatus::NOT_FOUND;
+            }, TRetryOptions(Retries)), "Recovery did not finish without a client retry");
+        } else {
+            const auto assertCommittedAudit = [&](const auto& response) {
+                UNIT_ASSERT_C(!response->Get()->Issues, response->Get()->Issues.ToString());
+                const auto& audit = response->Get()->AuditDetails;
+                UNIT_ASSERT(audit.IdempotencyResult);
+                UNIT_ASSERT(audit.After);
+                UNIT_ASSERT_VALUES_EQUAL(audit.After->meta().id(), bindingId);
+                UNIT_ASSERT_VALUES_EQUAL(audit.After->meta().revision(), revision + 1);
+                UNIT_ASSERT_VALUES_EQUAL(audit.After->content().name(), "new_binding");
+                UNIT_ASSERT_VALUES_EQUAL(audit.After->content().connection_id(), connectionId);
+                UNIT_ASSERT_VALUES_EQUAL(audit.CloudId, "mock_cloud");
+            };
+            assertCommittedAudit(rename(modify));
+            assertCommittedAudit(rename(modify));
+        }
         UNIT_ASSERT_VALUES_EQUAL(describeBinding().meta().revision(), revision + 1);
         UNIT_ASSERT_VALUES_EQUAL(describeComputeTable("old_binding").GetStatus(), EStatus::NOT_FOUND);
         const auto final = describeComputeTable("new_binding");
@@ -449,6 +525,14 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         const auto& candidateIdentity = candidate.GetResult().identity();
         UNIT_ASSERT_VALUES_EQUAL(finalIdentity.owner_id(), candidateIdentity.owner_id());
         UNIT_ASSERT_VALUES_EQUAL(finalIdentity.local_path_id(), candidateIdentity.local_path_id());
+    }
+
+    Y_UNIT_TEST(BindingRenameRetriesAfterLostStorageCommitReply) {
+        CheckBindingRenameAfterLostStorageCommitReply(false);
+    }
+
+    Y_UNIT_TEST(BindingRenameRecoversWithoutClientRetry) {
+        CheckBindingRenameAfterLostStorageCommitReply(true);
     }
 }
 

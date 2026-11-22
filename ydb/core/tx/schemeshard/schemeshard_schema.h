@@ -2921,6 +2921,7 @@ struct Schema : NIceDb::Schema {
     // static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12; deprecated
     static constexpr ui64 SysParam_TablePartitionsFormatSweepStatus = 13;
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
+    static constexpr ui64 SysParam_ExternalTableCreateLeaseCutoff = 15;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

@@ -59,6 +59,11 @@ message TExternalTableMutation {
         ABORT = 2;
         COMMIT = 3;
         GUARDED_DROP = 4;
+        CREATE_LEASED = 5;
+        RELEASE = 6;
+        ABORT_LEASED = 7;
+        COMMIT_LEASED = 8;
+        GUARDED_DROP_LEASED = 9;
     }
     optional EAction Action = 1;
     optional string WorkingDir = 2;
@@ -66,6 +71,8 @@ message TExternalTableMutation {
     optional bytes Key = 4;
     optional TExternalTableDescription Definition = 5;
     optional TExternalTableIdentity ExpectedTable = 6;
+    optional uint64 ExpectedSchemeShardId = 7;
+    optional NKikimrProto.TPathID ExpectedDomainPathId = 8;
 }
 
 message TExternalTableCreateTicket {
@@ -74,6 +81,8 @@ message TExternalTableCreateTicket {
     optional TExternalTableIdentity Table = 3;
     optional bool Aborted = 4;
     optional bool Committed = 5;
+    optional bool Released = 6;
+    optional uint64 LeaseDeadlineMs = 7;
 }
 
 message TDrop {
@@ -2240,6 +2249,8 @@ message TModifyScheme {
     optional bytes ExternalTableAbortCreateKey = 99;
     optional bytes ExternalTableCommitCreateKey = 100;
     optional TExternalTableMutation ExternalTableMutation = 101;
+    optional bytes ExternalTableReleaseCreateKey = 102;
+    optional uint64 ExternalTableCreateLeaseDeadlineMs = 103;
 
     // Some entries are grouped by semantics, so are out of order
 }

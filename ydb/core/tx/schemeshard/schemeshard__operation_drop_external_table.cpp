@@ -128,8 +128,11 @@ public:
 
         const bool abortCreate = Transaction.HasExternalTableAbortCreateKey();
         const bool commitCreate = Transaction.HasExternalTableCommitCreateKey();
-        const bool finishCreate = abortCreate || commitCreate;
-        const auto& operationKey = abortCreate ? Transaction.GetExternalTableAbortCreateKey() : Transaction.GetExternalTableCommitCreateKey();
+        const bool releaseCreate = Transaction.HasExternalTableReleaseCreateKey();
+        const bool finishCreate = abortCreate || commitCreate || releaseCreate;
+        const auto& operationKey = abortCreate    ? Transaction.GetExternalTableAbortCreateKey()
+                                   : commitCreate ? Transaction.GetExternalTableCommitCreateKey()
+                                                  : Transaction.GetExternalTableReleaseCreateKey();
         if (drop.HasExpectedExternalTable() || finishCreate) {
             const auto& expected = drop.GetExpectedExternalTable();
             if (drop.HasId() || !drop.HasName() || (drop.HasExpectedExternalTable() &&
@@ -168,14 +171,53 @@ public:
 
             key = {context.UserToken->GetUserSID(), operationKey};
             const auto* previous = context.SS->ExternalTableCreateTickets.FindPtr(key);
-            if (previous && previous->GetTargetPath() != path.PathString()) {
+            const ui64 deadline = Transaction.GetExternalTableCreateLeaseDeadlineMs();
+            if (previous && (previous->GetTargetPath() != path.PathString() || previous->GetLeaseDeadlineMs() != deadline)) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create ticket belongs to another path");
                 return result;
             }
+            if (releaseCreate) {
+                if (!previous && deadline <= context.SS->ExternalTableCreateLeaseCutoffMs) {
+                    result->SetStatus(NKikimrScheme::StatusSuccess);
+                } else if (!previous || (!previous->GetAborted() && !previous->GetCommitted())) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create lease is not terminal");
+                } else if (previous->GetAborted() && previous->HasTable() && path.IsResolved() && !path.Base()->Dropped() &&
+                           path.Base()->PathId == TPathId::FromProto(previous->GetTable().GetPathId()))
+                {
+                    result->SetError(NKikimrScheme::StatusMultipleModifications, "The aborted external table is being dropped");
+                } else {
+                    if (!previous->GetReleased()) {
+                        ticket = *previous;
+                        ticket.SetReleased(true);
+                        context.SS->StageExternalTableCreateTicket(context, key, std::move(ticket));
+                        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvCleanupExternalTableCreateTickets);
+                    }
+                    result->SetStatus(NKikimrScheme::StatusSuccess);
+                }
+                return result;
+            }
+
             if (previous) {
                 ticket = *previous;
             } else {
                 ticket.SetTargetPath(path.PathString());
+                if (abortCreate && deadline) {
+                    const ui64 now = context.Ctx.Now().MilliSeconds();
+                    if (deadline <= Max(now, context.SS->ExternalTableCreateLeaseCutoffMs)) {
+                        context.SS->StageExternalTableCreateLeaseCutoff(context, deadline);
+                        result->SetStatus(NKikimrScheme::StatusSuccess);
+                        return result;
+                    }
+                    if (deadline - now > TSchemeShard::MaxExternalTableCreateLease.MilliSeconds()) {
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, "The external table create lease is too long");
+                        return result;
+                    }
+                    if (context.SS->LeasedExternalTableCreateTicketCount >= TSchemeShard::MaxLeasedExternalTableCreateTickets) {
+                        result->SetError(NKikimrScheme::StatusQuotaExceeded, "Too many external table create leases");
+                        return result;
+                    }
+                    ticket.SetLeaseDeadlineMs(deadline);
+                }
             }
 
             if (commitCreate && (!ticket.HasTable() || ticket.GetAborted())) {

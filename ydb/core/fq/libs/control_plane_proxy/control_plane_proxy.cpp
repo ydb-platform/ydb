@@ -580,6 +580,11 @@ public:
             AccessService = Register(NCloud::CreateMockAccessServiceWithCache());
         }
 
+        if (YqSharedResources && Config.StorageConfig.Proto.GetEnabled() && !Config.StorageConfig.Proto.GetUseInMemory() &&
+            Config.ComputeConfig.GetProto().GetYdb().GetControlPlane().type_case() != NConfig::TYdbComputeControlPlane::TYPE_NOT_SET) {
+            Register(MakeBindingRenameRecoveryActor(
+                Counters, Config.RequestTimeout, Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
+        }
         Become(&TControlPlaneProxyActor::StateFunc);
     }
 

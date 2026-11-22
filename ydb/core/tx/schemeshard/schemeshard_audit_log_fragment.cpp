@@ -232,7 +232,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         return tx.HasExternalTableCreateKey() ? "MUTATE EXTERNAL TABLE" : "CREATE EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
-        return tx.HasExternalTableAbortCreateKey() || tx.HasExternalTableCommitCreateKey() || tx.GetDrop().HasExpectedExternalTable()
+        return tx.HasExternalTableAbortCreateKey() || tx.HasExternalTableCommitCreateKey() || tx.HasExternalTableReleaseCreateKey() ||
+               tx.GetDrop().HasExpectedExternalTable()
             ? "MUTATE EXTERNAL TABLE" : "DROP EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpExternalTableMutation:
         return "MUTATE EXTERNAL TABLE";

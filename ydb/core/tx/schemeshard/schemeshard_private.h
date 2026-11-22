@@ -66,6 +66,7 @@ namespace TEvPrivate {
         EvKesusResourcesDescribeResult,
         EvKesusSemaphoresDescribeResult,
         EvImportKesusResult,
+        EvCleanupExternalTableCreateTickets,
         EvEnd
     };
 
@@ -406,6 +407,15 @@ namespace TEvPrivate {
     struct TEvProgressTablePartitionsFormatSweep
         : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
     {};
+
+    struct TEvCleanupExternalTableCreateTickets: public TEventLocal<TEvCleanupExternalTableCreateTickets, EvCleanupExternalTableCreateTickets> {
+        explicit TEvCleanupExternalTableCreateTickets(bool scheduled = false)
+            : Scheduled(scheduled)
+        {
+        }
+
+        const bool Scheduled;
+    };
 
     // Sent self->self post-commit when a CopyTable sub-op of a tracked full backup finishes.
     struct TEvFullBackupItemDone : public NActors::TEventLocal<TEvFullBackupItemDone, EvFullBackupItemDone> {

@@ -60,6 +60,11 @@ inline EBindingRenameWrite AdvanceBindingRename(TBindingRename& rename, EBinding
             rename.set_candidate_identity(identity);
             rename.set_state(TBindingRename::COMMITTED);
             return EBindingRenameWrite::Binding;
+        case EBindingRenameAction::Expire:
+            if (!rename.lease_deadline_ms() || TInstant::Now().MilliSeconds() < rename.lease_deadline_ms()) {
+                ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding rename lease has not expired";
+            }
+            [[fallthrough]];
         case EBindingRenameAction::Abort:
             if (rename.state() != TBindingRename::PREPARED) {
                 return EBindingRenameWrite::None;

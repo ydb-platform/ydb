@@ -59,6 +59,7 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     CreatePendingSmallTable();
     CreateConnectionsTable();
     CreateBindingsTable();
+    CreateBindingRenameWorkTable();
     CreateIdempotencyKeysTable();
     CreateResultSetsTable();
     CreateJobsTable();
@@ -225,6 +226,20 @@ void TYdbControlPlaneStorageActor::CreateBindingsTable()
                            .Build();
 
     RunCreateTableActor(tablePath, TTableDescription(description));
+}
+
+void TYdbControlPlaneStorageActor::CreateBindingRenameWorkTable() {
+    auto description = TTableBuilder()
+                           .AddNullableColumn(OPERATION_ID_COLUMN_NAME, EPrimitiveType::String)
+                           .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+                           .AddNullableColumn(NEXT_ATTEMPT_COLUMN_NAME, EPrimitiveType::Timestamp)
+                           .AddNullableColumn(RELEASABLE_COLUMN_NAME, EPrimitiveType::Bool)
+                           .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String)
+                           .SetPrimaryKeyColumn(OPERATION_ID_COLUMN_NAME)
+                           .AddSecondaryIndex("by_next_attempt", NEXT_ATTEMPT_COLUMN_NAME)
+                           .AddSecondaryIndex("by_scope", std::vector<std::string>{ SCOPE_COLUMN_NAME, RELEASABLE_COLUMN_NAME })
+                           .Build();
+    RunCreateTableActor(JoinPath(YdbConnection->TablePathPrefix, BINDING_RENAME_WORK_TABLE_NAME), std::move(description));
 }
 
 void TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable()

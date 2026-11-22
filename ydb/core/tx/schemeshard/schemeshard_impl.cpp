@@ -437,6 +437,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     SubscribeToTempTableOwners();
 
     InitializeTablePartitionsFormatSweep();
+    ScheduleExternalTableCreateTicketCleanup(ctx);
 
     Become(&TThis::StateWork);
 }
@@ -768,6 +769,12 @@ void TSchemeShard::Clear() {
     SnapshotTables.clear();
     SnapshotsStepIds.clear();
     LockedPaths.clear();
+    ExternalTableCreateTickets.clear();
+    PreparedExternalTables.clear();
+    ReleasedExternalTableCreateTickets.clear();
+    LeasedExternalTableCreateTicketCount = 0;
+    ExternalTableCreateLeaseCutoffMs = 0;
+    ExternalTableCreateTicketCleanupScheduled = false;
 
     ColumnTables = { };
     BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
@@ -3869,10 +3876,24 @@ void TSchemeShard::PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const 
 void TSchemeShard::SetExternalTableCreateTicket(const TExternalTableCreateTicketKey& key,
     std::optional<NKikimrSchemeOp::TExternalTableCreateTicket> ticket)
 {
-    if (const auto* old = ExternalTableCreateTickets.FindPtr(key); old && old->HasTable() && !old->GetAborted() && !old->GetCommitted()) {
-        PreparedExternalTables.erase(TPathId::FromProto(old->GetTable().GetPathId()));
+    if (const auto* old = ExternalTableCreateTickets.FindPtr(key)) {
+        if (old->HasTable() && !old->GetAborted() && !old->GetCommitted()) {
+            PreparedExternalTables.erase(TPathId::FromProto(old->GetTable().GetPathId()));
+        }
+        if (old->HasLeaseDeadlineMs()) {
+            --LeasedExternalTableCreateTicketCount;
+            if (old->GetReleased()) {
+                ReleasedExternalTableCreateTickets.erase({ old->GetLeaseDeadlineMs(), key });
+            }
+        }
     }
     if (ticket) {
+        if (ticket->HasLeaseDeadlineMs()) {
+            ++LeasedExternalTableCreateTicketCount;
+            if (ticket->GetReleased()) {
+                ReleasedExternalTableCreateTickets.emplace(ticket->GetLeaseDeadlineMs(), key);
+            }
+        }
         if (ticket->HasTable() && !ticket->GetAborted() && !ticket->GetCommitted()) {
             PreparedExternalTables.insert(TPathId::FromProto(ticket->GetTable().GetPathId()));
         }
@@ -3894,6 +3915,74 @@ void TSchemeShard::PersistExternalTableCreateTicket(NIceDb::TNiceDb& db, const T
     using TTable = Schema::ExternalTableCreateTickets;
     db.Table<TTable>().Key(key.first, key.second).Update(
         NIceDb::TUpdate<TTable::Ticket>(ExternalTableCreateTickets.at(key).SerializeAsString()));
+}
+
+void TSchemeShard::StageExternalTableCreateLeaseCutoff(TProposeContext& context, ui64 cutoffMs) {
+    if (cutoffMs > ExternalTableCreateLeaseCutoffMs) {
+        context.MemChanges.GrabExternalTableCreateLeaseCutoff(this);
+        ExternalTableCreateLeaseCutoffMs = cutoffMs;
+        context.DbChanges.PersistExternalTableCreateLeaseCutoff();
+    }
+}
+
+void TSchemeShard::PersistExternalTableCreateLeaseCutoff(NIceDb::TNiceDb& db) {
+    db.Table<Schema::SysParams>()
+        .Key(Schema::SysParam_ExternalTableCreateLeaseCutoff)
+        .Update(NIceDb::TUpdate<Schema::SysParams::Value>(ToString(ExternalTableCreateLeaseCutoffMs)));
+}
+
+struct TSchemeShard::TTxCleanupExternalTableCreateTickets: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    explicit TTxCleanupExternalTableCreateTickets(TSchemeShard* self)
+        : TBase(self)
+    {
+    }
+
+    TTxType GetTxType() const override {
+        return TXTYPE_CLEANUP_EXTERNAL_TABLE_CREATE_TICKETS;
+    }
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+        NIceDb::TNiceDb db(txc.DB);
+        const ui64 cutoff = Max(Self->ExternalTableCreateLeaseCutoffMs, ctx.Now().MilliSeconds());
+        auto& ready = Self->ReleasedExternalTableCreateTickets;
+        constexpr size_t batchSize = 64;
+        size_t removed = 0;
+        while (removed < batchSize && !ready.empty() && ready.begin()->first <= cutoff) {
+            const auto key = ready.begin()->second;
+            db.Table<Schema::ExternalTableCreateTickets>().Key(key.first, key.second).Delete();
+            Self->SetExternalTableCreateTicket(key, std::nullopt);
+            ++removed;
+        }
+        if (removed && cutoff > Self->ExternalTableCreateLeaseCutoffMs) {
+            Self->ExternalTableCreateLeaseCutoffMs = cutoff;
+            Self->PersistExternalTableCreateLeaseCutoff(db);
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        Self->ExternalTableCreateTicketCleanupScheduled = false;
+        Self->ScheduleExternalTableCreateTicketCleanup(ctx);
+    }
+};
+
+void TSchemeShard::ScheduleExternalTableCreateTicketCleanup(const TActorContext& ctx) {
+    if (ExternalTableCreateTicketCleanupScheduled || ReleasedExternalTableCreateTickets.empty()) {
+        return;
+    }
+    const ui64 cutoff = Max(ExternalTableCreateLeaseCutoffMs, ctx.Now().MilliSeconds());
+    const ui64 earliest = ReleasedExternalTableCreateTickets.begin()->first;
+    const auto delay = earliest <= cutoff ? TDuration::Zero() : Min(TDuration::Minutes(1), TDuration::MilliSeconds(earliest - cutoff));
+    ExternalTableCreateTicketCleanupScheduled = true;
+    ctx.Schedule(delay, new TEvPrivate::TEvCleanupExternalTableCreateTickets(true));
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvCleanupExternalTableCreateTickets::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->Scheduled) {
+        Execute(new TTxCleanupExternalTableCreateTickets(this), ctx);
+    } else {
+        ScheduleExternalTableCreateTicketCleanup(ctx);
+    }
 }
 
 void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -6219,6 +6308,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvPrivate::TEvServerlessStorageBilling, Handle);
         HFuncTraced(TEvPrivate::TEvProgressTablePartitionsFormatSweep, Handle);
+        HFuncTraced(TEvPrivate::TEvCleanupExternalTableCreateTickets, Handle);
 
         HFuncTraced(NSysView::TEvSysView::TEvGetPartitionStats, Handle);
 

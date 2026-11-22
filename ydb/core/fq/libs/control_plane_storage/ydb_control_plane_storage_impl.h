@@ -427,6 +427,7 @@ protected:
         RTC_DESCRIBE_DATABASE,
         RTC_MODIFY_DATABASE,
         RTC_DELETE_FOLDER_RESOURCES,
+        RTC_BINDING_RENAME_WORK,
         RTC_MAX,
     };
 
@@ -484,6 +485,7 @@ protected:
             { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") },
             { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") },
             { MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources") },
+            { MakeIntrusive<TRequestCommonCounters>("BindingRenameWork") },
         });
 
         TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{ TTtlCacheSettings{}.SetTtl(TDuration::Days(1)) };
@@ -822,6 +824,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvListBindingsRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDescribeBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyBindingRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvBindingRenameWorkRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle);
@@ -863,6 +866,7 @@ public:
     void Handle(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev);
+    void Handle(TEvControlPlaneStorage::TEvBindingRenameWorkRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest::TPtr& ev);
@@ -909,6 +913,7 @@ public:
     void CreateJobsTable();
     void CreateNodesTable();
     void CreateBindingsTable();
+    void CreateBindingRenameWorkTable();
     void CreateIdempotencyKeysTable();
     void CreateResultSetsTable();
     void CreateQuotasTable();

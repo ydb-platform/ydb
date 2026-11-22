@@ -871,4 +871,5 @@ enum ETxTypes {
 
     TXTYPE_REVISIT_SPLIT_MERGE = 131                       [(TxTypeOpts) = {Name: "TxRevisitSplitMerge"}];
     TXTYPE_DATABASE_FREEZE = 132                         [(TxTypeOpts) = {Name: "TxDatabaseFreeze"}];
+    TXTYPE_CLEANUP_EXTERNAL_TABLE_CREATE_TICKETS = 133 [(TxTypeOpts) = {Name: "TxCleanupExternalTableCreateTickets"}];
 }

@@ -7,6 +7,7 @@ namespace NFq {
 #define PENDING_SMALL_TABLE_NAME "pending_small"
 #define CONNECTIONS_TABLE_NAME "connections"
 #define BINDINGS_TABLE_NAME "bindings"
+#define BINDING_RENAME_WORK_TABLE_NAME "binding_rename_work"
 #define RESULT_SETS_TABLE_NAME "result_sets"
 #define IDEMPOTENCY_KEYS_TABLE_NAME "idempotency_keys"
 #define JOBS_TABLE_NAME "jobs"
@@ -46,6 +47,9 @@ namespace NFq {
 
 #define BINDING_ID_COLUMN_NAME "binding_id"
 #define BINDING_COLUMN_NAME "binding"
+#define OPERATION_ID_COLUMN_NAME "operation_id"
+#define NEXT_ATTEMPT_COLUMN_NAME "next_attempt"
+#define RELEASABLE_COLUMN_NAME "releasable"
 
 #define IDEMPOTENCY_KEY_COLUMN_NAME "idempotency_key"
 #define EXPIRE_AT_COLUMN_NAME "expire_at"

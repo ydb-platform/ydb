@@ -73,6 +73,7 @@
 
 #include <util/generic/list.h>
 #include <util/generic/ptr.h>
+#include <util/generic/set.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
@@ -329,6 +330,13 @@ public:
     TDbRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, DbRefMaps};
     THashMap<TExternalTableCreateTicketKey, NKikimrSchemeOp::TExternalTableCreateTicket> ExternalTableCreateTickets;
     THashSet<TPathId> PreparedExternalTables;
+    TSet<std::pair<ui64, TExternalTableCreateTicketKey>> ReleasedExternalTableCreateTickets;
+    size_t LeasedExternalTableCreateTicketCount = 0;
+    ui64 ExternalTableCreateLeaseCutoffMs = 0;
+    bool ExternalTableCreateTicketCleanupScheduled = false;
+
+    static constexpr size_t MaxLeasedExternalTableCreateTickets = 8192;
+    static constexpr TDuration MaxExternalTableCreateLease = TDuration::Hours(1);
     TDbRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, DbRefMaps};
     TDbRefMap<TViewInfo::TPtr> Views{"Views", this, DbRefMaps};
     TDbRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, DbRefMaps};
@@ -1063,6 +1071,10 @@ public:
     void StageExternalTableCreateTicket(TProposeContext& context, const TExternalTableCreateTicketKey& key,
         NKikimrSchemeOp::TExternalTableCreateTicket ticket);
     void PersistExternalTableCreateTicket(NIceDb::TNiceDb& db, const TExternalTableCreateTicketKey& key);
+    void StageExternalTableCreateLeaseCutoff(TProposeContext& context, ui64 cutoffMs);
+    void PersistExternalTableCreateLeaseCutoff(NIceDb::TNiceDb& db);
+    void ScheduleExternalTableCreateTicketCleanup(const TActorContext& ctx);
+    struct TTxCleanupExternalTableCreateTickets;
     void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTable);
     void PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId);
@@ -1708,6 +1720,7 @@ public:
     void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvProgressTablePartitionsFormatSweep::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCleanupExternalTableCreateTickets::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NKikimr::NTestShard::TEvControlResponse__HandlePtr& ev, const TActorContext& ctx);
 

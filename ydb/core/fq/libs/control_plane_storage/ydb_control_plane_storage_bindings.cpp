@@ -6,11 +6,40 @@
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 #include <util/generic/guid.h>
+#include <util/string/builder.h>
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
 
 namespace NFq {
+
+namespace {
+
+void EnqueueBindingRename(
+    TSqlQueryBuilder& builder, const TString& scope, const TString& bindingId, const TBindingRename& rename, bool releasable) {
+    if (!rename.lease_deadline_ms()) {
+        return;
+    }
+    FederatedQuery::Internal::BindingRenameWork work;
+    work.set_scope(scope);
+    work.set_binding_id(bindingId);
+    *work.mutable_rename() = rename;
+    if (releasable) {
+        work.mutable_rename()->set_state(TBindingRename::FINISHED);
+    }
+    const auto nextAttempt = rename.state() == TBindingRename::PREPARED ? TInstant::MilliSeconds(rename.lease_deadline_ms()) : TInstant::Now();
+    builder.AddString("rename_operation_id", rename.operation_id());
+    builder.AddString("rename_scope", scope);
+    builder.AddString("rename_work", work.SerializeAsString());
+    builder.AddTimestamp("rename_next_attempt", nextAttempt);
+    builder.AddBool("rename_releasable", releasable);
+    builder.AddText("UPSERT INTO `" BINDING_RENAME_WORK_TABLE_NAME "` (`" OPERATION_ID_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME
+                    "`, `" NEXT_ATTEMPT_COLUMN_NAME "`, `" RELEASABLE_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
+                    "`) "
+                    "VALUES ($rename_operation_id, $rename_scope, $rename_next_attempt, $rename_releasable, $rename_work);");
+}
+
+}   // namespace
 
 NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev) const {
     NYql::TIssues issues = ValidateBinding(ev);
@@ -407,14 +436,38 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         viewPermissions.SetAll();
     }
     const bool checkCommitKey = renameAction == EBindingRenameAction::Commit && !idempotencyKey.empty();
-    const auto operationId = renameAction == EBindingRenameAction::Prepare ? CreateGuidAsString() : event.RenameOperationId;
+    const auto leaseDeadlineMs = renameAction == EBindingRenameAction::Prepare && event.RenameComputeScope.scheme_shard_id()
+                                     ? (startTime + TDuration::Minutes(30)).MilliSeconds()
+                                     : 0;
+    TString operationId = event.RenameOperationId;
+    if (renameAction == EBindingRenameAction::Prepare) {
+        operationId = CreateGuidAsString();
+        if (leaseDeadlineMs) {
+            operationId = TStringBuilder() << "fqv1:" << leaseDeadlineMs << ':' << operationId;
+        }
+    }
     const int byteSize = request.ByteSize();
     YDB_LOG_TRACE("Dump logPrefix, modifyBindingRequest, request",
         {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
         {"modifyBindingRequest", NKikimr::MaskTicket(token)},
         {"request", request.DebugString()});
 
-    NYql::TIssues issues = requiresAccess ? ValidateBinding(ev) : ValidateEvent(ev);
+    NYql::TIssues issues;
+    if (event.RecoverRename) {
+        if (renameAction != EBindingRenameAction::Expire && renameAction != EBindingRenameAction::Finish) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Invalid binding rename recovery action"));
+        }
+    } else {
+        issues = requiresAccess ? ValidateBinding(ev) : ValidateEvent(ev);
+    }
+    const auto& computeScope = event.RenameComputeScope;
+    if (renameAction == EBindingRenameAction::Prepare &&
+        (!computeScope.principal().empty() || computeScope.scheme_shard_id() || computeScope.domain_owner_id() ||
+            computeScope.domain_path_id()) &&
+        (computeScope.principal().empty() || !computeScope.scheme_shard_id() || !computeScope.domain_owner_id() ||
+            !computeScope.domain_path_id())) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incomplete Compute mutation scope"));
+    }
     if (issues) {
         YDB_LOG_DEBUG("ModifyBindingRequest, validation",
             {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
@@ -454,7 +507,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                              identity = event.RenameIdentity, connectionName = event.RenameConnectionName,
                              computeEndpoint = event.ComputeDatabase.connection().endpoint(),
                              computeDatabase = event.ComputeDatabase.connection().database(), tablePathPrefix = YdbConnection->TablePathPrefix,
-                             idempotencyKeyTtl = Config->IdempotencyKeyTtl,
+                             idempotencyKeyTtl = Config->IdempotencyKeyTtl, leaseDeadlineMs, computeScope,
+                             computeSsl = event.ComputeDatabase.connection().usessl(),
                              commonCounters = requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         response->second = {};
         if (resultSets.size() != (checkCommitKey ? 3 : 2)) {
@@ -537,7 +591,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         auto noWrite = [] {
             return std::make_pair(TString{}, NYdb::TParamsBuilder{}.Build());
         };
-        auto writeInternal = [&] {
+        auto writeInternal = [&](const TBindingRename& work, bool releasable) {
             TSqlQueryBuilder builder(tablePathPrefix, "ModifyBinding(rename)");
             builder.AddString("scope", scope);
             builder.AddString("binding_id", bindingId);
@@ -545,6 +599,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             builder.AddText("UPDATE `" BINDINGS_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME
                             "` = $internal"
                             " WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;");
+            EnqueueBindingRename(builder, scope, bindingId, work, releasable);
             auto query = builder.Build();
             return std::make_pair(query.Sql, query.Params);
         };
@@ -575,9 +630,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                     return noWrite();
                 case EBindingRenameWrite::Forget:
                     bindingInternal.clear_rename();
-                    return writeInternal();
+                    return writeInternal(*response->second.Rename, true);
                 case EBindingRenameWrite::Journal:
-                    return writeInternal();
+                    return writeInternal(*response->second.Rename, renameAction == EBindingRenameAction::Finish);
                 case EBindingRenameWrite::Binding:
                     if (checkCommitKey && TResultSetParser(resultSets[2]).TryNextRow()) {
                         ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST)
@@ -625,8 +680,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             intent.set_connection_name(connectionName);
             intent.set_compute_endpoint(computeEndpoint);
             intent.set_compute_database(computeDatabase);
+            intent.set_compute_ssl(computeSsl);
+            intent.set_lease_deadline_ms(leaseDeadlineMs);
+            intent.set_compute_principal(computeScope.principal());
+            intent.set_compute_scheme_shard_id(computeScope.scheme_shard_id());
+            intent.set_compute_domain_owner_id(computeScope.domain_owner_id());
+            intent.set_compute_domain_path_id(computeScope.domain_path_id());
             returnRename();
-            return writeInternal();
+            return writeInternal(intent, false);
         }
 
         if (renameAction != EBindingRenameAction::Commit) {
@@ -656,6 +717,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" BINDING_COLUMN_NAME
             "` = $binding\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;\n");
+        if (renameAction == EBindingRenameAction::Commit) {
+            EnqueueBindingRename(writeQueryBuilder, scope, bindingId, bindingInternal.rename(), false);
+        }
         const auto writeQuery = writeQueryBuilder.Build();
         return make_pair(writeQuery.Sql, writeQuery.Params);
     };
@@ -732,6 +796,55 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         TDuration delta = TInstant::Now() - startTime;
         LWPROBE(ModifyBindingRequest, scope, user, bindingId, delta, byteSize, future.GetValue());
     });
+}
+
+void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvBindingRenameWorkRequest::TPtr& ev) {
+    const auto now = TInstant::Now();
+    const auto& operationId = ev->Get()->Request.rename().operation_id();
+    auto counters = Counters.GetCounters("", "", RTS_MAX, RTC_BINDING_RENAME_WORK);
+    counters.IncInFly();
+    auto result = std::make_shared<FederatedQuery::Internal::BindingRenameWork>();
+    TAsyncStatus status;
+    if (operationId) {
+        TSqlQueryBuilder builder(TablePathPrefix, "AcknowledgeBindingRenameRelease");
+        builder.AddString("operation_id", operationId);
+        builder.AddText("DELETE FROM `" BINDING_RENAME_WORK_TABLE_NAME "` WHERE `" OPERATION_ID_COLUMN_NAME
+                        "` = $operation_id AND `" RELEASABLE_COLUMN_NAME "`;");
+        const auto query = builder.Build();
+        status = Write(query.Sql, query.Params, counters, {});
+    } else {
+        TSqlQueryBuilder builder(TablePathPrefix, "ClaimBindingRename");
+        builder.AddTimestamp("now", now);
+        builder.AddText("SELECT `" OPERATION_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" BINDING_RENAME_WORK_TABLE_NAME
+                        "` VIEW by_next_attempt WHERE `" NEXT_ATTEMPT_COLUMN_NAME "` <= $now ORDER BY `" NEXT_ATTEMPT_COLUMN_NAME
+                        "`, `" OPERATION_ID_COLUMN_NAME "` LIMIT 1;");
+        const auto query = builder.Build();
+        status = ReadModifyWrite(query.Sql, query.Params, [result, now, tablePathPrefix = TablePathPrefix](const auto& sets) {
+            result->Clear();
+            TResultSetParser parser(sets.at(0));
+            if (!parser.TryNextRow()) {
+                return std::make_pair(TString{}, NYdb::TParamsBuilder{}.Build());
+            }
+            const auto operationId = parser.ColumnParser(OPERATION_ID_COLUMN_NAME).GetOptionalString().value_or("");
+            if (!result->ParseFromString(parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString().value_or("")) || operationId.empty() ||
+                result->rename().operation_id() != operationId) {
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Invalid binding rename work";
+            }
+            TSqlQueryBuilder write(tablePathPrefix, "ClaimBindingRename");
+            write.AddString("operation_id", TString(operationId));
+            write.AddTimestamp("next_attempt", now + TDuration::Minutes(1));
+            write.AddText("UPDATE `" BINDING_RENAME_WORK_TABLE_NAME "` SET `" NEXT_ATTEMPT_COLUMN_NAME
+                          "` = $next_attempt WHERE `" OPERATION_ID_COLUMN_NAME "` = $operation_id;");
+            const auto query = write.Build();
+            return std::make_pair(query.Sql, query.Params);
+        }, counters);
+    }
+
+    SendResponse<TEvControlPlaneStorage::TEvBindingRenameWorkResponse, FederatedQuery::Internal::BindingRenameWork>("BindingRenameWork",
+        TActivationContext::ActorSystem(), status, SelfId(), std::move(ev), now, counters, [result] {
+            return *result;
+        },
+        {});
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev)

@@ -621,6 +621,25 @@ Y_UNIT_TEST_SUITE(TBindingRenameJournal) {
         UNIT_ASSERT(!HasPendingBindingRename(state.Internal));
     }
 
+    Y_UNIT_TEST(RecoveryAbortsOnlyExpiredLeasedIntents) {
+        TPreparedRename pending;
+        UNIT_ASSERT_EXCEPTION(pending.Advance(EBindingRenameAction::Expire), TCodeLineException);
+        pending.Internal.mutable_rename()->set_lease_deadline_ms((TInstant::Now() + TDuration::Minutes(30)).MilliSeconds());
+        UNIT_ASSERT_EXCEPTION(pending.Advance(EBindingRenameAction::Expire), TCodeLineException);
+
+        pending.Internal.mutable_rename()->set_lease_deadline_ms(1);
+        UNIT_ASSERT(pending.Advance(EBindingRenameAction::Expire) == EBindingRenameWrite::Journal);
+        UNIT_ASSERT(pending.Advance(EBindingRenameAction::Commit, "operation", "candidate") == EBindingRenameWrite::None);
+        UNIT_ASSERT(pending.Internal.rename().state() == TBindingRename::ABORTED);
+
+        TPreparedRename committed;
+        committed.Internal.mutable_rename()->set_lease_deadline_ms(1);
+        UNIT_ASSERT(committed.Advance(EBindingRenameAction::RecordSource, "operation", "source") == EBindingRenameWrite::Journal);
+        UNIT_ASSERT(committed.Advance(EBindingRenameAction::Commit, "operation", "candidate") == EBindingRenameWrite::Binding);
+        UNIT_ASSERT(committed.Advance(EBindingRenameAction::Expire) == EBindingRenameWrite::None);
+        UNIT_ASSERT(committed.Internal.rename().state() == TBindingRename::COMMITTED);
+    }
+
     Y_UNIT_TEST(AbortFencesCommitAndKeepsDeletionBlockedUntilCleanup) {
         TPreparedRename state;
         UNIT_ASSERT(HasPendingBindingRename(state.Internal));

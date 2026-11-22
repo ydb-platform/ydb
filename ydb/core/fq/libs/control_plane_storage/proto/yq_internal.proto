@@ -89,6 +89,18 @@ message BindingRename {
     string connection_name = 10;
     string compute_endpoint = 11;
     string compute_database = 12;
+    uint64 lease_deadline_ms = 13;
+    string compute_principal = 14;
+    uint64 compute_scheme_shard_id = 15;
+    bool compute_ssl = 16;
+    uint64 compute_domain_owner_id = 17;
+    uint64 compute_domain_path_id = 18;
+}
+
+message BindingRenameWork {
+    string scope = 1;
+    string binding_id = 2;
+    BindingRename rename = 3;
 }
 
 message BindingInternal {

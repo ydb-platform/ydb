@@ -266,6 +266,13 @@ message ExternalTableIdentity {
     uint64 version = 3;
 }
 
+message ExternalTableMutationScope {
+    string principal = 1;
+    uint64 scheme_shard_id = 2;
+    uint64 domain_owner_id = 3;
+    uint64 domain_path_id = 4;
+}
+
 message MutateExternalTableRequest {
     message Create {
         message Column {
@@ -292,7 +299,13 @@ message MutateExternalTableRequest {
         Ticket abort = 4;
         Ticket commit = 5;
         ExternalTableIdentity guarded_drop = 6;
+        Create leased_create = 7;
+        Ticket release = 8;
+        Ticket leased_abort = 9;
+        Ticket leased_commit = 10;
+        ExternalTableIdentity leased_guarded_drop = 11;
     }
+    ExternalTableMutationScope expected_scope = 12;
 }
 
 message MutateExternalTableResult {
@@ -306,11 +319,15 @@ message MutateExternalTableResponse {
 message DescribeExternalTableRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string relative_path = 2;
+    bool resolve_mutation_scope = 3;
+    ExternalTableMutationScope expected_scope = 4;
+    string scoped_relative_path = 5;
 }
 
 message DescribeExternalTableResult {
     ExternalTableIdentity identity = 1;
     Ydb.Table.DescribeExternalTableResult description = 2;
+    ExternalTableMutationScope mutation_scope = 3;
 }
 
 message DescribeExternalTableResponse {

@@ -1,6 +1,9 @@
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+#include <util/string/builder.h>
 
 using namespace NKikimr;
 using namespace NKikimrSchemeOp;
@@ -126,5 +129,94 @@ Y_UNIT_TEST_SUITE(TSchemeShardExternalTableMutation) {
         env.TestWaitNotification(runtime, txId);
         create("second", NKikimrScheme::StatusSuccess, "/", true);
         TestLs(runtime, path, false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(LeasedCreateTicketsSurviveExpiryUntilRelease) {
+        TTestBasicRuntime runtime;
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
+            return event->GetTypeRewrite() != NSchemeShard::TEvPrivate::EvCleanupExternalTableCreateTickets &&
+                   TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
+        });
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+        TestCreateExternalDataSource(runtime, txId, "/MyRoot", R"(
+            Name: "ExternalDataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/my_bucket"
+            Auth { None {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        runtime.GetAppData().AdministrationAllowedSIDs = { "root@builtin" };
+        const auto rootToken = NACLib::TUserToken("root@builtin", {}).SerializeAsString();
+        const auto schemeShard = TTestTxConfig::SchemeShard;
+        const auto root = DescribePath(runtime, "/MyRoot");
+        const auto& domain = root.GetPathDescription().GetDomainDescription().GetDomainKey();
+        UNIT_ASSERT(domain.GetSchemeShard() && domain.GetPathId());
+        const TInstant deadline = runtime.GetCurrentTime() + TDuration::Minutes(5);
+        const TString key = TStringBuilder() << "fqv1:" << deadline.MilliSeconds() << ":first";
+        const auto send = [&](TExternalTableMutation::EAction action, const TString& operationKey, NKikimrScheme::EStatus expected,
+                              ui64 expectedSchemeShard, bool correctDomain = true) {
+            auto* request = new TEvTx(++txId, schemeShard);
+            request->Record.SetUserToken(rootToken);
+            request->Record.SetOwner(BUILTIN_ACL_BASIC_OWNER);
+            auto* tx = request->Record.AddTransaction();
+            tx->SetOperationType(ESchemeOpExternalTableMutation);
+            auto* mutation = tx->MutableExternalTableMutation();
+            mutation->SetAction(action);
+            mutation->SetWorkingDir("/MyRoot");
+            mutation->SetName("LeasedTable");
+            mutation->SetKey(operationKey);
+            mutation->SetExpectedSchemeShardId(expectedSchemeShard);
+            auto* expectedDomain = mutation->MutableExpectedDomainPathId();
+            expectedDomain->SetOwnerId(domain.GetSchemeShard());
+            expectedDomain->SetLocalId(correctDomain ? domain.GetPathId() : domain.GetPathId() + 1);
+            if (action == TExternalTableMutation::CREATE_LEASED) {
+                auto* definition = mutation->MutableDefinition();
+                definition->SetSourceType("General");
+                definition->SetDataSourcePath("/MyRoot/ExternalDataSource");
+                definition->SetLocation("/");
+                auto* column = definition->AddColumns();
+                column->SetName("key");
+                column->SetType("Uint64");
+                NKikimrExternalSources::TGeneral content;
+                (*content.mutable_attributes())["format"] = "json_each_row";
+                definition->SetContent(content.SerializeAsString());
+            }
+            AsyncSend(runtime, schemeShard, request);
+            TestModificationResult(runtime, txId, expected);
+        };
+        const auto create = [&](const TString& operationKey, NKikimrScheme::EStatus expected) {
+            send(TExternalTableMutation::CREATE_LEASED, operationKey, expected, schemeShard);
+        };
+
+        send(TExternalTableMutation::CREATE_LEASED, key, NKikimrScheme::StatusPreconditionFailed, schemeShard + 1);
+        send(TExternalTableMutation::CREATE_LEASED, key, NKikimrScheme::StatusPreconditionFailed, schemeShard, false);
+        create(key, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+        send(TExternalTableMutation::RELEASE, key, NKikimrScheme::StatusPreconditionFailed, schemeShard);
+        runtime.UpdateCurrentTime(deadline + TDuration::Seconds(1));
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+        create(key, NKikimrScheme::StatusSuccess);
+        send(TExternalTableMutation::COMMIT_LEASED, key, NKikimrScheme::StatusSuccess, schemeShard);
+        send(TExternalTableMutation::RELEASE, key, NKikimrScheme::StatusSuccess, schemeShard);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        create(key, NKikimrScheme::StatusPreconditionFailed);
+        TestDropExternalTable(runtime, ++txId, "/MyRoot", "LeasedTable");
+        env.TestWaitNotification(runtime, txId);
+
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+        runtime.UpdateCurrentTime(deadline - TDuration::Minutes(1), true);
+        create(key, NKikimrScheme::StatusPreconditionFailed);
+        send(TExternalTableMutation::RELEASE, key, NKikimrScheme::StatusSuccess, schemeShard);
+        TestLs(runtime, "/MyRoot/LeasedTable", false, NLs::PathNotExist);
+
+        const TInstant absentDeadline = deadline + TDuration::Minutes(2);
+        const TString absentKey = TStringBuilder() << "fqv1:" << absentDeadline.MilliSeconds() << ":absent";
+        runtime.UpdateCurrentTime(absentDeadline + TDuration::Seconds(1));
+        send(TExternalTableMutation::ABORT_LEASED, absentKey, NKikimrScheme::StatusSuccess, schemeShard);
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+        runtime.UpdateCurrentTime(absentDeadline - TDuration::Minutes(1), true);
+        create(absentKey, NKikimrScheme::StatusPreconditionFailed);
+        send(TExternalTableMutation::RELEASE, absentKey, NKikimrScheme::StatusSuccess, schemeShard);
     }
 }

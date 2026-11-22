@@ -1411,6 +1411,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         {
+            RETURN_IF_NO_PRECHARGED(
+                Self->ReadSysValue(db, Schema::SysParam_ExternalTableCreateLeaseCutoff, Self->ExternalTableCreateLeaseCutoffMs));
+        }
+
+        {
             ui64 sweepStatusVal = 0;
             RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_TablePartitionsFormatSweepStatus, sweepStatusVal));
             switch (sweepStatusVal) {

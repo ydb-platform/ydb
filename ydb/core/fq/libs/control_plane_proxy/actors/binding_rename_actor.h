@@ -15,4 +15,7 @@ NActors::IActor* MakeRenameBindingActor(const NActors::TActorId& proxy, TEvContr
     TCounters& counters, TDuration timeout, TPermissions permissions, const TComputeConfig& compute, const TYqSharedResources::TPtr& resources,
     const NKikimr::TYdbCredentialsProviderFactory& credentials);
 
+NActors::IActor* MakeBindingRenameRecoveryActor(TCounters& counters, TDuration timeout, const TComputeConfig& compute,
+    const TYqSharedResources::TPtr& resources, const NKikimr::TYdbCredentialsProviderFactory& credentials);
+
 }   // namespace NFq::NPrivate

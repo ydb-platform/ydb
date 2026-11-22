@@ -281,6 +281,9 @@ public:
 
             key = {context.UserToken->GetUserSID(), Transaction.GetExternalTableCreateKey()};
             ticket.SetTargetPath(dstPath.PathString());
+            if (Transaction.HasExternalTableCreateLeaseDeadlineMs()) {
+                ticket.SetLeaseDeadlineMs(Transaction.GetExternalTableCreateLeaseDeadlineMs());
+            }
             NKikimrExternalSources::TGeneral content;
             if (!content.ParseFromString(externalTableDescription.GetContent())) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid external table content");
@@ -291,7 +294,7 @@ public:
             ticket.SetDefinition(SerializeDeterministically(canonicalDefinition));
             if (const auto* existing = context.SS->ExternalTableCreateTickets.FindPtr(key)) {
                 if (existing->GetAborted() || existing->GetTargetPath() != ticket.GetTargetPath() ||
-                    existing->GetDefinition() != ticket.GetDefinition())
+                    existing->GetDefinition() != ticket.GetDefinition() || existing->GetLeaseDeadlineMs() != ticket.GetLeaseDeadlineMs())
                 {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create ticket cannot be replayed");
                     return result;
@@ -316,6 +319,22 @@ public:
                 result->Record.SetExternalTableVersion(existing->GetTable().GetVersion());
                 result->SetStatus(NKikimrScheme::StatusSuccess);
                 return result;
+            }
+            if (ticket.HasLeaseDeadlineMs()) {
+                const ui64 now = context.Ctx.Now().MilliSeconds();
+                const ui64 deadline = ticket.GetLeaseDeadlineMs();
+                if (deadline <= Max(now, context.SS->ExternalTableCreateLeaseCutoffMs)) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create lease has expired");
+                    return result;
+                }
+                if (deadline - now > TSchemeShard::MaxExternalTableCreateLease.MilliSeconds()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, "The external table create lease is too long");
+                    return result;
+                }
+                if (context.SS->LeasedExternalTableCreateTicketCount >= TSchemeShard::MaxLeasedExternalTableCreateTickets) {
+                    result->SetError(NKikimrScheme::StatusQuotaExceeded, "Too many external table create leases");
+                    return result;
+                }
             }
         }
         if (!IsDestinationPathValid(result, context, dstPath, acl, acceptExisted)) {

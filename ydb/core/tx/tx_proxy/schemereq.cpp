@@ -847,16 +847,21 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             parent.Path = SplitPath(database);
             switch (action) {
                 case TMutation::CREATE:
+                case TMutation::CREATE_LEASED:
                     if (!IsEqualPaths(TString(ExtractParent(mutation.GetDefinition().GetDataSourcePath())), database)) {
                         return false;
                     }
                     [[fallthrough]];
                 case TMutation::COMMIT:
+                case TMutation::COMMIT_LEASED:
+                case TMutation::RELEASE:
                     parent.RequireAccess = NACLib::EAccessRights::CreateTable;
                     ResolveForACL.push_back(std::move(parent));
                     break;
                 case TMutation::ABORT:
-                case TMutation::GUARDED_DROP: {
+                case TMutation::ABORT_LEASED:
+                case TMutation::GUARDED_DROP:
+                case TMutation::GUARDED_DROP_LEASED: {
                     auto target = TPathToResolve(pbModifyScheme);
                     target.Path = ChildPath(parent.Path, mutation.GetName());
                     target.RequireAccess = NACLib::EAccessRights::RemoveSchema;

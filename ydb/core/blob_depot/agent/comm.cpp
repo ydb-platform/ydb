@@ -187,7 +187,7 @@ namespace NKikimr::NBlobDepot {
             kind.IssueGivenIdRange(msg.GetGivenIdRange());
         } else {
             ++*AllocateIdFailures;
-            kind.ProcessQueriesWaitingForId(false);
+            kind.ProcessQueriesWaitingForId(false, "out of space");
         }
 
         YDB_LOG_DEBUG("TEvAllocateIdsResult",
@@ -215,6 +215,8 @@ namespace NKikimr::NBlobDepot {
 
         for (auto& [_, kind] : ChannelKinds) {
             kind.IdAllocInFlight = false;
+            // the allocation these queries wait for is lost along with the other tablet requests, which end with error
+            kind.ProcessQueriesWaitingForId(false, "BlobDepot tablet disconnected while allocating BlobSeqId");
         }
 
         ClearPendingEventQueue("BlobDepot tablet disconnected");

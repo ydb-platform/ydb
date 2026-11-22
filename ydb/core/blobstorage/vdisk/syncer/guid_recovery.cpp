@@ -783,8 +783,11 @@ namespace NKikimr {
                     return;
                 }
                 auto guid = Decision->GetGuid();
+                // Publishing an existing GUID must not mark lost data recovered or reset DbBirthLsn.
+                const auto mode = Decision->GetDecision() == EDecision::FirstRun
+                    ? EFirstRunMode::Initialize : EFirstRunMode::PublishOnly;
                 Become(&TThis::WaitForFirstRunStateFunc);
-                FirstRunActorId = ctx.Register(CreateVDiskGuidFirstRunActor(VCtx, GInfo, CommitterId, ctx.SelfID, f, guid));
+                FirstRunActorId = ctx.Register(CreateVDiskGuidFirstRunActor(VCtx, GInfo, CommitterId, ctx.SelfID, mode, f, guid));
                 Phase = PhaseFirstRun;
             }
 

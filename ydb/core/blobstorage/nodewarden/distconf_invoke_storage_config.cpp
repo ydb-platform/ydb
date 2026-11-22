@@ -331,6 +331,23 @@ namespace NKikimr::NStorage {
         TActivationContext::Send(handle.release());
     }
 
+    NKikimrConfig::TBridgeConfig GetMergedBridgeConfig(const NJson::TJsonValue& mainConfig,
+            const NJson::TJsonValue *storageConfig, bool allowUnknownFields) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        for (const NJson::TJsonValue *item : {&mainConfig, storageConfig}) {
+            const NJson::TJsonValue *config;
+            const NJson::TJsonValue *bridgeConfig;
+            if (item && item->GetValuePointer("config", &config) &&
+                    config->GetValuePointer("bridge_config", &bridgeConfig)) {
+                json["bridge_config"] = *bridgeConfig;
+                break; // main config has precedence, the same way as when the node starts
+            }
+        }
+        NKikimrConfig::TAppConfig appConfig;
+        NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknownFields), appConfig, false);
+        return appConfig.GetBridgeConfig();
+    }
+
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
 
@@ -360,6 +377,7 @@ namespace NKikimr::NStorage {
         // start deriving a config from current one
         TString state;
         NKikimrBlobStorage::TStorageConfig config(*Self->StorageConfig);
+        bool pileListChanged = false;
 
         try {
             auto load = [&](const TString& yaml, ui64& version, const char *expectedKind) {
@@ -418,6 +436,34 @@ namespace NKikimr::NStorage {
                     throw TExError() << "Error while deriving StorageConfig: " << errorReason;
                 }
             }
+
+            // nodes take bridge config from the main config merged with the storage one, so piles are checked against
+            // this view whichever of the configs is replaced; bridged cluster can't lose its bridge config
+            if (config.HasClusterState()) {
+                state = "checking bridge config";
+                auto parse = [](const TString& yaml) { return NYaml::Yaml2Json(YAML::Load(yaml), true); };
+                const NJson::TJsonValue currentMain = Self->MainConfigYaml ? parse(Self->MainConfigYaml)
+                    : NJson::TJsonValue();
+                const NJson::TJsonValue currentStorage = Self->StorageConfigYaml ? parse(*Self->StorageConfigYaml)
+                    : NJson::TJsonValue();
+                if (!NewYaml) {
+                    main = currentMain;
+                }
+                const bool dedicatedStorageSection = request.GetDedicatedStorageSectionConfigMode();
+                if (!NewStorageYaml && dedicatedStorageSection) {
+                    storage = currentStorage;
+                }
+                const auto bridgeConfig = GetMergedBridgeConfig(main, dedicatedStorageSection ? &storage : nullptr,
+                    request.GetAllowUnknownFields());
+                // the bridge config of the configs being replaced, to see if positions of piles change
+                const auto currentBridgeConfig = GetMergedBridgeConfig(currentMain,
+                    Self->StorageConfigYaml ? &currentStorage : nullptr, true);
+                if (auto error = UpdatePileRegistry(bridgeConfig, &config,
+                        Self->Cfg->BridgeConfig ? &*Self->Cfg->BridgeConfig : nullptr,
+                        Self->MainConfigYaml ? &currentBridgeConfig : nullptr, &pileListChanged)) {
+                    throw TExError() << *error;
+                }
+            }
         } catch (const TExError& ex) {
             throw ex;
         } catch (const std::exception& ex) {
@@ -430,20 +476,56 @@ namespace NKikimr::NStorage {
         // make it proposed one
         ProposedStorageConfig = std::move(config);
 
-        // check if we are enabling distconf by this operation and handle it accordingly
-        if (!Self->SelfManagementEnabled && ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
-            if (IsDryRun) {
-                throw TExError() << "DryRun is not supported when enabling distconf";
-            }
-            ControllerOp = EControllerOp::ENABLE_DISTCONF;
-            TryEnableDistconf(); // collect quorum of configs first to see if we have to do rolling restart of the cluster
-        } else {
-            if (Self->SelfManagementEnabled && !ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
-                ControllerOp = EControllerOp::DISABLE_DISTCONF;
+        auto proceed = [this] {
+            // check if we are enabling distconf by this operation and handle it accordingly
+            if (!Self->SelfManagementEnabled && ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
+                if (IsDryRun) {
+                    throw TExError() << "DryRun is not supported when enabling distconf";
+                }
+                ControllerOp = EControllerOp::ENABLE_DISTCONF;
+                // collect quorum of configs first to see if we have to do rolling restart of the cluster
+                TryEnableDistconf();
             } else {
-                ControllerOp = EControllerOp::OTHER;
+                if (Self->SelfManagementEnabled && !ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
+                    ControllerOp = EControllerOp::DISABLE_DISTCONF;
+                } else {
+                    ControllerOp = EControllerOp::OTHER;
+                }
+                ConnectToController();
             }
-            ConnectToController();
+        };
+
+        const ui32 requiredFeatureLevel = GetRequiredBridgeFeatureLevel(ProposedStorageConfig);
+        if (pileListChanged || requiredFeatureLevel > GetRequiredBridgeFeatureLevel(*Self->StorageConfig)) {
+            // every node connected to the cluster must take pile ids from pile registry; static nodes being removed
+            // from the config, as well as the nodes of piles not allowing connections (INACTIVE and DISCONNECTED ones),
+            // don't take part in the cluster; the ones of lower feature level are refused when their pile is back
+            THashSet<ui32> staticNodeIds;
+            for (const auto& node : Self->StorageConfig->GetAllNodes()) {
+                staticNodeIds.insert(node.GetNodeId());
+            }
+            const auto registry = Self->GetConfigPileRegistry(ProposedStorageConfig);
+            THashSet<ui32> requiredNodeIds;
+            for (const auto& node : ProposedStorageConfig.GetAllNodes()) {
+                const auto bridgePileId = ResolveNodePileId(registry, TNodeLocation(node.GetLocation()));
+                const bool outside = bridgePileId && *bridgePileId && !NBridge::PileStateTraits(NBridge::GetPileState(
+                    ProposedStorageConfig.GetClusterState(), *bridgePileId)).AllowsConnection;
+                if (staticNodeIds.contains(node.GetNodeId()) && !outside) {
+                    requiredNodeIds.insert(node.GetNodeId());
+                }
+                staticNodeIds.insert(node.GetNodeId());
+            }
+            THashSet<ui32> ignoredNodeIds;
+            for (const ui32 nodeId : staticNodeIds) {
+                if (!requiredNodeIds.contains(nodeId)) {
+                    ignoredNodeIds.insert(nodeId);
+                }
+            }
+            RequireBridgeCapability(Max<ui32>(BridgeFeatureLevelPileOps, requiredFeatureLevel),
+                std::move(requiredNodeIds), std::move(ignoredNodeIds),
+                std::move(proceed));
+        } else {
+            proceed();
         }
     }
 
@@ -564,7 +646,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::CollectCommittedConfig() {
         auto needsRecovery = [this] {
-            return !Self->BridgeInfo && (Self->ConfigRecoveryRequired
+            return !Self->IsBridged() && (Self->ConfigRecoveryRequired
                 || Self->IsBelowKnownAppliedConfig(*ConfigAwaitingCommit));
         };
         const bool metadataOnly = !FullCommitConfirmationNeeded && !needsRecovery();
@@ -620,8 +702,8 @@ namespace NKikimr::NStorage {
             }
 
             const bool committedQuorum = HasConfigQuorum(*ConfigAwaitingCommit, successfulDisks,
-                Self->BridgePileNameMap, TBridgePileId(), *Self->Cfg, false);
-            if (!Self->BridgeInfo && !metadataOnly && (committedQuorum || Self->ConfigRecoveryRequired)) {
+                TBridgePileId(), *Self->Cfg, false);
+            if (!Self->IsBridged() && !metadataOnly && (committedQuorum || Self->ConfigRecoveryRequired)) {
                 auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;
@@ -681,7 +763,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
         if (msg.ClientId != ControllerPipeId) {
-            return;
+            return; // the pipe has already been closed
         }
         YDB_LOG_DEBUG("Received TEvClientConnected",
             {"marker", "NWDC65"},
@@ -699,7 +781,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
         if (msg.ClientId != ControllerPipeId) {
-            return;
+            return; // the pipe has been closed by this actor
         }
         YDB_LOG_DEBUG("Received TEvClientDestroyed",
             {"marker", "NWDC79"},
@@ -709,6 +791,27 @@ namespace NKikimr::NStorage {
 
         ControllerPipeId = {};
         throw TExError() << "Pipe to BSC disconnected";
+    }
+
+    std::optional<TInvokeRequestHandlerActor::TBridgePileControllerOp>
+            TInvokeRequestHandlerActor::GetBridgePileControllerOp() const {
+        using T = NKikimrBlobStorage::TEvControllerDistconfRequest;
+        switch (ControllerOp) {
+            case EControllerOp::ADD_BRIDGE_PILE:
+                return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_PILE_OPS, T::ValidateAddBridgePile, "add piles");
+            case EControllerOp::REMOVE_BRIDGE_PILE:
+                return TBridgePileControllerOp(BSC_INTERFACE_REMOVE_BRIDGE_PILE, T::ValidateRemoveBridgePile,
+                    "remove piles");
+            case EControllerOp::BRIDGE_ROLLBACK:
+                return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_ROLLBACK, T::ValidateBridgeRollback,
+                    "roll the bridged cluster back");
+            case EControllerOp::UNSET:
+            case EControllerOp::ENABLE_DISTCONF:
+            case EControllerOp::DISABLE_DISTCONF:
+            case EControllerOp::OTHER:
+                return std::nullopt;
+        }
+        Y_UNREACHABLE();
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
@@ -723,6 +826,21 @@ namespace NKikimr::NStorage {
 
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
+
+        if (const auto bridgeOp = GetBridgePileControllerOp()) {
+            const auto& [minInterfaceVersion, operation, what] = *bridgeOp;
+            if (response.GetStatus(0).GetInterfaceVersion() < minInterfaceVersion) {
+                throw TExError() << "BS_CONTROLLER is way too old to " << what;
+            }
+            record.SetOperation(operation);
+            BridgePileOpPileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
+            if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
+                record.MutableStorageConfig()->PackFrom(ProposedStorageConfig); // with static VDisks in the pile
+            }
+            NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
+            return;
+        }
+
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         const auto& replaceStorageConfig = op->Command.GetReplaceStorageConfig();
@@ -767,6 +885,9 @@ namespace NKikimr::NStorage {
                 record.MutableStorageConfig()->PackFrom(ProposedStorageConfig);
                 break;
 
+            case EControllerOp::ADD_BRIDGE_PILE:
+            case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -802,6 +923,19 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", getRecord()});
 
+        if (GetBridgePileControllerOp()) {
+            if (record.GetStatus() != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
+                throw TExError() << (ControllerOp == EControllerOp::ADD_BRIDGE_PILE
+                    ? "Can't add pile to the cluster: BSC can't add parts of its groups to the pile: "
+                    : ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE
+                    ? "Can't remove pile from the cluster: BSC can't delete parts of its groups in the pile: "
+                    : "Can't roll the bridged cluster back: BSC can't make its groups ordinary ones: ")
+                    << record.GetErrorReason();
+            }
+            NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId); // BSC is not needed anymore
+            return StartProposition(&ProposedStorageConfig);
+        }
+
         if (const auto& status = record.GetStatus(); status != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
             throw TExError() << "Failed to interact with BSC to update configuration"
                 << " Status# " << NKikimrBlobStorage::TEvControllerDistconfResponse::EStatus_Name(status)
@@ -832,6 +966,9 @@ namespace NKikimr::NStorage {
                 break;
             }
 
+            case EControllerOp::ADD_BRIDGE_PILE:
+            case EControllerOp::REMOVE_BRIDGE_PILE:
+            case EControllerOp::BRIDGE_ROLLBACK:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }

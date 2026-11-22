@@ -1743,6 +1743,10 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
                     if (bridge) {
                         bridge << ' ';
                     }
+                    if (pile.GetAbsent()) {
+                        bridge << '-'; // the group has no part in this pile
+                        continue;
+                    }
                     bridge << pile.GetGroupId() << ':' << pile.GetGroupGeneration()
                         << '#' << NKikimrBridge::TGroupState::EStage_Name(pile.GetStage())
                         << '@' << pile.GetBecameUnsyncedGeneration();

@@ -181,7 +181,8 @@ struct TTestEnv {
         ui64 storagePoolId,
         const TString& poolName,
         NKikimrBlobStorage::EPDiskType pdiskType,
-        ui32 numGroups
+        ui32 numGroups,
+        const NActorsInterconnect::TNodeLocation* location = nullptr
     ) {
         NKikimrBlobStorage::TConfigRequest request;
 
@@ -193,7 +194,11 @@ struct TTestEnv {
         pool->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Env.Settings.Erasure.GetErasure()));
         pool->SetVDiskKind("Default");
         pool->SetNumGroups(numGroups);
-        pool->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+        auto* filter = pool->AddPDiskFilter();
+        filter->AddProperty()->SetType(pdiskType);
+        if (location) {
+            *filter->AddProperty()->MutableLocation() = *location;
+        }
 
         const auto response = Env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
@@ -252,6 +257,39 @@ struct TTestEnv {
 };
 
 Y_UNIT_TEST_SUITE(ClusterBalancing) {
+
+    Y_UNIT_TEST(PDiskLocationFilterExcludesUnreachableBalancingTargets) {
+        TTestEnv env(4, TBlobStorageGroupType::ErasureNone, 1, 2);
+        const auto initial = env->FetchBaseConfig();
+        UNIT_ASSERT(initial.NodeSize());
+        const auto location = initial.GetNode(0).GetLocation();
+        UNIT_ASSERT(location.HasUnit());
+        env.DefineStoragePool(2, "one node", NKikimrBlobStorage::ROT, 4, &location);
+        env.WaitForDynamicVSlotsReady();
+        const auto pools = env.BuildGroupStoragePoolMap(env->FetchBaseConfig());
+        ui32 iterations = 0;
+        ui32 reassigns = 0;
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                for (const auto& cmd : ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest().GetCommand()) {
+                    if (cmd.HasQueryBaseConfig()) {
+                        ++iterations;
+                    } else if (cmd.HasReassignGroupDisk()) {
+                        if (pools.at(cmd.GetReassignGroupDisk().GetGroupId()) == 2) {
+                            ++reassigns;
+                        }
+                        env.SendReassignNotViable(*ev);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        // Other nodes have free slots, but cannot improve this pool's placement.
+        env->Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_C(iterations >= 3, iterations);
+        UNIT_ASSERT_VALUES_EQUAL(reassigns, 0);
+    }
 
     Y_UNIT_TEST(ClusterBalancingEvenDistribution) {
         TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100));

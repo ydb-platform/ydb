@@ -9,6 +9,7 @@ TEST_SRCS(
     test_cluster_balance.py
     test_cluster_workload_config.py
     test_cluster_workload_runtime.py
+    test_pdisk_location_filter.py
 )
 
 PEERDIR(

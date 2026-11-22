@@ -707,12 +707,6 @@ public:
             BlobsEncrypted = PutImpl.Blobs.size();
         }
 
-        if (ReduceInterpileTraffic) {
-            ResumeBootstrap();
-            CheckRequests(TEvents::TSystem::Bootstrap);
-            return;
-        }
-
         TInstant now = TActivationContext::Now();
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
@@ -739,10 +733,15 @@ public:
         );
 
         ScheduleNextWakeup(TInstant::Zero());
+        StartPut();
+    }
 
-        PartSets.resize(PutImpl.Blobs.size());
-        for (auto& partSet : PartSets) {
-            partSet.resize(Info->Type.TotalPartCount());
+    void StartPut() {
+        if (!ReduceInterpileTraffic) {
+            PartSets.resize(PutImpl.Blobs.size());
+            for (auto& partSet : PartSets) {
+                partSet.resize(Info->Type.TotalPartCount());
+            }
         }
         ResumeBootstrap();
         CheckRequests(TEvents::TSystem::Bootstrap);
@@ -775,7 +774,7 @@ public:
         if (InterpileOptions.empty()) {
             // fall back to ordinary algorithm
             ReduceInterpileTraffic = false;
-            return Bootstrap();
+            return StartPut(); // keep the original deadlines and timer when falling back
         }
 
         const ui32 nodeId = InterpileOptions.front();
@@ -799,6 +798,9 @@ public:
     }
 
     void Handle(TEvInterpilePutResult::TPtr ev) {
+        for (const auto& item : ev->Get()->Record.GetItems()) {
+            AccountRacingGeneration(item.GetRacingGeneration());
+        }
         TPutImpl::TPutResultVec putResults;
         PutImpl.ProcessInterpilePutResult(*ev->Get(), LogCtx, putResults);
         if (!ReplyAndDieWithLastResponse(putResults)) {

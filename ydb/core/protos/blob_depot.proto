@@ -251,6 +251,8 @@ message TEvResolve {
     // item makes BlobDepot copy the blob into its own storage, and that write must be admitted the
     // same way the requesting tablet's own writes are, or the tablet cannot boot.
     optional NKikimrBlobStorage.TDataKind.E DataKind = 2;
+    // Wall clock deadline of the requesting query; unset means no deadline.
+    optional uint64 DeadlineUs = 3;
 }
 
 message TEvResolveResult {

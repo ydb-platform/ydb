@@ -779,8 +779,11 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev) {
             }
         }
 
-        if (infoIt != LeaderInfo.end() && infoIt->first == *it)
+        // the follower is in the list, so it is done here; the loops after this one handle only the absent ones
+        if (infoIt != LeaderInfo.end() && infoIt->first == *it) {
             infoIt->second.PresentInList = true;
+            ++infoIt;
+        }
     }
 
     while (infoIt != LeaderInfo.end()) {
@@ -2574,7 +2577,9 @@ void TTablet::Bootstrap() {
     }
     ReportTabletStateChange(TTabletStateInfo::Created, SuggestedGeneration); // useless?
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
-    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
+    TEvStateStorage::TProxyOptions lookupOptions(TEvStateStorage::TProxyOptions::SigAsync);
+    lookupOptions.WaitForAllRingGroups = true;
+    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, lookupOptions));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));
     }

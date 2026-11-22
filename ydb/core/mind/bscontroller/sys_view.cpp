@@ -461,7 +461,7 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
 
     groupInfo->BridgePileId.CopyToProto(info, &std::decay_t<decltype(*info)>::SetBridgePileId);
 
-    if (groupInfo->BridgeProxyGroupId) {
+    if (groupInfo->BridgeProxyGroupId && !groupInfo->IsInlinePile()) { // inline pile is shown as an ordinary group
         groupInfo->BridgeProxyGroupId->CopyToProto(info, &std::decay_t<decltype(*info)>::SetProxyGroupId);
     }
 
@@ -569,9 +569,10 @@ void TBlobStorageController::UpdateSystemViews() {
                     SysViewChangedGroups.insert(*group->BridgeProxyGroupId);
                 }
                 if (group->BridgeGroupInfo) {
-                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
                         SysViewChangedGroups.insert(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    }
+                    });
                 }
             }
         }
@@ -690,7 +691,7 @@ void TBlobStorageController::UpdateSystemViews() {
 
                 info->GetBridgePileId().CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetBridgePileId);
 
-                if (const auto& proxyGroupId = info->GetBridgeProxyGroupId()) {
+                if (const auto& proxyGroupId = info->GetBridgeProxyGroupId(); proxyGroupId && !info->IsInlinePile()) {
                     proxyGroupId->CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetProxyGroupId);
                 }
             }
@@ -720,52 +721,41 @@ void TBlobStorageController::UpdateSystemViews() {
 
         for (auto& [groupId, g] : state.Groups) {
             if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeGroupInfo) {
-                aggr(g, group->BridgeGroupInfo->GetBridgeGroupState().GetPile() | std::views::transform([](const auto& pile) {
-                    return TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                }));
+                std::vector<TGroupId> pileGroupIds;
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    pileGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                });
+                aggr(g, pileGroupIds);
             } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
                 aggr(g, it->second.Info->GetBridgeGroupIds());
             }
         }
 
         for (auto& [groupId, g] : state.Groups) {
-            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end()) {
+            g.SetBridgeSyncStatus(GetBridgeSyncStatus(groupId));
+            if (const auto timestamp = GetBridgeSyncLastProgressTimestamp(groupId)) {
+                g.SetBridgeSyncLastProgressTimestamp(timestamp->GetValue());
+            }
+            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end() && it->second.ErrorCount) {
                 TBridgeSyncState& state = it->second;
                 g.SetBridgeSyncLastError(state.LastError);
                 g.SetBridgeSyncLastErrorTimestamp(state.LastErrorTimestamp.GetValue());
                 g.SetBridgeSyncFirstErrorTimestamp(state.FirstErrorTimestamp.GetValue());
                 g.SetBridgeSyncErrorCount(state.ErrorCount);
             }
-            if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeProxyGroupId && group->BridgePileId) {
-                if (const TGroupInfo *proxyGroup = FindGroup(*group->BridgeProxyGroupId); proxyGroup && proxyGroup->BridgeGroupInfo) {
-                    const auto& bridgeGroupState = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                    if (group->BridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
-                        const auto& pile = bridgeGroupState.GetPile(group->BridgePileId.GetPileIndex());
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
-                    }
-                }
-            } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end() &&
-                    it->second.Info &&
-                    it->second.Info->Group &&
-                    it->second.Info->Group->HasBridgeProxyGroupId() &&
-                    it->second.Info->Group->HasBridgePileId()) {
-                if (const auto proxyIt = StaticGroups.find(TGroupId::FromProto(&it->second.Info->Group.value(),
-                            &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
-                        proxyIt != StaticGroups.end() &&
-                        proxyIt->second.Info &&
-                        proxyIt->second.Info->Group &&
-                        proxyIt->second.Info->Group->HasBridgeGroupState()) {
-                    const auto& bridgeGroupState = proxyIt->second.Info->Group->GetBridgeGroupState();
-                    const auto bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
-                        &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
-                    if (bridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
-                        const auto& pile = bridgeGroupState.GetPile(bridgePileId.GetPileIndex());
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
+            if (const auto stage = GetBridgeSyncStage(groupId)) {
+                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(*stage));
+                if (*stage != NKikimrBridge::TGroupState::SYNCED) {
+                    if (const auto remaining = GetBridgeSyncRemaining(groupId, *stage)) {
+                        g.SetBridgeSyncRemainingBytes(remaining->Bytes);
+                        g.SetBridgeSyncRemainingBytesComplete(remaining->Complete);
                     }
                 }
             }
             if (const auto it = TargetGroupToSyncerState.find(groupId); it != TargetGroupToSyncerState.end()) {
                 TSyncerState& syncerState = it->second;
+                g.SetBridgeSyncCopyBytesPerSecond(syncerState.CopyRate);
                 for (const auto& perNodeInfo : syncerState.NodeIds | std::views::values) {
                     if (perNodeInfo.Progress.BytesTotal) {
                         const double progress = intmax_t(perNodeInfo.Progress.BytesDone) * 1'000'000 /

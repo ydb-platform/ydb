@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_test_peer.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -20,6 +21,9 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/tx/scheme_board/events_internal.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -136,7 +140,7 @@ void SetupLogging(TTestActorRuntime& runtime) {
 
 void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap,
         TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {},
-        bool setupController = true) {
+        bool setupController = true, bool strandPDisk = STRAND_PDISK) {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
 
@@ -302,7 +306,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
         SetupTabletResolver(runtime, nodeIndex);
     }
 
-    SetupPDiskSubsystem(&runtime, STRAND_PDISK);
+    SetupPDiskSubsystem(&runtime, strandPDisk);
     runtime.Initialize(app.Unwrap());
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
@@ -329,10 +333,10 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
 void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap,
         TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {},
-        bool setupController = true) {
+        bool setupController = true, bool strandPDisk = STRAND_PDISK) {
     SetupLogging(runtime);
     SetupServices(runtime, extraPath, extraSectorMap,
-        std::move(appPreprocessor), std::move(nodeWardenConfigPreprocessor), setupController);
+        std::move(appPreprocessor), std::move(nodeWardenConfigPreprocessor), setupController, strandPDisk);
 //    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
 //    runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_DEBUG);
@@ -346,6 +350,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     ui64 GetBsc(TTestActorRuntime& /*runtime*/) {
         return MakeBSControllerID();
     }
+
+
+
+
+
+
 
     ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory,
             const NKikimrBlobStorage::TPDiskConfig* pdiskConfig = nullptr, TActorId nodeWarden = {}) {
@@ -473,6 +483,54 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 Put(runtime, sender, groupId, TLogoBlobID(1234, 1, 2, 0, payloads[1].size(), 0), payloads[1]);
             }
         }
+    }
+
+    CUSTOM_UNIT_TEST(VDiskChunkReadErrorKeepsNodeAlive) {
+        // TPDisk::Stop answers the chunk reads that are still in its queue with ERROR. Here the PDisk's answer to
+        // a VDisk chunk read is replaced with such an ERROR. The VDisk must switch to the PDisk error state instead
+        // of aborting the whole process.
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 0).GetRaw();
+        TTestBasicRuntime runtime(1, false);
+        const ui32 nodeId = runtime.GetNodeId(0);
+        bool inject = false;
+        ui32 readErrors = 0;
+        ui32 vdiskErrors = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NPDisk::TEvChunkReadResult::EventType:
+                    if (std::exchange(inject, false)) {
+                        auto *msg = ev->Get<NPDisk::TEvChunkReadResult>();
+                        msg->Status = NKikimrProto::ERROR;
+                        msg->ErrorReason = "PDisk is stopped";
+                        ++readErrors;
+                    }
+                    break;
+                case TEvStatusUpdate::EventType:
+                    if (ev->Get<TEvStatusUpdate>()->Status == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                        ++vdiskErrors;
+                    }
+                    break;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Setup(runtime, "", nullptr, {}, {}, false /* setupController: only the static group is needed */);
+
+        auto sender = runtime.AllocateEdgeActor();
+        // Huge parts go straight to chunks, so the get below needs chunk reads.
+        const TString data(4_MB, 'h');
+        const TLogoBlobID id(1234, 1, 1, 0, data.size(), 0);
+        Put(runtime, sender, groupId, id, data);
+
+        inject = true;
+        const auto nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
+        runtime.Send(new IEventHandle(MakeBlobStorageProxyID(groupId), sender,
+            new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead),
+            IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
+        TDispatchOptions waitForError;
+        waitForError.CustomFinalCondition = [&] { return vdiskErrors > 0; };
+        runtime.DispatchEvents(waitForError, TDuration::Seconds(10));
+        UNIT_ASSERT_C(readErrors > 0, "no chunk read was answered");
+        UNIT_ASSERT_C(vdiskErrors > 0, "no VDisk switched to the error state");
     }
 
     void CreateStoragePool(TTestBasicRuntime& runtime, TString name, TString kind) {
@@ -1159,6 +1217,198 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT(out.Size());
     }
 
+    void TestStaticServiceSetReplacesObsoletePDiskOnSamePath(ui32 replacementPDiskId) {
+        TTestBasicRuntime runtime(1, false);
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        Setup(runtime, "", nullptr, [](TAppPrepare& app) {
+            app.FeatureFlags.SetForceDistconfDisable(true); // this test supplies complete configurations directly
+        }, [&](ui32, TNodeWardenConfig& wardenConfig) {
+            // Use a real file: a replacement started while the old PDisk holds its lock would never reach
+            // the GUID check, because PDisk gives up after a few blocking retries.
+            const TString path = runtime.GetTempDir() + "/reprovision.pdisk";
+            TFile file(path, CreateAlways | RdWr);
+            file.Resize(ui64{16} << 30);
+            file.Close();
+            FormatPDiskRandomKeys(path, 0, 32 << 20, 1, true, nullptr, false);
+            wardenConfig.BlobStorageConfig->MutableServiceSet()->MutablePDisks(0)->SetPath(path);
+            config->MutableBlobStorageConfig()->CopyFrom(*wardenConfig.BlobStorageConfig);
+        }, /*setupController=*/false, /*strandPDisk=*/false); // the observer below must see the actual PDisk actor
+
+        auto& ss = *config->MutableBlobStorageConfig()->MutableServiceSet();
+        UNIT_ASSERT_VALUES_EQUAL(ss.PDisksSize(), 1);
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui64 replacementGuid = 2; // the physical device still contains GUID 1
+        const ui32 replacementGroupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 1).GetRaw();
+        std::set<TActorId> oldActors;
+        std::set<TActorId> stoppedActors;
+        std::set<ui32> vslotsWaitingForError;
+        for (const auto& vdisk : ss.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            oldActors.insert(runtime.GetLocalServiceId(MakeBlobStorageVDiskID(nodeId, loc.GetPDiskID(),
+                loc.GetVDiskSlotID()), 0));
+            vslotsWaitingForError.insert(loc.GetVDiskSlotID());
+        }
+        const TActorId oldPDiskActor = runtime.GetLocalServiceId(MakeBlobStoragePDiskID(nodeId, 0), 0);
+        bool oldPDiskStopped = false;
+        bool holdOldPDiskPoison = true;
+        TAutoPtr<IEventHandle> oldPDiskPoison;
+        const auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (holdOldPDiskPoison && type == TEvents::TSystem::Poison && ev->GetRecipientRewrite() == oldPDiskActor) {
+                oldPDiskPoison = ev.Release();
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (type == TEvents::TEvPoisonTaken::EventType && ev->Sender == oldPDiskActor) {
+                oldPDiskStopped = true;
+            }
+            if (type == TEvents::TEvGone::EventType && oldActors.contains(ev->Sender)) {
+                stoppedActors.insert(ev->Sender);
+            }
+            if (type == TEvStatusUpdate::EventType && !oldActors.contains(ev->Sender)) {
+                const auto *msg = ev->Get<TEvStatusUpdate>();
+                if (msg->NodeId == nodeId && msg->PDiskId == replacementPDiskId
+                        && msg->Status == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                    vslotsWaitingForError.erase(msg->VSlotId);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(previousObserver); };
+
+        ss.MutablePDisks(0)->SetPDiskID(replacementPDiskId);
+        ss.MutablePDisks(0)->SetPDiskGuid(replacementGuid);
+        auto replaceLocation = [&](auto& loc) {
+            loc.SetPDiskID(replacementPDiskId);
+            loc.SetPDiskGuid(replacementGuid);
+        };
+        for (auto& vdisk : *ss.MutableVDisks()) {
+            replaceLocation(*vdisk.MutableVDiskLocation());
+            vdisk.MutableVDiskID()->SetGroupID(replacementGroupId);
+        }
+        for (auto& group : *ss.MutableGroups()) {
+            group.SetGroupID(replacementGroupId);
+            for (auto& ring : *group.MutableRings()) {
+                for (auto& domain : *ring.MutableFailDomains()) {
+                    for (auto& loc : *domain.MutableVDiskLocations()) {
+                        replaceLocation(loc);
+                    }
+                }
+            }
+        }
+
+        const auto edge = runtime.AllocateEdgeActor();
+        // A single comprehensive update must retire the omitted actors and start the replacement. No replay,
+        // manual PDisk insertion, DESTROY record or controller reconnect supplies the missing recovery step.
+        runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
+            new TEvNodeWardenStorageConfig(config, true, nullptr)), 0);
+        runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
+        }, {edge});
+        TDispatchOptions waitForPoison;
+        waitForPoison.CustomFinalCondition = [&] { return bool(oldPDiskPoison); };
+        runtime.DispatchEvents(waitForPoison);
+
+        // The replacement has to wait for the old PDisk to unlock the device, however long this takes.
+        UNIT_ASSERT(oldPDiskPoison);
+        UNIT_ASSERT(runtime.GetLocalServiceId(MakeBlobStoragePDiskID(nodeId, replacementPDiskId), 0)
+            == (replacementPDiskId == 0 ? oldPDiskActor : TActorId()));
+        holdOldPDiskPoison = false;
+        runtime.Send(oldPDiskPoison.Release(), 0);
+
+        // Simulated time can run ahead of the real PDisk I/O threads. Wait for their results and the
+        // replacement VDisks' error announcements rather than exhausting a simulated polling budget.
+        TDispatchOptions waitForReplacement;
+        waitForReplacement.CustomFinalCondition = [&] {
+            return oldPDiskStopped && stoppedActors.size() == oldActors.size() && vslotsWaitingForError.empty();
+        };
+        runtime.DispatchEvents(waitForReplacement);
+
+        for (const auto& vdisk : ss.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            runtime.Send(new IEventHandle(MakeBlobStorageVDiskID(nodeId, replacementPDiskId, loc.GetVDiskSlotID()),
+                edge, new TEvBlobStorage::TEvVStatus(VDiskIDFromVDiskID(vdisk.GetVDiskID()))), 0);
+            const auto response = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatusResult>(edge,
+                TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrProto::VDISK_ERROR_STATE);
+        }
+        runtime.Send(new IEventHandle(MakeBlobStoragePDiskID(nodeId, replacementPDiskId), edge,
+            new NPDisk::TEvYardInit(1, TVDiskID(replacementGroupId, 1, 0, 0, 0), replacementGuid)), 0);
+        const auto init = runtime.GrabEdgeEventRethrow<NPDisk::TEvYardInitResult>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(init);
+        UNIT_ASSERT_VALUES_EQUAL(init->Get()->Status, NKikimrProto::CORRUPTED);
+        UNIT_ASSERT_STRING_CONTAINS(init->Get()->ErrorReason, "guid error expected# 2 on-disk# 1");
+        UNIT_ASSERT(oldPDiskStopped);
+        UNIT_ASSERT_VALUES_EQUAL(stoppedActors.size(), oldActors.size());
+    }
+
+    CUSTOM_UNIT_TEST(TestStaticServiceSetReplacesObsoletePDiskOnSamePath) {
+        TestStaticServiceSetReplacesObsoletePDiskOnSamePath(1000);
+    }
+
+    CUSTOM_UNIT_TEST(TestStaticServiceSetReusesObsoletePDiskIdWithNewGuid) {
+        TestStaticServiceSetReplacesObsoletePDiskOnSamePath(0);
+    }
+
+    CUSTOM_UNIT_TEST(TestStartupConfigDoesNotRetireStaticServices) {
+        // When self-management gets turned off on a running node, distconf reports the startup config again.
+        TTestBasicRuntime runtime(1, false);
+        NKikimrBlobStorage::TNodeWardenServiceSet running;
+        Setup(runtime, "", nullptr, [](TAppPrepare& app) {
+            app.FeatureFlags.SetForceDistconfDisable(true); // this test supplies configurations directly
+        }, [&](ui32, TNodeWardenConfig& wardenConfig) {
+            running.CopyFrom(wardenConfig.BlobStorageConfig->GetServiceSet());
+        }, /*setupController=*/false, /*strandPDisk=*/false); // the observer below must see the actual actors
+
+        UNIT_ASSERT(running.PDisksSize());
+        UNIT_ASSERT(running.VDisksSize());
+        UNIT_ASSERT(running.GroupsSize());
+        const ui32 nodeId = runtime.GetNodeId(0);
+        std::set<TActorId> actors;
+        for (const auto& pdisk : running.GetPDisks()) {
+            actors.insert(runtime.GetLocalServiceId(MakeBlobStoragePDiskID(nodeId, pdisk.GetPDiskID()), 0));
+        }
+        for (const auto& vdisk : running.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            actors.insert(runtime.GetLocalServiceId(MakeBlobStorageVDiskID(nodeId, loc.GetPDiskID(),
+                loc.GetVDiskSlotID()), 0));
+        }
+        UNIT_ASSERT(!actors.contains(TActorId()));
+
+        bool poisoned = false;
+        const auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Poison && actors.contains(ev->GetRecipientRewrite())) {
+                poisoned = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(previousObserver); };
+
+        NKikimrBlobStorage::TNodeWardenServiceSet noGroups; // what a v2 cluster has in its startup config
+        noGroups.AddAvailabilityDomains(1);
+        NKikimrBlobStorage::TNodeWardenServiceSet obsolete; // the VDisks have moved away since the node had started
+        obsolete.MutableGroups()->CopyFrom(running.GetGroups());
+
+        const auto edge = runtime.AllocateEdgeActor();
+        for (const auto *startup : {&noGroups, &obsolete}) {
+            auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+            config->MutableBlobStorageConfig()->MutableServiceSet()->CopyFrom(*startup);
+            runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
+                new TEvNodeWardenStorageConfig(config, false, nullptr)), 0);
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
+            }, {edge});
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT(!poisoned);
+        }
+
+        // an ejected group would reply NO_GROUP to any request
+        SendToBsProxy(runtime, edge, running.GetGroups(0).GetGroupID(), new TEvBlobStorage::TEvStatus(TInstant::Max()));
+        const auto status =runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvStatusResult>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(status);
+        UNIT_ASSERT_UNEQUAL(status->Get()->Status, NKikimrProto::NO_GROUP);
+    }
+
     CUSTOM_UNIT_TEST(TestHttpMonPage) {
         TestHttpMonForPath("");
         TestHttpMonForPath("/json/groups");
@@ -1383,86 +1633,74 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 24, 9, 1u, 0.001);
     }
 
-    void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
-            TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
-            std::optional<ui64> expectedSlotSize = std::nullopt,
-            TDuration simTimeout = TDuration::Seconds(10), bool waitForSettings = false) {
-        const int maxAttempts = 10;
-        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
-            // Check EvPDiskStateUpdate sent from PDiskActor to Whiteboard
-            const auto ev = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>(fakeWhiteboard, simTimeout);
-            VERBOSE_COUT(" Got TEvPDiskStateUpdate# " << ev->ToString());
+    void WaitForPDiskInitialization(TTestBasicRuntime& runtime, ui32 pdiskId) {
+        const auto pdisk = MakeBlobStoragePDiskID(runtime.GetNodeId(0), pdiskId);
+        runtime.WaitFor("PDisk service registration", [&] {
+            return bool(runtime.GetLocalServiceId(pdisk));
+        }, TDuration::Seconds(10));
 
-            NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = ev->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskId(), pdiskId);
-            if (pdiskInfo.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
-                continue;
-            }
-            if (waitForSettings && (pdiskInfo.GetExpectedSlotCount() != expectedSlotCount
-                    || pdiskInfo.GetSlotSizeInUnits() != expectedSlotSizeInUnits
-                    || pdiskInfo.GetExpectedSlotSize() != expectedSlotSize.value_or(0))) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "PDisk settings did not reach Whiteboard");
-                continue;
-            }
-            UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
-            UNIT_ASSERT(pdiskInfo.HasSlotSizeInUnits());
-            UNIT_ASSERT(pdiskInfo.HasAvailableSize());
-            UNIT_ASSERT(pdiskInfo.HasTotalSize());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotCount(), expectedSlotCount);
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            // the field is always present in whiteboard updates; 0 means 'not set'
-            UNIT_ASSERT(pdiskInfo.HasExpectedSlotSize());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotSize(), expectedSlotSize.value_or(0));
-            UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
-            UNIT_ASSERT(pdiskInfo.HasPDiskCapacityAlert());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
-            break;
-        }
-
-        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
-            // Check EvControllerUpdateDiskStatus sent from PDiskActor to NodeWarden
-            const auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden, simTimeout);
-            VERBOSE_COUT(" Got TEvControllerUpdateDiskStatus# " << ev->ToString());
-
-            NKikimrBlobStorage::TEvControllerUpdateDiskStatus diskStatus = ev->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(diskStatus.PDisksMetricsSize(), 1);
-
-            const NKikimrBlobStorage::TPDiskMetrics &metrics = diskStatus.GetPDisksMetrics(0);
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskId(), pdiskId);
-            if (metrics.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
-                continue;
-            }
-            if (waitForSettings && (metrics.GetExpectedSlotCount() != expectedSlotCount
-                    || metrics.GetSlotSizeInUnits() != expectedSlotSizeInUnits
-                    || metrics.GetExpectedSlotSize() != expectedSlotSize.value_or(0))) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "PDisk settings did not reach NodeWarden metrics");
-                continue;
-            }
-            // metrics are replaced as a whole on the receiving side, so zero values are
-            // reported by omitting the field, except ExpectedSlotCount with fixed quotas.
-            UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotCount(), expectedSlotCount != 0 || expectedSlotSize.value_or(0) != 0);
-            UNIT_ASSERT(metrics.HasSlotSizeInUnits());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotCount(), expectedSlotCount);
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            if (expectedSlotSize.value_or(0)) {
-                UNIT_ASSERT(metrics.HasExpectedSlotSize());
-                UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), *expectedSlotSize);
-            } else {
-                UNIT_ASSERT(!metrics.HasExpectedSlotSize());
-                UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), 0);
-            }
-            UNIT_ASSERT(metrics.HasPDiskUsage());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
-            UNIT_ASSERT(metrics.HasPDiskCapacityAlert());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
-            break;
-        }
+        // The stranding decorator holds simulated progress until this request
+        // completes. Unlike periodic metrics, metadata reads wait for startup.
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(pdisk, sender, new NPDisk::TEvReadMetadata()));
+        const auto response = runtime.GrabEdgeEventRethrow<NPDisk::TEvReadMetadataResult>(sender);
+        const auto outcome = response->Get()->Outcome;
+        UNIT_ASSERT_C(outcome == NPDisk::EPDiskMetadataOutcome::OK
+            || outcome == NPDisk::EPDiskMetadataOutcome::NO_METADATA,
+            "PDisk metadata read failed while waiting for initialization");
     }
 
-    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime, bool useFixedVDiskSlotSize = false) {
+    void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
+            TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
+            std::optional<ui64> expectedSlotSize = std::nullopt) {
+        WaitForPDiskInitialization(runtime, pdiskId);
+        const auto deadline = TMonotonic::Now() + DEFAULT_DISPATCH_TIMEOUT;
+        TString lastReport;
+        auto timeout = runtime.AddObserver<IEventHandle>([&](auto&) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline,
+                "PDisk# " << pdiskId << " settings did not converge: " << lastReport);
+        });
+        const auto matches = [&](const auto& info) {
+            lastReport = info.ShortDebugString();
+            return info.GetPDiskId() == pdiskId
+                && info.GetState() == NKikimrBlobStorage::TPDiskState::Normal
+                && info.GetExpectedSlotCount() == expectedSlotCount
+                && info.GetSlotSizeInUnits() == expectedSlotSizeInUnits
+                && info.GetExpectedSlotSize() == expectedSlotSize.value_or(0);
+        };
+        using TWhiteboardUpdate = NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate;
+        TWhiteboardUpdate::TPtr whiteboard;
+        do {
+            whiteboard = runtime.GrabEdgeEventRethrow<TWhiteboardUpdate>(fakeWhiteboard);
+        } while (!matches(whiteboard->Get()->Record));
+        const auto& pdiskInfo = whiteboard->Get()->Record;
+        UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
+        UNIT_ASSERT(pdiskInfo.HasSlotSizeInUnits());
+        UNIT_ASSERT(pdiskInfo.HasAvailableSize());
+        UNIT_ASSERT(pdiskInfo.HasTotalSize());
+        UNIT_ASSERT(pdiskInfo.HasExpectedSlotSize());
+        UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
+        UNIT_ASSERT(pdiskInfo.HasPDiskCapacityAlert());
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
+
+        TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr nodeWarden;
+        do {
+            nodeWarden = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden);
+            UNIT_ASSERT_VALUES_EQUAL(nodeWarden->Get()->Record.PDisksMetricsSize(), 1);
+        } while (!matches(nodeWarden->Get()->Record.GetPDisksMetrics(0)));
+        const auto& metrics = nodeWarden->Get()->Record.GetPDisksMetrics(0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotCount(), expectedSlotCount != 0 || expectedSlotSize.value_or(0) != 0);
+        UNIT_ASSERT(metrics.HasSlotSizeInUnits());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotSize(), expectedSlotSize.value_or(0) != 0);
+        UNIT_ASSERT(metrics.HasPDiskUsage());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
+        UNIT_ASSERT(metrics.HasPDiskCapacityAlert());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
+    }
+
+    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime, bool useFixedVDiskSlotSize = false,
+            bool manageStateStorage = false) {
         // Setup logging
         SetupLogging(runtime);
         runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
@@ -1472,7 +1710,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
         app.AddHive(0);
-        SetupPDiskSubsystem(&runtime, false);
+        SetupPDiskSubsystem(&runtime, true);
         app.InitIcb(runtime.GetNodeCount());
         RegisterSharedControl(app.Icb[0]->PDiskControls.UseFixedVDiskSlotSize,
             0, 0, 1, useFixedVDiskSlotSize);
@@ -1480,17 +1718,245 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         // Setup BSNodeWarden
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
+        if (manageStateStorage) {
+            nodeWardenConfig->DomainsConfig = std::make_unique<NKikimrConfig::TDomainsConfig>();
+        }
         IActor* nodeWardenActor = CreateBSNodeWarden(nodeWardenConfig.Release());
         TActorId realNodeWarden = runtime.Register(nodeWardenActor, 0);
         runtime.EnableScheduleForActor(realNodeWarden, true);
+
+        // Direct test sends must not overtake the queued bootstrap event.
+        TDispatchOptions bootstrap;
+        bootstrap.FinalEvents.emplace_back([realNodeWarden](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvents::TSystem::Bootstrap
+                && ev.GetRecipientRewrite() == realNodeWarden;
+        });
+        runtime.DispatchEvents(bootstrap);
 
         // Communication scheme:
         //                                      .-> fakeNodeWarden -.
         // test -> realNodeWarden -> realPDsik -                     -> test
         //                                      `-> fakeWhiteboard -`
-        // Now give it some time to bootstrap
-        runtime.SimulateSleep(TDuration::Seconds(10));
         return realNodeWarden;
+    }
+
+    Y_UNIT_TEST(TestDisabledStateStorageReplicaRestartsWhenReenabled) {
+        TTestBasicRuntime runtime(1, false);
+        const TActorId nodeWarden = SetupNodeWardenOnly(runtime, false, true);
+        runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
+            return true;
+        });
+        const ui32 nodeId = runtime.GetNodeId(0);
+
+        auto makeConfig = [&](ui32 version, ui32 disabledRings) {
+            auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+            auto fill = [&](NKikimrConfig::TStateStorageConfig* stateStorage) {
+                stateStorage->SetStateStorageVersion(version);
+                auto* group = stateStorage->AddRingGroups();
+                group->SetNToSelect(3);
+                group->SetPileState(NKikimrConfig::TStateStorageConfig::PRIMARY);
+                for (ui32 index = 0; index < 3; ++index) {
+                    auto* ring = group->AddRing();
+                    ring->AddNode(nodeId);
+                    ring->SetIsDisabled(disabledRings & 1 << index);
+                }
+            };
+            fill(config->MutableStateStorageConfig());
+            fill(config->MutableStateStorageBoardConfig());
+            fill(config->MutableSchemeBoardConfig());
+            return config;
+        };
+
+        auto applyConfig = [&](std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(nodeWarden, sender,
+                new TEvNodeWardenStorageConfig(std::move(config), true, nullptr)));
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
+            }, {sender});
+        };
+
+        auto config = makeConfig(1, 0);
+        const auto info = BuildStateStorageInfo(config->GetStateStorageConfig());
+        const TActorId replicaA = info->RingGroups[0].Rings[0].Replicas[0];
+        const TActorId replicaB = info->RingGroups[0].Rings[1].Replicas[0];
+        const TActorId replicaC = info->RingGroups[0].Rings[2].Replicas[0];
+
+        applyConfig(std::move(config));
+        const TActorId firstActorA = runtime.GetLocalServiceId(replicaA, 0);
+        UNIT_ASSERT(firstActorA);
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaB, 0));
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaC, 0));
+
+        applyConfig(makeConfig(2, 1 << 0));
+        UNIT_ASSERT(!runtime.GetLocalServiceId(replicaA, 0));
+
+        applyConfig(makeConfig(3, 0));
+        const TActorId restartedActorA = runtime.GetLocalServiceId(replicaA, 0);
+        UNIT_ASSERT(restartedActorA);
+        UNIT_ASSERT_UNEQUAL(restartedActorA, firstActorA);
+
+        applyConfig(makeConfig(4, 1 << 1));
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaA, 0));
+        UNIT_ASSERT(!runtime.GetLocalServiceId(replicaB, 0));
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaC, 0));
+    }
+
+    Y_UNIT_TEST(TestRecoveredSuspendedPileDoesNotBlockMetadata) {
+        TTestBasicRuntime runtime(2, false);
+        const TActorId nodeWarden = SetupNodeWardenOnly(runtime, false, true);
+        runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
+            return true;
+        });
+        const ui64 tabletId = MakeBSControllerID();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        auto* clusterState = config->MutableClusterState();
+        clusterState->SetGeneration(7);
+        clusterState->SetGuid(17);
+        clusterState->SetPrimaryPile(1);
+        clusterState->SetPromotedPile(1);
+        clusterState->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        clusterState->AddPerPileState(NKikimrBridge::TClusterState::SUSPENDED);
+        auto fill = [&](NKikimrConfig::TStateStorageConfig* stateStorage) {
+            stateStorage->SetStateStorageVersion(1);
+            stateStorage->SetClusterStateGeneration(clusterState->GetGeneration());
+            stateStorage->SetClusterStateGuid(clusterState->GetGuid());
+            for (ui32 pile = 0; pile < 2; ++pile) {
+                auto* group = stateStorage->AddRingGroups();
+                group->SetBridgePileId(pile + 1);
+                group->SetRingGroupActorIdOffset(pile);
+                group->SetNToSelect(1);
+                // Persisted configurations made by older binaries describe SUSPENDED as SYNCHRONIZED.
+                group->SetPileState(pile ? NKikimrConfig::TStateStorageConfig::SYNCHRONIZED
+                    : NKikimrConfig::TStateStorageConfig::PRIMARY);
+                group->AddRing()->AddNode(runtime.GetNodeId(pile));
+            }
+        };
+        fill(config->MutableStateStorageConfig());
+        fill(config->MutableStateStorageBoardConfig());
+        fill(config->MutableSchemeBoardConfig());
+        const TString originalConfig = config->SerializeAsString();
+
+        auto applyConfig = [&](const std::shared_ptr<NKikimrBlobStorage::TStorageConfig>& current) {
+            auto bridgeInfo = std::make_shared<TBridgeInfo>();
+            bridgeInfo->Piles.resize(2);
+            for (ui32 pile = 0; pile < 2; ++pile) {
+                auto& info = bridgeInfo->Piles[pile];
+                info.BridgePileId = TBridgePileId::FromPileIndex(pile);
+                info.State = current->GetClusterState().GetPerPileState(pile);
+                info.StaticNodeIds.push_back(runtime.GetNodeId(pile));
+                bridgeInfo->StaticNodeIdToPile.emplace(runtime.GetNodeId(pile), &info);
+            }
+            bridgeInfo->Piles[0].IsPrimary = true;
+            bridgeInfo->PrimaryPile = bridgeInfo->SelfNodePile = &bridgeInfo->Piles[0];
+            runtime.Send(new IEventHandle(nodeWarden, sender,
+                new TEvNodeWardenStorageConfig(current, true, std::move(bridgeInfo))));
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
+            }, {sender});
+        };
+        auto checkReplicas = [&](IEventBase* request, size_t expectedGroups) {
+            runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender, request));
+            auto response = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvResolveReplicasList>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->ReplicaGroups.size(), expectedGroups);
+            for (ui32 pile = 0; pile < expectedGroups; ++pile) {
+                const auto& group = response->Get()->ReplicaGroups[pile];
+                UNIT_ASSERT(group.State == (pile ? ERingGroupState::SYNCHRONIZED : ERingGroupState::PRIMARY));
+                UNIT_ASSERT_VALUES_EQUAL(group.Replicas.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(group.Replicas.front().NodeId(), runtime.GetNodeId(pile));
+            }
+        };
+        auto checkAllReplicas = [&](size_t expectedGroups) {
+            checkReplicas(new TEvStateStorage::TEvResolveReplicas(tabletId), expectedGroups);
+            checkReplicas(new TEvStateStorage::TEvResolveBoard("/Root/database"), expectedGroups);
+            checkReplicas(new TEvStateStorage::TEvResolveSchemeBoard("/Root/database"), expectedGroups);
+        };
+
+        // The second node has no NodeWarden or replicas. Boot must use the live pile alone.
+        applyConfig(config);
+        checkAllReplicas(1);
+        TEvStateStorage::TProxyOptions options(TEvStateStorage::TProxyOptions::SigSync);
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
+            new TEvStateStorage::TEvLookup(tabletId, 0, options)));
+        auto lookup = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvInfo>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(lookup->Get()->Status, NKikimrProto::NODATA);
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
+            new TEvStateStorage::TEvLock(tabletId, 0, sender, 1, lookup->Get()->Signature, options)));
+        auto locked = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvInfo>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(locked->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(locked->Get()->CurrentGeneration, 1);
+        UNIT_ASSERT(locked->Get()->Locked);
+
+        // A fresh scheme lookup must synchronize with the live pile alone, just like tablet boot.
+        // Publish a known path so an absent description cannot hide a partial SchemeBoard sync.
+        const auto boardInfo = BuildSchemeBoardInfo(config->GetSchemeBoardConfig());
+        const auto replica = boardInfo->RingGroups.front().Rings.front().Replicas.front();
+        const ui64 schemeShardId = MakeTabletID(false, 0x840000);
+        using namespace NSchemeBoard;
+        runtime.Send(new IEventHandle(replica, sender, new NInternalEvents::TEvHandshakeRequest(schemeShardId, 1)));
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NInternalEvents::TEvHandshakeResponse>(sender, TDuration::Seconds(10)));
+
+        NKikimrScheme::TEvDescribeSchemeResult describe;
+        describe.SetStatus(NKikimrScheme::StatusSuccess);
+        describe.SetPath("/Root/database");
+        describe.SetPathOwnerId(schemeShardId);
+        describe.SetPathId(2);
+        auto* self = describe.MutablePathDescription()->MutableSelf();
+        self->SetName("database");
+        self->SetSchemeshardId(schemeShardId);
+        self->SetPathId(2);
+        self->SetParentPathId(1);
+        self->SetPathVersion(1);
+        self->SetPathType(NKikimrSchemeOp::EPathTypeDir);
+        self->SetCreateFinished(true);
+        auto* domain = describe.MutablePathDescription()->MutableDomainDescription()->MutableDomainKey();
+        domain->SetSchemeShard(schemeShardId);
+        domain->SetPathId(1);
+        auto description = MakeOpaquePathDescription("", describe);
+        auto update = std::make_unique<NInternalEvents::TEvUpdateBuilder>(schemeShardId, 1, description);
+        update->SetDescribeSchemeResultSerialized(std::move(description.DescribeSchemeResultSerialized));
+        update->Record.SetNeedAck(true);
+        runtime.Send(new IEventHandle(replica, sender, update.release()));
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NSchemeshardEvents::TEvUpdateAck>(sender, TDuration::Seconds(10)));
+        runtime.Send(new IEventHandle(replica, sender, new NInternalEvents::TEvCommitRequest(schemeShardId, 1)));
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NInternalEvents::TEvCommitResponse>(sender, TDuration::Seconds(10)));
+
+        auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
+        cacheConfig->Counters = new ::NMonitoring::TDynamicCounters;
+        cacheConfig->Roots.emplace_back(0, schemeShardId, "Root");
+        const auto schemeCache = runtime.Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+        runtime.EnableScheduleForActor(schemeCache, true);
+        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto& entry = navigate->ResultSet.emplace_back();
+        entry.Path = {"Root", "database"};
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.SyncVersion = true;
+        runtime.Send(new IEventHandle(schemeCache, sender,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.Release())), 0, true);
+        const auto result = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender,
+            TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Request->ResultSet.size(), 1);
+        const auto& resolved = result->Get()->Request->ResultSet.front();
+        UNIT_ASSERT(resolved.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(resolved.TableId.PathId.OwnerId, schemeShardId);
+        UNIT_ASSERT_VALUES_EQUAL(resolved.TableId.PathId.LocalPathId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(config->SerializeAsString(), originalConfig);
+
+        auto synchronized = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*config);
+        synchronized->MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        synchronized->MutableClusterState()->SetGeneration(8);
+        synchronized->MutableClusterState()->SetGuid(18);
+        for (auto* stateStorage : {synchronized->MutableStateStorageConfig(),
+                synchronized->MutableStateStorageBoardConfig(), synchronized->MutableSchemeBoardConfig()}) {
+            stateStorage->SetClusterStateGeneration(8);
+            stateStorage->SetClusterStateGuid(18);
+        }
+        applyConfig(synchronized);
+        checkAllReplicas(2);
+        UNIT_ASSERT_VALUES_EQUAL(config->SerializeAsString(), originalConfig);
     }
 
     class TNoReplyPDiskActor : public TActorBootstrapped<TNoReplyPDiskActor> {
@@ -1566,6 +2032,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         });
     }
 
+    void StopMetadataTestPDisk(TTestActorSystem& runtime, TActorId pdisk) {
+        const auto poison = runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(pdisk, false);
+        runtime.Send(new IEventHandle(poison->Sender, pdisk, new TEvents::TEvPoisonTaken, 0, poison->Cookie), 1);
+        runtime.Sim([&] { return runtime.HasImmediateEvents(); });
+    }
+
     ui32 GetMetadataTestPDiskRefs(TTestActorSystem& runtime, TActorId wardenId, ui32 pdiskId) {
         ui32 refs = 0;
         runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
@@ -1582,6 +2054,59 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT(record.SerializeToString(&data));
         runtime.Send(new IEventHandle(request.Sender, pdisk,
             new NPDisk::TEvReadMetadataResult(TRcBuf(std::move(data)), 123)), 1);
+    }
+
+    CUSTOM_UNIT_TEST(TestRetiredVDiskGoneDoesNotAffectReusedSlot) {
+        using TNodeWarden = NStorage::TNodeWarden;
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        const auto wardenId = SetupNodeWardenForSlayTest(runtime);
+        const auto oldActor = runtime.AllocateEdgeActor(1);
+        const auto newActor = runtime.AllocateEdgeActor(1);
+        const TNodeWarden::TVSlotId slot(1, 2095, 1);
+        const TVDiskID vdiskId(TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 100).GetRaw(), 1, 0, 0, 0);
+        runtime.RegisterService(slot.GetVDiskServiceId(), oldActor);
+        runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+            auto& warden = *static_cast<TNodeWarden*>(actor);
+            auto fill = [&](auto& record) {
+                VDiskIDFromVDiskID(vdiskId, record.Config.MutableVDiskID());
+                auto* loc = record.Config.MutableVDiskLocation();
+                loc->SetNodeID(slot.NodeId);
+                loc->SetPDiskID(slot.PDiskId);
+                loc->SetVDiskSlotID(slot.VDiskSlotId);
+            };
+            auto& old = warden.LocalVDisks[slot];
+            fill(old);
+            old.RuntimeData.emplace();
+            old.RuntimeData->GroupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
+            old.RuntimeData->ActorId = oldActor;
+            old.RuntimeData->ServiceId = slot.GetVDiskServiceId();
+            warden.VDiskIdByActor.emplace(oldActor, slot);
+            warden.Groups[vdiskId.GroupID.GetRawId()].VDisksOfGroup.PushBack(&old);
+            warden.ApplyServiceSet({}, true, true, "retire omitted slot");
+            UNIT_ASSERT(!warden.LocalVDisks.contains(slot));
+            auto& replacement = warden.LocalVDisks[slot];
+            fill(replacement);
+            replacement.RuntimeData.emplace();
+            replacement.RuntimeData->GroupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
+            replacement.RuntimeData->ActorId = newActor;
+            replacement.RuntimeData->ServiceId = slot.GetVDiskServiceId();
+        });
+        runtime.RegisterService(slot.GetVDiskServiceId(), newActor);
+        // Retirement targets the old incarnation even after its service name points at a replacement.
+        runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(oldActor, false);
+        runtime.Send(new IEventHandle(wardenId, oldActor, new TEvents::TEvGone), 1);
+        runtime.Sim([&] {
+            bool pending = false;
+            runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+                auto& warden = *static_cast<TNodeWarden*>(actor);
+                pending = warden.VDiskIdByActor.contains(oldActor);
+                const auto& replacement = warden.LocalVDisks.at(slot);
+                UNIT_ASSERT(replacement.RuntimeData);
+                UNIT_ASSERT_VALUES_EQUAL(replacement.RuntimeData->ActorId, newActor);
+                UNIT_ASSERT(!replacement.ShutdownPending);
+            });
+            return pending;
+        });
     }
 
     CUSTOM_UNIT_TEST(TestMetadataReadAdmissionSurvivesRequesterRetirement) {
@@ -1735,6 +2260,50 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         CheckMetadataRetry(true);
     }
 
+    CUSTOM_UNIT_TEST(TestMetadataRequestsWaitForDeviceRelease) {
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+            setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TNoReplyPDiskSubsystem>());
+        };
+        Y_DEFER { runtime.FilterFunction = {}; };
+        const auto warden = SetupNodeWardenForSlayTest(runtime);
+        const auto observer = runtime.AllocateEdgeActor(1);
+        runtime.WrapInActorContext(warden, [&](IActor*) {
+            auto* subsystem = TActivationContext::ActorSystem()->GetSubSystem<IPDiskSubsystem>();
+            dynamic_cast<TNoReplyPDiskSubsystem*>(subsystem)->SetObserver(observer);
+        });
+        const ui32 pdiskId = 2095;
+        const TString path = "/tmp/scripted-metadata-device";
+        AddMetadataTestPDisk(runtime, warden, pdiskId, path);
+        const auto oldPDisk = runtime.AllocateEdgeActor(1);
+        runtime.RegisterService(MakeBlobStoragePDiskID(1, pdiskId), oldPDisk);
+        runtime.WrapInActorContext(warden, [&](IActor* actor) {
+            dynamic_cast<NStorage::TNodeWarden*>(actor)->DestroyLocalPDisk(pdiskId);
+        });
+        const auto poison = runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(oldPDisk, false);
+
+        ui32 reads = 0;
+        ui32 writes = 0;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            reads += ev->GetTypeRewrite() == NPDisk::TEvReadMetadata::EventType;
+            writes += ev->GetTypeRewrite() == NPDisk::TEvWriteMetadata::EventType;
+            return ev->GetTypeRewrite() != NPDisk::TEvReadMetadata::EventType
+                && ev->GetTypeRewrite() != NPDisk::TEvWriteMetadata::EventType;
+        };
+        // An edge actor would crash upon an unexpected early failure of these requests.
+        const auto requester = runtime.AllocateEdgeActor(1);
+        NKikimrBlobStorage::TPDiskMetadataRecord record;
+        runtime.Send(new IEventHandle(warden, requester, new NStorage::TEvNodeWardenReadMetadata(path)), 1);
+        runtime.Send(new IEventHandle(warden, requester, new NStorage::TEvNodeWardenWriteMetadata(path, record)), 1);
+        runtime.Sim([&] { return runtime.HasImmediateEvents(); });
+        UNIT_ASSERT_VALUES_EQUAL(reads + writes, 0);
+
+        runtime.Send(new IEventHandle(poison->Sender, oldPDisk, new TEvents::TEvPoisonTaken, 0, poison->Cookie), 1);
+        runtime.Sim([&] { return !reads || !writes; });
+        UNIT_ASSERT_VALUES_EQUAL(reads, 1);
+        UNIT_ASSERT_VALUES_EQUAL(writes, 1);
+    }
+
     CUSTOM_UNIT_TEST(TestMetadataReadAdmissionFencesRemovedPDisk) {
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
         const auto warden = SetupNodeWardenForSlayTest(runtime);
@@ -1749,7 +2318,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         runtime.WrapInActorContext(warden, [&](IActor* actor) {
             dynamic_cast<NStorage::TNodeWarden*>(actor)->DestroyLocalPDisk(pdiskId);
         });
-        runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(oldPDisk, false);
+        StopMetadataTestPDisk(runtime, oldPDisk);
         AddMetadataTestPDisk(runtime, warden, pdiskId, path);
         const auto pdisk = runtime.AllocateEdgeActor(1);
         runtime.RegisterService(MakeBlobStoragePDiskID(1, pdiskId), pdisk);
@@ -1831,8 +2400,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             runtime.WrapInActorContext(warden, [&](IActor* actor) {
                 dynamic_cast<NStorage::TNodeWarden*>(actor)->ApplyServiceSetPDisks();
             });
-            if (!undelivered) {
-                runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(oldPDisk, false);
+            if (undelivered) {
+                runtime.Sim([&] { return runtime.HasImmediateEvents(); });
+            } else {
+                StopMetadataTestPDisk(runtime, oldPDisk);
             }
 
             const auto requester = runtime.AllocateEdgeActor(1);
@@ -1925,6 +2496,27 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         location->SetVDiskSlotID(vdiskSlotId);
         VDiskIDFromVDiskID(vdiskId, record.Config.MutableVDiskID());
     }
+
+
+
+    CUSTOM_UNIT_TEST(TestVDiskOfEjectedGroupDoesNotStart) {
+        using TNodeWarden = NStorage::TNodeWarden;
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        const auto wardenId = SetupNodeWardenForSlayTest(runtime);
+        const TVDiskID vdiskId(100595, 1, 1, 0, 0);
+        runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+            auto& warden = *static_cast<TNodeWarden*>(actor);
+            warden.EjectGroup(vdiskId.GroupID.GetRawId());
+            // The slot can outlive its group until BSC reports its destruction, so it must not reach any
+            // of the checks done for a running VDisk, including the one for its underlying PDisk.
+            auto& record = warden.LocalVDisks[TNodeWarden::TVSlotId(1, 2095, 1)];
+            SetSlayTestVDisk(record, 1, 2095, 1, vdiskId);
+            warden.StartLocalVDiskActor(record);
+            UNIT_ASSERT(!record.RuntimeData);
+        });
+    }
+
+
 
     CUSTOM_UNIT_TEST(TestSlayCompletesWhenPDiskIsDestroyedBeforeReply) {
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
@@ -2766,7 +3358,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto checkSettings = [&](ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
                     std::optional<ui64> expectedSlotSize = std::nullopt) {
                 CheckInferredPDiskSettings(runtime, whiteboard, fakeNodeWarden, pdiskId,
-                    expectedSlotCount, expectedSlotSizeInUnits, expectedSlotSize, TDuration::Seconds(10), true);
+                    expectedSlotCount, expectedSlotSizeInUnits, expectedSlotSize);
             };
 
             NKikimrBlobStorage::TPDiskConfig config;
@@ -2823,12 +3415,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             });
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 12, 2u);
 
         VERBOSE_COUT("- Test case 1b - change InferPDiskSlotCountSettings insignificantly");
         UpdateInferPDiskSlotCountSettings(runtime, realNodeWarden,
             100_GB, 18, false);
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 12, 2u);
 
         observer.Remove();
 
@@ -3068,7 +3662,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 FillDDisk(vdisk);
                 vdisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);
                 dynamic_cast<NStorage::TNodeWarden*>(actor)->ApplyServiceSet(
-                    serviceSet, true, false, false, "test");
+                    serviceSet, true, false, "test");
             }));
         }
 
@@ -3128,7 +3722,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             Runtime.WrapInActorContext(NodeWardenId, [&](IActor* actor) {
                 NKikimrBlobStorage::TNodeWardenServiceSet incoming;
                 FillDDisk(incoming.AddVDisks());
-                static_cast<NStorage::TNodeWarden*>(actor)->ApplyServiceSet(incoming, true, false, false, "attach DDisk");
+                static_cast<NStorage::TNodeWarden*>(actor)->ApplyServiceSet(incoming, true, false, "attach DDisk");
             });
         }
 
@@ -3290,7 +3884,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 auto* pdisk = incoming.AddPDisks();
                 *pdisk = NStorage::TNodeWardenTestPeer::GetPDisk(warden, PDiskId);
                 pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
-                warden.ApplyServiceSet(incoming, true, false, false, "requested restart");
+                warden.ApplyServiceSet(incoming, true, false, "requested restart");
             });
             auto assertFence = [&] {
                 Send(parent, new NDDisk::TEvConnect());
@@ -3431,7 +4025,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
             NKikimrBlobStorage::TNodeWardenServiceSet incoming;
             setup.FillDDisk(incoming.AddVDisks());
-            warden.ApplyServiceSet(incoming, true, false, false, "recreate while Gone is held");
+            warden.ApplyServiceSet(incoming, true, false, "recreate while Gone is held");
             const auto& record = warden.LocalVDisks.at({setup.NodeId, setup.PDiskId, setup.VDiskSlotId});
             UNIT_ASSERT(!record.RuntimeData);
             UNIT_ASSERT(warden.DDiskActors.contains(oldActor));

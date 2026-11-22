@@ -203,6 +203,15 @@ namespace NKikimr::NBsController {
                             ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
+                        for (ui64 value : settings.GetBridgeSyncTotalRateBytesPerSecond()) {
+                            Self->BridgeSyncTotalRate = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncTotalRate>(Self->BridgeSyncTotalRate);
+                            Self->BridgeSyncNodeRatesDirty = true;
+                        }
+                        for (ui32 value : settings.GetBridgeSyncMaxSyncers()) {
+                            Self->BridgeSyncMaxSyncers = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncMaxSyncers>(Self->BridgeSyncMaxSyncers);
+                        }
                         return;
                     }
 
@@ -446,6 +455,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MoveDDisk)
                     HANDLE_COMMAND(DeleteSpecificGroups)
                     HANDLE_COMMAND(UpdateStoragePoolSettings)
+                    HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
 
                     default: break;
                 }

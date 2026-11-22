@@ -86,6 +86,10 @@ namespace NKikimr::NStorage {
         std::optional<TString> ErrorReason; // set when BSC hasn't provided base config, BaseConfig is empty then
     };
 
+    struct TEvNodeWardenDynamicConfigSubscribe
+        : TEventPB<TEvNodeWardenDynamicConfigSubscribe, NKikimrBlobStorage::TEvNodeWardenDynamicConfigSubscribe, TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe>
+    {};
+
     struct TEvNodeWardenDynamicConfigPush
         : TEventPB<TEvNodeWardenDynamicConfigPush, NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush, TEvBlobStorage::EvNodeWardenDynamicConfigPush>
     {};

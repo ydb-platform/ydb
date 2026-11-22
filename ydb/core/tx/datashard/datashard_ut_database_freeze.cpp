@@ -1440,8 +1440,16 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
         UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 
-    Y_UNIT_TEST(LegacyTableThawPreservesDatabaseFreeze) {
-        TFreezeEnv env;
+    Y_UNIT_TEST_TWIN(LegacyTableThawPreservesDatabaseFreeze, StorageThresholds) {
+        TShardedTableOptions options;
+        if (StorageThresholds) {
+            options.Families({{
+                .Name = "default",
+                .DataThreshold = 512,
+                .ExternalThreshold = 1024,
+            }});
+        }
+        TFreezeEnv env(options);
         env.Runtime.GetAppData(0).FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
         env.LegacyFreeze(true);
         env.Freeze();
@@ -1486,11 +1494,23 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
 
     Y_UNIT_TEST(LegacyUnfreezeWithOtherAlterOptionsIsFenced) {
         TFreezeEnv env;
+        TString freezeBody;
+        auto proposals = env.Runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                freezeBody = ev->Get()->Record.GetTxBody();
+            }
+        });
         env.LegacyFreeze(true);
+        proposals.Remove();
+        NKikimrTxDataShard::TFlatSchemeTransaction freeze;
+        UNIT_ASSERT(freeze.ParseFromString(freezeBody));
+        UNIT_ASSERT(freeze.HasAlterTable());
         env.Freeze();
         ui64 txId = 5000;
-        for (const auto* name : {"TxReadSizeLimit", "TTLSettings", "ReplicationConfig"}) {
-            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+        for (const auto* name : {"TxReadSizeLimit", "TTLSettings", "ReplicationConfig",
+            "DataThreshold", "ExternalThreshold", "ColumnCodec", "Room", "UnknownStorageSetting"})
+        {
+            auto tx = freeze;
             tx.MutableSeqNo()->SetGeneration(Max<ui64>());
             tx.MutableSeqNo()->SetRound(++txId);
             auto* alter = tx.MutableAlterTable();
@@ -1498,8 +1518,21 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
             alter->SetTableSchemaVersion(env.TableId.SchemaVersion + 1);
             auto* config = alter->MutablePartitionConfig();
             config->SetFreezeState(NKikimrSchemeOp::EFreezeState::Unfreeze);
+            UNIT_ASSERT_VALUES_EQUAL(config->ColumnFamiliesSize(), 1);
+            auto* family = config->MutableColumnFamilies(0);
             if (TStringBuf(name) == "TxReadSizeLimit") {
                 config->SetTxReadSizeLimit(1024);
+            } else if (TStringBuf(name) == "DataThreshold") {
+                family->MutableStorageConfig()->SetDataThreshold(512);
+            } else if (TStringBuf(name) == "ExternalThreshold") {
+                family->MutableStorageConfig()->SetExternalThreshold(1024);
+            } else if (TStringBuf(name) == "ColumnCodec") {
+                family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+            } else if (TStringBuf(name) == "Room") {
+                family->SetRoom(1);
+            } else if (TStringBuf(name) == "UnknownStorageSetting") {
+                auto* storage = family->MutableStorageConfig();
+                storage->GetReflection()->MutableUnknownFields(storage)->AddVarint(19000, 1);
             } else {
                 const auto* field = alter->GetDescriptor()->FindFieldByName(name);
                 UNIT_ASSERT_C(field, name);

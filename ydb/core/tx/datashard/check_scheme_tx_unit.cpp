@@ -89,6 +89,12 @@ bool TCheckSchemeTxUnit::IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableD
     NKikimrSchemeOp::TTableDescription current;
     table->GetSchema(current);
     auto delta = alter;
+    // EQUIVALENT ignores unknown fields, including nested ones.
+    const auto originalSize = delta.ByteSizeLong();
+    delta.DiscardUnknownFields();
+    if (delta.ByteSizeLong() != originalSize) {
+        return false;
+    }
     delta.ClearName();
     delta.ClearId_Deprecated();
     delta.ClearPathId();
@@ -97,9 +103,40 @@ bool TCheckSchemeTxUnit::IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableD
     delta.MutablePartitionConfig()->ClearFreezeState();
     current.MutablePartitionConfig()->ClearFreezeState();
 
-    // SchemeShard repeats the full partition config, while DataShard expands
-    // default family settings. Only FreezeState may change during this unfreeze.
+    // SchemeShard repeats the full partition config, while DataShard persists
+    // normalized column families without placement hints or blob thresholds.
+    // Compare the actual DataShard settings; only FreezeState may change.
     if (delta.GetPartitionConfig().ByteSizeLong()) {
+        auto normalizeFamilies = [&](NKikimrSchemeOp::TPartitionConfig& config) {
+            for (auto& family : *config.MutableColumnFamilies()) {
+                const auto it = table->Families.find(family.GetId());
+                if (it == table->Families.end()) {
+                    return false;
+                }
+                auto& storage = *family.MutableStorageConfig();
+                const auto dataThreshold = storage.HasDataThreshold()
+                    ? TUserTable::TUserFamily::SaveGetThreshold(storage.GetDataThreshold())
+                    : it->second.OuterThreshold;
+                const auto externalThreshold = storage.GetExternalThreshold()
+                    ? TUserTable::TUserFamily::SaveGetThreshold(storage.GetExternalThreshold())
+                    : it->second.ExternalThreshold;
+                // Placement is represented by the storage rooms below. These
+                // hints are consumed by SchemeShard, not by TUserFamily::Update.
+                storage.ClearSysLog();
+                storage.ClearLog();
+                storage.ClearData();
+                storage.ClearExternal();
+                storage.ClearExternalChannelsCount();
+                storage.SetDataThreshold(dataThreshold);
+                storage.SetExternalThreshold(externalThreshold);
+            }
+            return true;
+        };
+        if (!normalizeFamilies(*delta.MutablePartitionConfig())
+            || !normalizeFamilies(*current.MutablePartitionConfig()))
+        {
+            return false;
+        }
         google::protobuf::util::MessageDifferencer configDiff;
         configDiff.set_message_field_comparison(google::protobuf::util::MessageDifferencer::EQUIVALENT);
         const auto* config = delta.GetPartitionConfig().GetDescriptor();
@@ -111,9 +148,6 @@ bool TCheckSchemeTxUnit::IsDatabaseFreezeUnfreeze(const NKikimrSchemeOp::TTableD
     }
     delta.ClearPartitionConfig();
     const auto* reflection = delta.GetReflection();
-    if (!reflection->GetUnknownFields(delta).empty()) {
-        return false;
-    }
     std::vector<const google::protobuf::FieldDescriptor*> fields;
     reflection->ListFields(delta, &fields);
     for (const auto* field : fields) {

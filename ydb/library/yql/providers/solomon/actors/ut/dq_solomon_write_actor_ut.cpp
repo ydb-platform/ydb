@@ -2,6 +2,7 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -378,6 +379,27 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         fixture.AssertRequest(2, 1006, 2);
         fixture.Drain();
         UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+    }
+
+    Y_UNIT_TEST(MaxSensorCountRespectsMetricLimit) {
+        constexpr ui32 sensorsPerRow = NSo::NConstants::MaxSensorsPerRow;
+        constexpr ui32 rowsPerRequest = 1000 / sensorsPerRow;
+        constexpr ui64 metricsPerRequest = rowsPerRequest * sensorsPerRow;
+        constexpr ui64 firstValue = 3 * sensorsPerRow;
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            TBatchingFixture fixture(clusterType, sensorsPerRow);
+            fixture.FillSlots();
+            fixture.Write(rowsPerRequest + 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
+            fixture.Ack();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
+            fixture.AssertRequest(2, firstValue, metricsPerRequest);
+            fixture.Ack();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
+            fixture.AssertRequest(2, firstValue + metricsPerRequest, sensorsPerRow);
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+        }
     }
 
     Y_UNIT_TEST(PartialInputBatchIsKeptForNextRequest) {

@@ -10,6 +10,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -45,8 +46,10 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-const ui64 MaxMetricsPerRequest = 1000;   // Max allowed count is 10000
+constexpr ui64 MaxMetricsPerRequest = 1000;   // Max allowed count is 10000
 const ui64 MaxRequestsInflight = 3;
+
+static_assert(NSo::NConstants::MaxSensorsPerRow <= MaxMetricsPerRequest);
 
 const auto RetryPolicy =
     NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy([](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp) {
@@ -352,7 +355,7 @@ private:
         auto guard = Guard(*Alloc);
         TMetricsToSend result;
         const auto sensorsPerRow = WriteParams.Shard.GetScheme().SensorsSize();
-        YQL_ENSURE(sensorsPerRow > 0 && sensorsPerRow <= MaxMetricsPerRequest, "Invalid Solomon sensor count");
+        YQL_ENSURE(sensorsPerRow > 0 && sensorsPerRow <= NSo::NConstants::MaxSensorsPerRow, "Invalid Solomon sensor count");
         while (!SendingBuffer.empty() && std::holds_alternative<TPendingBatch>(SendingBuffer.front()) &&
                result.MetricsCount + sensorsPerRow <= MaxMetricsPerRequest) {
             auto& pending = std::get<TPendingBatch>(SendingBuffer.front());

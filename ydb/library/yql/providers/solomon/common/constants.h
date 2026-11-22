@@ -8,6 +8,8 @@
 
 namespace NYql::NSo::NConstants {
 
+constexpr ui32 MaxSensorsPerRow = 50;
+
 // ── HTTP request / response size limits ──────────────────────────────────────
 
 // Maximum byte length of a single HTTP GET request URL.

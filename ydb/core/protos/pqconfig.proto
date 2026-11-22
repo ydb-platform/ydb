@@ -27,6 +27,7 @@ message TPartitionCounterData {
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
+    optional uint64 MirroredOffset = 8 [default = 0];
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
@@ -269,6 +270,7 @@ message TMirrorPartitionConfig {
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
     reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
+    optional bool MirrorConsumerOffsets = 11 [default = false];
 }
 
 message TPartitionConfig {
@@ -414,6 +416,7 @@ message TPQTabletConfig {
     enum EConsumerType {
         CONSUMER_TYPE_STREAMING = 0;
         CONSUMER_TYPE_MLP = 1;
+        CONSUMER_TYPE_REPLICATION = 2;
     }
 
     enum EDeadLetterPolicy {
@@ -450,6 +453,8 @@ message TPQTabletConfig {
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
+
+        optional bool ReplicateOffsets = 23 [default = true];
     }
 
     repeated TConsumer Consumers = 37;

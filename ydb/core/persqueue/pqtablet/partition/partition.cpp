@@ -744,6 +744,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(GetStartOffset());
     meta.SetEndOffset(GetEndOffset());
+    meta.SetMirroredOffset(BlobEncoder.MirroredOffset);
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
@@ -999,6 +1000,13 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
+    if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+        && BlobEncoder.IsEmpty() && CompactionBlobEncoder.IsEmpty()) {
+        // Restore the position of an empty mirror before starting consumers and the mirrorer.
+        BlobEncoder.StartOffset = BlobEncoder.EndOffset = BlobEncoder.MirroredOffset;
+        BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = BlobEncoder.MirroredOffset;
+    }
+
     if (BlobEncoder.StartOffset == BlobEncoder.EndOffset && BlobEncoder.EndOffset == 0) {
         for (auto&& [user, info] : UsersInfoStorage->ViewAll()) {
             if (info.Offset > 0 && BlobEncoder.StartOffset < (ui64)info.Offset) {
@@ -3247,8 +3255,10 @@ void TPartition::RunPersist() {
         Compacter->TryCompactionIfPossible();
     }
 
+    UpdatePendingUsersFromReplicationData();
+
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
-    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
+    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig || PendingReplicationData.has_value();
 
     if (haveChanges) {
         WriteCycleStartTime = now;
@@ -3268,6 +3278,23 @@ void TPartition::RunPersist() {
         && PersistRequest->Record.CmdRenameSize() == 0;
 
     if (haveChanges || !requestEmpty) {
+        // EndOffset still describes the previous KV state: accepted messages may
+        // already be buffered, including an incomplete multipart message at offset 0.
+        const auto hasNoBufferedMessages = [](const TPartitionBlobEncoder& encoder) {
+            return encoder.IsEmpty()
+                && encoder.Head.GetBatches().empty()
+                && encoder.NewHead.GetBatches().empty()
+                && !encoder.PartitionedBlob.IsInited();
+        };
+        if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+            && PendingRequests.empty() && QuotaWaitingRequests.empty()
+            && UserActionAndTransactionEvents.empty() && UserActionAndTxPendingWrite.empty()
+            && WriteInflightSize == 0 && WriteInfosApplied.empty()
+            && hasNoBufferedMessages(BlobEncoder) && hasNoBufferedMessages(CompactionBlobEncoder)) {
+            BlobEncoder.StartOffset = BlobEncoder.EndOffset = GetMirroredOffset();
+            BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = GetMirroredOffset();
+        }
+
         AddMessageDeduplicatorKeys(PersistRequest.Get());
         AddMetaKey(PersistRequest.Get());
 
@@ -3910,7 +3937,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             {"newHead", BlobEncoder.NewHead}
         );
 
-        auto oldHeadOffset = BlobEncoder.NewHead.Offset;
+        const auto oldHeadOffset = BlobEncoder.NewHead.Offset;
 
         if (!t.WriteInfo->BodyKeys.empty()) {
             bool needCompactHead =
@@ -4010,6 +4037,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.Generation = 0;
                 userInfo.Step = 0;
                 userInfo.PipeClient = {};
+                userInfo.ReadSessionActor = {};
                 FailStaleSessionReadRequests(operation.GetConsumer(), ActorContext());
             }
         }
@@ -4116,11 +4144,22 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         PendingExplicitMessageGroups.reset();
     }
 
+    bool replicationSessionEstablished = false;
+    TVector<const TUserInfo*> changedUsers;
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-            bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+            const auto previousOffset = userInfo.Offset;
+            if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+                && !actual->Session.empty() && actual->ReadSessionActor
+                && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
+                    || userInfo.Step != actual->Step || userInfo.ReadSessionActor != actual->ReadSessionActor)) {
+                replicationSessionEstablished = true;
+            }
 
+            userInfo.PipeClient = actual->PipeClient;
+            userInfo.ReadSessionActor = actual->ReadSessionActor;
+            userInfo.PartitionSessionId = actual->PartitionSessionId;
             userInfo.Session = actual->Session;
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
@@ -4143,6 +4182,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 userInfo.Offset = GetStartOffset();
             }
 
+            const bool offsetHasChanged = userInfo.Offset != previousOffset;
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
                 userInfo.ActualTimestamps = false;
                 ReadTimestampForOffset(user, userInfo, ctx);
@@ -4152,6 +4192,9 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 
             if (LastOffsetHasBeenCommited(userInfo)) {
                 SendReadingFinished(user);
+            }
+            if (offsetHasChanged) {
+                changedUsers.push_back(&userInfo);
             }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
             // Consumer may already have been removed by an earlier write cycle
@@ -4183,6 +4226,11 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
+    if (replicationSessionEstablished) {
+        SendOffsetsToReplicationConsumer(ctx);
+    } else if (!changedUsers.empty()) {
+        SendOffsetsToReplicationConsumer(ctx, changedUsers);
+    }
     ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 
@@ -4205,9 +4253,23 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 {
     bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
 
+    TVector<TString> consumersToResendOffsets;
+    for (const auto& consumer : config.GetConsumers()) {
+        const auto* previous = GetConsumer(Config, consumer.GetName());
+        if (previous && !previous->GetReplicateOffsets() && consumer.GetReplicateOffsets()) {
+            consumersToResendOffsets.push_back(consumer.GetName());
+        }
+    }
+
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
+
+    for (const auto& consumer : Config.GetConsumers()) {
+        if (auto* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName())) {
+            userInfo->Type = consumer.GetType();
+        }
+    }
 
     if (explicitMessageGroups) {
         for (const auto& [id, group] : *explicitMessageGroups) {
@@ -4242,8 +4304,9 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
-                                                                          Config));
+            auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, Config);
+            event->ConsumersToResendOffsets = std::move(consumersToResendOffsets);
+            ctx.Send(Mirrorer->Actor, event.Release());
         } else {
             ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
             CreateMirrorerActor();
@@ -4569,6 +4632,8 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
         userInfo.PipeClient = act.PipeClient;
+        userInfo.ReadSessionActor = act.ReadSessionActor;
+        userInfo.PartitionSessionId = act.PartitionSessionId;
         ScheduleReplyGetClientOffsetOk(act.Cookie,
                                        userInfo.Offset,
                                        ts.first, ts.second, ui->AnyCommits);
@@ -4684,6 +4749,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         userInfo.ReadRuleGeneration = 0;
         userInfo.Session = "";
+        userInfo.ReadSessionActor = {};
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
@@ -4704,6 +4770,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         userInfo.ReadRuleGeneration = readRuleGeneration;
         userInfo.Session = "";
+        userInfo.ReadSessionActor = {};
         userInfo.PartitionSessionId = 0;
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
@@ -4731,6 +4798,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Generation = generation;
             userInfo.Step = step;
             userInfo.PipeClient = act.PipeClient;
+            userInfo.ReadSessionActor = act.ReadSessionActor;
             userInfo.PartitionSessionId = act.PartitionSessionId;
         } else if ((dropSession && act.PipeClient == userInfo.PipeClient) || commitNotFromReadSession) {
             userInfo.Session = "";
@@ -4738,6 +4806,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Generation = 0;
             userInfo.Step = 0;
             userInfo.PipeClient = {};
+            userInfo.ReadSessionActor = {};
             FailStaleSessionReadRequests(user, ctx);
         }
 
@@ -5020,6 +5089,7 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
             newPendingUserIt->second.Session = userIt->Session;
             newPendingUserIt->second.PartitionSessionId = userIt->PartitionSessionId;
             newPendingUserIt->second.PipeClient = userIt->PipeClient;
+            newPendingUserIt->second.ReadSessionActor = userIt->ReadSessionActor;
 
             newPendingUserIt->second.Generation = userIt->Generation;
             newPendingUserIt->second.Step = userIt->Step;
@@ -5206,6 +5276,19 @@ void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
+}
+
+void TPartition::DestroyMirrorer() {
+    if (Mirrorer) {
+        Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
+        Mirrorer.Reset();
+    }
+}
+
+void TPartition::NotifyMirrorerPersistDone() {
+    if (Mirrorer) {
+        Send(Mirrorer->Actor, new TEvPQ::TEvPersistDone(GetEndOffset()));
+    }
 }
 
 bool TPartition::IsQuotingEnabled() const

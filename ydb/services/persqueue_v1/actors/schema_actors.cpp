@@ -139,6 +139,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 rr->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
             }
             rr->set_important(consumer.GetImportant());
+            rr->set_replicate_offsets(consumer.GetReplicateOffsets());
             if (consumer.HasAvailabilityPeriodMs()) {
                 TDuration availabilityPeriod = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
                 rr->mutable_availability_period()->set_seconds(availabilityPeriod.Seconds());
@@ -196,6 +197,10 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                     }
                     break;
                 }
+                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+                    (*settings->mutable_attributes())["_ydb_replication_consumer"] = consumerName;
+                    break;
+                }
             }
 
             // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
@@ -224,6 +229,8 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
 
         if (NPQ::MirroringEnabled(config)) {
+            (*settings->mutable_attributes())["_ydb_mirror_consumer_offsets"] =
+                partConfig.GetMirrorFrom().GetMirrorConsumerOffsets() ? "true" : "false";
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
             if (partConfig.GetMirrorFrom().GetUseSecureConnection()) {

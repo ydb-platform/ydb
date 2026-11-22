@@ -1497,8 +1497,12 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
             UNIT_ASSERT_EQUAL(result.binding().meta().revision(), 2);
         }
 
-        const auto pending = TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId)
-            .SetName("test_binding_name_3").SetIdempotencyKey("other_key").Build();
+        const auto pending = TModifyBindingBuilder{}
+                                 .SetConnectionId(connectionId)
+                                 .SetBindingId(bindingId)
+                                 .SetName("test_binding_name_3")
+                                 .SetIdempotencyKey("other_key")
+                                 .Build();
         const auto prepare = [&](const auto& proto) {
             using TRequest = TEvControlPlaneStorage::TEvModifyBindingRequest;
             using TResponse = TEvControlPlaneStorage::TEvModifyBindingResponse;

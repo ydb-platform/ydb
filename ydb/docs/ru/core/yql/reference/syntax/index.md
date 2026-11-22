@@ -22,6 +22,12 @@
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
 
+{% if backend_name == "YDB" %}
+
+* [ANALYZE](analyze.md)
+
+{% endif %}
+
 {% if feature_map_tables %}
 
 * [ALTER TABLE](alter_table/index.md)

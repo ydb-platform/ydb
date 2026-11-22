@@ -268,6 +268,11 @@ private:
 
         const auto& audit = response.AuditDetails;
         if (StorageAction == EBindingRenameAction::Probe) {
+            if (audit.After) {
+                CommitAudit = audit;
+                CommitAudit.IdempotencyResult = true;
+                return ReplySuccess(CommitAudit);
+            }
             if (!audit.Before) {
                 return Fail("Couldn't read binding state");
             }
@@ -284,8 +289,9 @@ private:
             return Fail("Couldn't determine binding rename state");
         }
         request.Rename = audit.Rename;
-        if (audit.After) {
+        if (audit.After && !CommitAudit.After) {
             CommitAudit = audit;
+            CommitAudit.IdempotencyResult = !audit.Before;
         }
         if (StorageAction == EBindingRenameAction::Finish) {
             if (request.Rename->state() == TRename::ABORTED) {

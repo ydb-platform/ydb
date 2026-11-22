@@ -2102,8 +2102,9 @@ private:
             return;
         }
         if (binding.Rename) {
-            Register(MakeRenameBindingActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout,
-                ExtractPermissions(ev, availablePermissions), Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
+            const auto permissions = ExtractPermissions(ev, availablePermissions);
+            Register(MakeRenameBindingActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions, Config.ComputeConfig,
+                YqSharedResources, CredentialsProviderFactory));
             return;
         }
         if (isComputeYDBSyncEnabled && !ev->Get()->ConnectionContent) {
@@ -2125,8 +2126,9 @@ private:
                 return false;
             };
             if (usesPg(*binding.OldBindingContent) || usesPg(request.content())) {
-                Register(MakeRenameBindingActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout,
-                    ExtractPermissions(ev, availablePermissions), Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
+                const auto permissions = ExtractPermissions(ev, availablePermissions);
+                Register(MakeRenameBindingActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions,
+                    Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
                 return;
             }
         }

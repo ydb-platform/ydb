@@ -482,15 +482,24 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         }
 
         const auto& rename = bindingInternal.rename();
+        const auto renameState = rename.state();
         const bool matches = bindingInternal.has_rename() && MatchesBindingRename(rename, request, user);
+        auto setCommittedAudit = [&] {
+            response->second.After = binding;
+            response->second.CloudId = bindingInternal.cloud_id();
+        };
         if (renameAction == EBindingRenameAction::Probe) {
             if (!matches && !HasViewAccess(viewPermissions, binding.content().acl().visibility(), binding.meta().created_by(), user)) {
                 ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED)
                     << "Binding does not exist or permission denied. Please check the binding id or your access rights";
             }
-            response->second.Before = binding;
             if (matches) {
                 response->second.Rename = rename;
+            }
+            if (matches && renameState == TBindingRename::FINISHED) {
+                setCommittedAudit();
+            } else {
+                response->second.Before = binding;
             }
             return std::make_pair(TString{}, NYdb::TParamsBuilder{}.Build());
         }
@@ -540,7 +549,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             return std::make_pair(query.Sql, query.Params);
         };
         auto returnRename = [&] {
-            response->second.Before = binding;
+            if (renameState == TBindingRename::COMMITTED || renameState == TBindingRename::FINISHED) {
+                setCommittedAudit();
+            } else {
+                response->second.Before = binding;
+            }
             response->second.Rename = bindingInternal.rename();
         };
 

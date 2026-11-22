@@ -420,8 +420,19 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         const auto candidate = describeComputeTable("new_binding");
         UNIT_ASSERT_C(candidate.IsSuccess(), candidate.GetIssues().ToString());
 
-        const auto retried = rename(modify);
-        UNIT_ASSERT_C(!retried->Get()->Issues, retried->Get()->Issues.ToString());
+        const auto assertCommittedAudit = [&](const auto& response) {
+            UNIT_ASSERT_C(!response->Get()->Issues, response->Get()->Issues.ToString());
+            const auto& audit = response->Get()->AuditDetails;
+            UNIT_ASSERT(audit.IdempotencyResult);
+            UNIT_ASSERT(audit.After);
+            UNIT_ASSERT_VALUES_EQUAL(audit.After->meta().id(), bindingId);
+            UNIT_ASSERT_VALUES_EQUAL(audit.After->meta().revision(), revision + 1);
+            UNIT_ASSERT_VALUES_EQUAL(audit.After->content().name(), "new_binding");
+            UNIT_ASSERT_VALUES_EQUAL(audit.After->content().connection_id(), connectionId);
+            UNIT_ASSERT_VALUES_EQUAL(audit.CloudId, "mock_cloud");
+        };
+        assertCommittedAudit(rename(modify));
+        assertCommittedAudit(rename(modify));
         UNIT_ASSERT_VALUES_EQUAL(describeBinding().meta().revision(), revision + 1);
         UNIT_ASSERT_VALUES_EQUAL(describeComputeTable("old_binding").GetStatus(), EStatus::NOT_FOUND);
         const auto final = describeComputeTable("new_binding");

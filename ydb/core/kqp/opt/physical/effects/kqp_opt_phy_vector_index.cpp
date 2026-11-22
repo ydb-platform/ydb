@@ -166,6 +166,8 @@ TVectorIndexPrefixLookup BuildVectorIndexPrefixLookup(
 
     TKqpStreamLookupSettings streamLookupSettings;
     streamLookupSettings.Strategy = EStreamLookupStrategyType::LookupSemiJoinRows;
+    // NULL components are part of the stored prefix key.
+    streamLookupSettings.AllowNullKeysPrefixSize = prefixColumns.size();
     TVector<TStringBuf> leftColumns = postingColumns;
     if (withNulls) {
         for (const auto& column : prefixColumns) {

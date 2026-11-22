@@ -1076,6 +1076,34 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT(!rows.TryNextRow());
     }
 
+    Y_UNIT_TEST(HnswFrozenSearchSkipsDeletedWinners) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto ddl = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Frozen (id Uint64 NOT NULL, emb String, payload String, PRIMARY KEY(id));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        auto write = ExecuteDataQuery(session, R"(
+            UPSERT INTO Frozen (id, emb, payload) VALUES
+                (1u, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), "deleted"),
+                (2u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"), "kept");
+        )");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        ddl = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE Frozen ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, autoupdate=false);
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        write = ExecuteDataQuery(session, "DELETE FROM Frozen WHERE id = 1u;");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const auto read = ExecuteDataQuery(session, R"(
+            SELECT id, payload FROM Frozen VIEW idx
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
+        )");
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), R"([[2u;["kept"]]])");
+    }
+
     Y_UNIT_TEST_TWIN(HnswFilteredSearchKeepsNullableKeysAndCoveredValues, Frozen) {
         TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -1168,6 +1196,29 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
             UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), "[[2u]]");
         }
+    }
+
+    Y_UNIT_TEST(HnswSearchRanksEmbeddingAgainstItself) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto ddl = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE SelfRank (
+                id Uint64 NOT NULL, emb String NOT NULL, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (emb)
+                WITH (similarity=inner_product, vector_type=float, vector_dimension=2, levels=1, clusters=1));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        const auto write = ExecuteDataQuery(session, R"(
+            UPSERT INTO SelfRank (id, emb) VALUES
+                (1u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2u, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"));
+        )");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const auto read = ExecuteDataQuery(session, R"(
+            SELECT id FROM SelfRank VIEW idx ORDER BY Knn::InnerProductSimilarity(emb, emb) DESC LIMIT 1;
+        )");
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), "[[2u]]");
     }
 
     Y_UNIT_TEST_QUAD(HnswFilteredSearchValidatesTarget, Covered, Parameterized) {

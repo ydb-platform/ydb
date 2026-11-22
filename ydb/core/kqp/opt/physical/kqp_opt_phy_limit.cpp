@@ -581,6 +581,10 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
     }
 
     auto [columnName, _, targetExpr] = *knnInfo;
+    // This target is evaluated outside the sort selector's row lambda.
+    if (!targetExpr->IsComplete()) {
+        return node;
+    }
     settings.VectorTopKColumn = columnName;
     settings.VectorTopKMetric = metric;
     settings.VectorTopKTarget = WrapInPrecompute(TExprBase(targetExpr), ctx);

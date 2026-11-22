@@ -390,6 +390,80 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_TWIN(HnswFrozenPrefixPreservesStoredValues, EnableVectorSearchActor) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto execute = [&](const TString& sql) {
+            auto result = session.ExecuteDataQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        auto ddl = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE FrozenPrefix (
+                id Uint64 NOT NULL, tenant String, emb String, label String, payload String, PRIMARY KEY(id)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        execute(R"(
+            UPSERT INTO FrozenPrefix (id, tenant, emb, label, payload) VALUES
+                (1u, "a", Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), "deleted", "gone"),
+                (2u, "a", Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"), "stored", "old"),
+                (3u, "a", Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"), "other", "other");
+        )");
+        ddl = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE FrozenPrefix ADD INDEX idx GLOBAL USING hnsw ON (tenant, emb) COVER (label)
+            WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=2,
+                  min_rows=1, autoupdate=false);
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        execute(R"(
+            DELETE FROM FrozenPrefix WHERE id = 1u;
+            UPDATE FrozenPrefix SET tenant = "b", emb = NULL, label = "live", payload = "new" WHERE id = 2u;
+        )");
+        auto read = execute(R"(
+            $q = Knn::ToBinaryStringFloat([0.0f, 0.0f]);
+            SELECT id, label, payload, tenant FROM FrozenPrefix VIEW idx WHERE tenant = "a"
+            ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+            SELECT id, tenant FROM FrozenPrefix VIEW idx WHERE tenant = "a"
+            ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), R"([[2u;["stored"];["new"];["a"]]])");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(1)), R"([[1u;["a"]]])");
+    }
+
+    Y_UNIT_TEST(HnswDeleteWithNullPrefix) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(true);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto ddl = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE NullPrefix (
+                id Uint64 NOT NULL, tenant String, emb String, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (tenant, emb)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        const auto execute = [&](const TString& sql) {
+            auto result = session.ExecuteDataQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        execute(R"(
+            UPSERT INTO NullPrefix (id, tenant, emb) VALUES
+                (1u, NULL, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector")),
+                (2u, NULL, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )");
+        const TString query = R"(
+            SELECT id FROM NullPrefix VIEW idx WHERE tenant IS NULL
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
+        )";
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(execute(query).GetResultSet(0)), "[[1u]]");
+        execute("DELETE FROM NullPrefix WHERE id = 1u;");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(execute(query).GetResultSet(0)), "[[2u]]");
+    }
+
     Y_UNIT_TEST(HnswCacheHonorsPrefixRange) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);

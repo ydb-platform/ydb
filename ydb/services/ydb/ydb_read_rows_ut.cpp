@@ -86,7 +86,8 @@ Y_UNIT_TEST_SUITE(ReadRows) {
         pgProjection.add_columns("legacy");
         const auto projection = read(std::move(pgProjection));
         UNIT_ASSERT_VALUES_EQUAL_C(projection.status(), Ydb::StatusIds::SCHEME_ERROR, projection.DebugString());
-        UNIT_ASSERT_STRING_CONTAINS(projection.DebugString(), "PostgreSQL compatibility is disabled for column 'legacy'");
+        UNIT_ASSERT_C(!projection.issues().empty(), projection.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(projection.issues(0).message(), "PostgreSQL compatibility is disabled for column 'legacy'");
 
         auto pgKey = request;
         pgKey.set_path("/Root/PgKey");
@@ -96,7 +97,8 @@ Y_UNIT_TEST_SUITE(ReadRows) {
         keys->mutable_value()->mutable_items(0)->mutable_items(0)->set_text_value("1");
         const auto key = read(std::move(pgKey));
         UNIT_ASSERT_VALUES_EQUAL_C(key.status(), Ydb::StatusIds::SCHEME_ERROR, key.DebugString());
-        UNIT_ASSERT_STRING_CONTAINS(key.DebugString(), "PostgreSQL compatibility is disabled for column 'key'");
+        UNIT_ASSERT_C(!key.issues().empty(), key.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(key.issues(0).message(), "PostgreSQL compatibility is disabled for column 'key'");
     }
 
     Y_UNIT_TEST(KillTabletDuringRead) {

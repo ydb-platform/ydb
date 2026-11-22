@@ -3511,7 +3511,8 @@ tx_meta {
                 auto reader = stub->StreamReadTable(&context, deniedRequest);
                 UNIT_ASSERT(reader->Read(&response));
                 UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SCHEME_ERROR);
-                UNIT_ASSERT_STRING_CONTAINS(response.DebugString(),
+                UNIT_ASSERT_C(!response.issues().empty(), response.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(),
                     TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'");
                 UNIT_ASSERT(!reader->Read(&response));
                 UNIT_ASSERT(reader->Finish().ok());

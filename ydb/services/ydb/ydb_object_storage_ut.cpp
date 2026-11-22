@@ -161,7 +161,8 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
         const auto expectPgRejected = [&](const Ydb::ObjectStorage::ListingRequest& input, const TString& columnName) {
             const auto response = list(input);
             UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SCHEME_ERROR, response.DebugString());
-            UNIT_ASSERT_STRING_CONTAINS(response.DebugString(),
+            UNIT_ASSERT_C(!response.issues().empty(), response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(),
                 TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'");
         };
 

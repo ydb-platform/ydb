@@ -703,6 +703,7 @@ public:
         }
 
         TPath path = TPath::Resolve(parentPath, context.SS).Dive(name);
+        bool restoreImportingReplica = false;
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -714,7 +715,8 @@ public:
                 .NotDeleted()
                 .NotUnderOperation();
 
-            if (checks && (!internal || !Transaction.HasRestore() || !path.IsImportingReplica())) {
+            restoreImportingReplica = checks && internal && Transaction.HasRestore() && path.IsImportingReplica();
+            if (checks && !restoreImportingReplica) {
                 checks.NotAsyncReplicaTable();
             }
 
@@ -727,6 +729,17 @@ public:
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
+            }
+        }
+
+        if (TxType == TTxState::TxRestore && !restoreImportingReplica && path->IsTable() && AppData()->FeatureFlags.GetDisablePgCompatibility()) {
+            const auto& table = context.SS->Tables.at(path->PathId);
+            for (const auto& [_, column] : table->Columns) {
+                if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");
+                    return result;
+                }
             }
         }
 

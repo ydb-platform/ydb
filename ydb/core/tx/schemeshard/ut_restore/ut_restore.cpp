@@ -2321,6 +2321,7 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2334,6 +2335,21 @@ value {
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
+        TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            TableDescription {
+                %s
+            }
+            S3Settings {
+                Endpoint: "localhost:%d"
+                Scheme: HTTP
+                ObjectKeyPattern: "Backup1"
+            }
+        )", GenerateTableDescription(desc).data(), port),
+            {{NKikimrScheme::StatusPreconditionFailed, "PostgreSQL compatibility is disabled for column 'value'"}});
+
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(false);
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
@@ -2346,6 +2362,46 @@ value {
         )", port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
+
+        if (!EnableDataShardDirectPartImport) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Replica"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "pgint4" }
+                KeyColumnNames: ["key"]
+                ReplicationConfig {
+                    Mode: REPLICATION_MODE_READ_ONLY
+                    ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
+                    ImportState: WAITING_IMPORT
+                }
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            auto restoreObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+                for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                    if (tx.GetOperationType() == ESchemeOpRestore && tx.GetRestore().GetTableName() == "Replica") {
+                        UNIT_ASSERT(tx.GetInternal());
+                        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
+                    }
+                }
+            });
+
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_prefix: "Backup1"
+                    destination_path: "/MyRoot/Replica"
+                  }
+                }
+            )", port));
+            env.TestWaitNotification(runtime, txId);
+            TestGetImport(runtime, txId, "/MyRoot");
+            UNIT_ASSERT(runtime.GetAppData().FeatureFlags.GetDisablePgCompatibility());
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Replica").GetPathDescription()
+                .GetTable().GetReplicationConfig().GetImportState(), TTableReplicationConfig::IMPORTED);
+        }
     }
 
     Y_UNIT_TEST_FLAG(ShouldRestoreTableWithMultiColumnStatistics, EnableDataShardDirectPartImport) {

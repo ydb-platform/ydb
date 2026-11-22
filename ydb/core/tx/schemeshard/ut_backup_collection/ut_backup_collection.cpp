@@ -1623,9 +1623,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             {NKikimrScheme::StatusPreconditionFailed});
     }
 
-    Y_UNIT_TEST(IncrementalBackupOperation) {
+    Y_UNIT_TEST_FLAG(IncrementalBackupOperation, PgSchema) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableTablePgTypes(PgSchema).DisablePgCompatibility(!PgSchema));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -1641,12 +1641,16 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::IsBackupCollection,
         });
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             Name: "Table1"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "%s" }
             KeyColumnNames: ["key"]
-        )");
+        )", PgSchema ? "pgint8" : "Utf8"));
         env.TestWaitNotification(runtime, txId);
+
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(true);
+        }
 
         TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");

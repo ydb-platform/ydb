@@ -38,6 +38,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         env.TestWaitNotification(runtime, txId);
 
         updatePgCompatibility(true);
+        AsyncCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table1");
+        TestModificationResults(runtime, txId, {
+            {NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled"}});
+        env.TestWaitNotification(runtime, txId);
+
         AsyncAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "another" Type: "pgint4" }

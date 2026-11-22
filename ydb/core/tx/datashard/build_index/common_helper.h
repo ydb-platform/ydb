@@ -71,10 +71,6 @@ public:
     };
 
 private:
-    // A shard request can retain its own partially filled serialization chunk.
-    // Before routing is known, each row or key can target a different shard.
-    static constexpr ui64 ShardSerializationOverhead = 4_KB;
-
     struct TUploadAttempt {
         std::shared_ptr<void> Reservation;
         bool Completed = false;
@@ -445,16 +441,16 @@ private:
                 {"debug", Debug()});
 
             Y_ENSURE(!Uploading.EraseBuffer.IsEmpty());
-            std::shared_ptr<void> attempt;
+            NTxProxy::TUploadMemoryReservation attempt;
             if (ResourceReservation) {
                 const auto keys = Uploading.EraseBuffer.GetKeysData();
-                ui64 bytes = 3 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * (256 + ShardSerializationOverhead) + 4_KB
+                ui64 bytes = 3 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * 256 + 4_KB
                     + (keys->capacity() - keys->size()) * sizeof(NTxProxy::TEraseKeys::value_type);
                 for (const auto& key : *keys) {
                     bytes += key.GetCells().size() * sizeof(TCell) * 2;
                 }
                 bytes += 2 * (Database.size() + Uploading.Table.size());
-                attempt = RetainAttempt(bytes);
+                attempt = RetainAttempt(bytes, keys->size());
             }
             auto actor = NTxProxy::CreateEraseRowsInternal(
                 Owner, Database, Uploading.Table, Uploading.EraseBuffer.GetKeysData(),
@@ -475,12 +471,12 @@ private:
         Y_ENSURE(!Uploading.Buffer.IsEmpty());
         Y_ENSURE(!UploaderId);
         Y_ENSURE(Owner);
-        std::shared_ptr<void> attempt;
+        NTxProxy::TUploadMemoryReservation attempt;
         if (ResourceReservation) {
             // Include the canonical rows, protobuf payload, and row/container
             // overhead still owned by this attempt after the scan stops.
             const auto rows = Uploading.Buffer.GetRowsData();
-            ui64 bytes = 3 * Uploading.Buffer.GetBufferBytes() + rows->size() * (256 + ShardSerializationOverhead) + 4_KB
+            ui64 bytes = 3 * Uploading.Buffer.GetBufferBytes() + rows->size() * 256 + 4_KB
                 + (rows->capacity() - rows->size()) * sizeof(NTxProxy::TUploadRows::value_type);
             for (const auto& [key, _] : *rows) {
                 bytes += key.GetCells().size() * sizeof(TCell) * 2;
@@ -489,7 +485,7 @@ private:
                 bytes += 2 * (name.size() + type.SpaceUsedLong() + 64);
             }
             bytes += 2 * (Database.size() + Uploading.Table.size());
-            attempt = RetainAttempt(bytes);
+            attempt = RetainAttempt(bytes, rows->size());
         }
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
@@ -500,10 +496,10 @@ private:
         UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 
-    std::shared_ptr<void> RetainAttempt(ui64 bytes) {
+    NTxProxy::TUploadMemoryReservation RetainAttempt(ui64 bytes, ui64 rows) {
         auto attempt = std::make_shared<TUploadAttempt>(RetainResource ? RetainResource(bytes) : ResourceReservation);
         PreviousAttempt = attempt;
-        return attempt;
+        return {std::move(attempt), RetainResource, rows};
     }
 
     bool WaitForPreviousAttempt() {

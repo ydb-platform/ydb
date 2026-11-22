@@ -107,7 +107,7 @@ namespace {
                 bool writeToIndexImplTable,
                 ui64 cookie,
                 TBackoff backoff,
-                std::shared_ptr<void> memoryReservation)
+                TUploadMemoryReservation memoryReservation)
             : MemoryReservation(std::move(memoryReservation))
             , Sender(sender)
             , SchemeCache(MakeSchemeCacheID())
@@ -292,7 +292,7 @@ namespace {
             Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
             auto ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
-            ev->MemoryReservation = MemoryReservation;
+            ev->MemoryReservation = MemoryReservation.RetainRequests(1);
             ev->Record = state->Headers;
             for (const auto& key : state->Keys) {
                 ev->Record.AddKeyColumns(key.GetBuffer());
@@ -311,6 +311,7 @@ namespace {
 
             TVector<TShardEraseRetryState*> eraseRetryStates(keyRange->GetPartitions().size());
             TVector<std::unique_ptr<TEvDataShard::TEvEraseRowsRequest>> shardRequests(keyRange->GetPartitions().size());
+            size_t shardRequestCount = 0;
 
             for (const auto& key : *Keys) {
                 auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), key.GetCells(),
@@ -333,7 +334,7 @@ namespace {
                 auto& ev = shardRequests[shardIdx];
                 if (!ev) {
                     ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
-                    ev->MemoryReservation = MemoryReservation;
+                    ++shardRequestCount;
                     ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                     if (keyRange->TableId.SchemaVersion) {
                         ev->Record.SetSchemaVersion(keyRange->TableId.SchemaVersion);
@@ -352,13 +353,13 @@ namespace {
                 retryState->Keys.push_back(key);
             }
 
-            size_t shardRequestCount = 0;
+            const auto requestReservation = MemoryReservation.RetainRequests(shardRequestCount);
             for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
                 auto& ev = shardRequests[idx];
                 if (!ev) {
                     continue;
                 }
-                ++shardRequestCount;
+                ev->MemoryReservation = requestReservation;
 
                 const TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
@@ -554,7 +555,7 @@ namespace {
         }
 
     private:
-        const std::shared_ptr<void> MemoryReservation;
+        TUploadMemoryReservation MemoryReservation;
         const TActorId Sender;
         const TActorId SchemeCache;
         const TActorId LeaderPipeCache;
@@ -600,7 +601,7 @@ IActor* CreateEraseRowsInternal(
     bool writeToIndexImplTable,
     ui64 cookie,
     TBackoff backoff,
-    std::shared_ptr<void> memoryReservation)
+    TUploadMemoryReservation memoryReservation)
 {
     return new TEraseRowsInternal(sender, database, table, std::move(keys),
         writeToTableShadow, writeToPrivateTable, writeToIndexImplTable, cookie, backoff, std::move(memoryReservation));

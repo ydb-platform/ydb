@@ -526,8 +526,7 @@ Y_UNIT_TEST(IndexBuildBudgetIncludesPendingDescriptors) {
         brokerLimit = event->Get()->Record.GetResourceLimit().GetMemory();
         activeLimit = event->Get()->IndexBuildMemoryLimit.value_or(0);
     });
-    // The controller already configured the broker during bootstrap. Change
-    // the pending slice to require a fresh update observable by this test.
+    // Reduce the pending slice while the original leases are still outstanding.
     fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
     fixture.Tick();
     const ui64 activities = GetResourceBrokerLimitBytes(config, 16_GB, false);
@@ -570,16 +569,15 @@ Y_UNIT_TEST(IndexBuildBrokerCapacityRefreshWaitsForAcknowledgement) {
     TBlockEvents<TAck> acks(fixture.Runtime, [&](const TAck::TPtr& event) {
         return event->Recipient == fixture.MemoryController;
     });
-    fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
     fixture.Tick();
     fixture.Runtime.WaitFor("broker configuration acknowledgement held", [&] { return !acks.empty(); });
     auto& quota = *fixture.Runtime.GetAppData().BuildIndexScanAdmission;
-    const ui64 capacity = quota.GetActiveByteLimit(32_MB);
+    const ui64 capacity = quota.GetActiveByteLimit(64_MB);
     quota.RestrictBrokerLimit(1, quota.GetBrokerLimitGeneration());
     fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), 1);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64_MB), 1);
     acks.Stop().Unblock();
-    fixture.Runtime.WaitFor("broker capacity confirmed", [&] { return quota.GetActiveByteLimit(32_MB) == capacity; });
+    fixture.Runtime.WaitFor("broker capacity confirmed", [&] { return quota.GetActiveByteLimit(64_MB) == capacity; });
 }
 
 Y_UNIT_TEST(IndexBuildBudgetOnSmallNodes) {

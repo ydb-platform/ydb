@@ -167,26 +167,26 @@ namespace NTabletFlatExecutor {
                         State->Priority, true)));
             }
 
-            std::shared_ptr<void> Retain(ui64 bytes) {
+            static std::shared_ptr<void> Retain(const std::shared_ptr<TState>& state, ui64 bytes) {
                 if (!bytes) {
                     return {};
                 }
-                auto payload = std::make_shared<TPayload>(State, bytes);
-                with_lock(State->Lock) {
+                auto payload = std::make_shared<TPayload>(state, bytes);
+                with_lock(state->Lock) {
                     // The payload already exists, including when retained from
                     // Finish(). Charge estimate overruns instead of throwing in
                     // the scan's teardown path or hiding their memory usage.
-                    State->Retained += bytes;
+                    state->Retained += bytes;
                     payload->Armed = true;
-                    if (!State->OverrunReported && State->Retained > State->Memory) {
-                        State->OverrunReported = true;
-                        YDB_LOG_WARN_CTX_COMP(*State->System, NKikimrServices::TABLET_OPS_HOST,
+                    if (!state->OverrunReported && state->Retained > state->Memory) {
+                        state->OverrunReported = true;
+                        YDB_LOG_WARN_CTX_COMP(*state->System, NKikimrServices::TABLET_OPS_HOST,
                             "Retained scan payload exceeds admitted memory reservation",
-                            {"scanType", State->Type}, {"client", State->Client}, {"taskId", State->TaskId},
-                            {"admittedBytes", State->Memory}, {"retainedBytes", State->Retained},
-                            {"overrunBytes", State->Retained - State->Memory});
+                            {"scanType", state->Type}, {"client", state->Client}, {"taskId", state->TaskId},
+                            {"admittedBytes", state->Memory}, {"retainedBytes", state->Retained},
+                            {"overrunBytes", state->Retained - state->Memory});
                     }
-                    State->UpdateRetained();
+                    state->UpdateRetained();
                 }
                 return payload;
             }
@@ -230,6 +230,7 @@ namespace NTabletFlatExecutor {
             bool NeedsReadmission = false;
             // Owns expiry of the readiness state chosen at a broker grant.
             TInstant ReadinessDeadline;
+            TInstant BrokerDeadline;
             ui32 ReadinessChecks = 0;
             ui64 TimeoutGeneration = 0;
             TActorId Actor;     /* Valid just after EState::Scan*/
@@ -256,14 +257,11 @@ namespace NTabletFlatExecutor {
         };
 
         struct TCancelled {
-            ui64 Serial = 0;
-            ui32 Table = Max<ui32>();
-            std::shared_ptr<TTaskLease> Lease;
-            TScanOptions Options;
+            std::shared_ptr<TOne> Scan;
             THolder<TScanSnapshot> Snapshot;
 
             explicit operator bool() const {
-                return Serial != 0;
+                return bool(Scan);
             }
         };
 
@@ -366,7 +364,7 @@ namespace NTabletFlatExecutor {
                 }
                 submit->SetOwner(Tablet, FollowerId);
                 ToBroker(submit.Release());
-                ScheduleAdmissionTimeout(one);
+                BeginBrokerWait(one);
             }
 
             return one.Serial;
@@ -374,7 +372,7 @@ namespace NTabletFlatExecutor {
 
         TAcquired Acquired(ui64 task, TResource *cookie)
         {
-            auto *one = Lookup(CheckedCast<TCookie*>(cookie)->Serial, false);
+            const auto one = Hold(CheckedCast<TCookie*>(cookie)->Serial);
 
             if (one == nullptr) {
                 if (!CheckedCast<TCookie*>(cookie)->ManagedLease) {
@@ -388,8 +386,12 @@ namespace NTabletFlatExecutor {
                 // An overdue grant must discard the old readiness state
                 // before selecting a new one, even if its timer is delayed.
                 ExpireReadiness(*one);
+                if (!Lookup(one->Serial, false)) {
+                    return {};
+                }
                 // A call to Start is expected now
                 one->State = EState::Ready;
+                one->BrokerDeadline = {};
                 ++one->TimeoutGeneration;
                 if (one->Lease) {
                     one->Lease->Acquired();
@@ -400,7 +402,8 @@ namespace NTabletFlatExecutor {
         }
 
         EReadiness AwaitReadiness(ui64 serial) {
-            auto& one = *Lookup(serial, true);
+            const auto owner = Hold(serial);
+            auto& one = *owner;
             if (one.ReadinessDeadline && TActivationContext::Now() >= one.ReadinessDeadline) {
                 return EReadiness::TimedOut;
             }
@@ -411,7 +414,11 @@ namespace NTabletFlatExecutor {
                 one.ReadinessDeadline = TActivationContext::Now() + one.Options.QueueTimeout;
             }
             auto resume = std::make_unique<IEventHandle>(BrokerClient, TActorId(), new NOps::TEvResumeScan(serial));
-            if (!one.Options.OnAdmissionReady(one.Options, std::move(resume))) {
+            const bool ready = one.Options.OnAdmissionReady(one.Options, std::move(resume));
+            if (!Lookup(serial, false)) {
+                return EReadiness::Waiting;
+            }
+            if (!ready) {
                 if (one.ReadinessChecks++ >= MaxReadinessChecks) {
                     return EReadiness::RetryLimitExceeded;
                 }
@@ -430,7 +437,7 @@ namespace NTabletFlatExecutor {
                 one.Lease->Readmit();
                 one.NeedsReadmission = false;
                 one.State = EState::Task;
-                ScheduleAdmissionTimeout(one);
+                BeginBrokerWait(one);
                 return EReadiness::Waiting;
             }
             return EReadiness::Ready;
@@ -445,17 +452,28 @@ namespace NTabletFlatExecutor {
         }
 
         bool Initialize(ui64 serial) {
-            auto& one = *Lookup(serial, true);
+            const auto owner = Hold(serial);
+            auto& one = *owner;
             if (one.Options.Factory) {
                 auto factory = std::move(one.Options.Factory);
-                one.Scan = factory(one.Options);
+                auto scan = factory(one.Options);
+                if (!Lookup(serial, false)) {
+                    return false;
+                }
+                one.Scan = scan;
                 one.Options.PendingReservation.reset();
             }
             return bool(one.Scan);
         }
 
-        TScanOptions& GetOptions(ui64 serial) {
-            return Lookup(serial, true)->Options;
+        std::shared_ptr<TScanOptions> HoldOptions(ui64 serial) {
+            auto owner = Hold(serial);
+            auto* options = &owner->Options;
+            return {std::move(owner), options};
+        }
+
+        bool Contains(ui64 serial) const {
+            return Scans.contains(serial);
         }
 
         bool NeedsSnapshot(ui64 serial) {
@@ -484,36 +502,50 @@ namespace NTabletFlatExecutor {
             const auto cookie = one->Cookie;
             auto cancelled = Cancel(serial);
             ReleaseSnapshot(std::move(cancelled.Snapshot));
-            if (memoryLimit && cancelled.Options.OnMemoryLimitExceeded) {
-                cancelled.Options.OnMemoryLimitExceeded(*memoryLimit);
+            const auto& options = cancelled.Scan->Options;
+            if (memoryLimit && options.OnMemoryLimitExceeded) {
+                options.OnMemoryLimitExceeded(*memoryLimit);
             }
-            if (cancelled.Options.OnAdmissionFailure) {
-                cancelled.Options.OnAdmissionFailure(reason, true);
+            if (options.OnAdmissionFailure) {
+                options.OnAdmissionFailure(reason, true);
             } else {
                 Owner->ScanComplete(EStatus::Term, {}, cookie, TActivationContext::ActorContextFor(OwnerActorId));
             }
         }
 
         void AdmissionTimedOut(ui64 serial, ui64 generation) {
-            auto* one = Lookup(serial, false);
+            const auto one = Hold(serial);
             if (!one || (one->State != EState::Task && one->State != EState::Ready) ||
                 one->TimeoutGeneration != generation) {
                 return;
             }
-            if (one->State == EState::Ready && one->ReadinessDeadline &&
-                TActivationContext::Now() >= one->ReadinessDeadline) {
-                return AdmissionFailed(serial, "Timed out waiting for scan readiness");
+            const auto now = TActivationContext::Now();
+            if (one->State == EState::Ready) {
+                if (one->ReadinessDeadline && now >= one->ReadinessDeadline) {
+                    AdmissionFailed(serial, "Timed out waiting for scan readiness");
+                } else {
+                    ScheduleAdmissionTimeout(*one);
+                }
+                return;
             }
-            if (one->State == EState::Task) {
-                ExpireReadiness(*one);
+            ExpireReadiness(*one);
+            if (!Contains(serial)) {
+                return;
             }
-            if (one->State == EState::Task && one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout()) {
-                // A heartbeat must not cancel and reinsert a queued task: that
-                // would lose its FIFO position under a sustained backlog.
+            if (!one->BrokerDeadline || now < one->BrokerDeadline) {
                 ScheduleAdmissionTimeout(*one);
                 return;
             }
-            return AdmissionFailed(serial, "Timed out waiting for scan admission");
+            const bool keepWaiting = one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout();
+            if (!Contains(serial)) {
+                return;
+            }
+            if (keepWaiting) {
+                // A heartbeat keeps the same broker task and its queue position.
+                BeginBrokerWait(*one);
+                return;
+            }
+            AdmissionFailed(serial, "Timed out waiting for scan admission");
         }
 
         void Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
@@ -521,10 +553,10 @@ namespace NTabletFlatExecutor {
                 // UpdateTask errors have no cookie. Match the live deferred
                 // task by id, ignoring errors for running or unrelated work.
                 for (const auto& [serial, one] : Scans) {
-                    if (one.TaskId == error.TaskId && one.Lease && one.Options.Factory && one.State <= EState::Ready) {
+                    if (one->TaskId == error.TaskId && one->Lease && one->Options.Factory && one->State <= EState::Ready) {
                         // A delayed error may refer to an earlier update, while
                         // the broker still owns a previously acquired task.
-                        one.Lease->Rejected();
+                        one->Lease->Rejected();
                         return AdmissionFailed(serial, error.Status.Message);
                     }
                 }
@@ -594,17 +626,17 @@ namespace NTabletFlatExecutor {
 
         TCancelled Cancel(ui64 serial)
         {
-            auto *one = Lookup(serial, false);
+            const auto one = Hold(serial);
 
             if (serial & 0x1 /* system scan */) {
-                Y_TABLET_ERROR(NFmt::If(one) << " is system (" << serial << "), cannot be cancelled this way");
+                Y_TABLET_ERROR(NFmt::If(one.get()) << " is system (" << serial << "), cannot be cancelled this way");
             }
 
             if (!one) {
                 return { };
             }
 
-            TCancelled cancelled{ one->Serial, one->Table, one->Lease, std::move(one->Options), std::move(one->Snapshot) };
+            TCancelled cancelled{one, std::move(one->Snapshot)};
 
             if (!Cancel(*one, EState::Forget)) {
                 return { };
@@ -652,15 +684,10 @@ namespace NTabletFlatExecutor {
 
             const ui64 token = (Serial += 2) - (type == EType::System ? 1 : 0);
 
-            auto got = Scans.emplace(
-                std::piecewise_construct,
-                std::make_tuple(token),
-                std::make_tuple(token, table, options, std::move(snapshot)));
+            auto [it, inserted] = Scans.emplace(token, std::make_shared<TOne>(token, table, options, std::move(snapshot)));
+            Y_ENSURE(inserted, "Failed to make new scan state entry");
 
-            Y_ENSURE(got.second, "Failed to make new scan state entry");
-
-            auto *one = &got.first->second;
-
+            auto* one = it->second.get();
             one->Scan = scan;
             Tables[table].Scans.PushBack(one);
 
@@ -697,10 +724,10 @@ namespace NTabletFlatExecutor {
 
             Y_ENSURE(one.Snapshot);
             if (one.Lease) {
-                one.Scan->HoldResourceReservation(one.Lease, [lease = std::weak_ptr<TTaskLease>(one.Lease)](ui64 bytes) {
-                    const auto owner = lease.lock();
+                one.Scan->HoldResourceReservation(one.Lease, [state = std::weak_ptr<TTaskLease::TState>(one.Lease->State)](ui64 bytes) {
+                    const auto owner = state.lock();
                     Y_ENSURE(owner, "Scan reservation has already been released");
-                    return owner->Retain(bytes);
+                    return TTaskLease::Retain(owner, bytes);
                 });
             }
             auto actor = MakeHolder<NOps::TDriver>(one.Serial, one.Scan, conf, one.Snapshot);
@@ -774,13 +801,20 @@ namespace NTabletFlatExecutor {
             }
 
             const ui64 serial = one.Serial;
+            one.Unlink();
             Scans.erase(serial);
             return outcome;
         }
 
+        std::shared_ptr<TOne> Hold(ui64 serial) {
+            const auto* entry = Scans.FindPtr(serial);
+            return entry ? *entry : nullptr;
+        }
+
         TOne* Lookup(ui64 serial, bool require)
         {
-            auto *one = Scans.FindPtr(serial);
+            const auto* entry = Scans.FindPtr(serial);
+            auto* one = entry ? entry->get() : nullptr;
 
             if (require && one == nullptr) {
                 Y_TABLET_ERROR("Cannot find scan serial " << serial << " in states");
@@ -807,14 +841,24 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        void BeginBrokerWait(TOne& one) {
+            one.BrokerDeadline = one.Options.QueueTimeout
+                ? TActivationContext::Now() + one.Options.QueueTimeout
+                : TInstant();
+            ScheduleAdmissionTimeout(one);
+        }
+
         void ScheduleAdmissionTimeout(TOne& one) {
             ++one.TimeoutGeneration;
-            if (one.Options.Factory && one.Options.QueueTimeout) {
-                const auto delay = one.ReadinessDeadline
-                    ? Min(one.Options.QueueTimeout, one.ReadinessDeadline - TActivationContext::Now())
-                    : one.Options.QueueTimeout;
-                TActivationContext::ActorContextFor(BrokerClient).Schedule(delay,
-                    new NOps::TEvAdmissionTimeout(one.Serial, one.TimeoutGeneration));
+            if (one.Options.Factory) {
+                auto deadline = one.BrokerDeadline;
+                if (one.ReadinessDeadline) {
+                    deadline = deadline ? Min(deadline, one.ReadinessDeadline) : one.ReadinessDeadline;
+                }
+                if (deadline) {
+                    TActivationContext::ActorContextFor(BrokerClient).Schedule(deadline - TActivationContext::Now(),
+                        new NOps::TEvAdmissionTimeout(one.Serial, one.TimeoutGeneration));
+                }
             }
         }
 
@@ -840,7 +884,7 @@ namespace NTabletFlatExecutor {
         const TIntrusivePtr<TIdEmitter> Emitter;
         const std::function<void(THolder<TScanSnapshot>)> ReleaseSnapshot;
         ui32 CounterAlive = 0;
-        THashMap<ui64, TOne> Scans;
+        THashMap<ui64, std::shared_ptr<TOne>> Scans;
         THashMap<ui32, TTable> Tables;  /* only alive scans */
     };
 }

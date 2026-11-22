@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "upload_memory_reservation.h"
 
 #include <ydb/core/util/backoff.h>
 
@@ -33,6 +34,6 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  bool disableChangeCollection = false,
                                  ui64 cookie = 0,
                                  TBackoff backoff = TBackoff(0),
-                                 std::shared_ptr<void> memoryReservation = {});
+                                 TUploadMemoryReservation memoryReservation = {});
 } // namespace NTxProxy
 } // namespace NKikimr

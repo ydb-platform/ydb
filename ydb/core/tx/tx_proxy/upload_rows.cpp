@@ -21,7 +21,7 @@ public:
         bool writeToIndexImplTable,
         bool disableChangeCollection,
         ui64 cookie,
-        TBackoff backoff, std::shared_ptr<void> memoryReservation)
+        TBackoff backoff, TUploadMemoryReservation memoryReservation)
         : TUploadRowsBase(std::move(rows), userCtx)
         , Sender(sender)
         , Database(database)
@@ -112,7 +112,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     bool writeToIndexImplTable,
     bool disableChangeCollection,
     ui64 cookie,
-    TBackoff backoff, std::shared_ptr<void> memoryReservation)
+    TBackoff backoff, TUploadMemoryReservation memoryReservation)
 {
     return new TUploadRowsInternal(sender,
         database,

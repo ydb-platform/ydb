@@ -591,7 +591,13 @@ private:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext& ctx) {
-        // Only limit sends are tracked, so an undelivered one marks a dead registrant
+        if (ev->Get()->SourceType == TEvResourceBroker::EvConfigure) {
+            // The next controller tick retries the latest undelivered configuration.
+            if (PendingIndexBuildLimits.erase(ev->Cookie) && ev->Cookie == NextBrokerConfig) {
+                CurrentResourceBrokerConfig.reset();
+            }
+            return;
+        }
         if (ev->Get()->SourceType != EvConsumerLimit) {
             return;
         }
@@ -812,7 +818,7 @@ private:
         const ui64 cookie = ++NextBrokerConfig;
         PendingIndexBuildLimits.clear(); // Only the latest configuration can supersede a rejection hint.
         PendingIndexBuildLimits[cookie] = Min(config.IndexBuildMemoryLimit, config.LimitBytes);
-        Send(MakeResourceBrokerID(), configure.Release(), 0, cookie);
+        Send(MakeResourceBrokerID(), configure.Release(), IEventHandle::FlagTrackDelivery, cookie);
 
         CurrentResourceBrokerConfig.emplace(std::move(config));
     }

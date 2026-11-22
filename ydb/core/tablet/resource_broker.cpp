@@ -37,7 +37,7 @@ TResourceLimit::TResourceLimit(const NKikimrResourceBroker::TResources &limit)
 bool TResourceLimit::HasResources(const TResourceValues &values) const
 {
     for (size_t i = 0; i < values.size(); ++i)
-        if (Used[i] > Limit[i] || values[i] > Limit[i] - Used[i])
+        if (values[i] && (Used[i] > Limit[i] || values[i] > Limit[i] - Used[i]))
             return false;
     return true;
 }
@@ -203,6 +203,9 @@ void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
         if (!task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
             MemorylessTasks.insert(task);
         }
+        if (!task->TypeLimit || !task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
+            TasksWithoutTypeMemoryLimit.insert(task);
+        }
 
         // Update queue/task counters
         QueueCounters.EnqueuedTasks->Inc();
@@ -237,6 +240,7 @@ void TTaskQueue::EraseTask(TTaskPtr task, bool finished, TInstant now)
         }
     } else {
         MemorylessTasks.erase(task);
+        TasksWithoutTypeMemoryLimit.erase(task);
         // Removing the first element is the most common case.
         if (*Tasks.begin() == task) {
             Tasks.erase(Tasks.begin());
@@ -305,10 +309,7 @@ TTaskPtr TTaskQueue::FrontMemorylessTask()
 
 TTaskPtr TTaskQueue::FrontTaskWithoutTypeMemoryLimit()
 {
-    const auto it = std::find_if(Tasks.begin(), Tasks.end(), [](const TTaskPtr& task) {
-        return !task->TypeLimit || !task->RequiredResources[NKikimrResourceBroker::MEMORY];
-    });
-    return it != Tasks.end() ? *it : TTaskPtr{};
+    return TasksWithoutTypeMemoryLimit.empty() ? TTaskPtr{} : *TasksWithoutTypeMemoryLimit.begin();
 }
 
 void TTaskQueue::PopTask(TTaskPtr task)

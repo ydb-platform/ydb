@@ -1,5 +1,7 @@
 #pragma once
 
+#include "upload_memory_reservation.h"
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -132,7 +134,7 @@ private:
     };
 
 protected:
-    std::shared_ptr<void> MemoryReservation;
+    TUploadMemoryReservation MemoryReservation;
 private:
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TActorId SchemeCache;
@@ -1200,7 +1202,7 @@ private:
         Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
-        ev->MemoryReservation = MemoryReservation;
+        ev->MemoryReservation = MemoryReservation.RetainRequests(1);
         ev->Record = state->Headers;
         if (UserCtx != nullptr) {
             UserCtx->SerializeToEvent(ev->Record);
@@ -1228,6 +1230,7 @@ private:
         // Group rows by shard id
         TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
         TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
+        size_t shardRequestCount = 0;
         for (const auto& keyValue : *Rows) {
             // Find partition for the key
             auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), keyValue.first.GetCells(),
@@ -1251,7 +1254,7 @@ private:
             if (!ev) {
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
-                ev->MemoryReservation = MemoryReservation;
+                ++shardRequestCount;
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
                 if (UserCtx != nullptr) {
                     UserCtx->SerializeToEvent(ev->Record);
@@ -1292,13 +1295,13 @@ private:
         }
 
         // Send requests to the shards
-        size_t shardRequestCount = 0;
+        const auto requestReservation = MemoryReservation.RetainRequests(shardRequestCount);
         for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
             auto& ev = shardRequests[idx];
             if (!ev) {
                 continue;
             }
-            ++shardRequestCount;
+            ev->MemoryReservation = requestReservation;
 
             TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 

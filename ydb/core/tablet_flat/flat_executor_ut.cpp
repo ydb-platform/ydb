@@ -1632,6 +1632,90 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CancelFromDeferredAdmissionCallback, InFactory) {
+        TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
+        bool cancelled = false;
+        bool destroyed = false;
+        bool failed = false;
+        ui64 serial = 0;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            const ui64 snapshot = executor->MakeScanSnapshot(TRowsModel::TableId);
+            const auto cancel = [&, executor, snapshot](TScanOptions& options) {
+                UNIT_ASSERT(executor->CancelScan(TRowsModel::TableId, serial));
+                options.SetSnapshotId(snapshot);
+                cancelled = true;
+            };
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            if (!InFactory) {
+                options.OnAdmissionReady = [cancel](TScanOptions& options, std::unique_ptr<IEventHandle>) {
+                    cancel(options);
+                    return false;
+                };
+            }
+            options.Factory = [&, cancel](TScanOptions& options) -> TAutoPtr<NTable::IScan> {
+                UNIT_ASSERT(InFactory);
+                cancel(options);
+                return new TThrowingDescriptionScan(destroyed);
+            };
+            options.OnAdmissionFailure = [&](const TString&, bool) { failed = true; };
+            serial = executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("callback cancelled the scan", [&] { return cancelled; });
+        UNIT_ASSERT_VALUES_EQUAL(destroyed, InFactory);
+        UNIT_ASSERT(!failed);
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
+    }
+
+    Y_UNIT_TEST(ReadinessExpiryKeepsReadmissionQueued) {
+        TMyEnvScans env;
+        bool ready = false;
+        bool expired = false;
+        bool failed = false;
+        bool finished = false;
+        std::unique_ptr<IEventHandle> resume;
+        TBlockEvents<TEvResourceBroker::TEvResourceAllocated> grants(env.Env, [](const auto& event) {
+            const auto* resource = dynamic_cast<TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == TResource::ESource::Scan;
+        });
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.QueueTimeout = TDuration::Seconds(60);
+            options.OnAdmissionReady = [&](TScanOptions&, std::unique_ptr<IEventHandle> event) {
+                if (ready) {
+                    return true;
+                }
+                resume = std::move(event);
+                return false;
+            };
+            options.OnReadinessExpired = [&] { expired = true; };
+            options.OnAdmissionFailure = [&](const TString&, bool) { failed = true; };
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                return new TAdmissionReadyScan(finished);
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("initial admission grant", [&] { return !grants.empty(); });
+        grants.Unblock(1);
+        env->WaitFor("scan parked for readiness", [&] { return bool(resume); });
+        env->SimulateSleep(TDuration::Seconds(59));
+        ready = true;
+        env->Send(resume.release());
+        env->WaitFor("readmission grant held", [&] { return !grants.empty(); });
+        env->SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT(expired);
+        UNIT_ASSERT(!failed);
+        UNIT_ASSERT(!finished);
+        grants.Stop().Unblock();
+        env->WaitFor("scan finishes after readmission", [&] { return finished; });
+        UNIT_ASSERT(!failed);
+    }
+
     Y_UNIT_TEST_TWIN(RepeatedReadinessCyclesYieldRetry, Readmit) {
         TMyEnvScans env;
         bool ready = false;

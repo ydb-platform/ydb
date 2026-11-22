@@ -263,6 +263,31 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         FinishTask(runtime, broker, sender, 6);
     }
 
+    Y_UNIT_TEST(CpuOnlyTaskRunsWhenMemoryLimitDropsBelowUsage) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        config.MutableResourceLimit()->SetCpu(1);
+        const auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+
+        SubmitTask(runtime, broker, sender, 1, 1, 400, "unknown", 5);
+        WaitForResourceAllocation(runtime, 1);
+        SubmitTask(runtime, broker, sender, 2, 1, 0, "scan", 5);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+
+        config.MutableResourceLimit()->SetCpu(2);
+        config.MutableResourceLimit()->SetMemory(300);
+        CheckConfigure(runtime, broker, sender, config, true);
+        WaitForResourceAllocation(runtime, 2);
+        CheckCounters(counters, "queue", "total", 2, 400, 0, 0, 2);
+        FinishTask(runtime, broker, sender, 1);
+        FinishTask(runtime, broker, sender, 2);
+    }
+
     Y_UNIT_TEST(ParkedTaskAllowsIdleBrokerOvercommit) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);

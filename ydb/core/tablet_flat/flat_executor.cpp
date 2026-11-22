@@ -3756,7 +3756,8 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
 
 void TExecutor::StartScan(ui64 serial, ui32 table)
 {
-    if (!Scans->GetOptions(serial).Factory) {
+    const auto options = Scans->HoldOptions(serial);
+    if (!options->Factory) {
         // Legacy scan failures must still propagate to their caller.
         try {
             Scans->Start(serial);
@@ -3767,15 +3768,24 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
         return;
     }
     const auto captureExplicitSnapshot = [&] {
-        const auto& options = Scans->GetOptions(serial);
-        if (Scans->NeedsSnapshot(serial) && std::holds_alternative<TScanOptions::TSnapshotById>(options.Snapshot)) {
-            Scans->SetSnapshot(serial, ResolveScanSnapshot(table, options));
+        if (Scans->NeedsSnapshot(serial) && std::holds_alternative<TScanOptions::TSnapshotById>(options->Snapshot)) {
+            Scans->SetSnapshot(serial, ResolveScanSnapshot(table, *options));
+        }
+    };
+
+    const auto releaseUnclaimedSnapshot = [&] {
+        if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options->Snapshot)) {
+            ReleaseScanLocks(TakeScanSnapshot(table, byId->SnapshotId));
         }
     };
 
     TString failure;
     try {
         const auto readiness = Scans->AwaitReadiness(serial);
+        if (!Scans->Contains(serial)) {
+            releaseUnclaimedSnapshot();
+            return;
+        }
         captureExplicitSnapshot();
         switch (readiness) {
             case TScans::EReadiness::Waiting:
@@ -3788,13 +3798,17 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
                 break;
             case TScans::EReadiness::Ready: {
                 const bool initialized = Scans->Initialize(serial);
+                if (!Scans->Contains(serial)) {
+                    releaseUnclaimedSnapshot();
+                    return;
+                }
                 captureExplicitSnapshot();
                 if (!initialized) {
                     failure = "Deferred scan factory returned no scan";
                     break;
                 }
                 if (Scans->NeedsSnapshot(serial)) {
-                    Scans->SetSnapshot(serial, ResolveScanSnapshot(table, Scans->GetOptions(serial)));
+                    Scans->SetSnapshot(serial, ResolveScanSnapshot(table, *options));
                 }
                 Scans->Start(serial);
                 return;
@@ -3803,9 +3817,7 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
     } catch (...) {
         failure = TStringBuilder() << "Cannot initialize admitted scan: " << CurrentExceptionMessage();
         // A callback can select a snapshot and throw before it is transferred.
-        if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&Scans->GetOptions(serial).Snapshot)) {
-            ReleaseScanLocks(TakeScanSnapshot(table, byId->SnapshotId));
-        }
+        releaseUnclaimedSnapshot();
     }
     Scans->AdmissionFailed(serial, failure);
 }

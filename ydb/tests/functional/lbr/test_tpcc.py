@@ -68,7 +68,8 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
         }
         for name, path in (("ydbd", binary), ("cli", cli)):
             command = [str(path), "-V"] if name == "ydbd" else [str(path), "version", "--semantic"]
-            result = yatest.common.execute(command)
+            result = yatest.common.execute(command, check_exit_code=False)
+            metadata[f"{name}_version_exit_code"] = result.exit_code
             (cls.profile_dir.parent / f"{name}-version.txt").write_bytes(result.std_out + result.std_err)
         (cls.profile_dir.parent / "lbr-run.json").write_text(json.dumps(metadata, indent=2))
         cls.conversion = LbrConversion(

@@ -222,3 +222,27 @@ def test_windowed_perf_is_checked_before_start(tmp_path, executable):
         with collector:
             pytest.fail("Invalid perf must fail before the workload starts")
     assert collector._thread is None
+
+
+def test_startup_timeout_uses_bounded_join(tmp_path, fake_perf, monkeypatch):
+    joins = []
+
+    class StuckThread:
+        def __init__(self, **kwargs):
+            assert kwargs["daemon"]
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            joins.append(timeout)
+
+    collector = LbrCollector([os.getpid()], tmp_path / "import", None, perf=fake_perf)
+    monkeypatch.setattr(threading, "Thread", StuckThread)
+    monkeypatch.setattr(collector._first_attempt, "wait", lambda timeout: False)
+    with pytest.raises(RuntimeError, match="Timed out starting LBR"):
+        with collector:
+            pytest.fail("Startup timeout must prevent the phase from starting")
+    assert joins == [15]
+    assert collector._stop.is_set()
+    assert "Timed out starting" in manifest(tmp_path / "import")["error"]

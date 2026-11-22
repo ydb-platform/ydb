@@ -77,7 +77,9 @@ def test_raw_lbr_filter_and_atomic_profile(tmp_path):
     binary = tmp_path / "ydbd"
     binary.touch()
     perf = tmp_path / "perf"
-    perf.write_text(f"#!/bin/sh\nprintf 'PERF_RECORD_MMAP {binary}\\n0x123/0x456\\nunrelated\\n'\n")
+    perf.write_text(
+        f"#!/bin/sh\nprintf 'PERF_RECORD_MMAP2 1/1: [0x1000(0x1000) @ 0 00:00 0 0]: r-xp {binary}\\n0x123/0x456\\nunrelated\\n'\n"
+    )
     perf.chmod(0o755)
     llvm = tmp_path / "llvm"
     llvm.mkdir()
@@ -93,7 +95,9 @@ def test_raw_lbr_filter_and_atomic_profile(tmp_path):
     conversion.submit("workload", 1, tmp_path / "ready.perf.data")
     conversion.finish_phase("workload", True)
     conversion.finish()
-    assert (tmp_path / "profiles/workload/snap1.lbr").read_text() == f"PERF_RECORD_MMAP {binary}\n0x123/0x456\n"
+    assert (
+        tmp_path / "profiles/workload/snap1.lbr"
+    ).read_text() == f"PERF_RECORD_MMAP2 1/1: [0x1000(0x1000) @ 0 00:00 0 0]: r-xp {binary}\n0x123/0x456\n"
     assert (tmp_path / "profiles/workload/snap1.prof").read_bytes() == b"profile"
     assert not list((tmp_path / "profiles").rglob("*.tmp"))
     report = json.loads((tmp_path / "profiles/conversion.json").read_text())[0]
@@ -153,7 +157,9 @@ def test_symlink_binary_mapping(tmp_path, monkeypatch, resolved_mapping):
     link.symlink_to(binary)
     mapped = binary if resolved_mapping else link
     perf = tmp_path / "perf"
-    perf.write_text(f"#!/bin/sh\nprintf 'PERF_RECORD_MMAP {mapped}\\n0x123/0x456\\n'\n")
+    perf.write_text(
+        f"#!/bin/sh\nprintf 'PERF_RECORD_MMAP2 1/1: [0x1000(0x1000) @ 0 00:00 0 0]: r-xp {mapped}\\n0x123/0x456\\n'\n"
+    )
     perf.chmod(0o755)
     conversion = LbrConversion(link, tmp_path / "profiles", perf=str(perf))
 
@@ -319,3 +325,29 @@ def test_conversion_without_gnu_time(tmp_path, monkeypatch):
     assert result["exit_code"] == 0
     assert result["peak_rss_kib"] is None
     assert (tmp_path / "profiles/snap1.log").read_text() == "converted"
+
+
+@pytest.mark.parametrize("wrong_prefix", [False, True])
+def test_mmap_filename_is_exact_and_can_contain_spaces(tmp_path, monkeypatch, wrong_prefix):
+    binary = tmp_path / "directory with spaces" / "ydbd"
+    binary.parent.mkdir()
+    binary.touch()
+    mapped = f"/another{binary}" if wrong_prefix else str(binary)
+    perf = tmp_path / "perf"
+    perf.write_text(
+        f"#!/bin/sh\nprintf 'PERF_RECORD_MMAP2 1/1: [0x1000(0x1000) @ 0 00:00 0 0]: r-xp {mapped}\\n0x123/0x456\\n'\n"
+    )
+    perf.chmod(0o755)
+    conversion = LbrConversion(binary, tmp_path / "profiles", perf=str(perf))
+
+    def profgen(command, prefix):
+        output = next(arg.split("=", 1)[1] for arg in command if arg.startswith("--output="))
+        Path(output).write_bytes(b"profile")
+        return {}
+
+    monkeypatch.setattr(conversion, "_run", profgen)
+    if wrong_prefix:
+        with pytest.raises(RuntimeError, match="mappings=0"):
+            conversion._convert(tmp_path / "data", tmp_path / "profiles/snap1")
+    else:
+        assert conversion._convert(tmp_path / "data", tmp_path / "profiles/snap1")["samples"] == 1

@@ -211,13 +211,15 @@ class LbrConversion:
         lbr = prefix.with_suffix(".lbr")
         samples = mappings = 0
         branch = re.compile(rb"0x[0-9a-fA-F]+/0x[0-9a-fA-F]+")
+        mmap = re.compile(rb"\bPERF_RECORD_MMAP2?\s+\d+/\d+:\s+\[[^\]]+\]:\s+(?:[-rwxps]{4}\s+)?(.+)$")
         command = [self.perf, "script", "-G", "--show-mmap-events", "-F", "ip,brstack", "-i", str(data)]
         prefix.with_suffix(".perf-command.json").write_text(json.dumps(command, indent=2))
         with lbr.open("wb") as output, prefix.with_suffix(".perf-script.log").open("wb") as log:
             with self._process(command, stdout=subprocess.PIPE, stderr=log) as process:
                 for line in process.stdout:
                     sample = bool(branch.search(line))
-                    mapping = b"PERF_RECORD_MMAP" in line and line.rstrip().endswith(self.binary_paths)
+                    event = mmap.search(line.rstrip())
+                    mapping = event is not None and event[1] in self.binary_paths
                     if sample or mapping:
                         output.write(line)
                         samples += sample

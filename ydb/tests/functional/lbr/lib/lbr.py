@@ -77,16 +77,16 @@ class LbrCollector:
             self._write_manifest()
             raise self.error
         self.perf = executable
-        self._thread = threading.Thread(target=self._collect, name=f"tpcc-lbr-{self.phase or 'load'}")
+        self._thread = threading.Thread(target=self._collect, name=f"tpcc-lbr-{self.phase or 'load'}", daemon=True)
         self._thread.start()
         if self.periodic and self.start_delay_seconds == 0:
             # Start the first perf process before a possibly short phase begins.
             if not self._first_attempt.wait(10):
                 self._stop.set()
-                self._thread.join()
                 self.error = RuntimeError("Timed out starting LBR collection")
             if self.error:
-                self._thread.join()
+                self._stop.set()
+                self._thread.join(timeout=15)
                 self._write_manifest()
                 raise self.error
         return self

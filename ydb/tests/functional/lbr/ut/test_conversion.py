@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from ydb.tests.functional.lbr.lib.conversion import LbrConversion
+from ydb.tests.functional.lbr.lib.lbr import LbrCollector
 
 
 def fake_result(path):
@@ -353,12 +354,12 @@ def test_mmap_filename_is_exact_and_can_contain_spaces(tmp_path, monkeypatch, wr
         assert conversion._convert(tmp_path / "data", tmp_path / "profiles/snap1")["samples"] == 1
 
 
-def test_finish_allows_two_sequential_commands(tmp_path, monkeypatch):
+def test_finish_allows_concurrent_snapshots_with_two_sequential_commands(tmp_path, monkeypatch):
     conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles", timeout=6)
-    entered = threading.Event()
+    entered = threading.Barrier(3)
 
     def convert(data, prefix):
-        entered.set()
+        entered.wait(timeout=5)
         for _ in range(2):
             with conversion._process(["sleep", "5.7"], stdout=subprocess.DEVNULL) as process:
                 process.wait(timeout=11)
@@ -370,11 +371,31 @@ def test_finish_allows_two_sequential_commands(tmp_path, monkeypatch):
     monkeypatch.setattr(conversion, "_convert", convert)
     monkeypatch.setattr(conversion, "_run", merge)
     try:
-        conversion.submit("workload", 1, tmp_path / "data")
-        assert entered.wait(5)
+        for index in (1, 2):
+            conversion.submit("workload", index, tmp_path / "data")
+        entered.wait(timeout=5)
         conversion.finish_phase("workload", True)
         conversion.finish()
+        assert all(future.done() and future.exception() is None for _, _, future in conversion.jobs)
         assert not conversion._aborted.is_set()
         assert (tmp_path / "profiles/workload.prof").read_bytes() == b"merged"
     finally:
         conversion.abort()
+
+
+def test_invalid_workload_schedule_keeps_preparation_profile(tmp_path, monkeypatch):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles")
+    monkeypatch.setattr(conversion, "_convert", lambda data, prefix: fake_result(prefix.with_suffix(".prof")))
+
+    def merge(command, prefix):
+        Path(command[command.index("-o") + 1]).write_bytes(b"merged")
+
+    monkeypatch.setattr(conversion, "_run", merge)
+    conversion.submit("import", 1, tmp_path / "data")
+    conversion.finish_phase("import", True)
+    with pytest.raises(ValueError, match="snapshots must fit"):
+        with conversion.finish_on_exit():
+            LbrCollector([1], tmp_path / "workload", 30, record_seconds=30)
+    assert (tmp_path / "profiles/import.prof").read_bytes() == b"merged"
+    report = json.loads((tmp_path / "profiles/conversion.json").read_text())
+    assert report[0]["phase_valid"]

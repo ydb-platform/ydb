@@ -3,7 +3,8 @@
 `TestTpccLocalLbr` is a LARGE profiling test tagged `ya:manual`.
 It runs in a single test process, without splitting into files or test cases. It starts three static and three
 dynamic YDB processes on the local machine, with `mirror-3-dc` and file-backed
-PDisks. Ordinary TPC tests keep their existing configuration.
+PDisks. `YDB_USE_IN_MEMORY_PDISKS=true` is rejected before starting the cluster;
+unset it or set it to `false`. Ordinary TPC tests keep their existing configuration.
 
 Supply external executables for both the server and CLI. To reproduce the baseline
 experiment, use Sandbox resources **14259363241** (ydbd) and **14258473698** (CLI).
@@ -112,7 +113,10 @@ interpret profile similarity as a direct performance comparison.
 The 1000-warehouse training run used about 142 GiB for the server/test processes,
 in addition to RAM-backed storage. This opt-in mode is intended for a suitably
 sized local host; the test suite RAM requirement does not describe its
-training resource needs.
+training resource needs. The suite timeout is four hours, including import,
+compaction, workload, conversion and merging. Reduce the training parameters or
+raise the runner timeout for longer runs; a suite timeout can terminate the
+process before manifests and conversion reports are finalized.
 
 The collector unit tests are in `ut/`: a SMALL suite without `ya:manual`.
 They use a fake perf executable and do not start YDB or collect hardware profiles.
@@ -121,7 +125,9 @@ They use a fake perf executable and do not start YDB or collect hardware profile
 ## Conversion during collection
 
 Each closed, valid snapshot immediately starts its own conversion in a background
-thread, without a worker limit or a waiting queue. An open perf file is never submitted. Import and compaction
+thread, without a worker limit or a waiting queue. Provision memory for the
+cluster and concurrent converters; if conversions fall behind recording, their
+combined memory use grows. An open perf file is never submitted. Import and compaction
 conversion overlaps the later phases; the test waits for the remaining jobs
 at the end of the test and merges each successful phase separately.
 

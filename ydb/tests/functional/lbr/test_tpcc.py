@@ -20,6 +20,8 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
 
     @classmethod
     def setup_class(cls):
+        if os.environ.get("YDB_USE_IN_MEMORY_PDISKS") == "true":
+            raise ValueError("LBR training requires file-backed PDisks; unset YDB_USE_IN_MEMORY_PDISKS or set it to false")
         binary = Path(yatest.common.get_param("tpc-lbr-ydbd", "")).expanduser()
         cli = Path(yatest.common.get_param("ydb-cli", "")).expanduser()
         for name, path in (("ydbd", binary), ("CLI", cli)):
@@ -128,19 +130,19 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
         )
 
     def test(self):
-        self._collector = LbrCollector(
-            self._server_pids(),
-            self.profile_dir / "workload",
-            self.time_s,
-            self.record_seconds,
-            self.snapshots,
-            self.perf,
-            start_delay_seconds=self.warmup_s,
-            mmap_pages=self.mmap_pages,
-            phase="workload",
-            conversion=self.conversion,
-        )
         with self.conversion.finish_on_exit():
+            self._collector = LbrCollector(
+                self._server_pids(),
+                self.profile_dir / "workload",
+                self.time_s,
+                self.record_seconds,
+                self.snapshots,
+                self.perf,
+                start_delay_seconds=self.warmup_s,
+                mmap_pages=self.mmap_pages,
+                phase="workload",
+                conversion=self.conversion,
+            )
             with ExitStack() as self._lbr_stack:
                 super().test()
 

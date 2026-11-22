@@ -138,6 +138,12 @@ public:
         }, "source history and consumer commit ahead of standby");
         CheckOffsets(2);
 
+        const auto result = Session(Destination).ExecuteSchemeQuery(
+            "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE');").GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FORCE");
+        WaitForState(NKikimrReplication::TReplicationState::kPaused);
+
         Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');");
         WaitForState(NKikimrReplication::TReplicationState::kDone);
         CheckOffsets(2, 2);

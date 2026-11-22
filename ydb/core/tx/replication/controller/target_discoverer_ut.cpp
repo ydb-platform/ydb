@@ -3,7 +3,10 @@
 #include "target_table.h"
 #include "target_transfer.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
@@ -96,6 +99,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
             Runtime.Initialize(TAppPrepare().Unwrap());
             Parent = Runtime.AllocateEdgeActor();
             Proxy = Runtime.AllocateEdgeActor();
+            Runtime.RegisterService(MakeTxProxyID(), Parent);
         }
 
         Ydb::Table::ChangefeedDescription& AddCdc(const TString& name, Ydb::Table::ChangefeedDescription::State state) {
@@ -112,7 +116,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
                 UNIT_FAIL("Discovery must not create source consumers");
             });
             const auto actor = Runtime.Register(CreateTargetDiscoverer(Parent, 1, Proxy,
-                CreateConfig({{"/Root/Table", "/Root/Replica"}})));
+                CreateConfig({{"/Root/Table", "/Root/Replica"}}), Owner));
             const auto path = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribePathRequest>(Proxy);
             NYdb::NScheme::TSchemeEntry entry;
             entry.Type = NYdb::NScheme::ESchemeEntryType::Table;
@@ -122,10 +126,33 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
             Runtime.Send(new IEventHandle(actor, Proxy, new TEvYdbProxy::TEvDescribeTableResponse(
                 NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(Description), NYdb::NTable::TDescribeTableSettings()),
                 0, table->Cookie));
+            RegisterChangefeeds(actor);
             return Runtime.GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(Parent);
         }
 
     private:
+        void RegisterChangefeeds(const TActorId& actor) {
+            namespace TEvSS = NSchemeShard::TEvSchemeShard;
+            Runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(Parent);
+            NTxProxy::TTxProxyServices services;
+            services.LeaderPipeCache = Parent;
+            Runtime.Send(actor, Parent, new TEvTxUserProxy::TEvAllocateTxIdResult(100, services, {}));
+
+            const auto proposal = Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(Parent);
+            UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(), TEvSS::TEvModifySchemeTransaction::EventType);
+            const auto* request = static_cast<const TEvSS::TEvModifySchemeTransaction*>(proposal->Get()->Ev.Get());
+            const auto& alter = request->Record.GetTransaction(0).GetAlterReplication();
+            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(alter.GetPathId()), Owner);
+            UNIT_ASSERT(alter.GetManagesChangefeeds());
+
+            Runtime.Send(actor, Parent, new TEvSS::TEvModifySchemeTransactionResult(
+                NKikimrScheme::StatusAccepted, 100, Owner.OwnerId));
+            const auto notify = Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(Parent);
+            UNIT_ASSERT_VALUES_EQUAL(notify->Get()->Ev->Type(), TEvSS::TEvNotifyTxCompletion::EventType);
+            Runtime.Send(actor, Parent, new TEvSS::TEvNotifyTxCompletionResult(100));
+        }
+
+        const TPathId Owner{1, 2};
         TTestActorRuntime Runtime;
         TActorId Parent;
         TActorId Proxy;

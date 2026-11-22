@@ -662,6 +662,23 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
+    Y_UNIT_TEST(DoneBeforeChangefeedRegistration) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication" State { Done { FailoverMode: FAILOVER_MODE_CONSISTENT } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterReplicationRequest(
+            ++txId, "/MyRoot", R"(Name: "Replication" ManagesChangefeeds: true)")));
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusPreconditionFailed);
+    }
+
     Y_UNIT_TEST(Describe) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));

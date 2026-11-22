@@ -1950,6 +1950,8 @@ message TReplicationDescription {
     }
 
     optional TAlterTransfer AlterTransfer = 10;
+    // Set by the controller before it enrolls the first mirrored changefeed.
+    optional bool ManagesChangefeeds = 11;
 }
 
 message TBlobDepotDescription {

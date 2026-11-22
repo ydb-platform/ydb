@@ -2,8 +2,6 @@
 #include "target_cdc.h"
 #include "target_transfer.h"
 
-#include <ydb/core/base/appdata.h>
-
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -105,13 +103,7 @@ public:
                     NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
 
-                const auto& config = Replication->GetConfig();
-                if (target.Kind == TReplication::ETargetKind::Table
-                    && config.GetInitialScan()
-                    && config.GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::kRow
-                    && AppData(ctx)->FeatureFlags.GetEnableTopicReplication()
-                    && AppData(ctx)->FeatureFlags.GetEnableAsyncReplicationTableOwnership())
-                {
+                if (!target.CdcStreams.empty()) {
                     AddCdcTargets(target, tid, db);
                 }
 

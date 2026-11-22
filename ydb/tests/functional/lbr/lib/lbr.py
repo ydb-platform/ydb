@@ -90,7 +90,7 @@ class LbrCollector:
                 self._entry_failed.set()
                 self._phase_failed = True
                 self._stop.set()
-                self._thread.join(timeout=65)
+                self._thread.join(timeout=75)
                 if not self._thread.is_alive():
                     self._write_manifest()
                 # A late worker owns the final manifest after it stops recording.
@@ -129,7 +129,9 @@ class LbrCollector:
         }
         self.records.append(record)
         with (self.output_dir / f"snap{index}.log").open("w") as log:
-            with subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True) as process:
+            # Popen.__exit__ waits without a timeout, even after SIGKILL.
+            process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            try:
                 self._first_attempt.set()
                 while process.poll() is None:
                     if self._stop.wait(0.05):
@@ -141,12 +143,21 @@ class LbrCollector:
                         try:
                             process.wait(timeout=60)
                         except subprocess.TimeoutExpired:
-                            os.killpg(process.pid, signal.SIGKILL)
-                            process.wait()
+                            pass  # The bounded SIGKILL/reap below handles this case.
                         break
+            finally:
+                if process.poll() is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        record["reap_timed_out"] = True
                 record["return_code"] = process.returncode
-        record["finished_at"] = time.time()
-        record["actual_seconds"] = record["finished_at"] - record["started_at"]
+                record["finished_at"] = time.time()
+                record["actual_seconds"] = record["finished_at"] - record["started_at"]
         graceful_stop = (
             self.periodic
             and record["stopped_on_phase_end"]
@@ -206,7 +217,11 @@ class LbrCollector:
     def __exit__(self, exc_type, exc_value, traceback):
         self._phase_failed = exc_type is not None
         self._stop.set()
-        self._thread.join()
+        self._thread.join(timeout=75)
+        if self._thread.is_alive():
+            self._phase_failed = True
+            self.error = self.error or TimeoutError("Timed out stopping LBR collector")
+            self._entry_failed.set()
         try:
             if exc_type is None:
                 if self.error:
@@ -220,7 +235,8 @@ class LbrCollector:
         finally:
             if self.conversion is not None:
                 self.conversion.finish_phase(self.phase, self.valid)
-            self._write_manifest()
+            if not self._thread.is_alive():
+                self._write_manifest()
 
 
 def validate_training_settings(

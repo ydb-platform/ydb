@@ -33,7 +33,9 @@ compaction. It records import, legacy compaction and workload into separate
 Import and compaction are sampled immediately and then every 60 seconds until
 the phase ends. A final shorter snapshot is stopped gracefully and flushed.
 The collector allows 60 seconds for perf to flush after SIGINT; if it still
-does not exit, it is killed and the snapshot is rejected.
+does not exit, it is killed and the snapshot is rejected. Reaping after SIGKILL
+is limited to another 10 seconds; waiting for the collector thread is bounded
+at 75 seconds. An unreaped process never makes a snapshot valid.
 Its manifest records the actual duration and `stopped_on_phase_end`. A failed
 phase remains marked invalid. The default record duration is 30 seconds.
 SDK compaction is not a separate phase: it happens inside CLI import; the local

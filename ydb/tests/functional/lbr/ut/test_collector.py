@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
 import time
 import threading
 
@@ -246,7 +247,7 @@ def test_startup_timeout_uses_bounded_join(tmp_path, fake_perf, monkeypatch):
     with pytest.raises(RuntimeError, match="Timed out starting LBR"):
         with collector:
             pytest.fail("Startup timeout must prevent the phase from starting")
-    assert joins == [65]
+    assert joins == [75]
     assert collector._stop.is_set()
     assert "Timed out starting" in manifest(tmp_path / "import")["error"]
 
@@ -313,7 +314,7 @@ def test_late_startup_worker_writes_final_manifest(tmp_path, fake_perf, monkeypa
             self.worker.start()
 
         def join(self, timeout=None):
-            assert timeout == 65
+            assert timeout == 75
             # Simulate a worker that is still in Popen after the bounded join.
 
         def is_alive(self):
@@ -355,3 +356,73 @@ def test_late_startup_worker_writes_final_manifest(tmp_path, fake_perf, monkeypa
         assert len(data["records"]) == 1
         assert "finished_at" in data["records"][0]
         assert not data["records"][0]["complete"]
+
+
+def test_unkillable_perf_does_not_block_exit(tmp_path, fake_perf, monkeypatch):
+    waits = []
+    signals = []
+    submitted = []
+
+    class StuckProcess:
+        pid = 999999
+        returncode = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            assert timeout is not None, "Unbounded wait for perf"
+            waits.append(timeout)
+            raise subprocess.TimeoutExpired("perf", timeout)
+
+    class Conversion:
+        def submit(self, *args):
+            pytest.fail("Unreaped snapshot must not be converted")
+
+        def finish_phase(self, phase, valid):
+            submitted.append((phase, valid))
+
+    monkeypatch.setattr(subprocess, "Popen", StuckProcess)
+    monkeypatch.setattr(os, "killpg", lambda pid, sig: signals.append(sig))
+    collector = LbrCollector(
+        [os.getpid()],
+        tmp_path / "import",
+        None,
+        perf=fake_perf,
+        phase="import",
+        conversion=Conversion(),
+    )
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="collection failed"):
+        with collector:
+            pass
+    assert time.monotonic() - started < 5
+    assert waits == [60, 10]
+    assert signals == [signal.SIGINT, signal.SIGKILL]
+    assert submitted == [("import", False)]
+    record = manifest(collector.output_dir)["records"][0]
+    assert record["reap_timed_out"] and not record["complete"]
+    assert record["return_code"] is None
+
+
+def test_exit_does_not_wait_forever_for_collector_thread(tmp_path, monkeypatch):
+    joins = []
+
+    class StuckThread:
+        def join(self, timeout=None):
+            joins.append(timeout)
+
+        def is_alive(self):
+            return True
+
+    collector = LbrCollector([os.getpid()], tmp_path / "import", None)
+    collector._thread = StuckThread()
+    monkeypatch.setattr(collector, "_write_manifest", lambda: pytest.fail("Worker still owns records"))
+    with pytest.raises(TimeoutError, match="Timed out stopping LBR collector"):
+        collector.__exit__(None, None, None)
+    assert joins == [75]
+    assert collector._entry_failed.is_set()
+    assert collector._phase_failed and not collector.valid

@@ -3704,6 +3704,61 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    Y_UNIT_TEST(StorageGroupsExcludeDDisksFromWhiteboard) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateRequest) {
+                const auto& fields = ev->Get<TEvWhiteboard::TEvBSGroupStateRequest>()->Record.GetFieldsRequired();
+                UNIT_ASSERT(std::ranges::find(fields, NKikimrWhiteboard::TBSGroupStateInfo::kDDiskFieldNumber) != fields.end());
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                auto& record = ev->Get<TEvWhiteboard::TEvBSGroupStateResponse>()->Record;
+                record.ClearBSGroupStateInfo();
+                const ui32 nodeId = ev->Sender.NodeId();
+                for (ui32 groupId : {10, 11, 12}) {
+                    NKikimrBlobStorage::TGroupInfo group;
+                    group.SetGroupID(groupId);
+                    group.SetGroupGeneration(1);
+                    group.SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+                    group.SetStoragePoolName(groupId == 11 ? "nbs-ddisk" : "nbs-metadata");
+                    auto* slot = group.AddRings()->AddFailDomains()->AddVDiskLocations();
+                    slot->SetNodeID(nodeId);
+                    slot->SetPDiskID(1);
+                    slot->SetVDiskSlotID(groupId);
+                    if (nodeId == runtime.GetNodeId(0) && groupId != 10) {
+                        group.SetDDisk(groupId == 11);
+                    }
+                    TEvWhiteboard::TEvBSGroupStateUpdate update(TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
+                    record.AddBSGroupStateInfo()->Swap(&update.Record);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /storage/groups?whiteboard_only=true&sort=GroupId HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        const auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), result->Response->Body);
+        UNIT_ASSERT_VALUES_EQUAL(json["TotalGroups"].GetUInteger(), 2);
+        const auto& groups = json["StorageGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["GroupId"].GetString(), "10");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["GroupId"].GetString(), "12");
+    }
+
     void CheckVDiskReplicationStatus(bool groups) {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))

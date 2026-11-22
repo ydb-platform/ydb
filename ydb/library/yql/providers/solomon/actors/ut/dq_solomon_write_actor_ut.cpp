@@ -7,6 +7,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/yexception.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -19,18 +21,88 @@ constexpr TDuration WaitTimeout = TDuration::Seconds(10);
 
 namespace {
 
+class TBatchingCredentialsProvider final: public NYdb::ICredentialsProvider {
+public:
+    bool Fail = false;
+
+    std::string GetAuthInfo() const override {
+        if (Fail) {
+            ythrow yexception() << "Test credentials failure";
+        }
+        return "test-token";
+    }
+
+    bool IsValid() const override {
+        return true;
+    }
+};
+
+class TBatchingCredentialsFactory final: public IStructuredTokenCredentialsFactory {
+    class TProviderFactory final: public NYdb::ICredentialsProviderFactory {
+    public:
+        explicit TProviderFactory(std::shared_ptr<TBatchingCredentialsProvider> provider)
+            : Provider(std::move(provider))
+        {
+        }
+
+        std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
+            return Provider;
+        }
+
+    private:
+        const std::shared_ptr<TBatchingCredentialsProvider> Provider;
+    };
+
+public:
+    explicit TBatchingCredentialsFactory(std::shared_ptr<TBatchingCredentialsProvider> provider)
+        : Provider(std::move(provider))
+    {
+    }
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, bool) override {
+        return std::make_shared<TProviderFactory>(Provider);
+    }
+
+private:
+    const std::shared_ptr<TBatchingCredentialsProvider> Provider;
+};
+
+class TTrackedRow final: public TComputationValue<TTrackedRow> {
+public:
+    TTrackedRow(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue row, ui64& destroyed)
+        : TComputationValue<TTrackedRow>(memInfo)
+        , Row(std::move(row))
+        , Destroyed(destroyed)
+    {
+    }
+
+    ~TTrackedRow() override {
+        ++Destroyed;
+    }
+
+private:
+    NUdf::TUnboxedValue GetElement(ui32 index) const override {
+        return Row.GetElement(index);
+    }
+
+    const NUdf::TUnboxedValue Row;
+    ui64& Destroyed;
+};
+
 struct TBatchingCallbacks final: IDqComputeActorAsyncOutput::ICallbacks {
     ui64 Finished = 0;
     ui64 Resumed = 0;
     TVector<ui64> Checkpoints;
     TVector<TIssues> Errors;
+    TVector<NDqProto::StatusIds::StatusCode> ErrorCodes;
 
     void ResumeExecution(EResumeSource) override {
         ++Resumed;
     }
 
-    void OnAsyncOutputError(ui64, const TIssues& issues, NDqProto::StatusIds::StatusCode) override {
+    void OnAsyncOutputError(ui64, const TIssues& issues, NDqProto::StatusIds::StatusCode code) override {
         Errors.push_back(issues);
+        ErrorCodes.push_back(code);
     }
 
     void OnAsyncOutputStateSaved(TSinkState&&, ui64, const NDqProto::TCheckpoint& checkpoint) override {
@@ -55,6 +127,11 @@ struct TBatchingFixture {
     ui64 NextRow = 0;
     ui64 ValueOffset = 0;
     bool SameLabels = false;
+    bool InvalidLabel = false;
+    bool TrackRows = false;
+    ui64 DestroyedRows = 0;
+    size_t ExpectedErrors = 0;
+    const std::shared_ptr<TBatchingCredentialsProvider> Credentials = std::make_shared<TBatchingCredentialsProvider>();
     // Destroy the runtime before the callbacks and captured requests it borrows.
     NActors::TTestActorRuntimeBase Runtime;
 
@@ -98,7 +175,8 @@ struct TBatchingFixture {
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto [output, actor] =
                 CreateDqSolomonWriteActor(std::move(settings), 0, TCollectStatsLevel::None, "batching-test", 0, {}, &Callbacks, counters,
-                    CreateStructuredTokenCredentialsFactory(), std::shared_ptr<TScopedAlloc>(&compute.Alloc, [](TScopedAlloc*) {
+                    std::make_shared<TBatchingCredentialsFactory>(Credentials),
+                    std::shared_ptr<TScopedAlloc>(&compute.Alloc, [](TScopedAlloc*) {
                     }), freeSpace);
             compute.InitAsyncOutput(output, actor);
             SinkId = actor->SelfId();
@@ -135,7 +213,7 @@ struct TBatchingFixture {
 
     void Pump() {
         Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT(Callbacks.Errors.empty());
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Errors.size(), ExpectedErrors);
     }
 
     void Write(ui32 rows, const TMaybe<NDqProto::TCheckpoint>& checkpoint = Nothing(), bool finished = false, i64 dataSize = -1) {
@@ -143,13 +221,20 @@ struct TBatchingFixture {
             TUnboxedValueBatch batch;
             for (ui32 i = 0; i < rows; ++i, ++NextRow) {
                 NUdf::TUnboxedValue* items = nullptr;
-                auto value = compute.GetHolderFactory().CreateDirectArrayHolder(Sensors + 2, items);
+                NUdf::TUnboxedValue value = compute.GetHolderFactory().CreateDirectArrayHolder(Sensors + 2, items);
                 items[0] = NUdf::TUnboxedValuePod(TInstant::Seconds(NextRow + 1).MicroSeconds());
                 items[1] = MakeString(SameLabels ? TString("same") : ToString(NextRow));
+                if (InvalidLabel) {
+                    items[1] = MakeString(TString("\xff"));
+                }
                 for (ui32 sensor = 0; sensor < Sensors; ++sensor) {
                     items[sensor + 2] = NUdf::TUnboxedValuePod(ValueOffset + NextRow * Sensors + sensor);
                 }
-                batch.emplace_back(std::move(value));
+                if (TrackRows) {
+                    batch.emplace_back(compute.GetHolderFactory().Create<TTrackedRow>(std::move(value), DestroyedRows));
+                } else {
+                    batch.emplace_back(std::move(value));
+                }
             }
             compute.DqAsyncOutput->SendData(std::move(batch), dataSize < 0 ? rows * 100 : dataSize, checkpoint, finished);
         });
@@ -215,19 +300,31 @@ struct TBatchingFixture {
         }
     }
 
-    void Ack(size_t index = 0) {
-        const auto count = Values(index).size();
+    void Reply(size_t index, TStringBuf status, const TString& body) {
+        UNIT_ASSERT(index < Requests.size());
         auto handle = std::move(Requests[index]);
         Requests.erase(Requests.begin() + index);
         const auto& request = *handle->Get<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>();
-        const TString body = TStringBuilder() << "{\""
-                                              << (ClusterType == NSo::NProto::CT_MONITORING ? "writtenMetricsCount" : "sensorsProcessed")
-                                              << "\":" << count << "}";
-        NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(nullptr, "HTTP", "1.1", "200", "OK");
+        NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(nullptr, "HTTP", "1.1", status, "Test response");
         response->SetBody(body);
         Runtime.Send(new NActors::IEventHandle(handle->Sender, handle->Recipient,
             new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request.Request, response->Reverse(request.Request))));
         Pump();
+    }
+
+    void Ack(size_t index = 0) {
+        const auto count = Values(index).size();
+        const TString body = TStringBuilder() << "{\""
+                                              << (ClusterType == NSo::NProto::CT_MONITORING ? "writtenMetricsCount" : "sensorsProcessed")
+                                              << "\":" << count << "}";
+        Reply(index, "200", body);
+    }
+
+    void AssertError(NDqProto::StatusIds::StatusCode code, TStringBuf message) const {
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.Errors.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.ErrorCodes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Callbacks.ErrorCodes.front(), code);
+        UNIT_ASSERT_STRING_CONTAINS(Callbacks.Errors.front().ToString(), message);
     }
 
     i64 FreeSpace() {
@@ -339,6 +436,267 @@ void TestWriteDateTimestamp(bool isCloud) {
 }   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
+    Y_UNIT_TEST(OutOfOrderRepliesPreserveCheckpointBoundary) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            TBatchingFixture fixture(clusterType);
+            fixture.FillSlots();
+            fixture.Write(2, CreateCheckpoint(1));
+            fixture.Write(3, Nothing(), true);
+
+            fixture.Ack(2);
+            fixture.AssertRequest(2, 3, 2);
+            fixture.Ack(0);
+            // The merged pre-checkpoint request completes before the last
+            // original request. Neither the barrier nor finish can advance yet.
+            fixture.Ack(1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 1);
+            UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+            fixture.AssertRequest(0, 1, 1);
+
+            fixture.Ack(0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 1);
+            fixture.AssertRequest(0, 5, 3);
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+        }
+    }
+
+    Y_UNIT_TEST(FinishWaitsForAllOutOfOrderReplies) {
+        TBatchingFixture fixture;
+        fixture.FillSlots();
+        fixture.Write(2);
+        fixture.Write(3, Nothing(), true);
+        fixture.Ack(2);
+        fixture.AssertRequest(2, 3, 5);
+        fixture.Ack(0);
+        fixture.Ack(1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+        fixture.AssertRequest(0, 1, 1);
+        fixture.Ack(0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 1);
+        UNIT_ASSERT(fixture.Requests.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+    }
+
+    Y_UNIT_TEST(RetryableErrorKeepsQueuedRowsUntilRetrySucceeds) {
+        TBatchingFixture fixture;
+        fixture.FillSlots();
+        fixture.TrackRows = true;
+        fixture.Write(2);
+        fixture.Write(3, Nothing(), true);
+        const i64 freeSpace = fixture.FreeSpace();
+        const TString originalBody(fixture.Request(0).Request->Body);
+        const auto sender = fixture.Requests[0]->Sender;
+        fixture.Runtime.EnableScheduleForActor(sender, true);
+        fixture.ExpectedErrors = 1;
+        fixture.Reply(0, "500", "retry later");
+        fixture.AssertError(NDqProto::StatusIds::UNSPECIFIED, "500");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), freeSpace);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(250));
+        fixture.Pump();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Requests[2]->Sender, sender);
+        UNIT_ASSERT_VALUES_EQUAL(TString(fixture.Request(2).Request->Body), originalBody);
+        fixture.AssertRequest(2, 0, 1);
+        fixture.Ack(2);
+        fixture.AssertRequest(2, 3, 5);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 5);
+        fixture.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+    }
+
+    Y_UNIT_TEST(TerminalHttpErrorRestoresInflightSpaceAndReportsFailure) {
+        TBatchingFixture fixture;
+        fixture.FillSlots();
+        fixture.TrackRows = true;
+        fixture.Write(10, CreateCheckpoint(1), true);
+        const i64 freeSpace = fixture.FreeSpace();
+        const i64 bodySize = fixture.Request(0).Request->Body.size();
+        fixture.ExpectedErrors = 1;
+        fixture.Reply(0, "401", "unauthorized");
+        fixture.AssertError(NDqProto::StatusIds::EXTERNAL_ERROR, "401");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), freeSpace + bodySize);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 0);
+        UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+        fixture.Stop();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
+        fixture.Pump();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 2);
+    }
+
+    Y_UNIT_TEST(MalformedResponseReportsFailureWithRowsBehindCheckpoint) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            TBatchingFixture fixture(clusterType);
+            fixture.FillSlots();
+            fixture.Write(0, CreateCheckpoint(1));
+            fixture.TrackRows = true;
+            fixture.Write(10, Nothing(), true);
+            const i64 freeSpace = fixture.FreeSpace();
+            const i64 bodySize = fixture.Request(2).Request->Body.size();
+            fixture.ExpectedErrors = 1;
+            fixture.Reply(2, "200", "{invalid-json");
+            fixture.AssertError(NDqProto::StatusIds::EXTERNAL_ERROR, "Invalid monitoring response");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), freeSpace + bodySize);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 0);
+            UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+            fixture.Stop();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
+        }
+    }
+
+    Y_UNIT_TEST(CredentialsErrorReleasesEncodedBatchReservation) {
+        TBatchingFixture fixture;
+        fixture.FillSlots();
+        fixture.TrackRows = true;
+        fixture.Write(10, CreateCheckpoint(1), true);
+        const i64 remainingBytes = fixture.Request(1).Request->Body.size() + fixture.Request(2).Request->Body.size();
+        fixture.Credentials->Fail = true;
+        fixture.ExpectedErrors = 1;
+        fixture.Ack();
+        fixture.AssertError(NDqProto::StatusIds::EXTERNAL_ERROR, "Failed to get auth token: Test credentials failure");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace - remainingBytes);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
+        UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+        fixture.Stop();
+        fixture.Pump();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
+    }
+
+    Y_UNIT_TEST(EncodingErrorReportsFailureWithoutLeakingQueuedRows) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            TBatchingFixture fixture(clusterType);
+            fixture.FillSlots();
+            fixture.TrackRows = true;
+            fixture.InvalidLabel = true;
+            fixture.Write(10, CreateCheckpoint(1), true);
+            const i64 remainingBytes = fixture.Request(1).Request->Body.size() + fixture.Request(2).Request->Body.size();
+            fixture.ExpectedErrors = 1;
+            fixture.Ack();
+            fixture.AssertError(NDqProto::StatusIds::EXTERNAL_ERROR, "Error while encoding solomon metrics");
+            UNIT_ASSERT_STRING_CONTAINS(fixture.Callbacks.Errors[0].ToString(), "UTF-8");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace - remainingBytes);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
+            UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+            fixture.Stop();
+            fixture.Pump();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyBatchCheckpointIsSavedWithoutHttpRequests) {
+        TBatchingFixture fixture;
+        fixture.Write(0, CreateCheckpoint(1));
+        UNIT_ASSERT(fixture.Requests.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+    }
+
+    Y_UNIT_TEST(ConsecutiveCheckpointsPreserveOrderWithQueuedRows) {
+        TBatchingFixture fixture;
+        fixture.FillSlots();
+        fixture.Write(1);
+        fixture.Write(0, CreateCheckpoint(1));
+        fixture.Write(0, CreateCheckpoint(2));
+        fixture.Write(2, Nothing(), true);
+        fixture.Ack(2);
+        fixture.AssertRequest(2, 3, 1);
+        fixture.Ack(0);
+        fixture.Ack(0);
+        UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 1);
+        fixture.Ack(0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints[1], 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 1);
+        fixture.AssertRequest(0, 4, 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+        fixture.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+    }
+
+    Y_UNIT_TEST(CheckpointAndFinishWaitForAllPendingRequests) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            for (const ui32 rows : { 0U, 2U, 1200U }) {
+                TBatchingFixture fixture(clusterType);
+                fixture.FillSlots();
+                fixture.Write(rows, CreateCheckpoint(1), true);
+                fixture.Ack(2);
+                fixture.Ack(0);
+                UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+                fixture.Ack(0);
+                if (rows) {
+                    UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+                    fixture.AssertRequest(0, 3, Min<ui32>(rows, 1000));
+                    if (rows > 1000) {
+                        fixture.AssertRequest(1, 1003, rows - 1000);
+                    }
+                }
+                fixture.Drain();
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints[0], 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MergedRequestsDoNotSplitRowsAtNonDivisibleMetricLimit) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            TBatchingFixture fixture(clusterType, 3);
+            fixture.FillSlots();
+            fixture.Write(200);
+            fixture.Write(200);
+            fixture.Ack();
+            fixture.AssertRequest(2, 9, 999);
+            fixture.Ack();
+            fixture.AssertRequest(2, 1008, 201);
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+        }
+    }
+
+    Y_UNIT_TEST(StopReleasesPartiallyConsumedBatch) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            TBatchingFixture fixture(clusterType);
+            fixture.FillSlots();
+            fixture.TrackRows = true;
+            fixture.Write(1200);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 0);
+            fixture.Ack();
+            fixture.AssertRequest(2, 3, 1000);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 1000);
+            fixture.Stop();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 1200);
+            fixture.Pump();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 1200);
+        }
+    }
+
     Y_UNIT_TEST(QueuedWritesAreMergedSolomon) {
         TestQueuedWritesAreMerged(NSo::NProto::CT_SOLOMON);
     }
@@ -434,12 +792,16 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
     Y_UNIT_TEST(StopWithPendingBatches) {
         TBatchingFixture fixture;
         fixture.FillSlots();
+        fixture.TrackRows = true;
         fixture.Write(10);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 0);
         fixture.Stop();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
         fixture.Pump();
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);
     }
 
     Y_UNIT_TEST(OmittedInputSizeStillAppliesBackpressure) {

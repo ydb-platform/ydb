@@ -385,8 +385,9 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
             const auto& messageStatus = message.GetStatus();
 
+            // Delayed is not committed, so it stops both cursors. Locked and DLQ stop only the commit cursor.
             moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
-            moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
+            moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
 
             if (moveUnlockedOffset) {
                 ++FirstUnlockedOffset;

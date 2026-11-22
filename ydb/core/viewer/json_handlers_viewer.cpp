@@ -284,6 +284,7 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/nodes", new THttpHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 22);
     handlers.Capabilities["/viewer/nodes/alive"] = 1;
+    handlers.Capabilities["/viewer/nodes/ddisks"] = 1;
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {

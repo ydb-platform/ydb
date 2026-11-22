@@ -6,6 +6,7 @@
 
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
@@ -411,12 +412,14 @@ public:
 
 class TConsumerRemovalFixture {
 public:
-    TConsumerRemovalFixture() {
+    explicit TConsumerRemovalFixture(bool cdc = false) {
         Runtime.Initialize(TAppPrepare().Unwrap());
         Parent = Runtime.AllocateEdgeActor();
         Proxy = Runtime.AllocateEdgeActor();
-        Remover = Runtime.Register(CreateStreamRemover(Parent, Proxy, 1, 1,
-            TReplication::ETargetKind::Topic, "/Root/topic", "consumer"));
+        Remover = Runtime.Register(cdc
+            ? CreateCdcStreamConsumerRemover(Parent, Proxy, 1, 1, "/Root/table", "feed", "consumer")
+            : CreateStreamRemover(Parent, Proxy, 1, 1,
+                TReplication::ETargetKind::Topic, "/Root/topic", "consumer"));
         Runtime.EnableScheduleForActor(Remover);
         Runtime.GrabEdgeEvent<TEvPrivate::TEvRequestDropStream>(Parent);
         Runtime.Send(Remover, Parent, new TEvPrivate::TEvAllowDropStream());
@@ -451,6 +454,60 @@ public:
             Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
             UNIT_ASSERT(Runtime.GetCurrentTime() - start >= TDuration::Seconds(10));
         }
+    }
+
+    enum class ECdcSource { MissingFeed, MissingTable, ReplacedTable };
+
+    void CheckCdcAbsence(ECdcSource source) {
+        auto describe = [&](NYdb::EStatus status, bool hasFeed) {
+            Reply(NYdb::EStatus::SCHEME_ERROR);
+            const auto request = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(request->Get()->GetArgs()), "/Root/table");
+            Ydb::Table::DescribeTableResult description;
+            if (hasFeed) {
+                description.add_changefeeds()->set_name("feed");
+            }
+            Runtime.Send(Remover, Proxy, new TEvYdbProxy::TEvDescribeTableResponse(
+                NYdb::TStatus(status, {}), std::move(description), NYdb::NTable::TDescribeTableSettings()));
+        };
+        for (const auto status : {NYdb::EStatus::SUCCESS, NYdb::EStatus::UNAUTHORIZED}) {
+            const auto start = Runtime.GetCurrentTime();
+            describe(status, status == NYdb::EStatus::SUCCESS);
+            const auto retry = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
+            UNIT_ASSERT(Runtime.GetCurrentTime() - start >= TDuration::Seconds(10));
+            const auto& args = retry->Get()->GetArgs();
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(args), "/Root/table/feed");
+            const auto& consumers = std::get<NYdb::NTopic::TAlterTopicSettings>(args).DropConsumers_;
+            UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(consumers.front(), "consumer");
+        }
+
+        auto listParent = [&](std::vector<NYdb::NScheme::TSchemeEntry> children) {
+            describe(NYdb::EStatus::SCHEME_ERROR, false);
+            const auto request = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvListDirectoryRequest>(Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(request->Get()->GetArgs()), "/Root");
+            NYdb::NScheme::TSchemeEntry parent;
+            parent.Type = NYdb::NScheme::ESchemeEntryType::SubDomain;
+            Runtime.Send(Remover, Proxy, new TEvYdbProxy::TEvListDirectoryResponse(
+                NYdb::NScheme::TListDirectoryResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), parent, std::move(children))));
+        };
+
+        if (source == ECdcSource::MissingFeed) {
+            describe(NYdb::EStatus::SUCCESS, false);
+        } else if (source == ECdcSource::MissingTable) {
+            listParent({});
+        } else {
+            NYdb::NScheme::TSchemeEntry replacement;
+            replacement.Name = "table";
+            replacement.Type = NYdb::NScheme::ESchemeEntryType::Unknown;
+            listParent({replacement});
+            Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(Proxy);
+
+            replacement.Type = NYdb::NScheme::ESchemeEntryType::Topic;
+            listParent({replacement});
+        }
+        const auto result = Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(Parent);
+        UNIT_ASSERT(result->Get()->IsSuccess());
     }
 
     void FinishWithMissingConsumer() {
@@ -498,6 +555,15 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         test.DenyAndWaitForRetry();
         test.CheckAmbiguousAbsence();
         test.FinishWithMissingConsumer();
+    }
+
+    Y_UNIT_TEST(CdcConsumerCleanupRequiresProvenAbsence) {
+        using ESource = TConsumerRemovalFixture::ECdcSource;
+        for (auto source : {ESource::MissingFeed, ESource::MissingTable, ESource::ReplacedTable}) {
+            TConsumerRemovalFixture test(true);
+            test.DenyAndWaitForRetry();
+            test.CheckCdcAbsence(source);
+        }
     }
 
     Y_UNIT_TEST(ConsumerCleanupCanBeCancelledAfterFailure) {

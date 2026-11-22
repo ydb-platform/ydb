@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/public
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/iam
     ydb/services/scheme_secret
 )
 

@@ -24,11 +24,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
       ON ( <index_columns> )
       [COVER ( <cover_columns> )]
       [WITH ( <parameter_name> = <parameter_value>[, ...])]
-    [, ...],
-    STATISTICS <statistics_name>
-      ON ( <column_name> [, ...] )
-      [WITH ( <statistics_type> [, ...] )]
-    [, ...],
+    [, ...]
   PRIMARY KEY ( <column>[, ...]),
   [FAMILY <column_family> ( family_options[, ...])]
 )
@@ -74,10 +70,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 * [Блум-индексы](bloom_skip_index.md),
 * [min_max-индекс](min_max_index.md),
 * [JSON-индексы](json_index.md).
-
-### STATISTICS
-
-Указание столбцов и типов многоколоночной статистики, которую должен собирать [ANALYZE](../analyze.md). Подробнее см. в разделе [{#T}](statistics.md).
 
 ### PRIMARY KEY
 
@@ -325,7 +317,6 @@ CREATE TABLE <table_name> (
 
 При создании строковых таблиц возможно задать:
 
-* [Статистику](statistics.md).
 * [Вторичный индекс](secondary_index.md).
 * [Векторный индекс](vector_index.md).
 * [Полнотекстовый индекс](fulltext_index.md).
@@ -337,7 +328,6 @@ CREATE TABLE <table_name> (
 
 Для колоночных таблиц при их создании возможно задать:
 
-* [Статистику](statistics.md).
 * [Блум-индекс](bloom_skip_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).

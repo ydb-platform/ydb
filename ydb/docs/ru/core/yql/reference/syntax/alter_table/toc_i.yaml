@@ -1,16 +1,7 @@
 items:
 - { name: Обзор,      href: index.md                                          }
 - { name: INDEX,      href: indexes.md, when: feature_secondary_index }
-<<<<<<< HEAD
 - { name: COLUMN,     href: columns.md                                        }
-=======
-- { name: STATISTICS, href: statistics.md, when: backend_name == "YDB" }
-- name: COLUMN
-  href: columns.md
-  items:
-  - { name: FAMILY,     href: family.md,          when: backend_name == "YDB"   }
-  - { name: NOT NULL,   href: not_null.md,        when: backend_name == "YDB"   }
->>>>>>> 44522199216 (Document ANALYZE sampling, column statistics, and statistics_config (#55229))
 - { name: SET,        href: set.md,             when: backend_name == "YDB"   }
 - { name: CHANGEFEED, href: changefeed.md,      when: feature_changefeed and backend_name == "YDB" }
 - { name: RENAME,     href: rename.md,          when: feature_map_tables      }

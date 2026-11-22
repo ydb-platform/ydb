@@ -22,8 +22,10 @@ ydb/library/yql/providers/generic/connector/tests/datasource/postgresql py3test.
 ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
+ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealPileupReplicas.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupCounters.test_warmup_counters_attribution[table]
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

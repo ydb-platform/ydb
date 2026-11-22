@@ -10,6 +10,7 @@ SRCS(
     normalize_path_ut.cpp
     pg_dump_parser_ut.cpp
     print_utils_ut.cpp
+    query_plan_ut.cpp
     recursive_remove_ut.cpp
     scheme_query_utils_ut.cpp
     tabbed_table_ut.cpp

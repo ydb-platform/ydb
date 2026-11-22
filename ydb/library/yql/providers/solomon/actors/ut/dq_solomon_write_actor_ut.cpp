@@ -323,7 +323,7 @@ struct TBatchingFixture {
     void AssertError(NDqProto::StatusIds::StatusCode code, TStringBuf message) const {
         UNIT_ASSERT_VALUES_EQUAL(Callbacks.Errors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(Callbacks.ErrorCodes.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(Callbacks.ErrorCodes.front(), code);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(Callbacks.ErrorCodes.front()), static_cast<int>(code));
         UNIT_ASSERT_STRING_CONTAINS(Callbacks.Errors.front().ToString(), message);
     }
 

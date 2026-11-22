@@ -175,8 +175,7 @@ struct TBatchingFixture {
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto [output, actor] =
                 CreateDqSolomonWriteActor(std::move(settings), 0, TCollectStatsLevel::None, "batching-test", 0, {}, &Callbacks, counters,
-                    std::make_shared<TBatchingCredentialsFactory>(Credentials),
-                    std::shared_ptr<TScopedAlloc>(&compute.Alloc, [](TScopedAlloc*) {
+                    std::make_shared<TBatchingCredentialsFactory>(Credentials), std::shared_ptr<TScopedAlloc>(&compute.Alloc, [](TScopedAlloc*) {
                     }), freeSpace);
             compute.InitAsyncOutput(output, actor);
             SinkId = actor->SelfId();
@@ -492,7 +491,11 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         const i64 freeSpace = fixture.FreeSpace();
         const TString originalBody(fixture.Request(0).Request->Body);
         const auto sender = fixture.Requests[0]->Sender;
-        fixture.Runtime.EnableScheduleForActor(sender, true);
+        // The base runtime drops scheduled events unless the filter permits them.
+        // Allow only this sender's retry timer.
+        fixture.Runtime.SetScheduledEventFilter([sender](auto&, auto& event, TDuration, TInstant&) {
+            return event->GetRecipientRewrite() != sender || event->GetTypeRewrite() != NActors::TEvents::TEvWakeup::EventType;
+        });
         fixture.ExpectedErrors = 1;
         fixture.Reply(0, "500", "retry later");
         fixture.AssertError(NDqProto::StatusIds::UNSPECIFIED, "500");
@@ -500,7 +503,11 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
 
-        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(250));
+        NActors::TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return fixture.Requests.size() == 3;
+        };
+        fixture.Runtime.DispatchEvents(options, WaitTimeout);
         fixture.Pump();
         UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Requests[2]->Sender, sender);
@@ -566,7 +573,8 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         fixture.Credentials->Fail = true;
         fixture.ExpectedErrors = 1;
         fixture.Ack();
-        fixture.AssertError(NDqProto::StatusIds::EXTERNAL_ERROR, "Failed to get auth token: Test credentials failure");
+        fixture.AssertError(NDqProto::StatusIds::EXTERNAL_ERROR, "Failed to get auth token:");
+        UNIT_ASSERT_STRING_CONTAINS(fixture.Callbacks.Errors[0].ToString(), "Test credentials failure");
         UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace - remainingBytes);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 10);

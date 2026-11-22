@@ -219,12 +219,13 @@ private:
     bool BuildSchema(const NActors::TActorContext& ctx) {
         auto& entry = ResolveNamesResult->ResultSet.front();
         const bool disablePgCompatibility = AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
-        const auto rejectPg = [&] {
+        const auto rejectPg = [&](const TString& columnName) {
             TString error;
             if (!CheckAccess(entry.SecurityObject.Get(), error)) {
                 ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, error, ctx);
             } else {
-                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "PostgreSQL compatibility is disabled", ctx);
+                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
+                    TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'", ctx);
             }
             return false;
         };
@@ -236,7 +237,7 @@ private:
             i32 keyOrder = ci.second.KeyOrder;
             if (keyOrder != -1) {
                 if (disablePgCompatibility && ci.second.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    return rejectPg();
+                    return rejectPg(ci.second.Name);
                 }
                 Y_VERIFY(keyOrder >= 0);
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
@@ -315,7 +316,7 @@ private:
             }
             const auto& column = entry.Columns[columnByName[name]];
             if (disablePgCompatibility && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                return rejectPg();
+                return rejectPg(column.Name);
             }
             ContentsColumns.push_back(column);
         }
@@ -363,7 +364,7 @@ private:
                 const auto& columnInfo = entry.Columns[colIdIt->second];
                 const auto& type = columnInfo.PType;
                 if (disablePgCompatibility && type.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    return rejectPg();
+                    return rejectPg(columnInfo.Name);
                 }
 
                 types.emplace_back(type, columnInfo.PTypeMod, columnInfo.IsNotNullColumn);

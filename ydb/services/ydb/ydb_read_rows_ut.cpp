@@ -45,6 +45,60 @@ Ydb::Table::ReadRowsRequest MakeReadRowsRequest(const TString& tablePath, const 
 
 Y_UNIT_TEST_SUITE(ReadRows) {
 
+    Y_UNIT_TEST(PgCompatibility) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableTablePgTypes(true)
+            .SetDisablePgCompatibility(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Mixed", TShardedTableOptions().Columns({
+            {"key", "Uint32", true, false},
+            {"native", "Uint32", false, false},
+            {"legacy", "pgint4", false, false},
+        }));
+        CreateShardedTable(server, sender, "/Root", "PgKey", TShardedTableOptions().Columns({
+            {"key", "pgint4", true, false},
+            {"native", "Uint32", false, false},
+        }));
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Mixed` (key, native, legacy) VALUES (1u, 7u, 42p);");
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
+
+        const auto read = [&](Ydb::Table::ReadRowsRequest input) {
+            auto result = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
+                std::move(input), "/Root", "", runtime.GetActorSystem(0));
+            return runtime.WaitFuture(result, TDuration::Seconds(10));
+        };
+
+        auto request = MakeReadRowsRequest("/Root/Mixed", {1});
+        request.add_columns("native");
+        const auto success = read(request);
+        UNIT_ASSERT_VALUES_EQUAL_C(success.status(), Ydb::StatusIds::SUCCESS, success.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(success.result_set().rows_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(success.result_set().rows(0).items(0).uint32_value(), 7);
+
+        auto pgProjection = request;
+        pgProjection.add_columns("legacy");
+        const auto projection = read(std::move(pgProjection));
+        UNIT_ASSERT_VALUES_EQUAL_C(projection.status(), Ydb::StatusIds::SCHEME_ERROR, projection.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(projection.DebugString(), "PostgreSQL compatibility is disabled for column 'legacy'");
+
+        auto pgKey = request;
+        pgKey.set_path("/Root/PgKey");
+        auto* keys = pgKey.mutable_keys();
+        keys->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type()
+            ->mutable_members(0)->mutable_type()->mutable_pg_type()->set_type_name("pgint4");
+        keys->mutable_value()->mutable_items(0)->mutable_items(0)->set_text_value("1");
+        const auto key = read(std::move(pgKey));
+        UNIT_ASSERT_VALUES_EQUAL_C(key.status(), Ydb::StatusIds::SCHEME_ERROR, key.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(key.DebugString(), "PostgreSQL compatibility is disabled for column 'key'");
+    }
+
     Y_UNIT_TEST(KillTabletDuringRead) {
         // Init cluster
         TPortManager pm;

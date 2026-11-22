@@ -3505,26 +3505,27 @@ tx_meta {
                 UNIT_ASSERT(reader->Finish().ok());
             }
 
-            const auto expectPgRejected = [&](const Ydb::Table::ReadTableRequest& deniedRequest) {
+            const auto expectPgRejected = [&](const Ydb::Table::ReadTableRequest& deniedRequest, const TString& columnName) {
                 grpc::ClientContext context;
                 Ydb::Table::ReadTableResponse response;
                 auto reader = stub->StreamReadTable(&context, deniedRequest);
                 UNIT_ASSERT(reader->Read(&response));
                 UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SCHEME_ERROR);
-                UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "PostgreSQL compatibility is disabled");
+                UNIT_ASSERT_STRING_CONTAINS(response.DebugString(),
+                    TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'");
                 UNIT_ASSERT(!reader->Read(&response));
                 UNIT_ASSERT(reader->Finish().ok());
             };
 
             auto pgProjection = request;
             pgProjection.add_columns("Value");
-            expectPgRejected(pgProjection);
+            expectPgRejected(pgProjection, "Value");
 
             auto pgBound = request;
             auto* lowerBound = pgBound.mutable_key_range()->mutable_greater_or_equal();
             lowerBound->mutable_type()->mutable_tuple_type()->add_elements()->mutable_pg_type()->set_type_name("pgint8");
             lowerBound->mutable_value()->add_items()->set_text_value("50");
-            expectPgRejected(pgBound);
+            expectPgRejected(pgBound, "Key");
         }
     }
 

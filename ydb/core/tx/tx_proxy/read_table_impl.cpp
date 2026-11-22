@@ -653,7 +653,8 @@ private:
                         return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,
                             NKikimrIssues::TStatusIds::ACCESS_DENIED, ctx);
                     }
-                    IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "PostgreSQL compatibility is disabled"));
+                    IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                        TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << col.Name << "'"));
                     return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError,
                         NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
                 }

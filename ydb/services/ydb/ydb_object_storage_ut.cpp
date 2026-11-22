@@ -1,5 +1,10 @@
 #include "ydb_common_ut.h"
 
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
+
+#include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
+
 #include <ydb/public/lib/experimental/ydb_object_storage.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -100,6 +105,86 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Path").GetOptionalUtf8().value(), "/home/.bashrc");
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Timestamp").GetOptionalUint64().value(), 10);
         }
+    }
+
+    Y_UNIT_TEST(PgCompatibility) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableTablePgTypes(true);
+        appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        const TString endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+        auto driver = TDriver(TDriverConfig().SetDatabase("/Root").SetEndpoint(endpoint));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+        const auto createMixed = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Mixed` (
+                Bucket Uint64, Path Utf8, NativeValue Uint64, LegacyValue pgint4,
+                PRIMARY KEY (Bucket, Path)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(createMixed.IsSuccess(), createMixed.GetIssues().ToString());
+        const auto createPgKey = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/PgKey` (
+                Bucket pgint4, Path Utf8, NativeValue Uint64,
+                PRIMARY KEY (Bucket, Path)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(createPgKey.IsSuccess(), createPgKey.GetIssues().ToString());
+        const auto upsert = session.ExecuteDataQuery(
+            "UPSERT INTO `/Root/Mixed` (Bucket, Path, NativeValue, LegacyValue) VALUES (50ul, \"/home/file\"u, 7ul, 42p);",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        server.GetRuntime()->GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
+
+        auto channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
+        auto stub = Ydb::ObjectStorage::V1::ObjectStorageService::NewStub(channel);
+        const auto list = [&](const Ydb::ObjectStorage::ListingRequest& input) {
+            grpc::ClientContext context;
+            Ydb::ObjectStorage::ListingResponse response;
+            UNIT_ASSERT(stub->List(&context, input, &response).ok());
+            return response;
+        };
+
+        Ydb::ObjectStorage::ListingRequest request;
+        request.set_table_name("/Root/Mixed");
+        request.set_path_column_prefix("/home/");
+        request.set_max_keys(100);
+        request.add_columns_to_return("NativeValue");
+        request.mutable_key_prefix()->mutable_type()->mutable_tuple_type()->add_elements()->set_type_id(Ydb::Type::UINT64);
+        request.mutable_key_prefix()->mutable_value()->add_items()->set_uint64_value(50);
+        request.mutable_start_after_key_suffix()->mutable_type()->mutable_tuple_type();
+
+        const auto success = list(request);
+        UNIT_ASSERT_VALUES_EQUAL_C(success.status(), Ydb::StatusIds::SUCCESS, success.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(success.contents().rows_size(), 1);
+
+        const auto expectPgRejected = [&](const Ydb::ObjectStorage::ListingRequest& input, const TString& columnName) {
+            const auto response = list(input);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SCHEME_ERROR, response.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response.DebugString(),
+                TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'");
+        };
+
+        auto pgProjection = request;
+        pgProjection.add_columns_to_return("LegacyValue");
+        expectPgRejected(pgProjection, "LegacyValue");
+
+        auto pgFilter = request;
+        auto* filter = pgFilter.mutable_matching_filter();
+        auto* filterType = filter->mutable_type()->mutable_tuple_type();
+        filterType->add_elements()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        filterType->add_elements()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        filterType->add_elements()->mutable_tuple_type()->add_elements()->mutable_pg_type()->set_type_name("pgint4");
+        filter->mutable_value()->add_items()->add_items()->set_text_value("LegacyValue");
+        filter->mutable_value()->add_items()->add_items()->set_uint32_value(Ydb::ObjectStorage::ListingRequest::EQUAL);
+        filter->mutable_value()->add_items()->add_items()->set_text_value("42");
+        expectPgRejected(pgFilter, "LegacyValue");
+
+        auto pgKey = request;
+        pgKey.set_table_name("/Root/PgKey");
+        pgKey.mutable_key_prefix()->mutable_type()->mutable_tuple_type()->mutable_elements(0)->mutable_pg_type()->set_type_name("pgint4");
+        pgKey.mutable_key_prefix()->mutable_value()->mutable_items(0)->set_text_value("50");
+        expectPgRejected(pgKey, "Bucket");
     }
 
     void SetPermissions(TString location) {

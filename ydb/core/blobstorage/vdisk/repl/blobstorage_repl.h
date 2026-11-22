@@ -9,6 +9,9 @@ namespace NKikimr {
 
     namespace NRepl {
         struct TProxyStat;
+
+        TDuration EstimateReplicationTimeOfArrival(ui64 workAtBegin, ui64 workAtEnd,
+            TInstant timeAtBegin, TInstant timeAtEnd);
     };
 
     struct TBlobIdQueue {
@@ -217,6 +220,14 @@ namespace NKikimr {
     };
 
     struct TEvReplResume : TEventLocal<TEvReplResume, TEvBlobStorage::EvReplResume> {};
+
+    // Replication verdict reported to Skeleton as a cookie of EvReplDone. A job may also report
+    // NonPhantomsRemain through its scheduler before the pass finishes; positive verdicts require completion.
+    enum class EReplDone : ui64 {
+        Finished = 0, // all blobs are replicated, replication will not resume
+        OnlyPhantomsRemain = 1, // only phantom-like blobs remain unreplicated after the pass
+        NonPhantomsRemain = 2, // some non-phantom blobs remain unreplicated
+    };
 
     ////////////////////////////////////////////////////////////////////////////
     // Message for recovered data (to Skeleton)

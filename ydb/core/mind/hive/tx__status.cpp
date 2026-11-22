@@ -75,6 +75,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxStatus::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId});
+        Self->ProcessPileDrains();
     }
 };
 

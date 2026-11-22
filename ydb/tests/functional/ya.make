@@ -37,6 +37,7 @@ RECURSE(
     split_merge
     sqs
     sqs_topic
+    statestorage
     statistics
     suite_tests
     tpc

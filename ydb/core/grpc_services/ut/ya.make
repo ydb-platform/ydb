@@ -8,6 +8,7 @@ ENDIF()
 
 SRCS(
     rpc_calls_ut.cpp
+    rpc_bridge_ut.cpp
     rpc_load_rows_ut.cpp
     operation_helpers_ut.cpp
 )
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/scheme
     ydb/core/testlib/default
+    ydb/core/tx/scheme_board
 )
 
 END()

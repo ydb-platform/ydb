@@ -43,6 +43,7 @@ namespace NKikimr::NBsController {
         TBackoffTimer MakeSessionBackoffTimer{1, 1000};
         TInstant ValidationTimeout;
         ui64 ExpectedValidationTimeoutCookie = 0;
+        ui64 ValidationRequestCookie = Max<ui64>(); // the cookie the validation of the replacement going on was asked with
         TBackoffTimer GetBlockBackoff{1, 1000};
         ui32 BlockedGeneration = 0;
         bool Working = false;

@@ -11,6 +11,7 @@ PEERDIR(
 )
 
 SRCS(
+    storage_pool_pile_override_ut.cpp
     ydb/core/blobstorage/base/batched_vec_ut.cpp
     ydb/core/blobstorage/base/bufferwithgaps_ut.cpp
     ydb/core/blobstorage/base/ptr_ut.cpp

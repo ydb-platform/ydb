@@ -32,6 +32,12 @@ namespace NKikimr::NBsController {
         if (config.HasPDiskSpaceColorBorder()) {
             result.AddPDiskSpaceColorBorder(config.GetPDiskSpaceColorBorder());
         }
+        if (config.HasBridgeSyncTotalRateBytesPerSecond()) {
+            result.AddBridgeSyncTotalRateBytesPerSecond(config.GetBridgeSyncTotalRateBytesPerSecond());
+        }
+        if (config.HasBridgeSyncMaxSyncers()) {
+            result.AddBridgeSyncMaxSyncers(config.GetBridgeSyncMaxSyncers());
+        }
         if (config.HasEnableGroupLayoutSanitizer()) {
             result.AddEnableGroupLayoutSanitizer(config.GetEnableGroupLayoutSanitizer());
         }

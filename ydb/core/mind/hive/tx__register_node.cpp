@@ -26,7 +26,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
-        if (node.Local != Local) {
+        const bool localChanged = node.Local != Local;
+        // An absent field from an old Local clears capabilities from its predecessor.
+        node.Capabilities.CopyFrom(Record.GetCapabilities());
+        if (localChanged) {
             Self->RemoveNodeFromSegments(&node);
 
             TInstant now = TActivationContext::Now();
@@ -118,7 +121,7 @@ public:
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
             Self->NodePingsInProgress.erase(node->Id);
-            node->Ping();
+            node->Ping(true, true);
             Self->ProcessNodePingQueue();
         }
     }

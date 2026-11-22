@@ -458,16 +458,5 @@ message TFeatureFlags {
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
-<<<<<<< HEAD
-=======
-    // (LOGBROKER-10680). Default false is
-    // the legacy zeroing behaviour that undercounted the consumed
-    // write quota.
-    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
-    optional bool EnableColumnShardStats = 395 [default = false];
-    optional bool EnableTopicReplication = 396 [default = false];
-    optional bool EnableRebuildIndex = 397 [default = false];
-    optional bool EnableDefaultFromExpression = 398 [default = false];
     optional bool ShareShardedMkqlProgram = 399 [default = false];
->>>>>>> 0c6df01cf55 (Deduplicate mkql program compilation (#59749))
 }

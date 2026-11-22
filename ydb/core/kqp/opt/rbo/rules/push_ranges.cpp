@@ -600,12 +600,13 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             return match;
         }
         result = extractor->BuildComputeNode(keyColumns, ctx, typeCtx);
-        return TKeyMatch{
+        TKeyRangeMatch match{
             .PointPrefixLen = result->PointPrefixLen,
             .UsedPrefixLen = result->UsedPrefixLen,
             .ExpectedMaxRanges = result->ExpectedMaxRanges,
             .HasResidual = !HasNoResidualPredicate(result->PrunedLambda),
         };
+        return match;
     };
 
     // Point prefixes are computed for every table the read can be redirected to, so a lookup join can

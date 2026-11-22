@@ -223,7 +223,7 @@ private:
 
 // The key ranges the extractor would build for a key, predicted on the normalized predicate tree, so that the
 // candidates can be scored and costed without building their ranges.
-struct TKeyMatch {
+struct TKeyRangeMatch {
     size_t PointPrefixLen = 0;
     size_t UsedPrefixLen = 0;
     TMaybe<size_t> ExpectedMaxRanges;
@@ -237,8 +237,8 @@ struct TKeyMatch {
     size_t PointRanges = 0;
 };
 
-TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);
+TKeyRangeMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);
 
-TString RangesToString(const TKeyMatch& match);
+TString RangesToString(const TKeyRangeMatch& match);
 
 } // namespace NKikimr::NKqp

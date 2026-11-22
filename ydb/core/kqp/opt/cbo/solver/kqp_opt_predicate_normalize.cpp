@@ -1326,9 +1326,9 @@ void FlattenConjuncts(const std::shared_ptr<TTreeNode>& node, TVector<std::share
 }
 
 // Every disjunct has to restrict the key, the ranges are their union.
-TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges) {
-    TKeyMatch result {.PointPrefixLen = keyColumns.size(), .UsedPrefixLen = keyColumns.size(), .HasResidual = false};
-    TVector<TKeyMatch> matches;
+TKeyRangeMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges) {
+    TKeyRangeMatch result {.PointPrefixLen = keyColumns.size(), .UsedPrefixLen = keyColumns.size(), .HasResidual = false};
+    TVector<TKeyRangeMatch> matches;
     size_t ranges = 0;
 
     for (size_t i = 0; i < node.Children.size(); ++i) {
@@ -1346,7 +1346,7 @@ TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyCol
 
     // With literal bounds, disjuncts that give the same ranges on the common prefix are one range
     std::optional<TVector<TVector<TPredicateRange>>> tuples;
-    if (!matches.empty() && std::all_of(matches.begin(), matches.end(), [](const TKeyMatch& m) { return m.Tuples.has_value(); })) {
+    if (!matches.empty() && std::all_of(matches.begin(), matches.end(), [](const TKeyRangeMatch& m) { return m.Tuples.has_value(); })) {
         tuples.emplace();
         for (const auto& match : matches) {
             for (const auto& tuple : *match.Tuples) {
@@ -1407,8 +1407,7 @@ TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyCol
 }
 
 // Walks the key columns over the conjuncts: a point on a column extends the prefix, a range ends it.
-TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts, const TVector<TString>& keyColumns,
-                           const TMaybe<size_t>& maxRanges) {
+TKeyRangeMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges) {
     TVector<std::optional<TColumnConstraint>> constraints;
     constraints.reserve(conjuncts.size());
 
@@ -1416,7 +1415,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
         constraints.push_back(ClassifyColumnConstraint(*conjunct));
     }
 
-    TKeyMatch result;
+    TKeyRangeMatch result;
     TVector<bool> consumed(conjuncts.size(), false);
     TVector<std::shared_ptr<TTreeNode>> consumedNodes;
     size_t ranges = 1;
@@ -1531,7 +1530,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
 
 } // anonymous namespace
 
-TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges) {
+TKeyRangeMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges) {
     if (!node || keyColumns.empty()) {
         return {};
     }
@@ -1545,7 +1544,7 @@ TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString
     return MatchConjunction(conjuncts, keyColumns, maxRanges);
 }
 
-TString RangesToString(const TKeyMatch& match) {
+TString RangesToString(const TKeyRangeMatch& match) {
     if (!match.Tuples) {
         return match.UsedPrefixLen == 0 ? "none" : "not tracked (built by the extractor, a bound is not a literal, or too many)";
     }

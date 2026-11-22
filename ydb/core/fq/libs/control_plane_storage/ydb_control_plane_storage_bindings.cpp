@@ -514,7 +514,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             response->second.Rename = bindingInternal.rename();
         };
 
-        if (clientRequest && matches) {
+        if (renameAction == EBindingRenameAction::Prepare && matches) {
             returnRename();
             return noWrite();
         }

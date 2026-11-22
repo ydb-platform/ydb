@@ -625,7 +625,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                         " WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;");
         const auto query = builder.Build();
         validators.push_back({ query.Sql, query.Params,
-            [response, parseProtobufError = requestCounters.Common->ParseProtobufError](NYdb::NTable::TDataQueryResult result) {
+            [response, renameAction, idempotencyKey, parseProtobufError = requestCounters.Common->ParseProtobufError](
+                NYdb::NTable::TDataQueryResult result) {
                 const auto& resultSets = result.GetResultSets();
                 if (resultSets.size() != 2) {
                     ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Unexpected binding idempotency result";
@@ -641,7 +642,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                         parseProtobufError->Inc();
                         ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing binding internal metadata";
                     }
-                    if (HasPendingBindingRename(internal)) {
+                    if (HasPendingBindingRename(internal) &&
+                        (renameAction == EBindingRenameAction::None || internal.rename().idempotency_key() == idempotencyKey)) {
                         return false;
                     }
                 }

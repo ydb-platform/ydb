@@ -433,6 +433,94 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(1)), R"([[1u;["a"]]])");
     }
 
+    Y_UNIT_TEST_TWIN(HnswFrozenCompositePrefixCovering, EnableVectorSearchActor) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr{TKikimrSettings(config).SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto run = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        auto ddl = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Composite (
+                tenant Uint64 NOT NULL, id Uint64 NOT NULL, region String, emb String,
+                PRIMARY KEY(tenant, id)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        run(R"(
+            INSERT INTO Composite (tenant, id, region, emb) VALUES
+                (7u, 1u, "a", Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector")),
+                (7u, 2u, "a", Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )");
+        ddl = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE Composite ADD INDEX idx GLOBAL USING hnsw ON (tenant, region, emb)
+            WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, autoupdate=false);
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        run("DELETE FROM Composite WHERE tenant = 7u AND id = 1u;");
+        const auto read = run(R"(
+            SELECT tenant, id FROM Composite VIEW idx WHERE tenant = 7u AND region = "a"
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), "[[7u;1u]]");
+    }
+
+    Y_UNIT_TEST_QUAD(HnswPrefixedTargetAndLimit, EnableVectorSearchActor, NullableEmbedding) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr{TKikimrSettings(config).SetEnableHnswIndex(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto ddl = session.ExecuteSchemeQuery(TStringBuilder()
+            << "CREATE TABLE PrefixTarget (id Uint64 NOT NULL, tenant String, emb String"
+            << (NullableEmbedding ? "" : " NOT NULL")
+            << R"(, PRIMARY KEY(id), INDEX idx GLOBAL USING hnsw ON (tenant, emb)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1));)")
+            .ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        const auto write = session.ExecuteDataQuery(R"(
+            INSERT INTO PrefixTarget (id, tenant, emb) VALUES
+                (1u, "a", Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector")),
+                (2u, "a", Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const auto read = [&](const TString& prefix, const std::optional<std::string>& target, ui64 limit) {
+            auto params = db.GetParamsBuilder();
+            params.AddParam("$q").OptionalString(target).Build();
+            params.AddParam("$tenant").String(prefix).Build();
+            params.AddParam("$limit").Uint64(limit).Build();
+            return session.ExecuteDataQuery(R"(
+                DECLARE $q AS String?;
+                DECLARE $tenant AS String;
+                DECLARE $limit AS Uint64;
+                SELECT id FROM PrefixTarget VIEW idx WHERE tenant = $tenant
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT $limit;
+            )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params.Build()).ExtractValueSync();
+        };
+        const auto vector = session.ExecuteDataQuery(R"(
+            SELECT Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector") AS target;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(vector.IsSuccess(), vector.GetIssues().ToString());
+        TResultSetParser rows(vector.GetResultSet(0));
+        UNIT_ASSERT(rows.TryNextRow());
+        const std::string target = rows.ColumnParser("target").GetString();
+        for (const ui64 limit : {1ull << 32, (1ull << 32) + 1}) {
+            const auto result = read("a", target, limit);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[1u];[2u]]");
+        }
+        for (const auto& empty : {std::optional<std::string>{}, std::optional<std::string>{std::string{}}}) {
+            const auto result = read("a", empty, 1);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[]");
+        }
+        const auto invalid = read("missing", std::string("invalid"), 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(invalid.GetStatus(), EStatus::BAD_REQUEST, invalid.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(HnswDeleteWithNullPrefix) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(true);

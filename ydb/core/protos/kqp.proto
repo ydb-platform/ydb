@@ -1083,6 +1083,7 @@ message TKqpStreamLookupSettings {
     // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
     // is only emitted once every node in the cluster understands it.
     optional uint32 CookieFormatVersion = 23 [default = 0];
+    optional bool LookupJoinUniqueKeys = 24;
 }
 
 message TKqpFullTextSourceSettings {

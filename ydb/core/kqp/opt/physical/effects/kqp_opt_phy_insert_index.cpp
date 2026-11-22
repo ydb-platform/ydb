@@ -152,9 +152,12 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     TVector<TExprBase> effects;
 
     if (useStreamIndex) {
+        const auto mainRows = needPrecompute && insertColumns.size() != insert.Columns().Size()
+            ? MakeInsertIndexRows(*insertRows, table, inputColumnsSet, insertColumns, insert.Pos(), ctx, true)
+            : *insertRows;
         effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
             .Table(insert.Table())
-            .Input(*insertRows)
+            .Input(mainRows)
             .Columns(BuildColumnsList(insertColumns, insert.Pos(), ctx))
             .ReturningColumns(insert.ReturningColumns())
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))

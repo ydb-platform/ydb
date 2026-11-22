@@ -2974,11 +2974,14 @@ private:
 
             auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
-            streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
+            streamLookupProto.SetKeepRowsOrder(!settings.LookupJoinUniqueKeys && Config->OrderPreservingLookupJoinEnabled());
             if (Config->GetEnableStreamLookupJoinCookieV2()) {
                 // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
                 // kept as a literal to avoid a runtime PEERDIR from the compiler.
                 streamLookupProto.SetCookieFormatVersion(1);
+            }
+            if (settings.LookupJoinUniqueKeys) {
+                streamLookupProto.SetLookupJoinUniqueKeys(true);
             }
             if (settings.AllowNullKeysPrefixSize) {
                 streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);

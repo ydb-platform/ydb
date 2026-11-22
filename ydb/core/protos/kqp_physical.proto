@@ -338,6 +338,7 @@ message TKqpPhyCnStreamLookup {
     repeated string InputColumns = 12;
     // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
     uint32 CookieFormatVersion = 13;
+    bool LookupJoinUniqueKeys = 14;
 }
 
 message TKqpPhyCnVectorResolve {

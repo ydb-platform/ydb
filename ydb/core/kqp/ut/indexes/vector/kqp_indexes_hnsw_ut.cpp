@@ -1076,6 +1076,31 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT(!rows.TryNextRow());
     }
 
+    Y_UNIT_TEST(HnswTopKAfterFlatten) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto ddl = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Flattened (
+                id Uint64 NOT NULL, emb String NOT NULL, payload String, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (emb) COVER (payload)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        const auto write = ExecuteDataQuery(session, R"(
+            INSERT INTO Flattened (id, emb, payload) VALUES
+                (1u, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), NULL),
+                (2u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"), "kept");
+        )");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const auto result = ExecuteDataQuery(session, R"(
+            SELECT id FROM Flattened VIEW idx FLATTEN LIST BY (IF(payload IS NULL, ListCreate(Uint64), AsList(id)) AS item)
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[2u]]");
+    }
+
     Y_UNIT_TEST(HnswFrozenSearchSkipsDeletedWinners) {
         TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -1102,6 +1127,15 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         )");
         UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), R"([[2u;["kept"]]])");
+        const auto partitions = ExecuteDataQuery(session, R"(
+            PRAGMA kikimr.EnableSystemColumns = "true";
+            SELECT _yql_partition_id FROM Frozen VIEW idx
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
+            SELECT _yql_partition_id FROM Frozen WHERE id = 2u;
+        )");
+        UNIT_ASSERT_C(partitions.IsSuccess(), partitions.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(partitions.GetResultSet(0)),
+            FormatResultSetYson(partitions.GetResultSet(1)));
     }
 
     Y_UNIT_TEST_TWIN(HnswFilteredSearchKeepsNullableKeysAndCoveredValues, Frozen) {
@@ -1369,8 +1403,14 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
                 (2u, 7u, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"), "kept");
         )");
         UNIT_ASSERT_C(second.IsSuccess(), second.GetIssues().ToString());
+        const auto missingKeys = ExecuteDataQuery(session, R"(
+            INSERT INTO `/Root/HnswMissingCover` (id) VALUES (3u);
+            SELECT id, emb FROM `/Root/HnswMissingCover` WHERE id = 3u;
+        )");
+        UNIT_ASSERT_C(missingKeys.IsSuccess(), missingKeys.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(missingKeys.GetResultSet(0)), "[[3u;#]]");
         for (const TString table : {"/Root/HnswMissingCover", "/Root/HnswMissingCover/idx/indexImplPostingTable"}) {
-            const auto read = ExecuteDataQuery(session, "SELECT id, payload, note FROM `" + table + "` ORDER BY id;");
+            const auto read = ExecuteDataQuery(session, "SELECT id, payload, note FROM `" + table + "` WHERE id < 3u ORDER BY id;");
             UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
             TResultSetParser rows(read.GetResultSet(0));
             UNIT_ASSERT(rows.TryNextRow());

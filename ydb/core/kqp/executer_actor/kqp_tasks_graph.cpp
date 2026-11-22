@@ -1077,6 +1077,9 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
     settings->SetCookieFormatVersion(streamLookup.GetCookieFormatVersion());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
+    if (streamLookup.GetLookupJoinUniqueKeys()) {
+        settings->SetLookupJoinUniqueKeys(true);
+    }
     settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
     if (streamLookup.GetIsTableImmutable()
@@ -1102,9 +1105,16 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
             if (in.HasHnswIndexId()) {
                 *out.MutableHnswIndexId() = in.GetHnswIndexId();
             }
-            auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+            NMiniKQL::TType* targetType = nullptr;
+            auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv,
+                NUdf::TUnboxedValuePod(), &targetType, /*allowOptional=*/in.HasHnswEfSearch());
+            if (targetType && targetType->GetKind() == NMiniKQL::TType::EKind::Optional) {
+                // HNSW validates the target before supplying a nonzero pushed limit.
+                YQL_ENSURE(target);
+                target = target.GetOptionalValue();
+            }
             out.SetTargetVector(TString(target.AsStringRef()));
-            out.SetLimit((ui32)limit);
+            out.SetLimit(static_cast<ui32>(std::min<ui64>(limit, Max<ui32>())));
             for (const auto& colIdx: in.GetDistinctColumns()) {
                 out.AddDistinctColumns(colIdx);
             }

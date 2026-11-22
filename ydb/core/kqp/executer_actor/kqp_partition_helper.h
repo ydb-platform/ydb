@@ -69,7 +69,7 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpReadRangesSource& source,
 
 NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NUdf::TUnboxedValue& defaultValue, NMiniKQL::TType** valueType = nullptr);
+    const NUdf::TUnboxedValue& defaultValue, NMiniKQL::TType** valueType = nullptr, bool allowOptional = false);
 
 // Returns the list of ColumnShards that can store rows from the specified range
 // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range

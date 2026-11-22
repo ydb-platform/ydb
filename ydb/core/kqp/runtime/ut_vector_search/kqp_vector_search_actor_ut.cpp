@@ -1122,12 +1122,19 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(FullRangeHnswPreservesReadConsistency) {
-            for (const bool followers : {false, true}) {
+            for (const auto& [withSnapshot, followers] : {
+                std::pair{true, false}, std::pair{true, true},
+                std::pair{false, false}, std::pair{false, true}})
+            {
                 auto builder = TSettingsBuilder().FullRangeHnsw().Covered().TopK(1).EfSearch(75);
                 if (followers) {
                     builder.Followers();
                 }
                 auto indexSettings = builder.Build();
+                if (!withSnapshot) {
+                    indexSettings.ClearSnapshot();
+                    indexSettings.SetAllowInconsistentReads(true);
+                }
                 auto* graphSettings = indexSettings.MutableIndexSettings();
                 graphSettings->set_m(24);
                 graphSettings->set_ef_construction(64);
@@ -1150,9 +1157,9 @@ namespace NKikimr::NKqp {
                 UNIT_ASSERT_VALUES_EQUAL(forwarded.min_rows(), 1u);
                 UNIT_ASSERT_VALUES_EQUAL(forwarded.delta_rows(), 100u);
                 UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().DistinctColumnsSize(), 0u);
-                UNIT_ASSERT_VALUES_EQUAL(settings.GetUseFollowers(), followers);
-                UNIT_ASSERT_VALUES_EQUAL(settings.HasSnapshot(), !followers);
-                UNIT_ASSERT_VALUES_EQUAL(settings.GetAllowInconsistentReads(), followers);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetUseFollowers(), followers && !withSnapshot);
+                UNIT_ASSERT_VALUES_EQUAL(settings.HasSnapshot(), withSnapshot);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetAllowInconsistentReads(), !withSnapshot);
 
                 auto& posting = env.Read(EReadKind::Posting);
                 posting.Push({{ui64(7), FarVec}, {ui64(8), NearVec}}, true);

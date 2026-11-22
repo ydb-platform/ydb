@@ -464,8 +464,10 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
-        DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
+        auto output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
+        if (output) {
+            DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 

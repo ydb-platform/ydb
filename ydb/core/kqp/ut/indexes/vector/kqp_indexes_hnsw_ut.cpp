@@ -1076,7 +1076,7 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT(!rows.TryNextRow());
     }
 
-    Y_UNIT_TEST(HnswFilteredSearchKeepsNullableKeysAndCoveredValues) {
+    Y_UNIT_TEST_TWIN(HnswFilteredSearchKeepsNullableKeysAndCoveredValues, Frozen) {
         TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto schema = [&](const TString& sql) {
@@ -1093,14 +1093,16 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
                 (1u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"), true, "other");
         )");
         UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
-        schema(R"(
+        schema(TStringBuilder() << R"(
             ALTER TABLE `/Root/HnswNullableFilter` ADD INDEX idx GLOBAL USING hnsw ON (emb) COVER (active)
-            WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, autoupdate=false);
-        )");
-        written = ExecuteDataQuery(session, R"(
-            UPDATE `/Root/HnswNullableFilter` SET active=false, note="updated" WHERE id IS NULL;
-        )");
-        UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+            WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1, autoupdate=)"
+            << (Frozen ? "false" : "true") << ");");
+        if (Frozen) {
+            written = ExecuteDataQuery(session, R"(
+                UPDATE `/Root/HnswNullableFilter` SET active=false, emb=NULL, note="updated" WHERE id IS NULL;
+            )");
+            UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+        }
         for (const TString projection : {"id", "id, note"}) {
             const auto read = ExecuteDataQuery(session, TStringBuilder()
                 << "$q = Knn::ToBinaryStringFloat([0.0f, 0.0f]); SELECT " << projection
@@ -1111,8 +1113,33 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
             UNIT_ASSERT(rows.TryNextRow());
             UNIT_ASSERT(!rows.ColumnParser("id").GetOptionalUint64());
             if (projection == "id, note") {
-                UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("note").GetOptionalString().value(), "updated");
+                UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("note").GetOptionalString().value(), Frozen ? "updated" : "old");
             }
+            if (projection == "id, note" && !Frozen) {
+                UNIT_ASSERT(read.GetStats());
+                ui64 mainRows = 0;
+                for (const auto& phase : NYdb::TProtoAccessor::GetProto(*read.GetStats()).query_phases()) {
+                    for (const auto& access : phase.table_access()) {
+                        if (access.name() == "/Root/HnswNullableFilter") {
+                            mainRows += access.reads().rows();
+                        }
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(mainRows, 1u);
+            }
+            UNIT_ASSERT(!rows.TryNextRow());
+        }
+        if (Frozen) {
+            const auto unfiltered = ExecuteDataQuery(session, R"(
+                $q = Knn::ToBinaryStringFloat([0.0f, 0.0f]);
+                SELECT active, note FROM `/Root/HnswNullableFilter` VIEW idx
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+            )");
+            UNIT_ASSERT_C(unfiltered.IsSuccess(), unfiltered.GetIssues().ToString());
+            TResultSetParser rows(unfiltered.GetResultSet(0));
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("active").GetOptionalBool().value(), true);
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("note").GetOptionalString().value(), "updated");
             UNIT_ASSERT(!rows.TryNextRow());
         }
     }
@@ -1134,12 +1161,13 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
                 (1u, $zero, $one, true), (2u, $one, $one, true);
         )");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        const auto read = ExecuteDataQuery(session, R"(
-            SELECT id FROM `/Root/HnswRowTarget` VIEW idx WHERE active
-            ORDER BY Knn::EuclideanDistance(emb, other_emb) LIMIT 1;
-        )");
-        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), "[[2u]]");
+        for (const TString where : {"", " WHERE active"}) {
+            const auto read = ExecuteDataQuery(session, TStringBuilder()
+                << "SELECT id FROM `/Root/HnswRowTarget` VIEW idx" << where
+                << " ORDER BY Knn::EuclideanDistance(emb, other_emb) LIMIT 1;");
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), "[[2u]]");
+        }
     }
 
     Y_UNIT_TEST_QUAD(HnswFilteredSearchValidatesTarget, Covered, Parameterized) {
@@ -1226,6 +1254,12 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
             )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(invalid.GetStatus(), EStatus::BAD_REQUEST, invalid.GetIssues().ToString());
         }
+        const auto unfilteredInvalid = ExecuteDataQuery(session, R"(
+            SELECT id FROM `/Root/HnswFilteredTarget` VIEW idx
+            ORDER BY Knn::EuclideanDistance(emb, "invalid") LIMIT 1;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(unfilteredInvalid.GetStatus(), EStatus::BAD_REQUEST,
+            unfilteredInvalid.GetIssues().ToString());
         const auto deleted = ExecuteDataQuery(session, "DELETE FROM `/Root/HnswFilteredTarget`;");
         UNIT_ASSERT_C(deleted.IsSuccess(), deleted.GetIssues().ToString());
         const auto emptyInvalid = read(3, "active");

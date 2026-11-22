@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -393,21 +394,24 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
-        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(true);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
 
-        auto result = session.ExecuteSchemeQuery(Q_(R"(
+        auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(Q_(R"(
             CREATE TABLE `/Root/HnswPrefix` (
                 pk Int64 NOT NULL,
                 user String NOT NULL,
                 emb String NOT NULL,
                 PRIMARY KEY (pk)
             );
-        )")).ExtractValueSync();
+        )")).ExtractValueSync(); });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = kikimr.RunCall([&] { return session.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/HnswPrefix` (pk, user, emb) VALUES
                 (1, "user_a", Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
                 (2, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
@@ -429,17 +433,17 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 (18, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
                 (19, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
                 (20, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector"));
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        result = session.ExecuteSchemeQuery(Q_(R"(
+        result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(Q_(R"(
             ALTER TABLE `/Root/HnswPrefix`
                 ADD INDEX index
                 GLOBAL USING hnsw
                 ON (user, emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
                       levels=1, clusters=2, min_rows=1);
-        )")).ExtractValueSync();
+        )")).ExtractValueSync(); });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         const TString query(Q_(R"(
@@ -450,15 +454,58 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             LIMIT 1;
         )"));
 
-        // There are more closer out-of-prefix rows than the default efSearch.
-        // A restricted read must use the exact range iterator rather than
-        // assuming Search(k = index size) exhausts the HNSW graph.
-        for (ui32 attempt = 0; attempt < 3; ++attempt) {
-            auto queryResult = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(queryResult.GetResultSet(0)), "[[1]]");
-            Sleep(TDuration::MilliSeconds(500));
+        const auto shards = GetTableShards(&kikimr.GetTestServer(), runtime.AllocateEdgeActor(),
+            "/Root/HnswPrefix/index/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        const auto shardActor = ResolveTablet(runtime, shards.front());
+        const auto getStats = [&] {
+            auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(shardActor));
+            UNIT_ASSERT(shard);
+            UNIT_ASSERT_VALUES_EQUAL(shard->GetUserTables().size(), 1u);
+            return shard->GetHnswIndexStats(shard->GetUserTables().begin()->second->LocalTid, {});
+        };
+        auto search = [&] {
+            return kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx())
+                    .ExtractValueSync();
+            });
+        };
+        auto stats = getStats();
+        for (ui32 attempt = 0; attempt < 30 && (!stats || !stats->Ready); ++attempt) {
+            const auto warm = search();
+            UNIT_ASSERT_C(warm.IsSuccess(), warm.GetIssues().ToString());
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            stats = getStats();
         }
+        UNIT_ASSERT_C(stats && stats->Ready, "Posting shard did not build an HNSW graph");
+
+        // More out-of-prefix rows are closer than the default efSearch.
+        const auto read = search();
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(read.GetResultSet(0)), "[[1]]");
+        const auto after = getStats();
+        UNIT_ASSERT(after && after->Ready);
+        UNIT_ASSERT_GT(after->RangeFallbacks, stats->RangeFallbacks);
+
+        const auto residual = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswPrefix` VIEW index
+                WHERE user = "user_a" AND pk = 1
+                ORDER BY Knn::CosineDistance(emb, $target) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(residual.GetStatus(), EStatus::BAD_REQUEST, residual.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(residual.GetIssues().ToString(), "predicates on index prefix columns only");
+
+        const auto invalidTarget = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                $target = Knn::ToBinaryStringFloat([1.0f, 0.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswPrefix` VIEW index WHERE user = "user_a"
+                ORDER BY Knn::CosineDistance(emb, $target) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(invalidTarget.GetStatus(), EStatus::BAD_REQUEST, invalidTarget.GetIssues().ToString());
     }
 
     void DoCheckOverlap(TSession& session, const TString& indexName) {

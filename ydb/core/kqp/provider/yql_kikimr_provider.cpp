@@ -276,9 +276,16 @@ bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStrin
         for (const auto& index: mainTableImpl->Metadata->Indexes) {
             if (TIndexDescription::IsVectorIndex(index.Type)) {
                 const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
+                if (path == levelTablePath) {
+                    return true;
+                }
+                if (index.Type == TIndexDescription::EType::GlobalSyncHnsw) {
+                    // HNSW postings and prefix groups are maintained by DML.
+                    continue;
+                }
                 const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
                 const auto prefixTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable;
-                if (path == levelTablePath || path == postingTablePath || path == prefixTablePath) {
+                if (path == postingTablePath || path == prefixTablePath) {
                     return true;
                 }
             }

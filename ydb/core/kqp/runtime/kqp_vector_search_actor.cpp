@@ -237,6 +237,11 @@ namespace NKikimr {
 
             // ---- Search driver -----------------------------------------------------
 
+            bool IsHnsw() const {
+                // The compiler supplies efSearch for both prefixed and unprefixed HNSW.
+                return Settings.HasHnswEfSearch() || Settings.GetFullRangeHnsw();
+            }
+
             void StartSearch() {
                 if (!Settings.HasIndexSettings()) {
                     RuntimeError("Index settings are required", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -264,9 +269,16 @@ namespace NKikimr {
                 // Ranking needs vector geometry, while the posting read still
                 // needs the original HNSW construction settings.
                 auto distanceSettings = NKMeans::MakeDistanceSettings(Settings.GetIndexSettings());
-                RankClusters = NKikimr::NKMeans::CreateClustersAutoDetect(distanceSettings, TargetVector, 0, error);
+                RankClusters = IsHnsw()
+                    ? NKMeans::CreateClusters(distanceSettings, 0, error)
+                    : NKMeans::CreateClustersAutoDetect(distanceSettings, TargetVector, 0, error);
                 if (!RankClusters) {
                     RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                    return;
+                }
+                if (IsHnsw() && !RankClusters->IsExpectedFormat(TargetVector)) {
+                    RuntimeError(TStringBuilder() << "Target vector has invalid format: "
+                        << RankClusters->FormatError(TargetVector), NYql::NDqProto::StatusIds::BAD_REQUEST);
                     return;
                 }
 
@@ -707,7 +719,8 @@ namespace NKikimr {
 
             void StartPostingRead(TVector<TClusterId>& parents) {
                 TIntrusivePtr<NActors::TProtoArenaHolder> arena;
-                auto* src = MakeSourceSettings(arena, Settings.GetPostingTable(), Settings.GetUseFollowers());
+                const bool useFollowers = Settings.GetUseFollowers() && !(IsHnsw() && Snapshot.IsValid());
+                auto* src = MakeSourceSettings(arena, Settings.GetPostingTable(), useFollowers);
                 if (Settings.GetFullRangeHnsw()) {
                     // Let the read actor resolve the whole posting table and fan out
                     // across its current partitions, including after automatic splits.

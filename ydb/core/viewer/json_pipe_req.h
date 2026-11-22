@@ -104,7 +104,7 @@ protected:
             Response = std::move(response);
         }
 
-        bool Set(std::shared_ptr<T>&& response) {
+        bool Set(std::shared_ptr<T>&& response, bool updateCache = true) {
             constexpr bool hasErrorCheck = requires(const T& r) {TViewerPipeClient::IsSuccess(r);};
             constexpr bool hasUpdateCache = requires(std::shared_ptr<T>&& r) {TEvViewer::TEvUpdateSharedCacheTabletResponse(r);};
             if constexpr (hasErrorCheck) {
@@ -116,7 +116,9 @@ protected:
                 Span.EndOk();
             }
             if constexpr (hasUpdateCache) {
-                TActivationContext::Send(MakeViewerID(TActivationContext::ActorSystem()->NodeId), std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(response));
+                if (updateCache) {
+                    TActivationContext::Send(MakeViewerID(TActivationContext::ActorSystem()->NodeId), std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(response));
+                }
             }
             if (IsDone()) {
                 return false;
@@ -125,8 +127,8 @@ protected:
             return true;
         }
 
-        bool Set(TAutoPtr<TEventHandle<T>>&& response) {
-            return Set(std::shared_ptr<T>(response->Release().Release()));
+        bool Set(TAutoPtr<TEventHandle<T>>&& response, bool updateCache = true) {
+            return Set(std::shared_ptr<T>(response->Release().Release()), updateCache);
         }
 
         bool Error(const TString& error) {

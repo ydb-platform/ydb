@@ -66,7 +66,8 @@ private:
 
         for (const auto& part : record.GetPartResult()) {
             if (!part.HasPartition() || !tablet->second.contains(part.GetPartition())
-                || part.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_INITIALIZING)
+                || part.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_INITIALIZING
+                || !part.GetCdcReplicationTrimTxId())
             {
                 continue;
             }

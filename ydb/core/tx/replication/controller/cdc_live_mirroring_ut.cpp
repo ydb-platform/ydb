@@ -1,8 +1,14 @@
+#include "cdc_trim_verifier.h"
+#include "private_events.h"
 #include "public_events.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -164,6 +170,35 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(CdcLiveMirroring) {
+    Y_UNIT_TEST_TWIN(TrimVerifierPollsUntilCommitted, ConflictingId) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto parent = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakePipePerNodeCacheID(false), parent);
+
+        NKikimrSchemeOp::TPersQueueGroupDescription topic;
+        topic.SetTotalGroupCount(1);
+        auto* partition = topic.AddPartitions();
+        partition->SetTabletId(1);
+        partition->SetPartitionId(0);
+        const ui64 expected = 10;
+        const auto verifier = runtime.Register(CreateCdcTrimVerifier(parent, TPathId(1, 2), expected, topic));
+        runtime.EnableScheduleForActor(verifier);
+
+        for (const ui64 committed : {ui64{0}, ConflictingId ? expected + 1 : expected}) {
+            runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(parent);
+            auto response = MakeHolder<TEvPersQueue::TEvStatusResponse>();
+            response->Record.SetTabletId(1);
+            auto* part = response->Record.AddPartResult();
+            part->SetPartition(0);
+            part->SetCdcReplicationTrimTxId(committed);
+            runtime.Send(verifier, parent, response.Release());
+        }
+
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCdcTrimVerified>(parent);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Success, !ConflictingId);
+    }
+
     Y_UNIT_TEST(InitialScanMirrorsCdcHistoryAndConsumerOffset) {
         TLiveCdcMirror test;
         test.InitialScanAndMirror();

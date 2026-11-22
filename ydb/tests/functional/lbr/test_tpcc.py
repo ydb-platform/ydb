@@ -14,6 +14,9 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
+    STATIC_NODES = 3
+    DYNAMIC_NODES = 3
+
     compaction_mode = tpcc.CompactionMode.LEGACY
     threads = 0
     warmup_s = 600
@@ -57,8 +60,8 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
         metadata = {
             "ydbd": str(binary),
             "cli": str(cli),
-            "static_nodes": 3,
-            "dynamic_nodes": 3,
+            "static_nodes": cls.STATIC_NODES,
+            "dynamic_nodes": cls.DYNAMIC_NODES,
             "erasure": "mirror-3-dc",
             "in_memory_pdisks": False,
             "pdisk_directory": pdisk_directory,
@@ -88,8 +91,8 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
         )
         try:
             cls.setup_cluster_ext(
-                static_nodes=3,
-                dynamic_nodes=3,
+                static_nodes=cls.STATIC_NODES,
+                dynamic_nodes=cls.DYNAMIC_NODES,
                 erasure=Erasure.MIRROR_3_DC,
                 use_in_memory_pdisks=False,
                 binary_paths=[str(binary)],
@@ -103,7 +106,7 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
                 ydb_endpoint=f"grpc://{slot.host}:{slot.grpc_port}",
                 ydb_database=f"{cls.cluster.domain_name}/test_db",
                 ydb_mon_port=slot.mon_port,
-                dyn_nodes_count=3,
+                dyn_nodes_count=cls.DYNAMIC_NODES,
             )
             super().setup_class()
         except BaseException:
@@ -118,7 +121,9 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
     def _server_pids(cls):
         pids = [node.pid for node in cls.cluster.nodes.values()]
         pids += [slot.pid for slot in cls.cluster.slots.values()]
-        assert len(pids) == 6 and len(set(pids)) == 6
+        expected = cls.STATIC_NODES + cls.DYNAMIC_NODES
+        if len(pids) != expected or len(set(pids)) != expected:
+            raise RuntimeError(f"Expected {expected} distinct server PIDs, got {pids}")
         return pids
 
     @classmethod

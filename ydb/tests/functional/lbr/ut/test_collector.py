@@ -297,7 +297,8 @@ def test_training_settings_check_storage_environment(monkeypatch, variable, valu
         validate_training_settings(**settings)
 
 
-def test_late_startup_worker_writes_final_manifest(tmp_path, fake_perf, monkeypatch):
+@pytest.mark.parametrize("late_error", [False, True])
+def test_late_startup_worker_writes_final_manifest(tmp_path, fake_perf, monkeypatch, late_error):
     entered = threading.Event()
     release = threading.Event()
     real_thread = threading.Thread
@@ -324,6 +325,8 @@ def test_late_startup_worker_writes_final_manifest(tmp_path, fake_perf, monkeypa
     def delayed_record(index, offset):
         entered.set()
         assert release.wait(5)
+        if late_error:
+            raise OSError("late perf exec failure")
         original_record(index, offset)
 
     def startup_timeout(timeout):
@@ -343,7 +346,12 @@ def test_late_startup_worker_writes_final_manifest(tmp_path, fake_perf, monkeypa
             worker.join(timeout=5)
     assert all(not worker.is_alive() for worker in workers)
     data = manifest(collector.output_dir)
-    assert "Timed out starting LBR" in data["error"]
-    assert len(data["records"]) == 1
-    assert "finished_at" in data["records"][0]
-    assert not data["records"][0]["complete"]
+    assert "Timed out starting LBR" in data["startup_error"]
+    if late_error:
+        assert data["error"] == "late perf exec failure"
+        assert not data["records"]
+    else:
+        assert "Timed out starting LBR" in data["error"]
+        assert len(data["records"]) == 1
+        assert "finished_at" in data["records"][0]
+        assert not data["records"][0]["complete"]

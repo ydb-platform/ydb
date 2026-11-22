@@ -62,6 +62,7 @@ class LbrCollector:
         self.valid = False
         self.records = []
         self.error = None
+        self.startup_error = None
         self._stop = threading.Event()
         self._first_attempt = threading.Event()
         self._thread = None
@@ -84,8 +85,8 @@ class LbrCollector:
             # Start the first perf process before a possibly short phase begins.
             if not self._first_attempt.wait(10):
                 self._stop.set()
-                self.error = RuntimeError("Timed out starting LBR collection")
-            if self.error:
+                self.startup_error = RuntimeError("Timed out starting LBR collection")
+            if self.error or self.startup_error:
                 self._entry_failed.set()
                 self._phase_failed = True
                 self._stop.set()
@@ -93,7 +94,7 @@ class LbrCollector:
                 if not self._thread.is_alive():
                     self._write_manifest()
                 # A late worker owns the final manifest after it stops recording.
-                raise self.error
+                raise self.error or self.startup_error
         return self
 
     def _record(self, index, offset):
@@ -196,7 +197,8 @@ class LbrCollector:
             "interval_seconds": self.interval_seconds if self.periodic else None,
             "start_delay_seconds": self.start_delay_seconds,
             "records": self.records,
-            "error": str(self.error) if self.error else None,
+            "error": str(self.error or self.startup_error) if self.error or self.startup_error else None,
+            "startup_error": str(self.startup_error) if self.startup_error else None,
             "workload_failed": self._phase_failed,
         }
         (self.output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))

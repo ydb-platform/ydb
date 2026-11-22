@@ -72,11 +72,7 @@ public:
 
 private:
     struct TUploadAttempt {
-        std::shared_ptr<void> Reservation;
         bool Completed = false;
-        explicit TUploadAttempt(std::shared_ptr<void> reservation)
-            : Reservation(std::move(reservation))
-        {}
     };
 
     struct TDestination {
@@ -497,9 +493,9 @@ private:
     }
 
     NTxProxy::TUploadMemoryReservation RetainAttempt(ui64 bytes, ui64 rows) {
-        auto attempt = std::make_shared<TUploadAttempt>(RetainResource ? RetainResource(bytes) : ResourceReservation);
+        auto attempt = std::make_shared<TUploadAttempt>();
         PreviousAttempt = attempt;
-        return {std::move(attempt), RetainResource, rows};
+        return {std::move(attempt), RetainResource ? RetainResource(bytes) : ResourceReservation, RetainResource, rows};
     }
 
     bool WaitForPreviousAttempt() {
@@ -515,18 +511,21 @@ private:
             return false;
         }
         const auto now = TActivationContext::Now();
+        auto delay = TDuration::MilliSeconds(100);
         if (!CleanupWaitStarted) {
             CleanupWaitStarted = now;
+            if (const auto attempt = PreviousAttempt.lock(); attempt && attempt->Completed) {
+                delay = TDuration::MilliSeconds(1);
+            }
         }
+        const auto deadline = *CleanupWaitStarted + TDuration::Minutes(1);
         // Keep the retained payload charged, but do not leave its scan waiting
         // forever for a disconnected pipe or a stalled destination mailbox.
-        if (now >= *CleanupWaitStarted + TDuration::Minutes(1)) {
+        if (now >= deadline) {
             CleanupTimedOut = true;
             ythrow yexception() << "Timed out waiting for previous upload payload cleanup";
         }
-        const auto attempt = PreviousAttempt.lock();
-        const auto delay = attempt && attempt->Completed ? TDuration::MilliSeconds(1) : TDuration::MilliSeconds(100);
-        TActivationContext::ActorContextFor(Owner).Schedule(delay, new TEvents::TEvWakeup());
+        TActivationContext::ActorContextFor(Owner).Schedule(Min(delay, deadline - now), new TEvents::TEvWakeup());
         return true;
     }
 

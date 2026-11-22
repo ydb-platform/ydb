@@ -309,8 +309,12 @@ namespace {
             const auto* keyRange = GetKeyRange();
             Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
 
-            TVector<TShardEraseRetryState*> eraseRetryStates(keyRange->GetPartitions().size());
-            TVector<std::unique_ptr<TEvDataShard::TEvEraseRowsRequest>> shardRequests(keyRange->GetPartitions().size());
+            const size_t partitionCount = keyRange->GetPartitions().size();
+            using TShardRequest = std::unique_ptr<TEvDataShard::TEvEraseRowsRequest>;
+            const auto routingMemory = MemoryReservation.RetainRoutingMemory(
+                partitionCount * (sizeof(TShardEraseRetryState*) + sizeof(TShardRequest)));
+            TVector<TShardEraseRetryState*> eraseRetryStates(partitionCount);
+            TVector<TShardRequest> shardRequests(partitionCount);
             size_t shardRequestCount = 0;
 
             for (const auto& key : *Keys) {

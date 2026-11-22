@@ -1228,8 +1228,12 @@ private:
         Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
 
         // Group rows by shard id
-        TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
-        TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
+        const size_t partitionCount = keyRange->GetPartitions().size();
+        using TShardRequest = std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>;
+        const auto routingMemory = MemoryReservation.RetainRoutingMemory(
+            partitionCount * (sizeof(TShardUploadRetryState*) + sizeof(TShardRequest)));
+        TVector<TShardUploadRetryState*> uploadRetryStates(partitionCount);
+        TVector<TShardRequest> shardRequests(partitionCount);
         size_t shardRequestCount = 0;
         for (const auto& keyValue : *Rows) {
             // Find partition for the key

@@ -3768,7 +3768,7 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
         return;
     }
     const auto captureExplicitSnapshot = [&](bool fromReadiness) {
-        if (Scans->NeedsSnapshot(serial) && std::holds_alternative<TScanOptions::TSnapshotById>(options->Snapshot)) {
+        if (Scans->NeedsSnapshot(serial, fromReadiness) && std::holds_alternative<TScanOptions::TSnapshotById>(options->Snapshot)) {
             Scans->SetSnapshot(serial, ResolveScanSnapshot(table, *options), fromReadiness);
         }
     };

@@ -1445,7 +1445,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
                     UNIT_ASSERT_STRING_CONTAINS(reason, "memory reservation exceeds");
                     ++failures;
                 };
-                options.OnMemoryLimitExceeded = [&](ui64 limit) { memoryLimit = limit; };
+                options.OnMemoryLimitExceeded = [&](ui64 limit) {
+                    memoryLimit = limit;
+                    ythrow yexception() << "Test memory limit callback failure";
+                };
                 options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
                     ++constructed;
                     return new TAdmissionReadyScan(finished);
@@ -1672,7 +1675,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         env.WaitFor<NFake::TEvDataCleaned>();
     }
 
-    Y_UNIT_TEST_TWIN(ReadinessExpiryKeepsReadmissionQueued, ThrowOnExpiry) {
+    void TestReadinessSnapshotReadmission(bool expire, bool throwOnExpiry) {
         TMyEnvScans env;
         env.SendSync(env.Rows.MakeRows(1));
         bool ready = false;
@@ -1698,7 +1701,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             };
             options.OnReadinessExpired = [&] {
                 expired = true;
-                if (ThrowOnExpiry) {
+                if (throwOnExpiry) {
                     ythrow yexception() << "Test readiness expiry failure";
                 }
             };
@@ -1718,20 +1721,65 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         ready = true;
         env->Send(resume.release());
         env->WaitFor("readmission grant held", [&] { return !grants.empty(); });
-        env->SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT(expired);
-        UNIT_ASSERT_VALUES_EQUAL(failed, ThrowOnExpiry);
+        if (expire) {
+            env->SimulateSleep(TDuration::Seconds(2));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(expired, expire);
+        UNIT_ASSERT_VALUES_EQUAL(failed, throwOnExpiry);
         UNIT_ASSERT(!finished);
         grants.Stop().Unblock();
-        if (!ThrowOnExpiry) {
+        if (!throwOnExpiry) {
             env->WaitFor("scan finishes after readmission", [&] { return finished; });
         }
         env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
             executor->StartVacuum(123ull);
         }));
         env.WaitFor<NFake::TEvDataCleaned>();
-        UNIT_ASSERT_VALUES_EQUAL(finished, !ThrowOnExpiry);
-        UNIT_ASSERT_VALUES_EQUAL(failed, ThrowOnExpiry);
+        UNIT_ASSERT_VALUES_EQUAL(finished, !throwOnExpiry);
+        UNIT_ASSERT_VALUES_EQUAL(failed, throwOnExpiry);
+        UNIT_ASSERT_VALUES_EQUAL(expired, expire);
+    }
+
+    Y_UNIT_TEST_TWIN(ReadinessExpiryKeepsReadmissionQueued, ThrowOnExpiry) {
+        TestReadinessSnapshotReadmission(true, ThrowOnExpiry);
+    }
+
+    Y_UNIT_TEST(TimelyReadmissionRefreshesReadinessSnapshot) {
+        TestReadinessSnapshotReadmission(false, false);
+    }
+
+    Y_UNIT_TEST(LateEagerScanGrantFinishesBrokerTask) {
+        TMyEnvScans env;
+        bool finished = false;
+        bool failed = false;
+        TBlockEvents<TEvResourceBroker::TEvResourceAllocated> grants(env.Env, [](const auto& event) {
+            const auto* resource = dynamic_cast<TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == TResource::ESource::Scan;
+        });
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.QueueTimeout = TDuration::Seconds(1);
+            options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                UNIT_ASSERT(retry);
+                UNIT_ASSERT_STRING_CONTAINS(reason, "Timed out waiting for scan admission");
+                failed = true;
+            };
+            executor->QueueScan(TRowsModel::TableId, new TAdmissionReadyScan(finished), 12345, options);
+        }));
+        env->WaitFor("eager grant held", [&] { return !grants.empty(); });
+        const ui64 taskId = grants.front()->Get()->TaskId;
+        const auto client = grants.front()->Recipient;
+        bool taskFinished = false;
+        auto finishes = env->AddObserver<TEvResourceBroker::TEvFinishTask>([&](auto& event) {
+            if (event->Sender == client && event->Get()->TaskId == taskId) {
+                taskFinished = true;
+            }
+        });
+        env->SimulateSleep(TDuration::Seconds(2));
+        grants.Stop().Unblock();
+        env->WaitFor("expired eager scan finishes its broker task", [&] { return failed && taskFinished; });
+        UNIT_ASSERT(!finished);
     }
 
     Y_UNIT_TEST_TWIN(ScanAdmissionTimeoutCallbackFailureFailsScan, GrantFirst) {

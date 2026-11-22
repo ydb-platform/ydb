@@ -143,7 +143,12 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             });
         };
         auto batch = retain(64_KB);
-        NTxProxy::TUploadMemoryReservation reservation(std::move(batch), retain, 4);
+        auto attempt = std::make_shared<int>();
+        std::weak_ptr<int> attemptLifetime = attempt;
+        NTxProxy::TUploadMemoryReservation reservation(std::move(attempt), std::move(batch), retain, 4);
+        const ui64 routingBytes = 128_KB;
+        auto routing = reservation.RetainRoutingMemory(routingBytes);
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 4 * 4_KB + routingBytes);
         NKikimrTxDataShard::TEvUploadRowsRequest record;
         record.AddRows()->SetValueColumns(TString(16_KB, 'x'));
         const ui64 requestBytes = record.SpaceUsedLong() + record.ByteSizeLong() + 4_KB;
@@ -151,18 +156,22 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto shardOne = reservation.RetainRequest(record);
         auto shardTwo = reservation.RetainRequest(record);
         reservation.FinishRouting();
-        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes);
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes + routingBytes);
         UNIT_ASSERT_VALUES_EQUAL(minimumRetained, retainedBytes);
+        routing.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes);
 
         auto retry = reservation.RetainRequest(record);
         reservation = {};
-        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 3 * requestBytes);
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 3 * requestBytes);
+        UNIT_ASSERT(!attemptLifetime.expired());
         shardTwo.reset();
-        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes);
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 2 * requestBytes);
         shardOne.reset();
-        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + requestBytes);
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, requestBytes);
         retry.reset();
         UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 0);
+        UNIT_ASSERT(attemptLifetime.expired());
     }
 
 

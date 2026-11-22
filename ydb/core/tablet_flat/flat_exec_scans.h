@@ -384,18 +384,19 @@ namespace NTabletFlatExecutor {
             } else if (one->State != EState::Task) {
                 Y_TABLET_ERROR(NFmt::Do(*one) << " acquired an unexpected resource");
             } else {
+                // Cancellation from an admission callback must finish this grant.
+                one->State = EState::Ready;
+                if (one->Lease) {
+                    one->Lease->Acquired();
+                }
                 // An overdue grant must discard the old readiness state
                 // before selecting a new one, even if its timer is delayed.
                 if (!ExpireReadiness(*one) || (BrokerDeadlineExpired(*one) && !HandleBrokerTimeout(*one))) {
                     return {};
                 }
                 // A call to Start is expected now
-                one->State = EState::Ready;
                 one->BrokerDeadline = {};
                 ++one->TimeoutGeneration;
-                if (one->Lease) {
-                    one->Lease->Acquired();
-                }
 
                 return { one->Serial, one->Table };
             }
@@ -476,12 +477,15 @@ namespace NTabletFlatExecutor {
             return Scans.contains(serial);
         }
 
-        bool NeedsSnapshot(ui64 serial) {
-            const auto& one = *Lookup(serial, true);
+        bool NeedsSnapshot(ui64 serial, bool fromReadiness = false) {
+            auto& one = *Lookup(serial, true);
             if (one.PreparedSnapshotId) {
                 const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&one.Options.Snapshot);
-                Y_ENSURE(byId && byId->SnapshotId == *one.PreparedSnapshotId,
-                    "Cannot replace a prepared scan snapshot during admission");
+                if (!byId || byId->SnapshotId != *one.PreparedSnapshotId) {
+                    Y_ENSURE(fromReadiness && one.ReadinessSnapshot,
+                        "Cannot replace a prepared scan snapshot during admission");
+                    ReleaseReadinessSnapshot(one);
+                }
             }
             return !one.Snapshot;
         }
@@ -505,7 +509,14 @@ namespace NTabletFlatExecutor {
             ReleaseSnapshot(std::move(cancelled.Snapshot));
             const auto& options = cancelled.Scan->Options;
             if (memoryLimit && options.OnMemoryLimitExceeded) {
-                options.OnMemoryLimitExceeded(*memoryLimit);
+                try {
+                    options.OnMemoryLimitExceeded(*memoryLimit);
+                } catch (...) {
+                    // The advisory hook cannot suppress the terminal notification.
+                    if (auto logl = Logger->Log(NUtil::ELnLev::Warn)) {
+                        logl << NFmt::Do(*Ops) << " scan memory limit callback failed: " << CurrentExceptionMessage();
+                    }
+                }
             }
             if (options.OnAdmissionFailure) {
                 options.OnAdmissionFailure(reason, true);
@@ -826,16 +837,20 @@ namespace NTabletFlatExecutor {
             return out.Str();
         }
 
+        void ReleaseReadinessSnapshot(TOne& one) {
+            one.ReadinessSnapshot = false;
+            one.PreparedSnapshotId.reset();
+            ReleaseSnapshot(std::move(one.Snapshot));
+        }
+
         bool ExpireReadiness(TOne& one) {
             if (!one.ReadinessDeadline || TActivationContext::Now() < one.ReadinessDeadline) {
                 return true;
             }
             one.ReadinessDeadline = {};
             if (one.ReadinessSnapshot) {
-                one.ReadinessSnapshot = false;
-                one.PreparedSnapshotId.reset();
                 one.Options.Snapshot = TScanOptions::TSnapshotNone{};
-                ReleaseSnapshot(std::move(one.Snapshot));
+                ReleaseReadinessSnapshot(one);
             }
             const auto serial = one.Serial;
             TString failure;

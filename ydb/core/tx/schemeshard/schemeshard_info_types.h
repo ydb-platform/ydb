@@ -1189,6 +1189,7 @@ public:
 
     struct TCreateAlterDataFeatureFlags {
         bool EnableTablePgTypes;
+        bool DisablePgCompatibility;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
@@ -4852,7 +4853,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
-    const TSubDomainInfo& subDomain, TString& errStr);
+    const TSubDomainInfo& subDomain, bool disablePgCompatibility, TString& errStr);
 
 /**
  * Check if the given detailed metrics settings (for a table) are valid.

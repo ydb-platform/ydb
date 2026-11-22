@@ -361,6 +361,7 @@ class TCreateTable: public TSubOperation {
     virtual const char* Name() const override final { return "TCreateTable"; }
 
     bool AllowShadowData = false;
+    bool AllowPgForBackup = false;
     THashSet<TString> LocalSequences;
 
     static TTxState::ETxState NextState() {
@@ -406,6 +407,10 @@ public:
 
     void SetAllowShadowDataForBuildIndex() {
         AllowShadowData = true;
+    }
+
+    void SetAllowPgForBackup(bool allowPgForBackup) {
+        AllowPgForBackup = allowPgForBackup;
     }
 
     void SetLocalSequences(const THashSet<TString>& localSequences) {
@@ -609,6 +614,7 @@ public:
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
             .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+            .DisablePgCompatibility = !AllowPgForBackup && AppData()->FeatureFlags.GetDisablePgCompatibility(),
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
             .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
@@ -827,9 +833,11 @@ bool SetName<TTag>(
 
 } // namespace NOperation
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, bool allowPgForBackup) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
-    static_cast<TCreateTable*>(obj.Get())->SetLocalSequences(localSequences);
+    auto* table = static_cast<TCreateTable*>(obj.Get());
+    table->SetLocalSequences(localSequences);
+    table->SetAllowPgForBackup(allowPgForBackup);
     return obj;
 }
 

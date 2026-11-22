@@ -5,25 +5,42 @@
 
 #include <ydb/library/signals/object_counter.h>
 
+#include <library/cpp/time_provider/monotonic.h>
+
 namespace NKikimr::NKqp {
 
-TConclusionStatus TWaitBackgroundProcessesCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
-    const TInstant start = TInstant::Now();
-    const TDuration timeout = TDuration::Seconds(TimeoutSeconds);
-    ui64 processScopeCount = NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val();
-    ui64 dataSourceCount = NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val();
+TBackgroundProcessesState TBackgroundProcessesState::Current() {
+    TBackgroundProcessesState state;
+    state.ProcessScopeCount =
+        NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val();
+    state.DataSourceCount = NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val();
+    return state;
+}
 
-    while (TInstant::Now() - start < timeout && (processScopeCount != 0 || dataSourceCount != 0)) {
-        Cerr << "WAIT_BACKGROUND_PROCESSES: Waiting for background processes to complete... "
-             << "ProcessScopeCount=" << processScopeCount << ", DataSourceCount=" << dataSourceCount << ", elapsed=" << (TInstant::Now() - start).Seconds() << "s" << Endl;
-
-        Sleep(TDuration::Seconds(1));
-        processScopeCount = NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val();
-        dataSourceCount = NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val();
+TBackgroundProcessesState WaitBackgroundProcesses(const TDuration timeout) {
+    const TMonotonic start = TMonotonic::Now();
+    TMonotonic nextReport = start + TDuration::Seconds(1);
+    TBackgroundProcessesState state = TBackgroundProcessesState::Current();
+    while (!state.IsClean() && TMonotonic::Now() - start < timeout) {
+        if (nextReport <= TMonotonic::Now()) {
+            Cerr << "WAIT_BACKGROUND_PROCESSES: Waiting for background processes to complete... "
+                 << "ProcessScopeCount=" << state.ProcessScopeCount << ", DataSourceCount=" << state.DataSourceCount
+                 << ", elapsed=" << (TMonotonic::Now() - start).Seconds() << "s" << Endl;
+            nextReport += TDuration::Seconds(1);
+        }
+        Sleep(TDuration::MilliSeconds(100));
+        state = TBackgroundProcessesState::Current();
+        state.Waited = TMonotonic::Now() - start;
     }
+    return state;
+}
 
-    AFL_VERIFY(processScopeCount == 0 && dataSourceCount == 0)("error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds")(
-        "ProcessScopeCount", processScopeCount)("DataSourceCount", dataSourceCount);
+TConclusionStatus TWaitBackgroundProcessesCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    const TBackgroundProcessesState state = WaitBackgroundProcesses(TDuration::Seconds(TimeoutSeconds));
+
+    AFL_VERIFY(state.IsClean())
+        ("error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds")
+        ("ProcessScopeCount", state.ProcessScopeCount)("DataSourceCount", state.DataSourceCount);
 
     Cerr << "WAIT_BACKGROUND_PROCESSES: All background processes completed successfully" << Endl;
     return TConclusionStatus::Success();

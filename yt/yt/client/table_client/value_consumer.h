@@ -28,6 +28,16 @@ struct IValueConsumer
     virtual void OnEndRow() = 0;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct IColumnarValueConsumer
+    : public virtual IValueConsumer
+{
+    virtual void Write(IUnversionedColumnarRowBatchPtr batch) = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IFlushableValueConsumer
     : public virtual IValueConsumer
 {
@@ -124,6 +134,7 @@ private:
 class TWritingValueConsumer
     : public TValueConsumerBase
     , public IFlushableValueConsumer
+    , public IColumnarValueConsumer
 {
 public:
     explicit TWritingValueConsumer(
@@ -133,6 +144,7 @@ public:
         IMemoryUsageTrackerPtr tracker = GetNullMemoryUsageTracker());
 
     TFuture<void> Flush() override;
+    void Write(IUnversionedColumnarRowBatchPtr batch) override;
     const TNameTablePtr& GetNameTable() const override;
 
     bool GetAllowUnknownColumns() const override;
@@ -144,8 +156,11 @@ public:
 private:
     const IUnversionedWriterPtr Writer_;
     const i64 MaxRowBufferSize_;
+    const bool IsTypeConversionEnabled_;
 
     const TRowBufferPtr RowBuffer_;
+
+    bool WriteNeedsWait_ = false;
 
     std::vector<TUnversionedRow> Rows_;
     TCompactVector<TUnversionedValue, TypicalColumnCount> Values_;

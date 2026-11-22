@@ -66,6 +66,7 @@ class LbrCollector:
         self._first_attempt = threading.Event()
         self._thread = None
         self._phase_failed = False
+        self._entry_failed = threading.Event()
 
     def __enter__(self):
         self.output_dir.mkdir(parents=True, exist_ok=False)
@@ -85,9 +86,13 @@ class LbrCollector:
                 self._stop.set()
                 self.error = RuntimeError("Timed out starting LBR collection")
             if self.error:
+                self._entry_failed.set()
+                self._phase_failed = True
                 self._stop.set()
-                self._thread.join(timeout=15)
-                self._write_manifest()
+                self._thread.join(timeout=65)
+                if not self._thread.is_alive():
+                    self._write_manifest()
+                # A late worker owns the final manifest after it stops recording.
                 raise self.error
         return self
 
@@ -133,7 +138,7 @@ class LbrCollector:
                         except ProcessLookupError:
                             pass
                         try:
-                            process.wait(timeout=10)
+                            process.wait(timeout=60)
                         except subprocess.TimeoutExpired:
                             os.killpg(process.pid, signal.SIGKILL)
                             process.wait()
@@ -172,9 +177,12 @@ class LbrCollector:
                     break
                 self._record(index, offset)
         except Exception as error:
-            self.error = error
+            if self.error is None:
+                self.error = error
         finally:
             self._first_attempt.set()
+            if self._entry_failed.is_set():
+                self._write_manifest()
 
     def _write_manifest(self):
         manifest = {
@@ -211,3 +219,16 @@ class LbrCollector:
             if self.conversion is not None:
                 self.conversion.finish_phase(self.phase, self.valid)
             self._write_manifest()
+
+
+def validate_training_settings(
+    *, window_seconds, record_seconds, snapshots, start_delay_seconds, interval_seconds, mmap_pages
+):
+    """Validate training inputs without starting processes or creating files."""
+    if os.environ.get("YDB_USE_IN_MEMORY_PDISKS") == "true":
+        raise ValueError("LBR training requires file-backed PDisks; unset YDB_USE_IN_MEMORY_PDISKS or set it to false")
+    if os.environ.get("YDB_PDISKS_DIRECTORY"):
+        raise ValueError("Unset YDB_PDISKS_DIRECTORY; use tpc-lbr-pdisk-directory for LBR training")
+    common = dict(record_seconds=record_seconds, snapshots=snapshots, mmap_pages=mmap_pages)
+    LbrCollector([os.getpid()], ".", window_seconds, start_delay_seconds=start_delay_seconds, **common)
+    LbrCollector([os.getpid()], ".", None, interval_seconds=interval_seconds, **common)

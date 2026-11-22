@@ -4,7 +4,8 @@
 It runs in a single test process, without splitting into files or test cases. It starts three static and three
 dynamic YDB processes on the local machine, with `mirror-3-dc` and file-backed
 PDisks. `YDB_USE_IN_MEMORY_PDISKS=true` is rejected before starting the cluster;
-unset it or set it to `false`. Ordinary TPC tests keep their existing configuration.
+unset it or set it to `false`. A nonempty `YDB_PDISKS_DIRECTORY` is also rejected:
+use `tpc-lbr-pdisk-directory` to select storage explicitly. Ordinary TPC tests keep their existing configuration.
 
 Supply external executables for both the server and CLI. To reproduce the baseline
 experiment, use Sandbox resources **14259363241** (ydbd) and **14258473698** (CLI).
@@ -30,8 +31,10 @@ compaction. It records import, legacy compaction and workload into separate
 `manifest.json`, `snap*.perf.data` and `snap*.log` files.
 
 Import and compaction are sampled immediately and then every 60 seconds until
-the phase ends. A final shorter snapshot is stopped gracefully and flushed;
-its manifest records the actual duration and `stopped_on_phase_end`. A failed
+the phase ends. A final shorter snapshot is stopped gracefully and flushed.
+The collector allows 60 seconds for perf to flush after SIGINT; if it still
+does not exit, it is killed and the snapshot is rejected.
+Its manifest records the actual duration and `stopped_on_phase_end`. A failed
 phase remains marked invalid. The default record duration is 30 seconds.
 SDK compaction is not a separate phase: it happens inside CLI import; the local
 training test deliberately uses legacy compaction.
@@ -42,6 +45,12 @@ seconds, configurable with `--test-param=tpc-lbr-warmup-seconds=300` for the
 workload, after that delay. A workload that ends before its scheduled snapshots
 finish is rejected. The CLI may enforce a minimum warmup for terminal startup;
 the parameter must be at least `warehouses // 10 + 1` seconds for the baseline CLI.
+This bound comes from ten terminals per warehouse, started at 10 ms intervals.
+Another CLI build may enforce a different minimum and silently extend warmup,
+shifting workload snapshots into warmup. When changing CLI builds, check its
+reported effective warmup and choose a sufficiently large explicit value; the
+collector does not derive its schedule from the CLI's effective warmup.
+Both workload and preparation sampling schedules are validated before cluster startup.
 
 The command is `perf record -m 64 -F 99 -e cycles:u -b -p <six server PIDs>`.
 No system-wide or CLI sampling is performed. The smaller per-CPU mmap buffer
@@ -141,7 +150,12 @@ The exact sampled ydbd is used, without binary rewriting or an LLVM patch.
 atomic rename. Command lines, logs, wall time, peak RSS and file sizes are kept
 next to each snapshot. `profiles/conversion.json` records phase validity and
 errors. A failed or incomplete phase is not merged, even if some of its
-snapshots converted successfully. Conversion errors in successful phases fail
+snapshots converted successfully. Per-snapshot files from invalid phases remain
+available for diagnostics; their existence does not certify phase validity.
+For training use only the final `profiles/<phase>.prof` files, produced by a
+successful phase merge, and check `conversion.json` and the phase manifest.
+Do not glob `profiles/<phase>/snap*.prof` into a training profile.
+Conversion errors in successful phases fail
 the test. Sampling errors keep their original exception; setup failure drains
 or cancels the pending conversion jobs. Each conversion command has a one-hour
 timeout; expiry and cancellation terminate its process group. Failed conversion

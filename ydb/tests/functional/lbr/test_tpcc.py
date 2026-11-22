@@ -6,7 +6,7 @@ from pathlib import Path
 import yatest.common
 
 import ydb.tests.olap.load.lib.tpcc as tpcc
-from ydb.tests.functional.lbr.lib.lbr import LbrCollector
+from ydb.tests.functional.lbr.lib.lbr import LbrCollector, validate_training_settings
 from ydb.tests.functional.lbr.lib.conversion import LbrConversion
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 from ydb.tests.library.common.types import Erasure
@@ -20,8 +20,6 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
 
     @classmethod
     def setup_class(cls):
-        if os.environ.get("YDB_USE_IN_MEMORY_PDISKS") == "true":
-            raise ValueError("LBR training requires file-backed PDisks; unset YDB_USE_IN_MEMORY_PDISKS or set it to false")
         binary = Path(yatest.common.get_param("tpc-lbr-ydbd", "")).expanduser()
         cli = Path(yatest.common.get_param("ydb-cli", "")).expanduser()
         for name, path in (("ydbd", binary), ("CLI", cli)):
@@ -47,6 +45,14 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
         cls.snapshots = int(yatest.common.get_param("tpc-lbr-snapshots", "3"))
         cls.perf = yatest.common.get_param("tpc-lbr-perf", "perf")
         cls.profile_dir = Path(yatest.common.test_output_path("lbr"))
+        validate_training_settings(
+            window_seconds=cls.time_s,
+            record_seconds=cls.record_seconds,
+            snapshots=cls.snapshots,
+            start_delay_seconds=cls.warmup_s,
+            interval_seconds=cls.phase_interval_s,
+            mmap_pages=cls.mmap_pages,
+        )
         cls.profile_dir.mkdir(parents=True, exist_ok=False)
         metadata = {
             "ydbd": str(binary),

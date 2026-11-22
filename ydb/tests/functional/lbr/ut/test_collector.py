@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from ydb.tests.functional.lbr.lib.lbr import LbrCollector
+from ydb.tests.functional.lbr.lib.lbr import LbrCollector, validate_training_settings
 
 
 @pytest.fixture
@@ -237,12 +237,113 @@ def test_startup_timeout_uses_bounded_join(tmp_path, fake_perf, monkeypatch):
         def join(self, timeout=None):
             joins.append(timeout)
 
+        def is_alive(self):
+            return False
+
     collector = LbrCollector([os.getpid()], tmp_path / "import", None, perf=fake_perf)
     monkeypatch.setattr(threading, "Thread", StuckThread)
     monkeypatch.setattr(collector._first_attempt, "wait", lambda timeout: False)
     with pytest.raises(RuntimeError, match="Timed out starting LBR"):
         with collector:
             pytest.fail("Startup timeout must prevent the phase from starting")
-    assert joins == [15]
+    assert joins == [65]
     assert collector._stop.is_set()
     assert "Timed out starting" in manifest(tmp_path / "import")["error"]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"snapshots": 0},
+        {"record_seconds": 600},
+        {"interval_seconds": 10},
+        {"window_seconds": float("nan")},
+        {"record_seconds": float("inf")},
+        {"start_delay_seconds": -1},
+        {"mmap_pages": 0},
+    ],
+)
+def test_training_settings_reject_invalid_inputs(monkeypatch, overrides):
+    monkeypatch.delenv("YDB_USE_IN_MEMORY_PDISKS", raising=False)
+    monkeypatch.delenv("YDB_PDISKS_DIRECTORY", raising=False)
+    settings = dict(
+        window_seconds=1800, record_seconds=30, snapshots=3, start_delay_seconds=600, interval_seconds=60, mmap_pages=64
+    )
+    settings.update(overrides)
+    with pytest.raises(ValueError):
+        validate_training_settings(**settings)
+
+
+@pytest.mark.parametrize(
+    "variable,value,rejected",
+    [
+        ("YDB_USE_IN_MEMORY_PDISKS", "true", True),
+        ("YDB_USE_IN_MEMORY_PDISKS", "false", False),
+        ("YDB_PDISKS_DIRECTORY", "/another/disk", True),
+        ("YDB_PDISKS_DIRECTORY", "", False),
+    ],
+)
+def test_training_settings_check_storage_environment(monkeypatch, variable, value, rejected):
+    monkeypatch.delenv("YDB_USE_IN_MEMORY_PDISKS", raising=False)
+    monkeypatch.delenv("YDB_PDISKS_DIRECTORY", raising=False)
+    monkeypatch.setenv(variable, value)
+    settings = dict(
+        window_seconds=1800, record_seconds=30, snapshots=3, start_delay_seconds=600, interval_seconds=60, mmap_pages=64
+    )
+    if rejected:
+        with pytest.raises(ValueError, match=variable):
+            validate_training_settings(**settings)
+    else:
+        validate_training_settings(**settings)
+
+
+def test_late_startup_worker_writes_final_manifest(tmp_path, fake_perf, monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+    real_thread = threading.Thread
+    workers = []
+
+    class DelayedThread:
+        def __init__(self, **kwargs):
+            self.worker = real_thread(**kwargs)
+            workers.append(self.worker)
+
+        def start(self):
+            self.worker.start()
+
+        def join(self, timeout=None):
+            assert timeout == 65
+            # Simulate a worker that is still in Popen after the bounded join.
+
+        def is_alive(self):
+            return self.worker.is_alive()
+
+    collector = LbrCollector([os.getpid()], tmp_path / "import", None, perf=fake_perf)
+    original_record = collector._record
+
+    def delayed_record(index, offset):
+        entered.set()
+        assert release.wait(5)
+        original_record(index, offset)
+
+    def startup_timeout(timeout):
+        assert entered.wait(5)
+        return False
+
+    monkeypatch.setattr(threading, "Thread", DelayedThread)
+    monkeypatch.setattr(collector, "_record", delayed_record)
+    monkeypatch.setattr(collector._first_attempt, "wait", startup_timeout)
+    try:
+        with pytest.raises(RuntimeError, match="Timed out starting LBR"):
+            collector.__enter__()
+        assert not (collector.output_dir / "manifest.json").exists()
+    finally:
+        release.set()
+        for worker in workers:
+            worker.join(timeout=5)
+    assert all(not worker.is_alive() for worker in workers)
+    data = manifest(collector.output_dir)
+    assert "Timed out starting LBR" in data["error"]
+    assert len(data["records"]) == 1
+    assert "finished_at" in data["records"][0]
+    assert not data["records"][0]["complete"]

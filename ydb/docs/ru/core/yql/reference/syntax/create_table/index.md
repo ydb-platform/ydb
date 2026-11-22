@@ -29,7 +29,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
     [, ...],
     STATISTICS <statistics_name>
       ON ( <column_name> [, ...] )
-      [WITH ( <statistics_type> [, ...] )]
+      WITH ( <statistics_type> )
     [, ...],
   PRIMARY KEY ( <column>[, ...]),
   [FAMILY <column_family> ( family_options[, ...])]
@@ -79,7 +79,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### STATISTICS
 
-Указание столбцов и типов многоколоночной статистики, которую должен собирать [ANALYZE](../analyze.md). Подробнее см. в разделе [{#T}](statistics.md).
+Указание столбцов и типов многоколоночной статистики, которую должен собирать [ANALYZE](../analyze.md). Подробнее см. в разделе [{#T}](statistics.md). В этой версии для сбора статистики нужно явно указать `WITH (COUNT_MIN_SKETCH)`.
 
 ### PRIMARY KEY
 

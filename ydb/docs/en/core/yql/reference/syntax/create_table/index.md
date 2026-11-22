@@ -30,7 +30,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
     [, ...],
     STATISTICS <statistics_name>
       ON ( <column_name> [, ...] )
-      [WITH ( <statistics_type> [, ...] )]
+      WITH ( <statistics_type> )
     [, ...],
   PRIMARY KEY ( <column>[, ...]),
   [FAMILY <column_family> ( family_options[, ...])]
@@ -80,7 +80,7 @@ Defining an index on the table. Supported types:
 
 ### STATISTICS
 
-Specifies columns and types of multi-column statistics to collect with [ANALYZE](../analyze.md). See [{#T}](statistics.md).
+Specifies columns and types of multi-column statistics to collect with [ANALYZE](../analyze.md). See [{#T}](statistics.md). In this version, collecting statistics requires an explicit `WITH (COUNT_MIN_SKETCH)`.
 
 ### PRIMARY KEY
 
@@ -349,7 +349,6 @@ When creating row tables, you can specify:
 
 For column tables, when creating them, you can specify:
 
-* [Statistics](statistics.md).
 * [Bloom index](bloom_skip_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).

@@ -71,7 +71,7 @@ GROUP BY
 
 Для более точных оценок нужно собирать статистику по столбцам: какие значения в них встречаются и как часто. Например, по ней оптимизатор может оценить, сколько строк соответствует условию `WHERE`.
 
-Сбор статистики по столбцам можно запускать вручную командой [ANALYZE](../../yql/reference/syntax/analyze.md) или настроить [сбор в фоновом режиме](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection).
+Сбор статистики по столбцам можно запускать вручную командой [ANALYZE](../../yql/reference/syntax/analyze.md) или для колоночных таблиц настроить [сбор в фоновом режиме](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection).
 
 ### Текущие уровни стоимостной оптимизации
 

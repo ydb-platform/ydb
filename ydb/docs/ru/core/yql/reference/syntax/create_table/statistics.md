@@ -10,7 +10,7 @@
 CREATE TABLE <table_name> (
     ...
     STATISTICS <statistics_name> ON ( <column_name> [, ...] )
-        [WITH ( <statistics_type> [, ...] )],
+        WITH ( <statistics_type> ),
     PRIMARY KEY ( ... )
 );
 ```
@@ -22,7 +22,7 @@ CREATE TABLE <table_name> (
 * `table_name`: имя создаваемой таблицы.
 * `statistics_name`: имя многоколоночной статистики.
 * `column_name`: имена существующих столбцов таблицы. Порядок перечисления важен.
-* `statistics_type`: `COUNT_MIN_SKETCH` или `EQ_HEIGHT_HISTOGRAM`. Без `WITH` используются все поддерживаемые типы.
+* `statistics_type`: `COUNT_MIN_SKETCH`. Указывайте `WITH (COUNT_MIN_SKETCH)` явно: в этой версии без `WITH` многоколоночная статистика не собирается.
 
 ## Типы статистики
 
@@ -30,13 +30,9 @@ CREATE TABLE <table_name> (
 
 Для отдельных столбцов `ANALYZE` строит скетчи без `STATISTICS`, если оценка числа различных значений меньше 80% числа строк.
 
-`EQ_HEIGHT_HISTOGRAM` описывает распределение значений с помощью гистограммы равной высоты.
-
-Гистограммы равной высоты по нескольким столбцам помогают оценивать число строк после соединения таблиц. Для этого у обеих таблиц должны быть гистограммы по столбцам соединения в соответствующем порядке и с совпадающими типами.
-
 ## Пример
 
-Настроить две гистограммы при создании таблицы и запустить сбор статистики:
+Настроить многоколоночный скетч при создании таблицы и запустить сбор статистики:
 
 ```yql
 CREATE TABLE orders (
@@ -44,8 +40,7 @@ CREATE TABLE orders (
     order_date Date,
     status Utf8,
     amount Int64,
-    STATISTICS orders_hist ON (customer_id, order_date) WITH (EQ_HEIGHT_HISTOGRAM),
-    STATISTICS status_hist ON (status) WITH (EQ_HEIGHT_HISTOGRAM),
+    STATISTICS orders_cms ON (customer_id, order_date) WITH (COUNT_MIN_SKETCH),
     PRIMARY KEY (customer_id, order_date)
 );
 

@@ -10,7 +10,7 @@ Add `STATISTICS` to the table definition:
 CREATE TABLE <table_name> (
     ...
     STATISTICS <statistics_name> ON ( <column_name> [, ...] )
-        [WITH ( <statistics_type> [, ...] )],
+        WITH ( <statistics_type> ),
     PRIMARY KEY ( ... )
 );
 ```
@@ -22,7 +22,7 @@ CREATE TABLE <table_name> (
 * `table_name`: name of the table to create.
 * `statistics_name`: name of the multi-column statistics.
 * `column_name`: names of existing table columns. The column order matters.
-* `statistics_type`: `COUNT_MIN_SKETCH` or `EQ_HEIGHT_HISTOGRAM`. If `WITH` is omitted, all supported types are used.
+* `statistics_type`: `COUNT_MIN_SKETCH`. Specify `WITH (COUNT_MIN_SKETCH)` explicitly: in this version, multi-column statistics are not collected if `WITH` is omitted.
 
 ## Statistics types
 
@@ -30,13 +30,9 @@ CREATE TABLE <table_name> (
 
 For individual columns, `ANALYZE` builds sketches without `STATISTICS` when the estimated number of distinct values is less than 80% of the row count.
 
-`EQ_HEIGHT_HISTOGRAM` describes the distribution of values using an equi-height histogram.
-
-Multi-column equi-height histograms help estimate the number of rows produced by a join. Both tables must have histograms for the join columns in the corresponding order and with matching types.
-
 ## Example
 
-Configure two histograms when creating a table and start collecting statistics:
+Configure a multi-column sketch when creating a table and start collecting statistics:
 
 ```yql
 CREATE TABLE orders (
@@ -44,8 +40,7 @@ CREATE TABLE orders (
     order_date Date,
     status Utf8,
     amount Int64,
-    STATISTICS orders_hist ON (customer_id, order_date) WITH (EQ_HEIGHT_HISTOGRAM),
-    STATISTICS status_hist ON (status) WITH (EQ_HEIGHT_HISTOGRAM),
+    STATISTICS orders_cms ON (customer_id, order_date) WITH (COUNT_MIN_SKETCH),
     PRIMARY KEY (customer_id, order_date)
 );
 

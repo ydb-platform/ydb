@@ -8,12 +8,12 @@
 
 ## Примеры
 
-Добавить две гистограммы равной высоты и запустить `ANALYZE`:
+Добавить два многоколоночных скетча и запустить `ANALYZE`:
 
 ```yql
 ALTER TABLE orders
-    ADD STATISTICS amount_category ON (amount, category) WITH (EQ_HEIGHT_HISTOGRAM),
-    ADD STATISTICS amount_time ON (amount, created_at) WITH (EQ_HEIGHT_HISTOGRAM);
+    ADD STATISTICS amount_category ON (amount, category) WITH (COUNT_MIN_SKETCH),
+    ADD STATISTICS amount_time ON (amount, created_at) WITH (COUNT_MIN_SKETCH);
 
 ANALYZE orders;
 ```

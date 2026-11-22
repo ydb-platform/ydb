@@ -8,12 +8,12 @@ Statistics types and column requirements are described in [CREATE TABLE ... STAT
 
 ## Examples
 
-Add two equi-height histograms and run `ANALYZE`:
+Add two multi-column sketches and run `ANALYZE`:
 
 ```yql
 ALTER TABLE orders
-    ADD STATISTICS amount_category ON (amount, category) WITH (EQ_HEIGHT_HISTOGRAM),
-    ADD STATISTICS amount_time ON (amount, created_at) WITH (EQ_HEIGHT_HISTOGRAM);
+    ADD STATISTICS amount_category ON (amount, category) WITH (COUNT_MIN_SKETCH),
+    ADD STATISTICS amount_time ON (amount, created_at) WITH (COUNT_MIN_SKETCH);
 
 ANALYZE orders;
 ```

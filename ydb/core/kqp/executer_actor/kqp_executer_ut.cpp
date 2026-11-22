@@ -24,6 +24,7 @@ namespace {
 enum class ELateRemoteTaskStart {
     ComputeState,
     StartResponse,
+    LegacyInternalError,
     NotStarted,
     Undelivered,
 };
@@ -33,6 +34,9 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
     using NYql::NDqProto::StatusIds;
     constexpr auto failureStatus = StatusIds::PRECONDITION_FAILED;
     const TString failureMessage = "Local compute actor failed";
+    const bool legacyInternalError = outcome == ELateRemoteTaskStart::LegacyInternalError;
+    const bool startsRemoteActors = outcome == ELateRemoteTaskStart::ComputeState
+        || outcome == ELateRemoteTaskStart::StartResponse || legacyInternalError;
 
     auto settings = TKikimrSettings().SetUseRealThreads(false).SetNodeCount(2);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
@@ -53,7 +57,7 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
         return ev->Sender.NodeId() != ev->GetRecipientRewrite().NodeId();
     });
     TBlockEvents<TEvKqpNode::TEvStartKqpTasksResponse> startResponses(runtime, [&](const auto& ev) {
-        return outcome == ELateRemoteTaskStart::ComputeState && ev->GetRecipientRewrite() == executer
+        return (outcome == ELateRemoteTaskStart::ComputeState || legacyInternalError) && ev->GetRecipientRewrite() == executer
             && ev->Sender.NodeId() != executer.NodeId();
     });
     const auto stateObserver = runtime.AddObserver<TEvState>([&](auto& ev) {
@@ -65,7 +69,7 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
         }
     });
     TBlockEvents<TEvState> remoteHellos(runtime, [&](const auto& ev) {
-        return outcome == ELateRemoteTaskStart::StartResponse && ev->GetRecipientRewrite() == executer
+        return (outcome == ELateRemoteTaskStart::StartResponse || legacyInternalError) && ev->GetRecipientRewrite() == executer
             && ev->Sender.NodeId() != executer.NodeId()
             && ev->Get()->Record.GetState() == NYql::NDqProto::COMPUTE_STATE_EXECUTING;
     });
@@ -132,6 +136,31 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
         case ELateRemoteTaskStart::StartResponse:
             startRequests.Stop().Unblock();
             break;
+        case ELateRemoteTaskStart::LegacyInternalError: {
+            const auto requestId = heldRequest->Cookie;
+            startRequests.Stop().Unblock();
+            runtime.WaitFor("remote start response", [&] { return !startResponses.empty(); }, TDuration::Seconds(5));
+            auto& record = startResponses.front()->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), remoteTaskCount);
+            // Older nodes could report started tasks as INTERNAL_ERROR when creating another actor failed.
+            for (const auto& started : record.GetStartedTasks()) {
+                auto* notStarted = record.AddNotStartedTasks();
+                notStarted->SetTaskId(started.GetTaskId());
+                notStarted->SetReason(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
+                notStarted->SetRequestId(requestId);
+            }
+            record.ClearStartedTasks();
+
+            startResponses.Stop().Unblock();
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+                return ev.GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType
+                    && ev.GetRecipientRewrite() == executer;
+            });
+            UNIT_ASSERT(runtime.DispatchEvents(options, shutdownDeadline));
+            remoteHellos.Stop().Unblock();
+            break;
+        }
         case ELateRemoteTaskStart::NotStarted: {
             auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
             reply->Record.SetTxId(start.GetTxId());
@@ -159,9 +188,8 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
     UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
     UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.GetResponse().DebugString(), failureMessage);
     UNIT_ASSERT_C(responseTime && responseTime < shutdownDeadline, "Executer waited for the compute actor shutdown timeout");
-    UNIT_ASSERT_VALUES_EQUAL(startRequests.size(),
-        outcome == ELateRemoteTaskStart::ComputeState || outcome == ELateRemoteTaskStart::StartResponse ? 0 : 1);
-    if (outcome == ELateRemoteTaskStart::ComputeState || outcome == ELateRemoteTaskStart::StartResponse) {
+    UNIT_ASSERT_VALUES_EQUAL(startRequests.size(), startsRemoteActors ? 0 : 1);
+    if (startsRemoteActors) {
         UNIT_ASSERT_VALUES_EQUAL(abortedRemoteActors.size(), remoteTaskCount);
     }
 }
@@ -176,6 +204,10 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
     Y_UNIT_TEST(LateRemoteTaskStartResponseDuringShutdown) {
         TestLateRemoteTaskStart(2, ELateRemoteTaskStart::StartResponse);
+    }
+
+    Y_UNIT_TEST(LateRemoteTaskLegacyInternalErrorDuringShutdown) {
+        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::LegacyInternalError);
     }
 
     Y_UNIT_TEST(LateRemoteTaskNotStartedDuringShutdown) {

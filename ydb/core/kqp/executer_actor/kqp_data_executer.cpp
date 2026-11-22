@@ -1156,6 +1156,11 @@ private:
             }
         }
         for (const auto& task : record.GetNotStartedTasks()) {
+            // Older nodes can report every task as not started after a partial creation failure.
+            if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR
+                && record.StartedTasksSize() == 0) {
+                continue;
+            }
             Planner->TaskNotStarted(task.GetTaskId());
         }
         TryFinishShutdown();

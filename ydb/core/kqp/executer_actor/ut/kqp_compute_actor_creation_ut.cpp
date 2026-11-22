@@ -13,6 +13,7 @@ constexpr TStringBuf CreationError = "injected compute actor creation failure";
 struct TCreationState {
     ui32 Attempts = 0;
     ui32 Aborted = 0;
+    TVector<TActorId> StartedActors;
     std::weak_ptr<IQueryQuotaManager> QueryQuota;
     TIntrusivePtr<NRm::TTxState> Tx;
 };
@@ -73,7 +74,9 @@ public:
             }
             ythrow yexception() << CreationError;
         }
-        return TlsActivationContext->Register(new TTestComputeActor(args, CreationState));
+        auto actor = TlsActivationContext->Register(new TTestComputeActor(args, CreationState));
+        CreationState->StartedActors.push_back(actor);
+        return actor;
     }
 
     void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager&) override {}
@@ -141,11 +144,17 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
             auto reply = runtime.GrabEdgeEventRethrow<TEvKqpNode::TEvStartKqpTasksResponse>(executer);
             const auto& record = reply->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), TxId);
-            UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.NotStartedTasksSize(), 3);
-            for (ui32 i = 0; i < 3; ++i) {
-                const auto& task = record.GetNotStartedTasks(i);
+            const ui32 startedTasks = failOnAttempt == 3 ? 0 : failOnAttempt - 1;
+            UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), startedTasks);
+            for (ui32 i = 0; i < startedTasks; ++i) {
+                const auto& task = record.GetStartedTasks(i);
                 UNIT_ASSERT_VALUES_EQUAL(task.GetTaskId(), firstTaskId + i);
+                UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(task.GetActorId()), factory->CreationState->StartedActors.at(i));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(record.NotStartedTasksSize(), 3 - startedTasks);
+            for (ui32 i = 0; i < 3 - startedTasks; ++i) {
+                const auto& task = record.GetNotStartedTasks(i);
+                UNIT_ASSERT_VALUES_EQUAL(task.GetTaskId(), firstTaskId + startedTasks + i);
                 UNIT_ASSERT_VALUES_EQUAL(task.GetRequestId(), requestId);
                 UNIT_ASSERT_EQUAL(task.GetReason(), NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
                 UNIT_ASSERT_STRING_CONTAINS(task.GetMessage(), "Failed to create compute actor");

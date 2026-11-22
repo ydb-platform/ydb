@@ -51,7 +51,6 @@ TString PatchMirrorConfig(NKikimrPQ::TMirrorPartitionConfig& config,
     config.SetDatabase(params.GetDatabase());
     config.SetConsumer(consumer);
     config.SetUseSecureConnection(params.GetEnableSsl());
-    config.SetSyncWriteTime(true);
     config.SetMirrorConsumerOffsets(true);
 
     auto& credentials = *config.MutableCredentials();

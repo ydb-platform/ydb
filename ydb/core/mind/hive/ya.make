@@ -30,6 +30,8 @@ SRCS(
     monitoring.cpp
     monitoring.h
     move_data_actor.cpp
+    named_resources.cpp
+    named_resources.h
     node_info.cpp
     node_info.h
     object_distribution.h
@@ -100,6 +102,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/containers/ring_buffer
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/monlib/dynamic_counters
     ydb/core/base

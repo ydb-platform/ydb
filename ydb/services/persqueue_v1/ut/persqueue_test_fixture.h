@@ -114,7 +114,10 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
 
             Cerr << "=== PersQueueClient" << Endl;
             NYdb::TDriverConfig driverCfg;
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release())).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort)
+                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                .SetDatabase("/Root")
+                .SetAuthToken(BUILTIN_ACL_ROOT);
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
             PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
 
@@ -264,8 +267,6 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
     };
 
     class TPersQueueV1TestServerWithRateLimiter : public TPersQueueV1TestServerBase {
-    private:
-        NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity;
     public:
         TPersQueueV1TestServerWithRateLimiter(bool tenantModeEnabled = false)
             : TPersQueueV1TestServerBase(tenantModeEnabled)
@@ -273,11 +274,9 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
 
         void AlterSettings(NKikimr::Tests::TServerSettings& settings) override {
             settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
-            settings.PQConfig.MutableQuotingConfig()->SetTopicWriteQuotaEntityToLimit(LimitedEntity);
         }
 
-        void InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity) {
-            LimitedEntity = limitedEntity;
+        void InitAll() {
             InitializePQ();
             InitQuotingPaths();
         }

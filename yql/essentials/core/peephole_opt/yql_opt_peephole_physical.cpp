@@ -172,23 +172,17 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
         const auto& extend = input.Head();
         // Technically, the code below rewrites the following sequence
         // (WideToBlocks (FromFlow (Extend (<input>))))
-        // into (Extend (WideToBlocks (FromFlow (<input>))), but
+        // into (BlockExtend (WideToBlocks (ToStream (<input>)))), but
         // the logging is left intact, omitting the FromFlow barrier.
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << extend.Content();
         TExprNodeList newChildren;
         newChildren.reserve(extend.ChildrenSize());
         for (const auto& child : extend.ChildrenList()) {
-            // Extend callable can handle any sequential type, so
-            // just wrap all its children with (ToStream (...)).
-            // However, its *block* overload works only with WideFlow,
-            // so the new child is wrapped with ToFlow callable.
             // clang-format off
             const auto newChild = ctx.Builder(node->Pos())
-                .Callable("ToFlow")
-                    .Callable(0, "WideToBlocks")
-                        .Callable(0, "ToStream")
-                            .Add(0, child)
-                        .Seal()
+                .Callable("WideToBlocks")
+                    .Callable(0, "ToStream")
+                        .Add(0, child)
                     .Seal()
                 .Seal()
                 .Build();
@@ -196,13 +190,7 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
             newChildren.emplace_back(newChild);
         }
         const auto newName = extend.IsCallable("Extend") ? "BlockExtend" : "BlockOrderedExtend";
-        // clang-format off
-        return ctx.Builder(node->Pos())
-            .Callable("FromFlow")
-                .Add(0, ctx.NewCallable(input.Pos(), newName, std::move(newChildren)))
-            .Seal()
-            .Build();
-        // clang-format on
+        return ctx.NewCallable(node->Pos(), newName, std::move(newChildren));
     }
 
     return node;
@@ -316,15 +304,9 @@ TExprNode::TPtr OptimizeBlockExtend(const TExprNode::TPtr& node, TExprContext& c
     TExprNodeList inputs = node->ChildrenList();
     bool hasReplicateScalars = false;
     for (auto& input : inputs) {
-        if (input->IsCallable("ToFlow") && input->Head().IsCallable("ReplicateScalars")) {
-            const auto& replicateScalars = input->Head();
+        if (input->IsCallable("ReplicateScalars")) {
             hasReplicateScalars = true;
-            // If tail is FromFlow, its input is WideFlow and can be
-            // used intact; Otherwise the input is WideStream, so the
-            // new input should be converted to WideFlow.
-            const auto tail = replicateScalars.HeadPtr();
-            input = tail->IsCallable("FromFlow") ? tail->HeadPtr()
-                  : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
+            input = input->HeadPtr();
         }
     }
 
@@ -373,37 +355,26 @@ TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx
 
     TExprNodeList newChildren;
     newChildren.reserve(node->ChildrenSize());
-    bool seenScalars = false;
-    for (auto& child : node->ChildrenList()) {
-        const auto& items = child->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    for (const auto& child : node->Children()) {
+        const auto& items = child->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
         const ui32 width = items.size();
         YQL_ENSURE(width > 0);
 
         const bool hasScalars = AnyOf(items.begin(), items.end() - 1, [](const auto& item) { return item->IsScalar(); });
-        seenScalars = seenScalars || hasScalars;
-        TExprNode::TPtr newChild = child;
-        if (hasScalars) {
-            // clang-format off
-            newChild = ctx.Builder(child->Pos())
-                .Callable("ToFlow")
-                    .Callable(0, "ReplicateScalars")
-                        .Callable(0, "FromFlow")
-                            .Add(0, std::move(child))
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-            // clang-format on
-        }
-
-        newChildren.push_back(newChild);
+        auto stream = hasScalars ? ctx.NewCallable(child->Pos(), "ReplicateScalars", { child }) : child;
+        newChildren.push_back(ctx.NewCallable(child->Pos(), "ToFlow", { std::move(stream) }));
     }
 
     const TStringBuf newName = node->IsCallable("BlockExtend") ? "Extend" : "OrderedExtend";
-    if (!seenScalars) {
-        return ctx.RenameNode(*node, newName);
-    }
-    return ctx.NewCallable(node->Pos(), newName, std::move(newChildren));
+    // clang-format off
+    return ctx.Builder(node->Pos())
+        .Callable("FromFlow")
+            .Callable(0, newName)
+                .Add(std::move(newChildren))
+            .Seal()
+        .Seal()
+        .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr ExpandReplicateScalars(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {

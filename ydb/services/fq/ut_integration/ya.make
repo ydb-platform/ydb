@@ -17,10 +17,12 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/fq/libs/control_plane_proxy
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/private_client
+    ydb/core/fq/libs/shared_resources
     ydb/core/testlib/default
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/udfs/common/clickhouse/client

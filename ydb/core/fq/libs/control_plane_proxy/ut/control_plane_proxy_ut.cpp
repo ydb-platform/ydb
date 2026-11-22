@@ -1,6 +1,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
+#include <ydb/core/fq/libs/control_plane_proxy/actors/binding_rename_actor.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/binding_rename.h>
@@ -545,6 +546,42 @@ Y_UNIT_TEST_SUITE(TBindingRenameJournal) {
             return AdvanceBindingRename(*Internal.mutable_rename(), action, operation, identity, Binding);
         }
     };
+
+    Y_UNIT_TEST(ProbeResumesCommittedRenameAfterThePublicNameChanged) {
+        TTestBootstrap bootstrap;
+        const auto client = bootstrap.Runtime->AllocateEdgeActor();
+        const auto proxy = bootstrap.Runtime->AllocateEdgeActor();
+        TPreparedRename state;
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyBindingRequest>(
+            "yandexcloud://my_folder", state.Request, "user", "", AllPermissions());
+        auto event = IEventHandle::Downcast<TEvControlPlaneProxy::TEvModifyBindingRequest>(
+            TAutoPtr<IEventHandle>(new IEventHandle(proxy, client, request.release(), 0, 42)));
+        NPrivate::TCounters counters(MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        bootstrap.Runtime->Register(
+            NPrivate::MakeProbeBindingRenameActor(proxy, event, counters, TDuration::Seconds(10), TPermissions{ TPermissions::MANAGE_PUBLIC }));
+
+        const auto read = bootstrap.MetaStorageGrab->GetRequest();
+        const auto* storageRequest = read->Get<TEvControlPlaneStorage::TEvModifyBindingRequest>();
+        UNIT_ASSERT(storageRequest->RenameAction == EBindingRenameAction::Probe);
+        UNIT_ASSERT(!storageRequest->RenameOperationId);
+        TBindingModifyAuditDetails audit;
+        auto& binding = audit.Before.ConstructInPlace();
+        binding.mutable_content()->set_name("new");
+        binding.mutable_meta()->set_revision(5);
+        auto& rename = audit.Rename.ConstructInPlace(state.Internal.rename());
+        rename.set_state(TBindingRename::COMMITTED);
+        rename.set_source_identity("old-identity");
+        rename.set_candidate_identity("new-identity");
+        bootstrap.Runtime->Send(new IEventHandle(
+            read->Sender, read->Recipient, new TEvControlPlaneStorage::TEvModifyBindingResponse(FederatedQuery::ModifyBindingResult{}, audit)));
+
+        const auto forwarded = bootstrap.Runtime->GrabEdgeEventRethrow<TEvControlPlaneProxy::TEvModifyBindingRequest>(proxy);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Cookie, 42);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Get()->OldBindingContent->name(), "new");
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Get()->Rename->source_name(), "old");
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Get()->Rename->operation_id(), "operation");
+        UNIT_ASSERT(forwarded->Get()->Rename->state() == TBindingRename::COMMITTED);
+    }
 
     Y_UNIT_TEST(MatchesOnlyTheSameRequestWithoutAnIdempotencyKey) {
         TPreparedRename state;

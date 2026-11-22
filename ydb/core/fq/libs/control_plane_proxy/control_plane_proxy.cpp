@@ -6,6 +6,7 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
+#include <ydb/core/fq/libs/control_plane_proxy/actors/binding_rename_actor.h>
 #include <ydb/core/fq/libs/control_plane_proxy/actors/control_plane_storage_requester_actor.h>
 #include <ydb/core/fq/libs/control_plane_proxy/actors/request_actor.h>
 #include <ydb/core/fq/libs/control_plane_proxy/actors/utils.h>
@@ -2088,15 +2089,46 @@ private:
         auto isComputeYDBSyncEnabled =
             Config.ComputeConfig.IsYDBSchemaOperationsEnabled(ev->Get()->Scope, ev->Get()->Request.content().setting().binding_case());
 
-        if (isComputeYDBSyncEnabled && !ev->Get()->OldBindingContent) {
+        auto& binding = *ev->Get();
+        const bool restartableRename =
+            isComputeYDBSyncEnabled && Config.ComputeConfig.GetProto().GetSupportedComputeYdbFeatures().GetRestartableExternalTableRename();
+        if (isComputeYDBSyncEnabled && !binding.OldBindingContent) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
-            Register(MakeDiscoverYDBBindingContentActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
+            if (restartableRename) {
+                Register(MakeProbeBindingRenameActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
+            } else {
+                Register(MakeDiscoverYDBBindingContentActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
+            }
+            return;
+        }
+        if (binding.Rename) {
+            Register(MakeRenameBindingActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout,
+                ExtractPermissions(ev, availablePermissions), Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
             return;
         }
         if (isComputeYDBSyncEnabled && !ev->Get()->ConnectionContent) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
             Register(MakeDiscoverYDBConnectionContentActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
+        }
+
+        if (restartableRename && binding.OldBindingContent->name() != request.content().name()) {
+            const auto usesPg = [](const FederatedQuery::BindingContent& content) {
+                for (const auto& subset : content.setting().object_storage().subset()) {
+                    for (const auto& column : subset.schema().column()) {
+                        const auto& type = column.type();
+                        if (type.has_pg_type() || type.optional_type().item().has_pg_type()) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            if (usesPg(*binding.OldBindingContent) || usesPg(request.content())) {
+                Register(MakeRenameBindingActor(ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout,
+                    ExtractPermissions(ev, availablePermissions), Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
+                return;
+            }
         }
 
         if (!ev->Get()->ControlPlaneYDBOperationWasPerformed) {

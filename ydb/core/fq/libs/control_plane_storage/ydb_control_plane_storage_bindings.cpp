@@ -402,6 +402,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     const auto renameAction = event.RenameAction;
     const bool clientRequest = renameAction == EBindingRenameAction::None || renameAction == EBindingRenameAction::Prepare;
     const bool requiresAccess = clientRequest || renameAction == EBindingRenameAction::Commit;
+    auto viewPermissions = Config->Proto.GetEnablePermissions() ? event.Permissions : TPermissions{ TPermissions::VIEW_PUBLIC };
+    if (IsSuperUser(user)) {
+        viewPermissions.SetAll();
+    }
     const bool checkCommitKey = renameAction == EBindingRenameAction::Commit && !idempotencyKey.empty();
     const auto operationId = renameAction == EBindingRenameAction::Prepare ? CreateGuidAsString() : event.RenameOperationId;
     const int byteSize = request.ByteSize();
@@ -435,7 +439,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         "` FROM $selected;\n"
         "SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
         "` FROM $selected;\n"
-        "SELECT `" VISIBILITY_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
+        "SELECT `" VISIBILITY_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
         "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
 
@@ -445,9 +449,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
 
     using TResponse = std::pair<FederatedQuery::ModifyBindingResult, TBindingModifyAuditDetails>;
     auto response = std::make_shared<TResponse>();
-    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request = request,
+    auto prepareParams = [response, permissions, viewPermissions, bindingId, idempotencyKey, user, scope, request = request,
                              observedRevision = event.ObservedRevision, renameAction, clientRequest, requiresAccess, checkCommitKey, operationId,
-                             identity = event.RenameIdentity, tablePathPrefix = YdbConnection->TablePathPrefix,
+                             identity = event.RenameIdentity, connectionName = event.RenameConnectionName,
+                             computeEndpoint = event.ComputeDatabase.connection().endpoint(),
+                             computeDatabase = event.ComputeDatabase.connection().database(), tablePathPrefix = YdbConnection->TablePathPrefix,
                              idempotencyKeyTtl = Config->IdempotencyKeyTtl,
                              commonCounters = requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         response->second = {};
@@ -475,6 +481,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             }
         }
 
+        const auto& rename = bindingInternal.rename();
+        const bool matches = bindingInternal.has_rename() && MatchesBindingRename(rename, request, user);
+        if (renameAction == EBindingRenameAction::Probe) {
+            if (!matches && !HasViewAccess(viewPermissions, binding.content().acl().visibility(), binding.meta().created_by(), user)) {
+                ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED)
+                    << "Binding does not exist or permission denied. Please check the binding id or your access rights";
+            }
+            response->second.Before = binding;
+            if (matches) {
+                response->second.Rename = rename;
+            }
+            return std::make_pair(TString{}, NYdb::TParamsBuilder{}.Build());
+        }
+
         const auto requestBindingVisibility = request.content().acl().visibility();
         if (requiresAccess) {
             if (!HasManageAccess(permissions, binding.content().acl().visibility(), binding.meta().created_by(), user)) {
@@ -492,10 +512,19 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                 ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST)
                     << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
             }
+            if (renameAction == EBindingRenameAction::Prepare || renameAction == EBindingRenameAction::Commit) {
+                FederatedQuery::Connection connection;
+                if (!connection.ParseFromString(parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString().value_or(""))) {
+                    commonCounters->ParseProtobufError->Inc();
+                    ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing connection metadata";
+                }
+                const auto& expected = renameAction == EBindingRenameAction::Commit ? rename.connection_name() : connectionName;
+                if (expected.empty() || expected != connection.content().name()) {
+                    ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding rename connection has changed";
+                }
+            }
         }
 
-        const auto& rename = bindingInternal.rename();
-        const bool matches = bindingInternal.has_rename() && MatchesBindingRename(rename, request, user);
         auto noWrite = [] {
             return std::make_pair(TString{}, NYdb::TParamsBuilder{}.Build());
         };
@@ -580,6 +609,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             *intent.mutable_destination() = request.content();
             intent.set_idempotency_key(idempotencyKey);
             intent.set_user(user);
+            intent.set_connection_name(connectionName);
+            intent.set_compute_endpoint(computeEndpoint);
+            intent.set_compute_database(computeDatabase);
             returnRename();
             return writeInternal();
         }

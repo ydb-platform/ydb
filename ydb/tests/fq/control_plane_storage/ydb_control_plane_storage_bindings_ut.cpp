@@ -1458,9 +1458,10 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
     Y_UNIT_TEST(ShouldCheckIdempotencyKey)
     {
         TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
+        const auto connection = TCreateConnectionBuilder{}.Build();
         TString connectionId;
         {
-            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
+            const auto [result, issues] = bootstrap.CreateConnection(connection);
             UNIT_ASSERT_C(!issues, issues.ToString());
             connectionId = result.connection_id();
         }
@@ -1509,6 +1510,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
             auto request = std::make_unique<TRequest>("yandexcloud://test_folder_id_1", proto, "test_user@staff", "xxx", "mock_cloud",
                 TPermissions{}, Nothing(), std::make_shared<TTenantInfo>(), FederatedQuery::Internal::ComputeDatabaseInternal{});
             request->RenameAction = EBindingRenameAction::Prepare;
+            request->RenameConnectionName = connection.content().name();
             const auto [handle, response] = bootstrap.SendInternalRequest<TRequest, TResponse>(std::move(request));
             UNIT_ASSERT_C(!response->Issues, response->Issues.ToString());
             return response->AuditDetails;

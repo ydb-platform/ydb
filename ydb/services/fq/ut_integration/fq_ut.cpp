@@ -1,5 +1,10 @@
 #include "ut_utils.h"
 
+#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
+#include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
+#include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
+#include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
@@ -16,10 +21,14 @@
 #include <google/protobuf/util/time_util.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/retry/retry.h>
+#include <library/cpp/threading/future/future.h>
+#include <util/generic/scope.h>
 #include <util/string/split.h>
 #include <util/system/hostname.h>
 #include <util/system/mutex.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <algorithm>
 
 using namespace NYdb;
 using namespace FederatedQuery;
@@ -93,6 +102,46 @@ void CheckGetResultData(
         UNIT_ASSERT_VALUES_EQUAL(std::stoi(arr.back()), answer);
     }
 }
+
+class TLoseRenameCommitReply final: public NActors::TActor<TLoseRenameCommitReply> {
+    using TStorage = ::NFq::TEvControlPlaneStorage;
+    using TRename = FederatedQuery::Internal::BindingRename;
+
+public:
+    TLoseRenameCommitReply(const NActors::TActorId& storage, NThreading::TPromise<void> dropped)
+        : TActor(&TLoseRenameCommitReply::StateWork)
+        , Storage(storage)
+        , Dropped(std::move(dropped))
+    {
+    }
+
+private:
+    STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == TStorage::TEvModifyBindingRequest::EventType &&
+            ev->Get<TStorage::TEvModifyBindingRequest>()->RenameAction == ::NFq::EBindingRenameAction::Commit && !Dropped.HasValue())
+        {
+            Y_ABORT_UNLESS(!Requester);
+            Requester = ev->Sender;
+            Send(Storage, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+        } else if (ev->GetTypeRewrite() == TStorage::TEvModifyBindingResponse::EventType) {
+            const auto& response = *ev->Get<TStorage::TEvModifyBindingResponse>();
+            if (response.AuditDetails.After && response.AuditDetails.Rename && response.AuditDetails.Rename->state() == TRename::COMMITTED) {
+                Dropped.SetValue();
+                Send(Requester, new NActors::TEvents::TEvWakeup());
+            } else {
+                Send(ev->Forward(Requester));
+            }
+            Requester = {};
+        } else {
+            Send(ev->Forward(Storage));
+        }
+    }
+
+    const NActors::TActorId Storage;
+    NThreading::TPromise<void> Dropped;
+    NActors::TActorId Requester;
+};
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(FqPrivateSchema) {
@@ -210,6 +259,185 @@ Y_UNIT_TEST_SUITE(FqPrivateSchema) {
         UNIT_ASSERT_C(aborted.IsSuccess(), aborted.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(
             client.MutateExternalTable(createTable("aborted")).ExtractValueSync().GetStatus(), EStatus::PRECONDITION_FAILED);
+    }
+    Y_UNIT_TEST(BindingRenameRetriesAfterLostStorageCommitReply) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        auto& security = *config.MutableDomainsConfig()->MutableSecurityConfig();
+        security.AddAdministrationAllowedSIDs("root@builtin");
+        security.AddDefaultUserSIDs("root@builtin");
+        TKikimrWithGrpcAndRootSchema server(config, {}, {}, true, nullptr, [](auto& settings) {
+            settings.template RegisterGrpcService<NKikimr::NGRpcService::TGRpcFqPrivateSchemaService>("yq_private_schema");
+        });
+        const TString endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+        const TString user = "root@builtin";
+        const TDriver driver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken(user));
+        NYdb::NFq::TClient fq(driver);
+        ::NFq::TPrivateClient compute(driver);
+        const TScope scope("yandexcloud://rename_folder");
+        Warmup(scope.ParseFolder(), fq);
+
+        const auto createConnection = ::NFq::TCreateConnectionBuilder{}.SetName("s3_source").CreateObjectStorage("bucket", "").Build();
+        const auto connection = fq.CreateConnection(createConnection, CreateFqSettings<TCreateConnectionSettings>(scope)).ExtractValueSync();
+        UNIT_ASSERT_C(connection.IsSuccess(), connection.GetIssues().ToString());
+        const auto& connectionId = connection.GetResult().connection_id();
+
+        FederatedQuery::ObjectStorageBinding objectStorage;
+        auto& subset = *objectStorage.add_subset();
+        subset.set_path_pattern("/");
+        subset.set_format("json_each_row");
+        auto& column = *subset.mutable_schema()->add_column();
+        column.set_name("key");
+        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+        const auto createBinding =
+            ::NFq::TCreateBindingBuilder{}.SetName("old_binding").SetConnectionId(connectionId).CreateObjectStorage(objectStorage).Build();
+        const auto binding = fq.CreateBinding(createBinding, CreateFqSettings<TCreateBindingSettings>(scope)).ExtractValueSync();
+        UNIT_ASSERT_C(binding.IsSuccess(), binding.GetIssues().ToString());
+        const auto& bindingId = binding.GetResult().binding_id();
+
+        NYdb::NTable::TTableClient tableClient(driver);
+        const auto sessionResult = tableClient.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto source = session
+                                .ExecuteSchemeQuery(R"sql(
+            CREATE EXTERNAL DATA SOURCE s3_source WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="http://localhost:12345/bucket/", AUTH_METHOD="NONE"
+            );
+        )sql")
+                                .ExtractValueSync();
+        UNIT_ASSERT_C(source.IsSuccess(), source.GetIssues().ToString());
+        const auto oldTable = session
+                                  .ExecuteSchemeQuery(R"sql(
+            CREATE EXTERNAL TABLE old_binding (key Uint64) WITH (
+                DATA_SOURCE="s3_source", LOCATION="/", FORMAT="json_each_row"
+            );
+        )sql")
+                                  .ExtractValueSync();
+        UNIT_ASSERT_C(oldTable.IsSuccess(), oldTable.GetIssues().ToString());
+
+        const auto describeBinding = [&] {
+            auto result = fq.DescribeBinding(
+                ::NFq::TDescribeBindingBuilder{}.SetBindingId(bindingId).Build(), CreateFqSettings<TDescribeBindingSettings>(scope))
+                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetResult().binding();
+        };
+        const auto describeComputeTable = [&](const TString& name) {
+            Fq::Private::DescribeExternalTableRequest request;
+            request.set_relative_path(name);
+            return compute.DescribeExternalTable(std::move(request)).ExtractValueSync();
+        };
+        const auto revision = describeBinding().meta().revision();
+        const auto original = describeComputeTable("old_binding");
+        UNIT_ASSERT_C(original.IsSuccess(), original.GetIssues().ToString());
+
+        auto& runtime = *server.GetRuntime();
+        const auto storageService = ::NFq::ControlPlaneStorageServiceActorId();
+        const auto storage = runtime.GetLocalServiceId(storageService);
+        UNIT_ASSERT(storage);
+        auto dropped = NThreading::NewPromise<void>();
+        runtime.RegisterService(storageService, runtime.Register(new TLoseRenameCommitReply(storage, dropped)));
+
+        ::NFq::NConfig::TConfig fqConfig;
+        auto& computeConfig = *fqConfig.MutableCompute();
+        computeConfig.SetDefaultCompute(::NFq::NConfig::YDB);
+        computeConfig.MutableSupportedComputeYdbFeatures()->SetRestartableExternalTableRename(true);
+        auto& computeYdb = *computeConfig.MutableYdb();
+        computeYdb.SetEnable(true);
+        auto& controlPlane = *computeYdb.MutableControlPlane();
+        controlPlane.SetEnable(true);
+        controlPlane.MutableSingle()->MutableConnection()->SetToken(user);
+        fqConfig.MutableControlPlaneStorage()->AddAvailableBinding("OBJECT_STORAGE");
+        const auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        const auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto resources = ::NFq::CreateYqSharedResourcesImpl(fqConfig, credFactory, counters);
+        resources->Init(runtime.GetActorSystem(0));
+        Y_DEFER {
+            resources->Stop();
+        };
+        const auto proxyService = ::NFq::ControlPlaneProxyActorId();
+        runtime.RegisterService(proxyService,
+            runtime.Register(::NFq::CreateControlPlaneProxyActor(fqConfig.GetControlPlaneProxy(), fqConfig.GetControlPlaneStorage(),
+                computeConfig, fqConfig.GetCommon(), fqConfig.GetGateways().GetS3(), {}, resources, credFactory, counters, false)));
+
+        column.mutable_type()->mutable_optional_type()->mutable_item()->mutable_pg_type()->set_type_name("int4");
+        auto& textColumn = *subset.mutable_schema()->add_column();
+        textColumn.set_name("value");
+        auto& pg = *textColumn.mutable_type()->mutable_optional_type()->mutable_item()->mutable_pg_type();
+        pg.set_type_name("pgvarchar");
+        pg.set_type_modifier("17");
+        const auto modify = ::NFq::TModifyBindingBuilder{}
+                                .SetBindingId(bindingId)
+                                .SetName("new_binding")
+                                .SetConnectionId(connectionId)
+                                .SetPreviousRevision(revision)
+                                .SetIdempotencyKey("rename")
+                                .CreateObjectStorage(objectStorage)
+                                .Build();
+        using TProxy = ::NFq::TEvControlPlaneProxy;
+        const auto rename = [&](const FederatedQuery::ModifyBindingRequest& proto) {
+            const auto sender = runtime.AllocateEdgeActor();
+            auto request = std::make_unique<TProxy::TEvModifyBindingRequest>(scope.ToString(), proto, user, user, TVector<TString>{});
+            request->CloudId = "cloud";
+            request->SubjectType = "user";
+            auto& computeDb = *request->ComputeDatabase.ConstructInPlace().mutable_connection();
+            computeDb.set_endpoint(endpoint);
+            computeDb.set_database("/Root");
+            runtime.Send(new NActors::IEventHandle(proxyService, sender, request.release(), 0, 42));
+            return runtime.GrabEdgeEventRethrow<TProxy::TEvModifyBindingResponse>(sender, TDuration::Seconds(30));
+        };
+
+        auto invalid = modify;
+        *invalid.mutable_content()->mutable_setting()->mutable_object_storage()->add_subset() = objectStorage.subset(0);
+        const auto rejected = rename(invalid);
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Issues.ToString(), "A binding rename requires exactly one Object Storage subset");
+        UNIT_ASSERT(!dropped.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(describeBinding().meta().revision(), revision);
+        UNIT_ASSERT_VALUES_EQUAL(describeComputeTable("new_binding").GetStatus(), EStatus::NOT_FOUND);
+
+        auto malformed = modify;
+        auto& malformedSubset = *malformed.mutable_content()->mutable_setting()->mutable_object_storage()->mutable_subset(0);
+        malformedSubset.mutable_schema()->add_column()->set_name("missing_type");
+        const auto malformedResult = rename(malformed);
+        UNIT_ASSERT_STRING_CONTAINS(malformedResult->Get()->Issues.ToString(), "Unsupported external table column type");
+        UNIT_ASSERT(!dropped.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(describeBinding().meta().revision(), revision);
+        UNIT_ASSERT_VALUES_EQUAL(describeComputeTable("new_binding").GetStatus(), EStatus::NOT_FOUND);
+
+        const auto interrupted = rename(modify);
+        UNIT_ASSERT_C(dropped.HasValue(), interrupted->Get()->Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(interrupted->Cookie, 42);
+        UNIT_ASSERT_VALUES_EQUAL(interrupted->Get()->SubjectType, "user");
+        UNIT_ASSERT_VALUES_EQUAL(interrupted->Get()->Issues.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(interrupted->Get()->Issues.begin()->GetCode(), static_cast<ui32>(::NFq::TIssuesIds::TIMEOUT));
+        const auto afterCommit = describeBinding();
+        UNIT_ASSERT_VALUES_EQUAL(afterCommit.content().name(), "new_binding");
+        UNIT_ASSERT_VALUES_EQUAL(afterCommit.meta().revision(), revision + 1);
+        const auto stillPresent = describeComputeTable("old_binding");
+        UNIT_ASSERT_C(stillPresent.IsSuccess(), stillPresent.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(stillPresent.GetResult().identity().SerializeAsString(), original.GetResult().identity().SerializeAsString());
+        const auto candidate = describeComputeTable("new_binding");
+        UNIT_ASSERT_C(candidate.IsSuccess(), candidate.GetIssues().ToString());
+
+        const auto retried = rename(modify);
+        UNIT_ASSERT_C(!retried->Get()->Issues, retried->Get()->Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describeBinding().meta().revision(), revision + 1);
+        UNIT_ASSERT_VALUES_EQUAL(describeComputeTable("old_binding").GetStatus(), EStatus::NOT_FOUND);
+        const auto final = describeComputeTable("new_binding");
+        UNIT_ASSERT_C(final.IsSuccess(), final.GetIssues().ToString());
+        const auto& columns = final.GetResult().description().columns();
+        const auto text = std::find_if(columns.begin(), columns.end(), [](const auto& item) {
+            return item.name() == "value";
+        });
+        UNIT_ASSERT(text != columns.end());
+        UNIT_ASSERT(text->type().has_pg_type());
+        UNIT_ASSERT_VALUES_EQUAL(text->type().pg_type().type_name(), "pgvarchar");
+        UNIT_ASSERT_VALUES_EQUAL(text->type().pg_type().type_modifier(), "17");
+        const auto& finalIdentity = final.GetResult().identity();
+        const auto& candidateIdentity = candidate.GetResult().identity();
+        UNIT_ASSERT_VALUES_EQUAL(finalIdentity.owner_id(), candidateIdentity.owner_id());
+        UNIT_ASSERT_VALUES_EQUAL(finalIdentity.local_path_id(), candidateIdentity.local_path_id());
     }
 }
 

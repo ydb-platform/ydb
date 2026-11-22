@@ -387,6 +387,8 @@ struct TEvControlPlaneProxy {
 
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
         TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
+        i64 OldBindingRevision = 0;
+        TMaybe<FederatedQuery::Internal::BindingRename> Rename;
     };
 
     template <>

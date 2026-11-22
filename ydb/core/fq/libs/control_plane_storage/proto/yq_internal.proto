@@ -86,6 +86,9 @@ message BindingRename {
     string idempotency_key = 7;
     string user = 8;
     string candidate_identity = 9;
+    string connection_name = 10;
+    string compute_endpoint = 11;
+    string compute_database = 12;
 }
 
 message BindingInternal {

@@ -35,6 +35,7 @@ struct TAuditDetails {
 
 enum class EBindingRenameAction {
     None,
+    Probe,
     Prepare,
     RecordSource,
     Commit,
@@ -390,6 +391,7 @@ struct TEvControlPlaneStorage {
         EBindingRenameAction RenameAction = EBindingRenameAction::None;
         TString RenameOperationId;
         TString RenameIdentity;
+        TString RenameConnectionName;
     };
 
     using TEvModifyBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding,

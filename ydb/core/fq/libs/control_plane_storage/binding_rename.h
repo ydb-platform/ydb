@@ -79,6 +79,7 @@ inline EBindingRenameWrite AdvanceBindingRename(TBindingRename& rename, EBinding
                     ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding rename has no durable decision";
             }
         case EBindingRenameAction::None:
+        case EBindingRenameAction::Probe:
         case EBindingRenameAction::Prepare:
             Y_ABORT("Unexpected binding rename action");
     }

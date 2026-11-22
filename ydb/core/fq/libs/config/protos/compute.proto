@@ -115,6 +115,7 @@ message TComputeMapping {
 
 message TSupportedComputeYdbFeatures {
     bool ReplaceIfExists = 1;
+    bool RestartableExternalTableRename = 2;
 }
 
 message TComputeConfig {

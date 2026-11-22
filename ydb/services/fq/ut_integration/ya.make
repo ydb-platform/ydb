@@ -23,7 +23,7 @@ PEERDIR(
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/shared_resources
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/utils/network

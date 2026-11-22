@@ -219,13 +219,12 @@ private:
     bool BuildSchema(const NActors::TActorContext& ctx) {
         auto& entry = ResolveNamesResult->ResultSet.front();
         const bool disablePgCompatibility = AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
-        const auto rejectPg = [&](const TString& columnName) {
+        const auto rejectPg = [&](const TString& message) {
             TString error;
             if (!CheckAccess(entry.SecurityObject.Get(), error)) {
                 ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, error, ctx);
             } else {
-                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                    TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'", ctx);
+                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, message, ctx);
             }
             return false;
         };
@@ -237,7 +236,7 @@ private:
             i32 keyOrder = ci.second.KeyOrder;
             if (keyOrder != -1) {
                 if (disablePgCompatibility && ci.second.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    return rejectPg(ci.second.Name);
+                    return rejectPg(TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << ci.second.Name << "'");
                 }
                 Y_VERIFY(keyOrder >= 0);
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
@@ -252,6 +251,10 @@ private:
         TString errStr;
         TVector<TCell> prefixCells;
         TMemoryPool prefixMemoryOwner(256);
+        if (disablePgCompatibility && TupleContainsPgType(Request->Getkey_prefix().Gettype())) {
+            return rejectPg("PostgreSQL compatibility is disabled for KeyPrefix types");
+        }
+
         TConstArrayRef<TConversionTypeInfo> prefixTypes(KeyColumnTypeInfos.data(), KeyColumnTypeInfos.size() - 1); // -1 for path column
         bool prefixParsedOk = CellsFromTuple(&Request->Getkey_prefix().Gettype(), Request->Getkey_prefix().Getvalue(),
                 prefixTypes, true, false, prefixCells, errStr, prefixMemoryOwner);
@@ -278,6 +281,10 @@ private:
 
         TVector<TCell> suffixCells;
         TMemoryPool suffixMemoryOwner(256);
+        if (disablePgCompatibility && TupleContainsPgType(Request->Getstart_after_key_suffix().Gettype())) {
+            return rejectPg("PostgreSQL compatibility is disabled for StartAfterKeySuffix types");
+        }
+
         TConstArrayRef<TConversionTypeInfo> suffixTypes(KeyColumnTypeInfos.data() + pathColPos, KeyColumnTypeInfos.size() - pathColPos); // starts at path column
         bool suffixParsedOk = CellsFromTuple(&Request->Getstart_after_key_suffix().Gettype(), Request->Getstart_after_key_suffix().Getvalue(),
                                  suffixTypes, true, false, suffixCells, errStr, suffixMemoryOwner);
@@ -316,7 +323,7 @@ private:
             }
             const auto& column = entry.Columns[columnByName[name]];
             if (disablePgCompatibility && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                return rejectPg(column.Name);
+                return rejectPg(TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");
             }
             ContentsColumns.push_back(column);
         }
@@ -364,7 +371,7 @@ private:
                 const auto& columnInfo = entry.Columns[colIdIt->second];
                 const auto& type = columnInfo.PType;
                 if (disablePgCompatibility && type.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    return rejectPg(columnInfo.Name);
+                    return rejectPg(TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnInfo.Name << "'");
                 }
 
                 types.emplace_back(type, columnInfo.PTypeMod, columnInfo.IsNotNullColumn);
@@ -402,6 +409,10 @@ private:
             TMemoryPool owner(256);
 
             TString err;
+
+            if (disablePgCompatibility && TupleContainsPgType(filterType)) {
+                return rejectPg("PostgreSQL compatibility is disabled for matching_filter types");
+            }
 
             bool filterParsedOk = CellsFromTuple(&filterType, columnValues, typesRef, true, false, cells, err, owner);
 

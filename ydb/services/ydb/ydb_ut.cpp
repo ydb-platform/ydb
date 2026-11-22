@@ -3505,28 +3505,47 @@ tx_meta {
                 UNIT_ASSERT(reader->Finish().ok());
             }
 
-            const auto expectPgRejected = [&](const Ydb::Table::ReadTableRequest& deniedRequest, const TString& columnName) {
+            const auto expectPgRejected = [&](const Ydb::Table::ReadTableRequest& deniedRequest, const TString& issue) {
                 grpc::ClientContext context;
                 Ydb::Table::ReadTableResponse response;
                 auto reader = stub->StreamReadTable(&context, deniedRequest);
                 UNIT_ASSERT(reader->Read(&response));
                 UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SCHEME_ERROR);
                 UNIT_ASSERT_C(!response.issues().empty(), response.DebugString());
-                UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(),
-                    TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'");
+                UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(), issue);
                 UNIT_ASSERT(!reader->Read(&response));
                 UNIT_ASSERT(reader->Finish().ok());
             };
 
             auto pgProjection = request;
             pgProjection.add_columns("Value");
-            expectPgRejected(pgProjection, "Value");
+            expectPgRejected(pgProjection, "PostgreSQL compatibility is disabled for column 'Value'");
 
             auto pgBound = request;
             auto* lowerBound = pgBound.mutable_key_range()->mutable_greater_or_equal();
             lowerBound->mutable_type()->mutable_tuple_type()->add_elements()->mutable_pg_type()->set_type_name("pgint8");
             lowerBound->mutable_value()->add_items()->set_text_value("50");
-            expectPgRejected(pgBound, "Key");
+            expectPgRejected(pgBound, "PostgreSQL compatibility is disabled for column 'Key'");
+
+            grpc::ClientContext nativeContext;
+            Ydb::Table::CreateTableRequest nativeTable;
+            nativeTable.set_session_id(sessionId);
+            nativeTable.set_path("/Root/NativeKey");
+            auto* nativeKey = nativeTable.add_columns();
+            nativeKey->set_name("Key");
+            nativeKey->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+            nativeTable.add_primary_key("Key");
+            Ydb::Table::CreateTableResponse nativeResponse;
+            UNIT_ASSERT(stub->CreateTable(&nativeContext, nativeTable, &nativeResponse).ok());
+            UNIT_ASSERT_VALUES_EQUAL(nativeResponse.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            pgBound.set_path("/Root/NativeKey");
+            pgBound.clear_columns();
+            auto* boundType = lowerBound->mutable_type()->mutable_tuple_type()->mutable_elements(0);
+            boundType->mutable_pg_type()->set_type_name("unrecognized_pg_type");
+            expectPgRejected(pgBound, "PostgreSQL compatibility is disabled for range key types");
+            boundType->mutable_optional_type()->mutable_item()->mutable_pg_type()->set_type_name("unrecognized_pg_type");
+            expectPgRejected(pgBound, "PostgreSQL compatibility is disabled for range key types");
         }
     }
 

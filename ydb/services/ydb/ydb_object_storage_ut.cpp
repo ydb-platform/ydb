@@ -158,17 +158,16 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
         UNIT_ASSERT_VALUES_EQUAL_C(success.status(), Ydb::StatusIds::SUCCESS, success.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(success.contents().rows_size(), 1);
 
-        const auto expectPgRejected = [&](const Ydb::ObjectStorage::ListingRequest& input, const TString& columnName) {
+        const auto expectPgRejected = [&](const Ydb::ObjectStorage::ListingRequest& input, const TString& issue) {
             const auto response = list(input);
             UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SCHEME_ERROR, response.DebugString());
             UNIT_ASSERT_C(!response.issues().empty(), response.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(),
-                TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnName << "'");
+            UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(), issue);
         };
 
         auto pgProjection = request;
         pgProjection.add_columns_to_return("LegacyValue");
-        expectPgRejected(pgProjection, "LegacyValue");
+        expectPgRejected(pgProjection, "PostgreSQL compatibility is disabled for column 'LegacyValue'");
 
         auto pgFilter = request;
         auto* filter = pgFilter.mutable_matching_filter();
@@ -179,13 +178,28 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
         filter->mutable_value()->add_items()->add_items()->set_text_value("LegacyValue");
         filter->mutable_value()->add_items()->add_items()->set_uint32_value(Ydb::ObjectStorage::ListingRequest::EQUAL);
         filter->mutable_value()->add_items()->add_items()->set_text_value("42");
-        expectPgRejected(pgFilter, "LegacyValue");
+        expectPgRejected(pgFilter, "PostgreSQL compatibility is disabled for column 'LegacyValue'");
 
         auto pgKey = request;
         pgKey.set_table_name("/Root/PgKey");
         pgKey.mutable_key_prefix()->mutable_type()->mutable_tuple_type()->mutable_elements(0)->mutable_pg_type()->set_type_name("pgint4");
         pgKey.mutable_key_prefix()->mutable_value()->mutable_items(0)->set_text_value("50");
-        expectPgRejected(pgKey, "Bucket");
+        expectPgRejected(pgKey, "PostgreSQL compatibility is disabled for column 'Bucket'");
+
+        auto pgPrefix = request;
+        auto* prefixType = pgPrefix.mutable_key_prefix()->mutable_type()->mutable_tuple_type()->mutable_elements(0);
+        prefixType->mutable_pg_type()->set_type_name("unrecognized_pg_type");
+        expectPgRejected(pgPrefix, "PostgreSQL compatibility is disabled for KeyPrefix types");
+
+        auto pgSuffix = request;
+        auto* suffixType = pgSuffix.mutable_start_after_key_suffix()->mutable_type()->mutable_tuple_type()->add_elements();
+        suffixType->mutable_optional_type()->mutable_item()->mutable_pg_type()->set_type_name("unrecognized_pg_type");
+        pgSuffix.mutable_start_after_key_suffix()->mutable_value()->add_items()->set_text_value("/home/file");
+        expectPgRejected(pgSuffix, "PostgreSQL compatibility is disabled for StartAfterKeySuffix types");
+
+        filter->mutable_value()->mutable_items(0)->mutable_items(0)->set_text_value("NativeValue");
+        filterType->mutable_elements(2)->mutable_tuple_type()->mutable_elements(0)->mutable_pg_type()->set_type_name("unrecognized_pg_type");
+        expectPgRejected(pgFilter, "PostgreSQL compatibility is disabled for matching_filter types");
     }
 
     void SetPermissions(TString location) {

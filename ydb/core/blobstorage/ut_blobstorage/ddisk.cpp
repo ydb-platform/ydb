@@ -776,6 +776,28 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
     }
 
+    Y_UNIT_TEST(BaseConfigMarksDDiskSlots) {
+        TDDiskTestContext f;
+        f.Env.Sim(TDuration::Seconds(10));
+
+        const auto baseConfig = f.Env.FetchBaseConfig();
+        UNIT_ASSERT(baseConfig.HasHasDDiskPools());
+        UNIT_ASSERT(baseConfig.GetHasDDiskPools());
+        ui32 ddiskSlots = 0;
+        ui32 ordinarySlots = 0;
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetDDisk()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.GetStoragePoolName(), "ddisk_pool");
+                ddiskSlots += group.VSlotIdSize();
+            } else {
+                ordinarySlots += group.VSlotIdSize();
+            }
+        }
+        // The fixture creates three DDisk groups with five slots each, plus a conventional pool.
+        UNIT_ASSERT_VALUES_EQUAL(ddiskSlots, 15);
+        UNIT_ASSERT(ordinarySlots > 0);
+    }
+
     Y_UNIT_TEST(PersistentBufferAllocationSingleSlotBalanced) {
         CheckPersistentBufferAllocationSingleSlot(NKikimrBlobStorage::BALANCED);
     }

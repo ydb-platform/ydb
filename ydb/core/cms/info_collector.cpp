@@ -305,10 +305,17 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
             Info->AddVDisk(vdisk);
         }
 
-        for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
-            // Pool identity remains available even when a DDisk or its node is down.
-            if (!group.GetStoragePoolName().empty()) {
-                for (const auto& slot : group.GetVSlotId()) {
+        const auto& config = record.GetStatus(0).GetBaseConfig();
+        if (config.HasHasDDiskPools()) {
+            Info->SetHasDDiskPools(config.GetHasDDiskPools());
+        }
+        for (const auto& group : config.GetGroup()) {
+            for (const auto& slot : group.GetVSlotId()) {
+                if (group.GetDDisk()) {
+                    Info->AddDDiskSlot(slot);
+                }
+                // Pool identity remains available even when a DDisk or its node is down.
+                if (!group.GetStoragePoolName().empty()) {
                     Info->SetDDiskPoolName(slot.GetNodeId(), slot.GetPDiskId(), slot.GetVSlotId(), group.GetStoragePoolName());
                 }
             }

@@ -884,6 +884,33 @@ public:
         TTableInfo::TCPtr tableInfo = context.SS->Tables.at(path.Base()->PathId);
         Y_ABORT_UNLESS(tableInfo);
 
+        NKikimrTxDataShard::TSplitMergeDescription cdc;
+        for (const auto& [name, id] : path.Base()->GetChildren()) {
+            const auto stream = context.SS->PathsById.at(id);
+            if (!stream->IsCdcStream() || stream->Dropped()) {
+                continue;
+            }
+            const auto topicId = stream->FindChild("streamImpl");
+            if (!topicId) {
+                continue;
+            }
+            const auto it = context.SS->Topics.find(*topicId);
+            if (it == context.SS->Topics.end()) {
+                continue;
+            }
+            const auto& topic = it->second;
+            const auto config = topic->GetTabletConfig();
+            if ((!config.HasCdcReplication() || config.GetReplicationSourceConsumer().empty())
+                && topic->AlterData && topic->AlterData->GetTabletConfig().HasCdcReplication())
+            {
+                setResultError(NKikimrScheme::StatusMultipleModifications, "CDC topic attachment is in progress");
+                return result;
+            }
+            auto* producer = cdc.AddCdcProducers();
+            id.ToProto(producer->MutableStreamPathId());
+            producer->SetReplicationConsumer(config.GetReplicationSourceConsumer());
+        }
+
         if (tableInfo->IsBackup) {
             TString errMsg = TStringBuilder()
                 << "cannot split/merge backup table " << info.GetTablePath();
@@ -1083,6 +1110,7 @@ public:
         txState.State = op.State;
         txState.Shards = std::move(op.Shards);
         txState.SplitDescription = std::move(op.SplitDescription);
+        txState.SplitDescription->MutableCdcProducers()->Swap(cdc.MutableCdcProducers());
         // LoadSplitLineage is internal-only: ignore it in client (non-internal) proposes so
         // external callers cannot deepen the by-load lineage of their partitions.
         txState.LoadSplitLineage = Transaction.GetInternal() && info.GetLoadSplitLineage();

@@ -1,8 +1,11 @@
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/replication_description.h>
@@ -702,6 +705,121 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             NLs::ReplicationMode(mode),
             NLs::UserAttrsEqual(attrs),
         });
+    }
+
+    struct TCdcSplitFixture {
+        TTestBasicRuntime Runtime;
+        TTestEnv Env{Runtime, TTestEnvOptions().InitYdbDriver(true).EnableProtoSourceIdInfo(true)};
+        const ui64 SchemeShard = TTestTxConfig::SchemeShard;
+        ui64 TxId = 100;
+        NKikimr::TPathId Owner;
+        NKikimrSchemeOp::TPathDescription Topic;
+        const TString Consumer = "source-consumer";
+
+        TCdcSplitFixture() {
+            using NKikimr::TPathId;
+            using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
+            TestCreateReplication(Runtime, ++TxId, "/MyRoot", DefaultScheme("Owner"));
+            Env.TestWaitNotification(Runtime, TxId);
+            Owner = TPathId(SchemeShard, DescribePath(Runtime, "/MyRoot/Owner").GetPathDescription().GetSelf().GetPathId());
+            auto* create = InternalTransaction(CreateTableRequest(++TxId, "/MyRoot", R"(
+                Name: "Table" Columns { Name: "key" Type: "Uint64" } KeyColumnNames: ["key"]
+            )"));
+            auto& replica = *create->Record.MutableTransaction(0)->MutableCreateTable()->MutableReplicationConfig();
+            replica.SetMode(TConfig::REPLICATION_MODE_READ_ONLY);
+            replica.SetConsistencyLevel(TConfig::CONSISTENCY_LEVEL_ROW);
+            replica.SetImportState(TConfig::IMPORTING);
+            Owner.ToProto(replica.MutableOwnerPathId());
+            AsyncSend(Runtime, SchemeShard, create);
+            TestModificationResult(Runtime, TxId);
+            Env.TestWaitNotification(Runtime, TxId);
+
+            AsyncSend(Runtime, SchemeShard, InternalTransaction(CreateCdcStreamRequest(++TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription { Name: "Feed" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatJson State: ECdcStreamStateDisabled }
+            )")));
+            TestModificationResult(Runtime, TxId);
+            Env.TestWaitNotification(Runtime, TxId);
+
+            Topic = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
+        }
+
+        void Attach(NKikimrScheme::EStatus expected) {
+            auto* request = InternalTransaction(AlterPQGroupRequest(++TxId, "/MyRoot/Table/Feed", R"(Name: "streamImpl")"));
+            auto& tx = *request->Record.MutableTransaction(0);
+            Owner.ToProto(tx.MutableExpectedReplicationOwnerPathId());
+            auto& config = *tx.MutableAlterPersQueueGroup()->MutablePQTabletConfig();
+            config = Topic.GetPersQueueGroup().GetPQTabletConfig();
+            config.SetReplicationSourceConsumer(Consumer);
+            AsyncSend(Runtime, SchemeShard, request);
+            TestModificationResult(Runtime, TxId, expected);
+        }
+
+        void Split(ui64 boundary, NKikimrScheme::EStatus expected) {
+            const auto shard = GetTableShards(Runtime, SchemeShard, "/MyRoot/Table").front();
+            TestSplitTable(Runtime, ++TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: %lu } } } }
+            )", shard, boundary), {expected});
+        }
+
+        void CheckSplitWithStaleTopic() {
+            using namespace NKikimr;
+            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+            // Return the pre-attachment configuration to the split worker.
+            bool staleReply = false;
+            auto staleCache = Runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+                for (auto& entry : ev->Get()->Request->ResultSet) {
+                    if (entry.Operation == TNavigate::OpTopic && entry.PQGroupInfo
+                        && entry.TableId.PathId == TPathId(SchemeShard, Topic.GetSelf().GetPathId())) {
+                        auto stale = MakeIntrusive<TNavigate::TPQGroupInfo>();
+                        stale->Description = entry.PQGroupInfo->Description;
+                        stale->Description.MutablePQTabletConfig()->ClearReplicationSourceConsumer();
+                        entry.PQGroupInfo = stale;
+                        staleReply = true;
+                    }
+                }
+            });
+            const auto parent = GetTableShards(Runtime, SchemeShard, "/MyRoot/Table").front();
+            bool registered = false;
+            auto groups = Runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+                const auto& cmd = ev->Get()->Record.GetPartitionRequest().GetCmdSplitMessageGroup();
+                if (!cmd.DeregisterGroupsSize()) {
+                    return;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(NPQ::NSourceIdEncoding::Decode(cmd.GetDeregisterGroups(0).GetId()),
+                    NPQ::MakeCdcSourceId(parent, Consumer));
+                for (const auto& group : cmd.GetRegisterGroups()) {
+                    UNIT_ASSERT(NPQ::NSourceIdEncoding::Decode(group.GetId()).StartsWith(Consumer + ":"));
+                }
+                registered = true;
+            });
+            Split(50, NKikimrScheme::StatusAccepted);
+            Env.TestWaitNotification(Runtime, TxId);
+            Runtime.WaitFor("CDC producer re-registration", [&] { return registered; });
+            UNIT_ASSERT(staleReply);
+        }
+    };
+
+    Y_UNIT_TEST(CdcTopicAttachmentSerializesWithTableSplits) {
+        using namespace NKikimr;
+        TCdcSplitFixture test;
+        NActors::TBlockEvents<TEvDataShard::TEvSplit> splitting(test.Runtime);
+        test.Split(100, NKikimrScheme::StatusAccepted);
+        const ui64 firstSplit = test.TxId;
+        test.Runtime.WaitFor("split source", [&] { return !splitting.empty(); });
+        test.Attach(NKikimrScheme::StatusMultipleModifications);
+        splitting.Stop().Unblock();
+        test.Env.TestWaitNotification(test.Runtime, firstSplit);
+
+        NActors::TBlockEvents<TEvPersQueue::TEvProposeTransactionResult> attaching(test.Runtime);
+        test.Attach(NKikimrScheme::StatusAccepted);
+        const ui64 attachId = test.TxId;
+        test.Runtime.WaitFor("topic attachment", [&] { return !attaching.empty(); });
+        test.Split(50, NKikimrScheme::StatusMultipleModifications);
+        attaching.Stop().Unblock();
+        test.Env.TestWaitNotification(test.Runtime, attachId);
+
+        test.CheckSplitWithStaleTopic();
     }
 
     Y_UNIT_TEST(CreateReplicatedTable) {

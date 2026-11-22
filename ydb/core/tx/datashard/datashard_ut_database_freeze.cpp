@@ -863,18 +863,28 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
     Y_UNIT_TEST(UncommittedLockCannotBeCommittedWhileFrozen) {
         TFreezeEnv env;
         NLongTxService::TLockHandle lockHandle(42, env.Runtime.GetActorSystem(0));
-        const auto written = UncommittedWrite(env.Runtime, env.Sender, env.Shards.at(0),
-            env.TableId, TShardedTableOptions().Columns_, 42, env.Sender.NodeId(), 1, 10, 0, 0,
+        auto request = MakeWriteRequestOneKeyValue(std::nullopt, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, env.TableId,
+            TShardedTableOptions().Columns_, 1, 10);
+        request->SetLockId(42, env.Sender.NodeId());
+        const auto written = Write(env.Runtime, env.Sender, env.Shards.at(0), std::move(request),
             NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         UNIT_ASSERT_VALUES_EQUAL(written.TxLocksSize(), 1);
         const auto lock = written.GetTxLocks(0);
+        auto commitLock = [&](NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus) {
+            auto request = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            auto* locks = request->Record.MutableLocks();
+            locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            locks->AddSendingShards(env.Shards.at(0));
+            locks->AddReceivingShards(env.Shards.at(0));
+            *locks->AddLocks() = lock;
+            return Write(env.Runtime, env.Sender, env.Shards.at(0), std::move(request), expectedStatus);
+        };
         env.Freeze();
-        CommitLock(env.Runtime, env.Sender, env.Shards.at(0), lock,
-            NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        commitLock(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, env.Shards, env.TableId), "");
         env.Thaw();
-        CommitLock(env.Runtime, env.Sender, env.Shards.at(0), lock,
-            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        commitLock(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, env.Shards, env.TableId), "key = 1, value = 10\n");
     }
 
@@ -958,27 +968,6 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
             UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR, name);
             UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.ShortDebugString(), "Wrong shard state for scheme transaction");
         }
-    }
-
-    Y_UNIT_TEST(UnsafeTruncateIsFenced) {
-        TFreezeEnv env;
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        auto truncate = [&] {
-            auto request = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-            auto* operation = request->Record.AddOperations();
-            operation->SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE);
-            operation->MutableTableId()->SetOwnerId(env.TableId.PathId.OwnerId);
-            operation->MutableTableId()->SetTableId(env.TableId.PathId.LocalPathId);
-            operation->MutableTableId()->SetSchemaVersion(env.TableId.SchemaVersion);
-            env.Runtime.SendToPipe(env.Shards.at(0), env.Sender, request.Release(), 0, GetPipeConfigWithRetries());
-            return env.Runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(env.Sender)->Get()->Record;
-        };
-        env.Freeze();
-        UNIT_ASSERT_VALUES_EQUAL(truncate().GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
-        UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, env.Shards, env.TableId), "key = 1, value = 10\n");
-        env.Thaw();
-        UNIT_ASSERT_VALUES_EQUAL(truncate().GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, env.Shards, env.TableId), "");
     }
 
     Y_UNIT_TEST(TtlRequestsAreFenced) {

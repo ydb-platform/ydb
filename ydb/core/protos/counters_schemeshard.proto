@@ -806,5 +806,8 @@ enum ETxTypes {
     TXTYPE_FORGET_SET_COLUMN_CONSTRAINT = 128          [(TxTypeOpts) = {Name: "TxForgetSetColumnConstraint"}];
     TXTYPE_CANCEL_SET_COLUMN_CONSTRAINT = 129             [(TxTypeOpts) = {Name: "TxCancelSetColumnConstraint"}];
 
+    // Keep the upstream transaction IDs contiguous for tablet counter indexes.
+    TXTYPE_UPDATE_STORAGE_SPACE_STATE = 130               [(TxTypeOpts) = {Name: "TxUpdateStorageSpaceState"}];
+    TXTYPE_REVISIT_SPLIT_MERGE = 131                       [(TxTypeOpts) = {Name: "TxRevisitSplitMerge"}];
     TXTYPE_DATABASE_FREEZE = 132                         [(TxTypeOpts) = {Name: "TxDatabaseFreeze"}];
 }

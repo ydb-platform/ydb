@@ -1399,7 +1399,15 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
     Y_UNIT_TEST(UnsupportedColumnTableDoesNotFenceRowTables) {
         TFreezeEnv env;
         env.CreateTable();
-        CreateTestTable(env.Runtime, ++env.TxId, env.Root, true);
+        TestCreateColumnTable(env.Runtime, ++env.TxId, env.Root, R"(
+            Name: "TestTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "id" Type: "Uint64" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "id"
+            }
+        )");
         env.Env.TestWaitNotification(env.Runtime, env.TxId);
         ui32 shardRequests = 0;
         auto observer = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreeze>([&](auto&) { ++shardRequests; });

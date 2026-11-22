@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
-        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetEnableRebuildIndex(true)
             .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });

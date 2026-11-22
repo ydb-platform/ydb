@@ -756,7 +756,13 @@ public:
                 return result;
             }
 
-            const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
+            const auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+            if (attachCdcTopic && !table->GetSplitOpsInFlight().empty()) {
+                result->SetError(NKikimrScheme::StatusMultipleModifications, "Table split or merge is in progress");
+                return result;
+            }
+
+            const auto& config = table->ReplicationConfig();
             const auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
             const auto expectedOwner = TPathId::FromProto(Transaction.GetExpectedReplicationOwnerPathId());
             if (!Transaction.GetInternal() || !expectedOwner.OwnerId || !expectedOwner.LocalPathId

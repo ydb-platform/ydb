@@ -750,6 +750,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             Owner.ToProto(tx.MutableExpectedReplicationOwnerPathId());
             auto& config = *tx.MutableAlterPersQueueGroup()->MutablePQTabletConfig();
             config = Topic.GetPersQueueGroup().GetPQTabletConfig();
+            config.ClearPartitionKeySchema();
             config.SetReplicationSourceConsumer(Consumer);
             AsyncSend(Runtime, SchemeShard, request);
             TestModificationResult(Runtime, TxId, expected);

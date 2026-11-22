@@ -373,10 +373,13 @@ message TEvGetStoragePoolsRequest {
 
     optional TStoragePoolKey To = 3;
     optional bool InclusiveTo = 4;
+    optional bool NbsDiscoveryOnly = 5;
 }
 
 message TEvGetStoragePoolsResponse {
     repeated TStoragePoolEntry Entries = 1;
+    // Set by the controller for a discovery-only request. Absent on older controllers.
+    optional bool HasDDiskPools = 2;
 }
 
 message TStorageStatsEntry {

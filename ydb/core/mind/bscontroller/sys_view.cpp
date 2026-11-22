@@ -315,6 +315,15 @@ IActor* TBlobStorageController::CreateSystemViewsCollector() {
 }
 
 void TBlobStorageController::ForwardToSystemViewsCollector(STATEFN_SIG) {
+    if (ev->GetTypeRewrite() == TEvSysView::EvGetStoragePoolsRequest &&
+            ev->Get<TEvSysView::TEvGetStoragePoolsRequest>()->Record.GetNbsDiscoveryOnly()) {
+        auto response = std::make_unique<TEvSysView::TEvGetStoragePoolsResponse>();
+        response->Record.SetHasDDiskPools(std::ranges::any_of(StoragePools, [](const auto& entry) {
+            return entry.second.DDisk;
+        }));
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
     TActivationContext::Forward(ev, SystemViewsCollectorId);
 }
 

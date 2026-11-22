@@ -1234,6 +1234,52 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    Y_UNIT_TEST(NbsStorageDiscovery) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        enum class EMode { RealController, Configured, Legacy };
+        EMode mode = EMode::RealController;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                if (mode == EMode::Configured) {
+                    record.SetHasDDiskPools(true);
+                } else if (mode == EMode::Legacy) {
+                    record.ClearHasDDiskPools();
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        for (EMode responseMode : {EMode::RealController, EMode::Configured, EMode::Legacy}) {
+            mode = responseMode;
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /storage/nbs HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(result->Response->Body, &json));
+            UNIT_ASSERT(json.Has("Configured"));
+            if (mode == EMode::Legacy) {
+                UNIT_ASSERT_VALUES_EQUAL(json["Configured"].GetType(), NJson::JSON_NULL);
+            } else {
+                UNIT_ASSERT(json["Configured"].IsBoolean());
+                UNIT_ASSERT_VALUES_EQUAL(json["Configured"].GetBoolean(), mode == EMode::Configured);
+            }
+        }
+    }
+
     Y_UNIT_TEST(StorageGroupOutputWithoutFilterNoDepends)
     {
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true, "Green");

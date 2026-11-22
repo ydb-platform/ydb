@@ -774,10 +774,12 @@ private:
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
         bool isStale = compileRequest.ConfigGeneration != ConfigGeneration;
+        const bool skipRevalidationCacheUpdate = compileRequest.RevalidatePgCompatibility
+            && (!compileResult->AllowCache || hasTempTablesNameClashes);
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
-                if (!hasTempTablesNameClashes) {
+                if (!hasTempTablesNameClashes && !skipRevalidationCacheUpdate) {
                     if (isStale) {
                         YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
                             {"queryUid", compileResult->Uid},
@@ -792,7 +794,7 @@ private:
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    if (!isStale) {
+                    if (!isStale && !skipRevalidationCacheUpdate) {
                         QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                     }
                 }
@@ -1273,7 +1275,7 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
         TItem& item = const_cast<TItem&>(*it);
         const auto& previous = *item.Value.CompileResult;
         if (*previous.Query != *compileResult->Query) {
-            // A query can have multiple prepared UIDs. Keep the existing owner of the text lookup.
+            // Preserve the existing text lookup when this prepared UID changes mode.
             QueryIndex.try_emplace(*compileResult->Query, compileResult->Uid);
             EraseQueryIndex(previous);
             DecBytes(previous.PreparedQuery->ByteSize());

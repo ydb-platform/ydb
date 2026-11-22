@@ -163,6 +163,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistExternalDataSource(db, pId);
     }
 
+    for (const auto& key : ExternalTableCreateTickets) {
+        ss->PersistExternalTableCreateTicket(db, key);
+    }
+
     for (const auto& pId : ExternalTables) {
         ss->PersistExternalTable(db, pId);
     }

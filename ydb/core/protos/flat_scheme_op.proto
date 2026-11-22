@@ -48,11 +48,40 @@ enum EDropWaitPolicy {
     EDropWaitChanges = 2;
 }
 
+message TExternalTableIdentity {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 Version = 2;
+}
+
+message TExternalTableMutation {
+    enum EAction {
+        CREATE = 1;
+        ABORT = 2;
+        COMMIT = 3;
+        GUARDED_DROP = 4;
+    }
+    optional EAction Action = 1;
+    optional string WorkingDir = 2;
+    optional string Name = 3;
+    optional bytes Key = 4;
+    optional TExternalTableDescription Definition = 5;
+    optional TExternalTableIdentity ExpectedTable = 6;
+}
+
+message TExternalTableCreateTicket {
+    optional string TargetPath = 1;
+    optional bytes Definition = 2;
+    optional TExternalTableIdentity Table = 3;
+    optional bool Aborted = 4;
+    optional bool Committed = 5;
+}
+
 message TDrop {
     optional string Name = 1;
     optional EDropWaitPolicy WaitPolicy = 2;
     optional uint64 Id = 3;
     optional NKikimrReplication.ESourceCleanupPolicy ReplicationSourceCleanup = 4 [default = SOURCE_CLEANUP_POLICY_DROP];
+    optional TExternalTableIdentity ExpectedExternalTable = 5;
 }
 
 enum EColumnCodec {
@@ -2206,6 +2235,11 @@ message TModifyScheme {
 
     // Conditional replication cleanup: skip if the table is owned by another replication.
     optional NKikimrProto.TPathID ExpectedReplicationOwnerPathId = 97;
+
+    optional bytes ExternalTableCreateKey = 98;
+    optional bytes ExternalTableAbortCreateKey = 99;
+    optional bytes ExternalTableCommitCreateKey = 100;
+    optional TExternalTableMutation ExternalTableMutation = 101;
 
     // Some entries are grouped by semantics, so are out of order
 }

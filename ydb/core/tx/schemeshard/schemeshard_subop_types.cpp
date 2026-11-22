@@ -592,6 +592,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp: return TxCreateLongIncrementalBackupOp;
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive: return TxAlterExtSubDomainCreateHive;
         case NKikimrSchemeOp::ESchemeOpDropExternalTable: return TxDropExternalTable;
+        case NKikimrSchemeOp::ESchemeOpExternalTableMutation: return TxInvalid;
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource: return TxDropExternalDataSource;
         case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: return TxCreateContinuousBackup;
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: return TxAlterContinuousBackup;

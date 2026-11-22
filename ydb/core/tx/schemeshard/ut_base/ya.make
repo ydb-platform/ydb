@@ -25,6 +25,7 @@ SRCS(
     ut_info_types.cpp
     ut_move_tablet_to_storage_pool.cpp
     ut_table_decimal_types.cpp
+    ut_external_table_mutation.cpp
     ut_table_info.cpp
     ut_table_pg_types.cpp
     ut_commit_redo_limit.cpp

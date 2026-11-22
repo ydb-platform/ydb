@@ -3866,6 +3866,36 @@ void TSchemeShard::PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const 
     }
 }
 
+void TSchemeShard::SetExternalTableCreateTicket(const TExternalTableCreateTicketKey& key,
+    std::optional<NKikimrSchemeOp::TExternalTableCreateTicket> ticket)
+{
+    if (const auto* old = ExternalTableCreateTickets.FindPtr(key); old && old->HasTable() && !old->GetAborted() && !old->GetCommitted()) {
+        PreparedExternalTables.erase(TPathId::FromProto(old->GetTable().GetPathId()));
+    }
+    if (ticket) {
+        if (ticket->HasTable() && !ticket->GetAborted() && !ticket->GetCommitted()) {
+            PreparedExternalTables.insert(TPathId::FromProto(ticket->GetTable().GetPathId()));
+        }
+        ExternalTableCreateTickets[key] = std::move(*ticket);
+    } else {
+        ExternalTableCreateTickets.erase(key);
+    }
+}
+
+void TSchemeShard::StageExternalTableCreateTicket(TProposeContext& context, const TExternalTableCreateTicketKey& key,
+    NKikimrSchemeOp::TExternalTableCreateTicket ticket)
+{
+    context.MemChanges.GrabExternalTableCreateTicket(this, key);
+    SetExternalTableCreateTicket(key, std::move(ticket));
+    context.DbChanges.PersistExternalTableCreateTicket(key);
+}
+
+void TSchemeShard::PersistExternalTableCreateTicket(NIceDb::TNiceDb& db, const TExternalTableCreateTicketKey& key) {
+    using TTable = Schema::ExternalTableCreateTickets;
+    db.Table<TTable>().Key(key.first, key.second).Update(
+        NIceDb::TUpdate<TTable::Ticket>(ExternalTableCreateTickets.at(key).SerializeAsString()));
+}
+
 void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     const auto it = ExternalTables.find(pathId);

@@ -270,6 +270,10 @@ public:
 
         TPath dstPath     = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
+        if (context.SS->PreparedExternalTables.contains(dstPath.Base()->PathId)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table has a prepared create ticket");
+            return result;
+        }
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);

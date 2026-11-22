@@ -230,9 +230,12 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
         return "DROP BLOB DEPOT";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-        return "CREATE EXTERNAL TABLE";
+        return tx.HasExternalTableCreateKey() ? "MUTATE EXTERNAL TABLE" : "CREATE EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
-        return "DROP EXTERNAL TABLE";
+        return tx.HasExternalTableAbortCreateKey() || tx.HasExternalTableCommitCreateKey() || tx.GetDrop().HasExpectedExternalTable()
+            ? "MUTATE EXTERNAL TABLE" : "DROP EXTERNAL TABLE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpExternalTableMutation:
+        return "MUTATE EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
         return "ALTER EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
@@ -613,6 +616,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpExternalTableMutation: {
+        const auto& mutation = tx.GetExternalTableMutation();
+        result.emplace_back(NKikimr::JoinPath({mutation.GetWorkingDir(), mutation.GetName()}));
+        break;
+    }
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
         // TODO: unimplemented
         break;

@@ -327,6 +327,8 @@ public:
     TDbRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos", this, DbRefMaps};
     TDbRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores", this, DbRefMaps};
     TDbRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, DbRefMaps};
+    THashMap<TExternalTableCreateTicketKey, NKikimrSchemeOp::TExternalTableCreateTicket> ExternalTableCreateTickets;
+    THashSet<TPathId> PreparedExternalTables;
     TDbRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, DbRefMaps};
     TDbRefMap<TViewInfo::TPtr> Views{"Views", this, DbRefMaps};
     TDbRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, DbRefMaps};
@@ -1056,6 +1058,11 @@ public:
     void PersistStorageBillingTime(NIceDb::TNiceDb& db);
 
     // ExternalTable
+    void SetExternalTableCreateTicket(const TExternalTableCreateTicketKey& key,
+        std::optional<NKikimrSchemeOp::TExternalTableCreateTicket> ticket);
+    void StageExternalTableCreateTicket(TProposeContext& context, const TExternalTableCreateTicketKey& key,
+        NKikimrSchemeOp::TExternalTableCreateTicket ticket);
+    void PersistExternalTableCreateTicket(NIceDb::TNiceDb& db, const TExternalTableCreateTicketKey& key);
     void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTable);
     void PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId);

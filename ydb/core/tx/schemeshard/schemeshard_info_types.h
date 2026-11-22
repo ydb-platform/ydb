@@ -4305,6 +4305,8 @@ public:
 }; // TImportInfo
 // } // NImport
 
+using TExternalTableCreateTicketKey = std::pair<TString, TString>; // authenticated SID and operation key
+
 struct TExternalTableInfo: TSimpleRefCount<TExternalTableInfo> {
     using TPtr = TIntrusivePtr<TExternalTableInfo>;
 

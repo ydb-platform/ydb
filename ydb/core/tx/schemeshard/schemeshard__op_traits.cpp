@@ -161,6 +161,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
         case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
         case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpExternalTableMutation:
         case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
             return EOperationClass::Other;
 

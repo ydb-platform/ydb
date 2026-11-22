@@ -6,7 +6,11 @@
 
 #include <utility>
 
+#include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -14,6 +18,16 @@ namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+
+TString SerializeDeterministically(const NProtoBuf::Message& message) {
+    TString result;
+    result.ReserveAndResize(message.ByteSizeLong());
+    NProtoBuf::io::ArrayOutputStream output(result.begin(), result.size());
+    NProtoBuf::io::CodedOutputStream coded(&output);
+    coded.SetSerializationDeterministic(true);
+    Y_ABORT_UNLESS(message.SerializeToCodedStream(&coded));
+    return result;
+}
 
 class TPropose: public TSubOperationState {
     virtual const char* Name() const override final { return "TPropose"; }
@@ -232,7 +246,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        const auto acceptExisted = !Transaction.GetFailOnExist();
+        const auto acceptExisted = !Transaction.HasExternalTableCreateKey() && !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& externalTableDescription = Transaction.GetCreateExternalTable();
         const TString& name = externalTableDescription.GetName();
@@ -257,8 +271,56 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(
-            result, context, dstPath, acl, acceptExisted));
+        TExternalTableCreateTicketKey key;
+        NKikimrSchemeOp::TExternalTableCreateTicket ticket;
+        if (Transaction.HasExternalTableCreateKey()) {
+            if (!context.UserToken || context.UserToken->GetUserSID().empty()) {
+                result->SetError(NKikimrScheme::StatusAccessDenied, "An external table create ticket requires an authenticated caller");
+                return result;
+            }
+
+            key = {context.UserToken->GetUserSID(), Transaction.GetExternalTableCreateKey()};
+            ticket.SetTargetPath(dstPath.PathString());
+            NKikimrExternalSources::TGeneral content;
+            if (!content.ParseFromString(externalTableDescription.GetContent())) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid external table content");
+                return result;
+            }
+            auto canonicalDefinition = externalTableDescription;
+            canonicalDefinition.SetContent(SerializeDeterministically(content));
+            ticket.SetDefinition(SerializeDeterministically(canonicalDefinition));
+            if (const auto* existing = context.SS->ExternalTableCreateTickets.FindPtr(key)) {
+                if (existing->GetAborted() || existing->GetTargetPath() != ticket.GetTargetPath() ||
+                    existing->GetDefinition() != ticket.GetDefinition())
+                {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create ticket cannot be replayed");
+                    return result;
+                }
+                const auto pathId = TPathId::FromProto(existing->GetTable().GetPathId());
+                if (!existing->GetCommitted()) {
+                    if (!dstPath.IsResolved() || dstPath.Base()->Dropped() || dstPath.Base()->PathId != pathId) {
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table created by the ticket no longer exists");
+                        return result;
+                    }
+                    if (dstPath.Base()->HasActiveChanges()) {
+                        result->SetError(NKikimrScheme::StatusMultipleModifications, "The external table has a schema operation in progress");
+                        return result;
+                    }
+                    const auto info = context.SS->ExternalTables.Value(pathId, nullptr);
+                    if (!info || info->AlterVersion != existing->GetTable().GetVersion()) {
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table created by the ticket has changed");
+                        return result;
+                    }
+                }
+                result->SetPathId(pathId.LocalPathId);
+                result->Record.SetExternalTableVersion(existing->GetTable().GetVersion());
+                result->SetStatus(NKikimrScheme::StatusSuccess);
+                return result;
+            }
+        }
+        if (!IsDestinationPathValid(result, context, dstPath, acl, acceptExisted)) {
+            return result;
+        }
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);
@@ -316,6 +378,12 @@ public:
                                                 dstPath);
 
         context.SS->ExternalTables.Set(newPathId, externalTableInfo);
+        if (Transaction.HasExternalTableCreateKey()) {
+            newPathId.ToProto(ticket.MutableTable()->MutablePathId());
+            ticket.MutableTable()->SetVersion(externalTableInfo->AlterVersion);
+            result->Record.SetExternalTableVersion(ticket.GetTable().GetVersion());
+            context.SS->StageExternalTableCreateTicket(context, key, std::move(ticket));
+        }
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);
         }
@@ -399,6 +467,13 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
     const auto &operation = tx.GetCreateExternalTable();
     const auto replaceIfExists = tx.GetReplaceIfExists();
     const TString &name = operation.GetName();
+
+    if (tx.HasExternalTableCreateKey() &&
+        (tx.GetExternalTableCreateKey().empty() || tx.GetExternalTableCreateKey().size() > 128 ||
+         replaceIfExists || !tx.GetFailedOnAlreadyExists() || tx.GetModifyACL().HasDiffACL() || tx.ApplyIfSize()))
+    {
+        return errorResult(NKikimrScheme::StatusInvalidParameter, "Invalid external table create ticket or create options");
+    }
 
     if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
         return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");

@@ -226,6 +226,7 @@ enum EOperationType {
 
     // Internal repair of legacy unique-index implementation tables.
     ESchemeOpRepairIndexShadowData = 140;
+    ESchemeOpExternalTableMutation = 141;
 
     // Some entries are grouped by semantics, so are out of order
 }

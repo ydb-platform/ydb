@@ -2093,6 +2093,22 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        {
+            using TTable = Schema::ExternalTableCreateTickets;
+            auto rows = db.Table<TTable>().Range().Select();
+            if (!rows.IsReady())
+                return false;
+
+            while (!rows.EndOfSet()) {
+                TExternalTableCreateTicketKey key{rows.GetValue<TTable::Owner>(), rows.GetValue<TTable::OperationKey>()};
+                NKikimrSchemeOp::TExternalTableCreateTicket ticket;
+                Y_ABORT_UNLESS(ticket.ParseFromString(rows.GetValue<TTable::Ticket>()));
+                Self->SetExternalTableCreateTicket(key, std::move(ticket));
+                if (!rows.Next())
+                    return false;
+            }
+        }
+
         // Externel Data Source
         {
             auto rowset = db.Table<Schema::ExternalDataSource>().Range().Select();

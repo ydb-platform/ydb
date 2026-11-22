@@ -412,6 +412,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
             return *modifyScheme.MutableCreateExternalTable()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpExternalTableMutation:
+            return *modifyScheme.MutableExternalTableMutation()->MutableName();
+
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
             NSchemeShard::AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpAlterExternalTable>();
 
@@ -638,6 +641,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 result->Record.SetPathId(shardResult->GetPathId());
             }
 
+            if (shardResult->HasExternalTableVersion()) {
+                result->Record.SetExternalTableVersion(shardResult->GetExternalTableVersion());
+            }
+
             if (shardResult->HasPathCreateTxId()) {
                 result->Record.SetPathCreateTxId(shardResult->GetPathCreateTxId());
             }
@@ -825,6 +832,44 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         auto workingDir = SplitPath(pbModifyScheme.GetWorkingDir());
 
         switch (pbModifyScheme.GetOperationType()) {
+        case NKikimrSchemeOp::ESchemeOpExternalTableMutation: {
+            using TMutation = NKikimrSchemeOp::TExternalTableMutation;
+            const auto& mutation = pbModifyScheme.GetExternalTableMutation();
+            const auto action = mutation.GetAction();
+            const auto& database = GetRequestProto().GetDatabaseName();
+            if (database.empty() || !IsEqualPaths(mutation.GetWorkingDir(), database)
+                || mutation.GetName().Contains('/') || IsPathPartContainsOnlyDots(mutation.GetName()))
+            {
+                return false;
+            }
+
+            auto parent = TPathToResolve(pbModifyScheme);
+            parent.Path = SplitPath(database);
+            switch (action) {
+                case TMutation::CREATE:
+                    if (!IsEqualPaths(TString(ExtractParent(mutation.GetDefinition().GetDataSourcePath())), database)) {
+                        return false;
+                    }
+                    [[fallthrough]];
+                case TMutation::COMMIT:
+                    parent.RequireAccess = NACLib::EAccessRights::CreateTable;
+                    ResolveForACL.push_back(std::move(parent));
+                    break;
+                case TMutation::ABORT:
+                case TMutation::GUARDED_DROP: {
+                    auto target = TPathToResolve(pbModifyScheme);
+                    target.Path = ChildPath(parent.Path, mutation.GetName());
+                    target.RequireAccess = NACLib::EAccessRights::RemoveSchema;
+                    target.AllowNotExist = true;
+                    ResolveForACL.push_back(std::move(parent));
+                    ResolveForACL.push_back(std::move(target));
+                    break;
+                }
+                default:
+                    return false;
+            }
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomain:
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
         case NKikimrSchemeOp::ESchemeOpAlterSubDomain:

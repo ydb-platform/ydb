@@ -63,6 +63,7 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> ExternalDataSources;
     TDeque<TPathId> ExternalTables;
+    TDeque<TExternalTableCreateTicketKey> ExternalTableCreateTickets;
     TDeque<TPathId> ResourcePools;
 
     TDeque<TPathId> TestShardSets;
@@ -205,6 +206,10 @@ public:
 
     void PersistExternalDataSource(const TPathId& pathId) {
         ExternalDataSources.emplace_back(pathId);
+    }
+
+    void PersistExternalTableCreateTicket(const TExternalTableCreateTicketKey& key) {
+        ExternalTableCreateTickets.push_back(key);
     }
 
     void PersistExternalTable(const TPathId& pathId) {

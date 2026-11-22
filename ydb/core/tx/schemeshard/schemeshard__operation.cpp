@@ -296,6 +296,71 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
         return response;
     }
 
+    for (auto& transaction : *record.MutableTransaction()) {
+        using namespace NKikimrSchemeOp;
+        const auto invalidMutation = [=] {
+            return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Invalid external table mutation");
+        };
+        if (transaction.HasExternalTableCreateKey() || transaction.HasExternalTableAbortCreateKey() ||
+            transaction.HasExternalTableCommitCreateKey() || transaction.GetDrop().HasExpectedExternalTable())
+        {
+            return invalidMutation();
+        }
+        if (transaction.GetOperationType() != ESchemeOpExternalTableMutation) {
+            if (transaction.HasExternalTableMutation()) {
+                return invalidMutation();
+            }
+            continue;
+        }
+
+        const auto* appData = AppData(context.Ctx);
+        if (!context.UserToken || appData->AdministrationAllowedSIDs.empty() ||
+            !IsAdministrator(appData, context.UserToken.Get()))
+        {
+            return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                NKikimrScheme::StatusAccessDenied, ui64(txId), ui64(selfId), "External table mutations require a trusted caller");
+        }
+
+        const auto& mutation = transaction.GetExternalTableMutation();
+        if (record.TransactionSize() != 1 || !mutation.HasAction() ||
+            !mutation.GetWorkingDir().StartsWith('/') || mutation.GetName().empty() || mutation.GetName().Contains('/') ||
+            transaction.HasWorkingDir() || transaction.HasMkDir() || transaction.HasCreateExternalTable() ||
+            transaction.HasDrop() || transaction.HasModifyACL() || transaction.HasReplaceIfExists() ||
+            transaction.HasFailedOnAlreadyExists() || transaction.ApplyIfSize())
+        {
+            return invalidMutation();
+        }
+        const bool create = mutation.GetAction() == TExternalTableMutation::CREATE;
+        const bool guardedDrop = mutation.GetAction() == TExternalTableMutation::GUARDED_DROP;
+        if (create != mutation.HasDefinition() || guardedDrop != mutation.HasExpectedTable() ||
+            (guardedDrop ? mutation.HasKey() : mutation.GetKey().empty() || mutation.GetKey().size() > 128) ||
+            (create && mutation.GetDefinition().HasName()))
+        {
+            return invalidMutation();
+        }
+
+        transaction.SetWorkingDir(mutation.GetWorkingDir());
+        if (create) {
+            transaction.SetOperationType(ESchemeOpCreateExternalTable);
+            *transaction.MutableCreateExternalTable() = mutation.GetDefinition();
+            transaction.MutableCreateExternalTable()->SetName(mutation.GetName());
+            transaction.SetExternalTableCreateKey(mutation.GetKey());
+        } else {
+            transaction.SetOperationType(ESchemeOpDropExternalTable);
+            auto* drop = transaction.MutableDrop();
+            drop->SetName(mutation.GetName());
+            if (guardedDrop) {
+                *drop->MutableExpectedExternalTable() = mutation.GetExpectedTable();
+            } else if (mutation.GetAction() == TExternalTableMutation::ABORT) {
+                transaction.SetExternalTableAbortCreateKey(mutation.GetKey());
+            } else {
+                transaction.SetExternalTableCommitCreateKey(mutation.GetKey());
+            }
+        }
+        transaction.ClearExternalTableMutation();
+    }
+
     if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
         && context.UserToken
         && !context.UserToken->IsSystemUser()

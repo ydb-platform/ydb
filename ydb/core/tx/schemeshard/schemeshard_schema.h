@@ -2755,8 +2755,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, State>;
     };
 
+    struct ExternalTableCreateTickets : Table<142> {
+        struct Owner : Column<1, NScheme::NTypeIds::String> {};
+        struct OperationKey : Column<2, NScheme::NTypeIds::String> {};
+        struct Ticket : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Owner, OperationKey>;
+        using TColumns = TableColumns<Owner, OperationKey, Ticket>;
+    };
+
     using TTables = SchemaTables<
         DatabaseFreezes,
+        ExternalTableCreateTickets,
         Paths,
         TxInFlight,
         TxDependencies,

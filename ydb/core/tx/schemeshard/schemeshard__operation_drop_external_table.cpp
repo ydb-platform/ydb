@@ -126,9 +126,87 @@ public:
         const ui64 ssId = context.SS->TabletID();
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ssId);
 
+        const bool abortCreate = Transaction.HasExternalTableAbortCreateKey();
+        const bool commitCreate = Transaction.HasExternalTableCommitCreateKey();
+        const bool finishCreate = abortCreate || commitCreate;
+        const auto& operationKey = abortCreate ? Transaction.GetExternalTableAbortCreateKey() : Transaction.GetExternalTableCommitCreateKey();
+        if (drop.HasExpectedExternalTable() || finishCreate) {
+            const auto& expected = drop.GetExpectedExternalTable();
+            if (drop.HasId() || !drop.HasName() || (drop.HasExpectedExternalTable() &&
+                (finishCreate || !expected.HasPathId() || !expected.HasVersion())) ||
+                (finishCreate && (operationKey.empty() || operationKey.size() > 128 || Transaction.ApplyIfSize())))
+            {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid external table drop guard or create ticket");
+                return result;
+            }
+            if (!context.UserToken || context.UserToken->GetUserSID().empty()) {
+                result->SetError(NKikimrScheme::StatusAccessDenied, "An external table drop guard or create ticket requires authentication");
+                return result;
+            }
+        }
+
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
             : TPath::Resolve(workingDir, context.SS).Dive(name);
+        TExternalTableCreateTicketKey key;
+        NKikimrSchemeOp::TExternalTableCreateTicket ticket;
+        if (finishCreate) {
+            const auto parentPath = TPath::Resolve(workingDir, context.SS);
+            const auto checks = parentPath.Check();
+            checks.IsAtLocalSchemeShard().IsResolved().NotDeleted().NotUnderDeleting().IsLikeDirectory();
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            const auto pathChecks = path.Check();
+            pathChecks.IsAtLocalSchemeShard().IsValidLeafName(context.UserToken.Get());
+            if (!pathChecks) {
+                result->SetError(pathChecks.GetStatus(), pathChecks.GetError());
+                return result;
+            }
+
+            key = {context.UserToken->GetUserSID(), operationKey};
+            const auto* previous = context.SS->ExternalTableCreateTickets.FindPtr(key);
+            if (previous && previous->GetTargetPath() != path.PathString()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create ticket belongs to another path");
+                return result;
+            }
+            if (previous) {
+                ticket = *previous;
+            } else {
+                ticket.SetTargetPath(path.PathString());
+            }
+
+            if (commitCreate && (!ticket.HasTable() || ticket.GetAborted())) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create ticket cannot be committed");
+                return result;
+            }
+            if (ticket.GetCommitted()) {
+                if (abortCreate) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table create ticket is committed");
+                } else {
+                    result->SetStatus(NKikimrScheme::StatusSuccess);
+                }
+                return result;
+            }
+
+            if (!ticket.HasTable() || !path.IsResolved() || path.Base()->Dropped() ||
+                path.Base()->PathId != TPathId::FromProto(ticket.GetTable().GetPathId()))
+            {
+                if (commitCreate) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table created by the ticket no longer exists");
+                    return result;
+                }
+                if (!ticket.GetAborted()) {
+                    ticket.SetAborted(true);
+                    ticket.ClearDefinition();
+                    context.SS->StageExternalTableCreateTicket(context, key, std::move(ticket));
+                }
+                result->SetStatus(NKikimrScheme::StatusSuccess);
+                return result;
+            }
+        }
         {
             auto checks = path.Check();
             checks
@@ -166,6 +244,24 @@ public:
             result->SetError(NKikimrScheme::StatusSchemeError, "External table info doesn't exist");
             return result;
         }
+        const auto& expected = finishCreate ? ticket.GetTable() : drop.GetExpectedExternalTable();
+        if ((finishCreate || drop.HasExpectedExternalTable()) &&
+            (TPathId::FromProto(expected.GetPathId()) != pathId || expected.GetVersion() != externalTableInfo->AlterVersion))
+        {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "External table identity does not match the drop guard");
+            return result;
+        }
+        if (commitCreate) {
+            ticket.SetCommitted(true);
+            context.SS->StageExternalTableCreateTicket(context, key, std::move(ticket));
+            result->SetStatus(NKikimrScheme::StatusSuccess);
+            return result;
+        }
+        if (!abortCreate && context.SS->PreparedExternalTables.contains(pathId)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "The external table has a prepared create ticket");
+            return result;
+        }
+
         TPath dataSourcePath = TPath::Resolve(externalTableInfo->DataSourcePath, context.SS);
         {
             auto checks = dataSourcePath.Check();
@@ -198,6 +294,12 @@ public:
         context.DbChanges.PersistPath(dataSourcePath->PathId);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+        if (abortCreate) {
+            ticket.SetAborted(true);
+            ticket.ClearDefinition();
+            context.SS->StageExternalTableCreateTicket(context, key, std::move(ticket));
+        }
+
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropExternalTable, path.Base()->PathId, dataSourcePath->PathId);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);

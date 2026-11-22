@@ -269,6 +269,7 @@ inline constexpr TSchemeOperationInfo SchemeOperations[] = {
     {NKikimrSchemeOp::ESchemeOpDropBlobDepot, &NOperationFactories::MakeDropBlobDepot, ESchemeOperationSupport::Unsupported},
     {NKikimrSchemeOp::ESchemeOpCreateExternalTable, &NOperationFactories::MakeCreateExternalTable},
     {NKikimrSchemeOp::ESchemeOpDropExternalTable, &NOperationFactories::MakeDropExternalTable},
+    {NKikimrSchemeOp::ESchemeOpExternalTableMutation, nullptr, ESchemeOperationSupport::Internal, "Unwrapped by IgniteOperation"},
     {NKikimrSchemeOp::ESchemeOpAlterExternalTable, nullptr, ESchemeOperationSupport::Unsupported},
     {NKikimrSchemeOp::ESchemeOpCreateExternalDataSource, &NOperationFactories::MakeCreateExternalDataSource},
     {NKikimrSchemeOp::ESchemeOpDropExternalDataSource, &NOperationFactories::MakeDropExternalDataSource},

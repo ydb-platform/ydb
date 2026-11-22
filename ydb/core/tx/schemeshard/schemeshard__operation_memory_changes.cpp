@@ -124,6 +124,14 @@ void TMemoryChanges::GrabExternalTable(TSchemeShard* ss, const TPathId& pathId) 
     Grab<TExternalTableInfo>(pathId, ss->ExternalTables, ExternalTables);
 }
 
+void TMemoryChanges::GrabExternalTableCreateTicket(TSchemeShard* ss, const TExternalTableCreateTicketKey& key) {
+    if (const auto* ticket = ss->ExternalTableCreateTickets.FindPtr(key)) {
+        ExternalTableCreateTickets.emplace(key, *ticket);
+    } else {
+        ExternalTableCreateTickets.emplace(key, std::nullopt);
+    }
+}
+
 void TMemoryChanges::GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->ExternalDataSources, ExternalDataSources);
 }
@@ -346,6 +354,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             Y_ABORT("No such cases are exist");
         }
         TxStates.pop();
+    }
+
+    while (ExternalTableCreateTickets) {
+        auto& [key, ticket] = ExternalTableCreateTickets.top();
+        ss->SetExternalTableCreateTicket(key, std::move(ticket));
+        ExternalTableCreateTickets.pop();
     }
 
     while (ExternalTables) {

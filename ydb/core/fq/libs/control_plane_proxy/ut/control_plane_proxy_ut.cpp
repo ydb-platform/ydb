@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(TBindingRenameJournal) {
         UNIT_ASSERT_VALUES_EQUAL(state.Internal.rename().candidate_identity(), "candidate");
         UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Commit, "operation", "other"), TCodeLineException);
         UNIT_ASSERT(state.Advance(EBindingRenameAction::Abort) == EBindingRenameWrite::None);
-        UNIT_ASSERT_VALUES_EQUAL(state.Internal.rename().state(), TBindingRename::COMMITTED);
+        UNIT_ASSERT(state.Internal.rename().state() == TBindingRename::COMMITTED);
         UNIT_ASSERT(HasPendingBindingRename(state.Internal));
         UNIT_ASSERT(state.Advance(EBindingRenameAction::Finish) == EBindingRenameWrite::Forget);
         state.Internal.clear_rename();
@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(TBindingRenameJournal) {
         UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Finish), TCodeLineException);
         UNIT_ASSERT(state.Advance(EBindingRenameAction::Abort) == EBindingRenameWrite::Journal);
         UNIT_ASSERT(state.Advance(EBindingRenameAction::Commit, "operation", "candidate") == EBindingRenameWrite::None);
-        UNIT_ASSERT_VALUES_EQUAL(state.Internal.rename().state(), TBindingRename::ABORTED);
+        UNIT_ASSERT(state.Internal.rename().state() == TBindingRename::ABORTED);
         UNIT_ASSERT(HasPendingBindingRename(state.Internal));
         UNIT_ASSERT(state.Advance(EBindingRenameAction::Finish) == EBindingRenameWrite::Forget);
         state.Internal.clear_rename();

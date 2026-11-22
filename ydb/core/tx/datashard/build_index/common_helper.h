@@ -444,7 +444,7 @@ private:
             NTxProxy::TUploadMemoryReservation attempt;
             if (ResourceReservation) {
                 const auto keys = Uploading.EraseBuffer.GetKeysData();
-                ui64 bytes = 3 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * 256 + 4_KB
+                ui64 bytes = 2 * Uploading.EraseBuffer.GetBufferBytes() + keys->size() * 256 + 4_KB
                     + (keys->capacity() - keys->size()) * sizeof(NTxProxy::TEraseKeys::value_type);
                 for (const auto& key : *keys) {
                     bytes += key.GetCells().size() * sizeof(TCell) * 2;
@@ -473,10 +473,10 @@ private:
         Y_ENSURE(Owner);
         NTxProxy::TUploadMemoryReservation attempt;
         if (ResourceReservation) {
-            // Include the canonical rows, protobuf payload, and row/container
-            // overhead still owned by this attempt after the scan stops.
+            // Include the canonical and retry rows that can outlive the scan.
+            // Shard requests reserve their own protobuf and serialized bytes.
             const auto rows = Uploading.Buffer.GetRowsData();
-            ui64 bytes = 3 * Uploading.Buffer.GetBufferBytes() + rows->size() * 256 + 4_KB
+            ui64 bytes = 2 * Uploading.Buffer.GetBufferBytes() + rows->size() * 256 + 4_KB
                 + (rows->capacity() - rows->size()) * sizeof(NTxProxy::TUploadRows::value_type);
             for (const auto& [key, _] : *rows) {
                 bytes += key.GetCells().size() * sizeof(TCell) * 2;

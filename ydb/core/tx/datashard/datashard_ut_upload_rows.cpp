@@ -130,6 +130,41 @@ static void DoUploadRows(
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
+    Y_UNIT_TEST(SerializationReservationTracksIndividualRequestCopies) {
+        ui64 retainedBytes = 0;
+        ui64 minimumRetained = Max<ui64>();
+        const auto retain = [&](ui64 bytes) {
+            retainedBytes += bytes;
+            return std::shared_ptr<void>(new ui64(bytes), [&](void* value) {
+                const auto held = static_cast<ui64*>(value);
+                retainedBytes -= *held;
+                minimumRetained = Min(minimumRetained, retainedBytes);
+                delete held;
+            });
+        };
+        auto batch = retain(64_KB);
+        NTxProxy::TUploadMemoryReservation reservation(std::move(batch), retain, 4);
+        NKikimrTxDataShard::TEvUploadRowsRequest record;
+        record.AddRows()->SetValueColumns(TString(16_KB, 'x'));
+        const ui64 requestBytes = record.SpaceUsedLong() + record.ByteSizeLong() + 4_KB;
+
+        auto shardOne = reservation.RetainRequest(record);
+        auto shardTwo = reservation.RetainRequest(record);
+        reservation.FinishRouting();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes);
+        UNIT_ASSERT_VALUES_EQUAL(minimumRetained, retainedBytes);
+
+        auto retry = reservation.RetainRequest(record);
+        reservation = {};
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 3 * requestBytes);
+        shardTwo.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + 2 * requestBytes);
+        shardOne.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 64_KB + requestBytes);
+        retry.reset();
+        UNIT_ASSERT_VALUES_EQUAL(retainedBytes, 0);
+    }
+
 
     Y_UNIT_TEST(TestUploadRows) {
         TPortManager pm;

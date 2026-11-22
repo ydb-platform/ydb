@@ -203,7 +203,7 @@ void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
         if (!task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
             MemorylessTasks.insert(task);
         }
-        if (!task->TypeLimit || !task->RequiredResources[NKikimrResourceBroker::MEMORY]) {
+        if (HasTypeMemoryLimit && (!task->TypeLimit || !task->RequiredResources[NKikimrResourceBroker::MEMORY])) {
             TasksWithoutTypeMemoryLimit.insert(task);
         }
 
@@ -240,7 +240,9 @@ void TTaskQueue::EraseTask(TTaskPtr task, bool finished, TInstant now)
         }
     } else {
         MemorylessTasks.erase(task);
-        TasksWithoutTypeMemoryLimit.erase(task);
+        if (HasTypeMemoryLimit) {
+            TasksWithoutTypeMemoryLimit.erase(task);
+        }
         // Removing the first element is the most common case.
         if (*Tasks.begin() == task) {
             Tasks.erase(Tasks.begin());
@@ -904,6 +906,8 @@ TVector<TTaskPtr> TScheduler::Configure(const TResourceBrokerConfig &config, con
         TaskConfigs.emplace(taskConfig.Name, taskConfig);
     }
     Y_ABORT_UNLESS(TaskConfigs.contains(NLocalDb::UnknownTaskName), "task '%s' wasn't found in config", NLocalDb::UnknownTaskName.data());
+
+    TaskConfig("build_index").Queue->HasTypeMemoryLimit = true;
 
     TVector<TTaskPtr> rejected;
     for (auto &[_, task] : Tasks) {

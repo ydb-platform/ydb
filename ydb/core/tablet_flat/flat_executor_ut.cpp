@@ -3,6 +3,7 @@
 #include "flat_page_blobs.h"
 #include "flat_redo_observer.h"
 #include "flat_scan_actor.h"
+#include "flat_scan_events.h"
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
@@ -1671,8 +1672,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         env.WaitFor<NFake::TEvDataCleaned>();
     }
 
-    Y_UNIT_TEST(ReadinessExpiryKeepsReadmissionQueued) {
+    Y_UNIT_TEST_TWIN(ReadinessExpiryKeepsReadmissionQueued, ThrowOnExpiry) {
         TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
         bool ready = false;
         bool expired = false;
         bool failed = false;
@@ -1686,15 +1688,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             TScanOptions options;
             options.SetResourceBroker("build_index", 10, 1_MB);
             options.QueueTimeout = TDuration::Seconds(60);
-            options.OnAdmissionReady = [&](TScanOptions&, std::unique_ptr<IEventHandle> event) {
+            options.OnAdmissionReady = [&, executor](TScanOptions& options, std::unique_ptr<IEventHandle> event) {
                 if (ready) {
+                    options.SetSnapshotId(executor->MakeScanSnapshot(TRowsModel::TableId));
                     return true;
                 }
                 resume = std::move(event);
                 return false;
             };
-            options.OnReadinessExpired = [&] { expired = true; };
-            options.OnAdmissionFailure = [&](const TString&, bool) { failed = true; };
+            options.OnReadinessExpired = [&] {
+                expired = true;
+                if (ThrowOnExpiry) {
+                    ythrow yexception() << "Test readiness expiry failure";
+                }
+            };
+            options.OnAdmissionFailure = [&](const TString& reason, bool) {
+                UNIT_ASSERT_STRING_CONTAINS(reason, "Test readiness expiry failure");
+                failed = true;
+            };
             options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
                 return new TAdmissionReadyScan(finished);
             };
@@ -1709,11 +1720,56 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         env->WaitFor("readmission grant held", [&] { return !grants.empty(); });
         env->SimulateSleep(TDuration::Seconds(2));
         UNIT_ASSERT(expired);
-        UNIT_ASSERT(!failed);
+        UNIT_ASSERT_VALUES_EQUAL(failed, ThrowOnExpiry);
         UNIT_ASSERT(!finished);
         grants.Stop().Unblock();
-        env->WaitFor("scan finishes after readmission", [&] { return finished; });
-        UNIT_ASSERT(!failed);
+        if (!ThrowOnExpiry) {
+            env->WaitFor("scan finishes after readmission", [&] { return finished; });
+        }
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(finished, !ThrowOnExpiry);
+        UNIT_ASSERT_VALUES_EQUAL(failed, ThrowOnExpiry);
+    }
+
+    Y_UNIT_TEST_TWIN(ScanAdmissionTimeoutCallbackFailureFailsScan, GrantFirst) {
+        TMyEnvScans env;
+        bool failed = false;
+        TBlockEvents<TEvResourceBroker::TEvResourceAllocated> grants(env.Env, [](const auto& event) {
+            const auto* resource = dynamic_cast<TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == TResource::ESource::Scan;
+        });
+        TBlockEvents<NOps::TEvAdmissionTimeout> timeouts(env.Env, [](const auto&) { return GrantFirst; });
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.QueueTimeout = TDuration::Seconds(1);
+            options.OnAdmissionTimeout = []() -> bool {
+                ythrow yexception() << "Test broker timeout failure";
+            };
+            options.OnAdmissionFailure = [&](const TString& reason, bool) {
+                UNIT_ASSERT_STRING_CONTAINS(reason, "Test broker timeout failure");
+                failed = true;
+            };
+            options.Factory = [](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                UNIT_FAIL("The expired scan reached the factory");
+                return {};
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("grant held while the broker deadline passes", [&] { return !grants.empty(); });
+        env->SimulateSleep(TDuration::Seconds(2));
+        if (GrantFirst) {
+            UNIT_ASSERT(!failed);
+            UNIT_ASSERT(!timeouts.empty());
+            grants.Unblock(1);
+        }
+        env->WaitFor("expired admission failed", [&] { return failed; });
+        grants.Stop().Unblock();
+        timeouts.Stop().Unblock();
+        env->SimulateSleep(TDuration::MilliSeconds(100));
     }
 
     Y_UNIT_TEST_TWIN(RepeatedReadinessCyclesYieldRetry, Readmit) {

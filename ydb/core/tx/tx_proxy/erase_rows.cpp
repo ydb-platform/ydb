@@ -292,7 +292,6 @@ namespace {
             Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
             auto ev = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
-            ev->MemoryReservation = MemoryReservation.RetainRequests(1);
             ev->Record = state->Headers;
             for (const auto& key : state->Keys) {
                 ev->Record.AddKeyColumns(key.GetBuffer());
@@ -302,6 +301,7 @@ namespace {
             ev->Record.SetOverloadSubscribe(seqNo);
             state->SentOverloadSeqNo = seqNo;
 
+            ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record);
             ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
         }
 
@@ -353,13 +353,11 @@ namespace {
                 retryState->Keys.push_back(key);
             }
 
-            const auto requestReservation = MemoryReservation.RetainRequests(shardRequestCount);
             for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
                 auto& ev = shardRequests[idx];
                 if (!ev) {
                     continue;
                 }
-                ev->MemoryReservation = requestReservation;
 
                 const TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
@@ -367,10 +365,13 @@ namespace {
                 ev->Record.SetOverloadSubscribe(seqNo);
                 eraseRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
+                ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record);
                 ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
                 ShardRepliesLeft.insert(shardId);
             }
+
+            MemoryReservation.FinishRouting();
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Erase rows: sending requests to shards",
                 {"selfId", ctx.SelfID},

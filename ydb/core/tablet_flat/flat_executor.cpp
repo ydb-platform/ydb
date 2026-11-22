@@ -3767,9 +3767,9 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
         }
         return;
     }
-    const auto captureExplicitSnapshot = [&] {
+    const auto captureExplicitSnapshot = [&](bool fromReadiness) {
         if (Scans->NeedsSnapshot(serial) && std::holds_alternative<TScanOptions::TSnapshotById>(options->Snapshot)) {
-            Scans->SetSnapshot(serial, ResolveScanSnapshot(table, *options));
+            Scans->SetSnapshot(serial, ResolveScanSnapshot(table, *options), fromReadiness);
         }
     };
 
@@ -3786,7 +3786,7 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
             releaseUnclaimedSnapshot();
             return;
         }
-        captureExplicitSnapshot();
+        captureExplicitSnapshot(true);
         switch (readiness) {
             case TScans::EReadiness::Waiting:
                 return;
@@ -3802,7 +3802,7 @@ void TExecutor::StartScan(ui64 serial, ui32 table)
                     releaseUnclaimedSnapshot();
                     return;
                 }
-                captureExplicitSnapshot();
+                captureExplicitSnapshot(false);
                 if (!initialized) {
                     failure = "Deferred scan factory returned no scan";
                     break;

@@ -1202,7 +1202,6 @@ private:
         Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
-        ev->MemoryReservation = MemoryReservation.RetainRequests(1);
         ev->Record = state->Headers;
         if (UserCtx != nullptr) {
             UserCtx->SerializeToEvent(ev->Record);
@@ -1218,6 +1217,7 @@ private:
         ev->Record.SetOverloadSubscribe(seqNo);
         state->SentOverloadSeqNo = seqNo;
 
+        ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record);
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
     }
 
@@ -1295,13 +1295,11 @@ private:
         }
 
         // Send requests to the shards
-        const auto requestReservation = MemoryReservation.RetainRequests(shardRequestCount);
         for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
             auto& ev = shardRequests[idx];
             if (!ev) {
                 continue;
             }
-            ev->MemoryReservation = requestReservation;
 
             TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
@@ -1313,6 +1311,7 @@ private:
             ev->Record.SetOverloadSubscribe(seqNo);
             uploadRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
+            ev->MemoryReservation = MemoryReservation.RetainRequest(ev->Record);
             ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
             auto res = ShardRepliesLeft.insert(shardId);
@@ -1321,6 +1320,8 @@ private:
                     {"shardId", shardId});
             }
         }
+
+        MemoryReservation.FinishRouting();
 
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});

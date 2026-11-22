@@ -257,6 +257,7 @@ public:
     bool StrictMemoryLimit;
     TSet<TTaskPtr, TTaskEarlier> Tasks;
     TSet<TTaskPtr, TTaskEarlier> MemorylessTasks;
+    bool HasTypeMemoryLimit = false;
     TSet<TTaskPtr, TTaskEarlier> TasksWithoutTypeMemoryLimit;
     TResourceLimit QueueLimit;
     TResourceLimitPtr TotalLimit;

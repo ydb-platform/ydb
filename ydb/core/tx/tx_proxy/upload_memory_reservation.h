@@ -24,15 +24,20 @@ public:
         return bool(Batch);
     }
 
-    std::shared_ptr<void> RetainRequests(ui64 requests) {
-        // Routing has finished. Reserve one partial serialization chunk per
-        // request before sending it, and let the requests own that charge.
-        UnroutedSerialization.reset();
-        if (!Retain || !requests) {
+    template <class TRecord>
+    std::shared_ptr<void> RetainRequest(const TRecord& record) const {
+        if (!Retain) {
             return Batch;
         }
+        // The protobuf and its sender-side serialization can coexist.
+        const ui64 bytes = record.SpaceUsedLong() + record.ByteSizeLong() + SerializationOverhead;
         return std::make_shared<std::pair<std::shared_ptr<void>, std::shared_ptr<void>>>(
-            Batch, Retain(requests * SerializationOverhead));
+            Batch, Retain(bytes));
+    }
+
+    void FinishRouting() {
+        // Each routed request must own its charge before the estimate is released.
+        UnroutedSerialization.reset();
     }
 
 private:

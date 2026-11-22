@@ -226,6 +226,7 @@ namespace NTabletFlatExecutor {
             TScanOptions Options;
             THolder<TScanSnapshot> Snapshot;
             std::optional<ui64> PreparedSnapshotId;
+            bool ReadinessSnapshot = false;
             EState State = EState::None;
             bool NeedsReadmission = false;
             // Owns expiry of the readiness state chosen at a broker grant.
@@ -385,8 +386,7 @@ namespace NTabletFlatExecutor {
             } else {
                 // An overdue grant must discard the old readiness state
                 // before selecting a new one, even if its timer is delayed.
-                ExpireReadiness(*one);
-                if (!Lookup(one->Serial, false)) {
+                if (!ExpireReadiness(*one) || (BrokerDeadlineExpired(*one) && !HandleBrokerTimeout(*one))) {
                     return {};
                 }
                 // A call to Start is expected now
@@ -486,10 +486,11 @@ namespace NTabletFlatExecutor {
             return !one.Snapshot;
         }
 
-        void SetSnapshot(ui64 serial, THolder<TScanSnapshot> snapshot) {
+        void SetSnapshot(ui64 serial, THolder<TScanSnapshot> snapshot, bool fromReadiness = false) {
             auto& one = *Lookup(serial, true);
             if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&one.Options.Snapshot)) {
                 one.PreparedSnapshotId = byId->SnapshotId;
+                one.ReadinessSnapshot = fromReadiness;
             }
             one.Snapshot = std::move(snapshot);
         }
@@ -528,24 +529,17 @@ namespace NTabletFlatExecutor {
                 }
                 return;
             }
-            ExpireReadiness(*one);
-            if (!Contains(serial)) {
+            if (!ExpireReadiness(*one)) {
                 return;
             }
-            if (!one->BrokerDeadline || now < one->BrokerDeadline) {
+            if (BrokerDeadlineExpired(*one)) {
+                if (HandleBrokerTimeout(*one)) {
+                    // A heartbeat keeps the same broker task and its queue position.
+                    BeginBrokerWait(*one);
+                }
+            } else {
                 ScheduleAdmissionTimeout(*one);
-                return;
             }
-            const bool keepWaiting = one->Options.OnAdmissionTimeout && one->Options.OnAdmissionTimeout();
-            if (!Contains(serial)) {
-                return;
-            }
-            if (keepWaiting) {
-                // A heartbeat keeps the same broker task and its queue position.
-                BeginBrokerWait(*one);
-                return;
-            }
-            AdmissionFailed(serial, "Timed out waiting for scan admission");
         }
 
         void Rejected(const TEvResourceBroker::TEvTaskOperationError& error) {
@@ -832,13 +826,52 @@ namespace NTabletFlatExecutor {
             return out.Str();
         }
 
-        void ExpireReadiness(TOne& one) {
-            if (one.ReadinessDeadline && TActivationContext::Now() >= one.ReadinessDeadline) {
-                one.ReadinessDeadline = {};
+        bool ExpireReadiness(TOne& one) {
+            if (!one.ReadinessDeadline || TActivationContext::Now() < one.ReadinessDeadline) {
+                return true;
+            }
+            one.ReadinessDeadline = {};
+            if (one.ReadinessSnapshot) {
+                one.ReadinessSnapshot = false;
+                one.PreparedSnapshotId.reset();
+                one.Options.Snapshot = TScanOptions::TSnapshotNone{};
+                ReleaseSnapshot(std::move(one.Snapshot));
+            }
+            const auto serial = one.Serial;
+            TString failure;
+            try {
                 if (one.Options.OnReadinessExpired) {
                     one.Options.OnReadinessExpired();
                 }
+            } catch (...) {
+                failure = TStringBuilder() << "Scan readiness expiry callback failed: " << CurrentExceptionMessage();
             }
+            if (!failure.empty() && Contains(serial)) {
+                AdmissionFailed(serial, failure);
+                return false;
+            }
+            return Contains(serial);
+        }
+
+        static bool BrokerDeadlineExpired(const TOne& one) {
+            return one.BrokerDeadline && TActivationContext::Now() >= one.BrokerDeadline;
+        }
+
+        bool HandleBrokerTimeout(TOne& one) {
+            const auto serial = one.Serial;
+            TString failure;
+            try {
+                if (one.Options.OnAdmissionTimeout && one.Options.OnAdmissionTimeout()) {
+                    return Contains(serial);
+                }
+                failure = "Timed out waiting for scan admission";
+            } catch (...) {
+                failure = TStringBuilder() << "Scan admission timeout callback failed: " << CurrentExceptionMessage();
+            }
+            if (Contains(serial)) {
+                AdmissionFailed(serial, failure);
+            }
+            return false;
         }
 
         void BeginBrokerWait(TOne& one) {

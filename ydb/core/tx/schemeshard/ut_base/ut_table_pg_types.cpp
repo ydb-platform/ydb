@@ -62,6 +62,41 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(IndexBuildWithInheritedPgKey) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "pgint4" }
+            Columns { Name: "native" Type: "Uint64" }
+            Columns { Name: "legacy" Type: "pgint4" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(true);
+        }
+
+        const auto buildIndex = [&](const TBuildIndexConfig& config) {
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", config);
+            env.TestWaitNotification(runtime, txId);
+            return TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId).GetIndexBuild();
+        };
+        const auto native = buildIndex({"native_index", NKikimrSchemeOp::EIndexTypeGlobal, {"native"}, {}, {}});
+        UNIT_ASSERT_VALUES_EQUAL_C(native.GetState(), Ydb::Table::IndexBuildState::STATE_DONE, native.DebugString());
+
+        const auto pgKey = buildIndex({"pg_key", NKikimrSchemeOp::EIndexTypeGlobal, {"key", "native"}, {}, {}});
+        UNIT_ASSERT_VALUES_EQUAL_C(pgKey.GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, pgKey.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(pgKey.DebugString(), "PostgreSQL compatibility is disabled for index column 'key'");
+
+        const auto pgData = buildIndex({"pg_data", NKikimrSchemeOp::EIndexTypeGlobal, {"native"}, {"legacy"}, {}});
+        UNIT_ASSERT_VALUES_EQUAL_C(pgData.GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, pgData.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(pgData.DebugString(), "PostgreSQL compatibility is disabled for index column 'legacy'");
+    }
+
     Y_UNIT_TEST_FLAG(CreateTableWithPgTypeColumn, EnableTablePgTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes).DisablePgCompatibility(false));

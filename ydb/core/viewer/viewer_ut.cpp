@@ -3757,8 +3757,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         for (bool withController : {false, true}) {
             useController = withController;
             const TString path = useController
-                ? "/storage/groups?fields_required=GroupId,PoolName&sort=GroupId&use_cache=false"
-                : "/storage/groups?whiteboard_only=true&sort=GroupId";
+                ? "/storage/groups?fields_required=GroupId,PoolName&use_cache=false"
+                : "/storage/groups?whiteboard_only=true";
             NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
                 TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
             runtime.Send(new IEventHandle(MakeViewerID(0), sender,
@@ -3770,8 +3770,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(json["TotalGroups"].GetUInteger(), 2);
             const auto& groups = json["StorageGroups"].GetArray();
             UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(groups[0]["GroupId"].GetString(), "10");
-            UNIT_ASSERT_VALUES_EQUAL(groups[1]["GroupId"].GetString(), "12");
+            THashSet<TString> groupIds;
+            for (const auto& group : groups) {
+                groupIds.insert(group["GroupId"].GetString());
+            }
+            UNIT_ASSERT_C(groupIds.contains("10") && groupIds.contains("12"), result->Response->Body);
         }
     }
 

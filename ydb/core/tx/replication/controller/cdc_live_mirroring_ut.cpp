@@ -47,7 +47,7 @@ class TLiveCdcMirror {
             pathId.ToProto(request->Record.MutablePathId());
             const auto result = Destination.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
             const auto& record = result->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+            UNIT_ASSERT(record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
             UNIT_ASSERT_C(!record.GetState().HasError(), record.GetState().ShortDebugString());
             return record.GetState().GetStateCase() == state;
         }, "replication controller state");

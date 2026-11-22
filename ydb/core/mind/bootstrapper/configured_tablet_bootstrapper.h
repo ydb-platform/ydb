@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/mind/defs.h>
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/base/appdata.h>
@@ -11,7 +10,7 @@ namespace NKikimr {
 
     TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type);
     TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(TTabletTypes::EType tabletType,
-        ETabletBootType bootType, ui32 poolId, ui32 tabletPoolId);
+                                                        ETabletBootType bootType, ui32 poolId, ui32 tabletPoolId);
 
     // selects the actor-system pool for a tablet executor
     ui32 SelectTabletWorkPoolId(TTabletTypes::EType tabletType, const TAppData* appData);
@@ -20,5 +19,5 @@ namespace NKikimr {
     IActor* CreateTabletBootstrapper(const ::NKikimrConfig::TBootstrap::TTablet& tablet, const TAppData* appData);
 
     // would subscribe to boot config and instantiate tablet bootstrapper if configured for this node
-    IActor* CreateConfiguredTabletBootstrapper(const ::NKikimrConfig::TBootstrap &bootstrapConfig, bool manageAllTablets = true);
-}
+    IActor* CreateConfiguredTabletBootstrapper(const ::NKikimrConfig::TBootstrap& bootstrapConfig, bool manageAllTablets = true);
+} // namespace NKikimr

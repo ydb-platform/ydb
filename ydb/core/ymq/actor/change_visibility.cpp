@@ -11,6 +11,8 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <util/generic/map.h>
+
 using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {
@@ -82,11 +84,10 @@ protected:
 
                 msgReq.VisibilityDeadline = NowTimestamp_ + newVisibilityTimeout;
             } else if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
-                if (IsBatch_) {
-                    MLPRequestToReplyIndexMapping_.push_back(requestIndexInBatch);
-                }
+                const NPQ::NMLP::TMessageId messageId(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
+                MLPEntries_.push_back({messageId, requestIndexInBatch});
 
-                MLPRequest_.Messages.emplace_back(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
+                MLPRequest_.Messages.push_back(messageId);
                 MLPRequest_.Deadlines.emplace_back(NowTimestamp_ + newVisibilityTimeout);
             } else {
                 if (IsBatch_) {
@@ -217,13 +218,20 @@ private:
     }
 
     void Handle(NPQ::NMLP::TEvChangeResponse::TPtr& ev) {
-        auto& messages = ev->Get()->Messages;
+        // Response messages are grouped by partition, not in request order.
+        TMap<std::pair<ui32, ui64>, NPQ::NMLP::EOperationResult> results;
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            for (const auto& message : ev->Get()->Messages) {
+                results.emplace(std::pair(message.MessageId.PartitionId, message.MessageId.Offset), message.Status);
+            }
+        }
 
-        auto status = [&](const auto& message) {
-            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        auto status = [&](const NPQ::NMLP::TMessageId& messageId) {
+            const auto it = results.find(std::pair(messageId.PartitionId, messageId.Offset));
+            if (it == results.end()) {
                 return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
             }
-            switch (message.Status) {
+            switch (it->second) {
                 case NPQ::NMLP::EOperationResult::Success:
                     return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::OK;
                 case NPQ::NMLP::EOperationResult::NotFound:
@@ -236,18 +244,13 @@ private:
             Y_UNREACHABLE();
         };
 
-        if (IsBatch_) {
-            Y_ABORT_UNLESS(messages.size() == MLPRequestToReplyIndexMapping_.size());
-            for (size_t i = 0, size = messages.size(); i < size; ++i) {
-                const size_t entryIndex = MLPRequestToReplyIndexMapping_[i];
+        for (const auto& [messageId, entryIndex] : MLPEntries_) {
+            if (IsBatch_) {
                 Y_ABORT_UNLESS(entryIndex < Response_.GetChangeMessageVisibilityBatch().EntriesSize());
-
-                ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(entryIndex), status(messages[i]));
+                ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(entryIndex), status(messageId));
+            } else {
+                ProcessAnswer(Response_.MutableChangeMessageVisibility(), status(messageId));
             }
-        } else {
-            Y_ABORT_UNLESS(RequestsToLeader_ == 1);
-            Y_ABORT_UNLESS(ev->Get()->Messages.size() == 1);
-            ProcessAnswer(Response_.MutableChangeMessageVisibility(), status(messages[0]));
         }
 
         --RequestsToLeader_;
@@ -274,7 +277,11 @@ private:
     size_t RequestsToLeader_ = 0;
     std::vector<TShardInfo> ShardInfo_;
     NPQ::NMLP::TMessageDeadlineChangerSettings MLPRequest_;
-    std::vector<size_t> MLPRequestToReplyIndexMapping_;
+    struct TMLPEntry {
+        NPQ::NMLP::TMessageId MessageId;
+        size_t EntryIndex;
+    };
+    std::vector<TMLPEntry> MLPEntries_;
     TInstant NowTimestamp_;
 };
 

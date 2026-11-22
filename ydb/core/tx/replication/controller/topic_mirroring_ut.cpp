@@ -173,7 +173,8 @@ public:
     };
 
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false,
-            TMirrorReaderFactory* mirrorReaderFactory = nullptr, EStart start = EStart::Immediate)
+            TMirrorReaderFactory* mirrorReaderFactory = nullptr, const TString& sourceWriteMode = {},
+            EStart start = EStart::Immediate)
         : Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
     {
         if (mirrorReaderFactory) {
@@ -183,6 +184,9 @@ public:
             appData.PersQueueMirrorReaderFactory = mirrorReaderFactory;
         }
 
+        if (!sourceWriteMode.empty()) {
+            SetSourceWriteMode(sourceWriteMode);
+        }
         if (start == EStart::Immediate) {
             Start(sourceHost, stopBeforeCreateResult);
         }
@@ -348,6 +352,15 @@ public:
     void ReplicateFirstMessage() {
         Write({"first"});
         WaitForOffsets(1, 0);
+    }
+
+    void SetSourceWriteMode(const TString& mode) {
+        NYdb::NTopic::TTopicClient client(Source.GetDriver());
+        const auto result = Source.RunCall([&] {
+            return client.AlterTopic("/Root/src/topic", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAlterAttributes().Add("_write_mode", mode).EndAlterAttributes()).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     void CheckBacklog(ui64 before, ui64 end) {
@@ -552,6 +565,23 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(TopicMirroring) {
+    Y_UNIT_TEST(DoesNotInheritSourceWriteMode) {
+        for (const auto* mode : {"unavailable", "prohibited"}) {
+            TTopicMirroringFixture test("localhost", false, nullptr, mode);
+            const auto config = test.Config();
+            UNIT_ASSERT(!config.HasWriteMode());
+            UNIT_ASSERT(config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+
+            NYdb::NTopic::TTopicClient client(test.Destination.GetDriver());
+            const auto description = client.DescribeTopic("/Root/topic").GetValueSync();
+            UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+            UNIT_ASSERT(!description.GetTopicDescription().GetAttributes().contains("_write_mode"));
+
+            test.SetSourceWriteMode("available");
+            test.WriteAndReadBack("after-reopening-source", 0);
+        }
+    }
+
     Y_UNIT_TEST(ConsumerCleanupRetriesUnauthorizedAndAcceptsMissing) {
         TConsumerRemovalFixture test;
         test.DenyAndWaitForRetry();
@@ -645,7 +675,7 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
 
     Y_UNIT_TEST(TopicFailoverDrainsBacklogWithClientModificationsDisabled) {
         TMirrorReaderFactory mirrorReader;
-        TTopicMirroringFixture test("[::1]", false, &mirrorReader, TTopicMirroringFixture::EStart::Deferred);
+        TTopicMirroringFixture test("[::1]", false, &mirrorReader, {}, TTopicMirroringFixture::EStart::Deferred);
 
         const TVector<TString> consumed = {"first", "second"};
         TVector<TString> unread;

@@ -308,7 +308,7 @@ public:
 
     bool WarnUnusedHints();
 
-    TScopedStatePtr CreateScopedState() const;
+    TScopedStatePtr CreateScopedState();
 
     EYqlSelect GetYqlSelectMode() const {
         return YqlSelectMode_;

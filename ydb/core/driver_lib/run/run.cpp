@@ -193,6 +193,9 @@
 #include <ydb/library/signal_backtrace/signal_backtrace.h>
 #endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+
+#include <arrow/memory_pool.h>
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
@@ -1586,9 +1589,9 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
 
     if (allocConfig.GetEnableDefaultAllocator()) {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
+        NKikimr::SetArrowAllocator(arrow::default_memory_pool());
         NKikimr::UseDefaultAllocator();
 #endif
-        NKikimr::UseDefaultArrowAllocator();
     }
 
 }

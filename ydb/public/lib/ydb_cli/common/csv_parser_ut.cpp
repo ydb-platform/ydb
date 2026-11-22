@@ -321,26 +321,36 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
 
     Y_UNIT_TEST(ShuffledColumns) {
         std::map<std::string, TType> tableColumnTypes = {
-            {"col1", TTypeBuilder().Primitive(EPrimitiveType::Utf8).Build()},
-            {"col2", TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Int64).EndOptional().Build()},
-            {"col3", TTypeBuilder().Primitive(EPrimitiveType::Bool).Build()},
+            {"sku", TTypeBuilder().Primitive(EPrimitiveType::Utf8).Build()},
+            {"quantity", TTypeBuilder().Primitive(EPrimitiveType::Uint8).Build()},
+            {"enabled", TTypeBuilder().Primitive(EPrimitiveType::Bool).Build()},
+            {"price", TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Int64).EndOptional().Build()},
         };
 
-        TString csvHeader = "col4,col3,col5,col1,col6";
-        std::vector<TString> data = {
-            "col4 unused value,true,col5 unused value,col1 value,col6 unused value"
-        };
-
-        TCsvParser parser(std::move(csvHeader), ',', "", &tableColumnTypes, nullptr);
+        TCsvParser parser("warehouse,enabled,quantity,sku", ',', "", &tableColumnTypes, nullptr);
         parser.BuildLineType();
-        TValue builtResult = parser.BuildList(data, "testFile.csv", 0);
 
-        TValue expexctedResult = TValueBuilder().BeginList()
+        // A bad row in a later batch should identify the source location and the value.
+        std::vector<TString> rows = {"west,true,255,A-17", "east,false,256,B-23"};
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            parser.BuildList(rows, "inventory.csv", 41),
+            TCsvParseException,
+            "Error during CSV parsing in line 42 in column `quantity` in file `inventory.csv`:\n"
+            "Expected Uint8 value, received: \"256\".");
+
+        rows.back() = "east,false,12,B-23";
+        const auto expected = TValueBuilder().BeginList()
             .AddListItem().BeginStruct()
-                .AddMember("col3").Bool(true)
-                .AddMember("col1").Utf8("col1 value")
+                .AddMember("enabled").Bool(true)
+                .AddMember("quantity").Uint8(255)
+                .AddMember("sku").Utf8("A-17")
+                .EndStruct()
+            .AddListItem().BeginStruct()
+                .AddMember("enabled").Bool(false)
+                .AddMember("quantity").Uint8(12)
+                .AddMember("sku").Utf8("B-23")
                 .EndStruct()
             .EndList().Build();
-        AssertValuesEqual(builtResult, expexctedResult);
+        AssertValuesEqual(parser.BuildList(rows, "inventory.csv", 41), expected);
     }
 }

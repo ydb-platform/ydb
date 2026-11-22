@@ -91,11 +91,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
 
         const auto pgKey = buildIndex({"pg_key", NKikimrSchemeOp::EIndexTypeGlobal, {"key", "native"}, {}, {}});
         UNIT_ASSERT_VALUES_EQUAL_C(pgKey.GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, pgKey.DebugString());
-        UNIT_ASSERT_STRING_CONTAINS(pgKey.DebugString(), "PostgreSQL compatibility is disabled for index column 'key'");
+        UNIT_ASSERT_C(pgKey.IssuesSize() > 0, pgKey.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(pgKey.GetIssues(0).message(), "PostgreSQL compatibility is disabled for index column 'key'");
 
         const auto pgData = buildIndex({"pg_data", NKikimrSchemeOp::EIndexTypeGlobal, {"native"}, {"legacy"}, {}});
         UNIT_ASSERT_VALUES_EQUAL_C(pgData.GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, pgData.DebugString());
-        UNIT_ASSERT_STRING_CONTAINS(pgData.DebugString(), "PostgreSQL compatibility is disabled for index column 'legacy'");
+        UNIT_ASSERT_C(pgData.IssuesSize() > 0, pgData.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(pgData.GetIssues(0).message(), "PostgreSQL compatibility is disabled for index column 'legacy'");
     }
 
     Y_UNIT_TEST_FLAG(CreateTableWithPgTypeColumn, EnableTablePgTypes) {

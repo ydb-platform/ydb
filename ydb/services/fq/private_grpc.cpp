@@ -46,5 +46,24 @@ void TGRpcFqPrivateTaskService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
 #undef SETUP_FQ_METHOD
 }
 
+TGRpcFqPrivateSchemaService::TGRpcFqPrivateSchemaService(
+    NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+    : ActorSystem_(system)
+    , Counters_(counters)
+    , GRpcRequestProxyId_(id)
+{
+}
+
+void TGRpcFqPrivateSchemaService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
+    using namespace Fq::Private;
+    CQ_ = cq;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+
+    SETUP_METHOD(MutateExternalTable, DoFqPrivateMutateExternalTableRequest, RLMODE(Off), UNSPECIFIED, fq_internal,
+        TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), EEmptyDatabaseMode::EmptyDatabaseForbidden);
+    SETUP_METHOD(DescribeExternalTable, DoFqPrivateDescribeExternalTableRequest, RLMODE(Off), UNSPECIFIED, fq_internal,
+        TAuditMode::NonModifying(), EEmptyDatabaseMode::EmptyDatabaseForbidden);
+}
+
 }   // namespace NGRpcService
 }   // namespace NKikimr

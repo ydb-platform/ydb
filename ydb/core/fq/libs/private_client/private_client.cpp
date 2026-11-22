@@ -2,6 +2,10 @@
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -25,6 +29,8 @@ public:
         , NodesHealthCheckTime(Counters->GetHistogram("NodesHealthCheckMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , CreateRateLimiterResourceTime(Counters->GetHistogram("CreateRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , DeleteRateLimiterResourceTime(Counters->GetHistogram("DeleteRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
+        , MutateExternalTableTime(Counters->GetHistogram("MutateExternalTableMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
+        , DescribeExternalTableTime(Counters->GetHistogram("DescribeExternalTableMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
     {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
@@ -64,6 +70,42 @@ public:
             UpdateKnownEndpoints(status.Endpoint, knownEndpoints);
             promise.SetValue(TResultWrapper(TStatus(std::move(status)), std::move(result)));
         };
+    }
+
+    TAsyncMutateExternalTableResult MutateExternalTable(
+        Fq::Private::MutateExternalTableRequest&& request, const TMutateExternalTableSettings& settings)
+    {
+        const auto startedAt = TInstant::Now();
+        auto promise = NThreading::NewPromise<TMutateExternalTableResult>();
+        auto future = promise.GetFuture();
+
+        auto extractor = MakeResultExtractor<Fq::Private::MutateExternalTableResult, TMutateExternalTableResult>(
+            std::move(promise), MutateExternalTableTime, startedAt);
+
+        FillOperationParams(settings, request);
+        using TService = Fq::Private::V1::FqPrivateSchemaService;
+        Connections_->RunDeferred<TService, Fq::Private::MutateExternalTableRequest, Fq::Private::MutateExternalTableResponse>(
+            std::move(request), std::move(extractor), &TService::Stub::AsyncMutateExternalTable, DbDriverState_, INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+        return future;
+    }
+
+    TAsyncDescribeExternalTableResult DescribeExternalTable(
+        Fq::Private::DescribeExternalTableRequest&& request, const TDescribeExternalTableSettings& settings)
+    {
+        const auto startedAt = TInstant::Now();
+        auto promise = NThreading::NewPromise<TDescribeExternalTableResult>();
+        auto future = promise.GetFuture();
+
+        auto extractor = MakeResultExtractor<Fq::Private::DescribeExternalTableResult, TDescribeExternalTableResult>(
+            std::move(promise), DescribeExternalTableTime, startedAt);
+
+        FillOperationParams(settings, request);
+        using TService = Fq::Private::V1::FqPrivateSchemaService;
+        Connections_->RunDeferred<TService, Fq::Private::DescribeExternalTableRequest, Fq::Private::DescribeExternalTableResponse>(
+            std::move(request), std::move(extractor), &TService::Stub::AsyncDescribeExternalTable, DbDriverState_, INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+        return future;
     }
 
     TAsyncPingTaskResult PingTask(Fq::Private::PingTaskRequest&& request, const TPingTaskSettings& settings) {
@@ -179,12 +221,26 @@ private:
     const NMonitoring::THistogramPtr NodesHealthCheckTime;
     const NMonitoring::THistogramPtr CreateRateLimiterResourceTime;
     const NMonitoring::THistogramPtr DeleteRateLimiterResourceTime;
+    const NMonitoring::THistogramPtr MutateExternalTableTime;
+    const NMonitoring::THistogramPtr DescribeExternalTableTime;
     std::shared_ptr<TKnownEndpoints> KnownEndpoints = std::make_shared<TKnownEndpoints>();
 };
 
 TPrivateClient::TPrivateClient(const TDriver& driver, const TCommonClientSettings& settings, const NMonitoring::TDynamicCounterPtr& counters)
     : Impl(new TImpl(CreateInternalInterface(driver), settings, counters))
 {
+}
+
+TAsyncMutateExternalTableResult TPrivateClient::MutateExternalTable(
+    Fq::Private::MutateExternalTableRequest&& request, const TMutateExternalTableSettings& settings)
+{
+    return Impl->MutateExternalTable(std::move(request), settings);
+}
+
+TAsyncDescribeExternalTableResult TPrivateClient::DescribeExternalTable(
+    Fq::Private::DescribeExternalTableRequest&& request, const TDescribeExternalTableSettings& settings)
+{
+    return Impl->DescribeExternalTable(std::move(request), settings);
 }
 
 TAsyncPingTaskResult TPrivateClient::PingTask(Fq::Private::PingTaskRequest&& request, const TPingTaskSettings& settings) {

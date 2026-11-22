@@ -10,6 +10,7 @@
 #include <ydb/public/lib/fq/helpers.h>
 #include <ydb/public/lib/fq/scope.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -93,6 +94,124 @@ void CheckGetResultData(
     }
 }
 }   // namespace
+
+Y_UNIT_TEST_SUITE(FqPrivateSchema) {
+    Y_UNIT_TEST(ExternalTableMutation) {
+        NKikimrConfig::TAppConfig config;
+        auto& security = *config.MutableDomainsConfig()->MutableSecurityConfig();
+        security.SetEnforceUserTokenRequirement(true);
+        security.AddAdministrationAllowedSIDs("root@builtin");
+        security.AddAdministrationAllowedSIDs("other@builtin");
+        security.AddDefaultAccess("+(ConnDB):regular@builtin");
+        security.AddDefaultAccess("+(ConnDB):other@builtin");
+
+        TKikimrWithGrpcAndRootSchema server(config, {}, {}, false, nullptr, [](auto& settings) {
+            settings.template RegisterGrpcService<NKikimr::NGRpcService::TGRpcFqPrivateSchemaService>("yq_private_schema");
+        });
+        const TString endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+        const auto makeDriver = [&](const TString& token) {
+            return TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken(token));
+        };
+        const auto driver = makeDriver("root@builtin");
+        const auto regularDriver = makeDriver("regular@builtin");
+        const auto otherDriver = makeDriver("other@builtin");
+        ::NFq::TPrivateClient client(driver);
+        ::NFq::TPrivateClient regularClient(regularDriver);
+        ::NFq::TPrivateClient otherClient(otherDriver);
+
+        NYdb::NTable::TTableClient tableClient(driver);
+        const auto sessionResult = tableClient.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto source = session
+                                .ExecuteSchemeQuery(R"sql(
+            CREATE EXTERNAL DATA SOURCE S3Source WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="http://localhost:12345/bucket/", AUTH_METHOD="NONE"
+            );
+        )sql")
+                                .ExtractValueSync();
+        UNIT_ASSERT_C(source.IsSuccess(), source.GetIssues().ToString());
+        const auto grant = session.ExecuteSchemeQuery("GRANT DESCRIBE SCHEMA ON `/Root` TO `other@builtin`").ExtractValueSync();
+        UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+
+        const auto createTable = [](const TString& key) {
+            Fq::Private::MutateExternalTableRequest request;
+            request.set_relative_path("ExternalTable");
+            auto& create = *request.mutable_create();
+            create.set_key(key);
+            create.set_relative_data_source_path("S3Source");
+            create.set_location("/");
+            (*create.mutable_attributes())["format"] = "json_each_row";
+            auto& column = *create.add_columns();
+            column.set_name("key");
+            column.set_type("Uint64");
+            return request;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(regularClient.MutateExternalTable(createTable("first")).ExtractValueSync().GetStatus(), EStatus::UNAUTHORIZED);
+
+        auto crossDatabase = createTable("first");
+        crossDatabase.set_relative_path("OtherDatabase/ExternalTable");
+        UNIT_ASSERT_VALUES_EQUAL(client.MutateExternalTable(std::move(crossDatabase)).ExtractValueSync().GetStatus(), EStatus::BAD_REQUEST);
+
+        const auto created = client.MutateExternalTable(createTable("first")).ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        UNIT_ASSERT(created.IsResultSet());
+        const auto& identity = created.GetResult().created_table();
+        UNIT_ASSERT(identity.owner_id());
+        UNIT_ASSERT(identity.local_path_id());
+        UNIT_ASSERT(identity.version());
+
+        const auto describeTable = [] {
+            Fq::Private::DescribeExternalTableRequest request;
+            request.set_relative_path("ExternalTable");
+            return request;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(regularClient.DescribeExternalTable(describeTable()).ExtractValueSync().GetStatus(), EStatus::UNAUTHORIZED);
+        UNIT_ASSERT_VALUES_EQUAL(
+            otherClient.DescribeExternalTable(describeTable()).ExtractValueSync().GetStatus(), EStatus::PRECONDITION_FAILED);
+
+        const auto described = client.DescribeExternalTable(describeTable()).ExtractValueSync();
+        UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+        UNIT_ASSERT(described.IsResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(described.GetResult().identity().SerializeAsString(), identity.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(described.GetResult().description().self().owner(), "root@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(described.GetResult().description().data_source_path(), "/Root/S3Source");
+
+        const auto replay = client.MutateExternalTable(createTable("first")).ExtractValueSync();
+        UNIT_ASSERT_C(replay.IsSuccess(), replay.GetIssues().ToString());
+        UNIT_ASSERT(replay.IsResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetResult().created_table().SerializeAsString(), identity.SerializeAsString());
+
+        UNIT_ASSERT_VALUES_EQUAL(client.MutateExternalTable(createTable("conflict")).ExtractValueSync().GetStatus(), EStatus::SCHEME_ERROR);
+
+        Fq::Private::MutateExternalTableRequest commit;
+        commit.set_relative_path("ExternalTable");
+        commit.mutable_commit()->set_key("first");
+        const auto committed = client.MutateExternalTable(std::move(commit)).ExtractValueSync();
+        UNIT_ASSERT_C(committed.IsSuccess(), committed.GetIssues().ToString());
+
+        Fq::Private::MutateExternalTableRequest drop;
+        drop.set_relative_path("ExternalTable");
+        *drop.mutable_guarded_drop() = identity;
+        drop.mutable_guarded_drop()->set_version(identity.version() + 1);
+        UNIT_ASSERT_VALUES_EQUAL(client.MutateExternalTable(Fq::Private::MutateExternalTableRequest(drop)).ExtractValueSync().GetStatus(),
+            EStatus::PRECONDITION_FAILED);
+
+        *drop.mutable_guarded_drop() = identity;
+        const auto dropped = client.MutateExternalTable(Fq::Private::MutateExternalTableRequest(drop)).ExtractValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(client.MutateExternalTable(std::move(drop)).ExtractValueSync().GetStatus(), EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(client.DescribeExternalTable(describeTable()).ExtractValueSync().GetStatus(), EStatus::NOT_FOUND);
+
+        Fq::Private::MutateExternalTableRequest abort;
+        abort.set_relative_path("ExternalTable");
+        abort.mutable_abort()->set_key("aborted");
+        const auto aborted = client.MutateExternalTable(std::move(abort)).ExtractValueSync();
+        UNIT_ASSERT_C(aborted.IsSuccess(), aborted.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            client.MutateExternalTable(createTable("aborted")).ExtractValueSync().GetStatus(), EStatus::PRECONDITION_FAILED);
+    }
+}
 
 Y_UNIT_TEST_SUITE(Yq_1) {
     Y_UNIT_TEST(Basic) {

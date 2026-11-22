@@ -974,6 +974,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["yq"] = &hasYandexQuery;
         TServiceCfg hasYandexQueryPrivate = false;
         names["yq_private"] = &hasYandexQueryPrivate;
+        TServiceCfg hasYandexQueryPrivateSchema = false;
+        names["yq_private_schema"] = &hasYandexQueryPrivateSchema;
         TServiceCfg hasLogStore = false;
         names["logstore"] = &hasLogStore;
         TServiceCfg hasAuth = services.empty();
@@ -1277,6 +1279,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             }
         }   /* REMOVE */ else /* THIS else as well and separate ifs */ if (hasYandexQueryPrivate) {
             server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
+        if (hasYandexQueryPrivateSchema) {
+            server.AddService(new NGRpcService::TGRpcFqPrivateSchemaService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (hasQueryService) {

@@ -9,6 +9,7 @@ import "ydb/core/fq/libs/protos/dq_effects.proto";
 import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 
 import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
@@ -257,4 +258,61 @@ message DeleteRateLimiterResourceResult {
 
 message DeleteRateLimiterResourceResponse {
     Ydb.Operations.Operation operation = 1; // DeleteRateLimiterResourceResult
+}
+
+message ExternalTableIdentity {
+    uint64 owner_id = 1;
+    uint64 local_path_id = 2;
+    uint64 version = 3;
+}
+
+message MutateExternalTableRequest {
+    message Create {
+        message Column {
+            string name = 1;
+            string type = 2;
+            bool not_null = 3;
+        }
+
+        string key = 1;
+        string relative_data_source_path = 2;
+        string location = 3;
+        repeated Column columns = 4;
+        map<string, string> attributes = 5;
+    }
+
+    message Ticket {
+        string key = 1;
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+    string relative_path = 2;
+    oneof action {
+        Create create = 3;
+        Ticket abort = 4;
+        Ticket commit = 5;
+        ExternalTableIdentity guarded_drop = 6;
+    }
+}
+
+message MutateExternalTableResult {
+    ExternalTableIdentity created_table = 1;
+}
+
+message MutateExternalTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string relative_path = 2;
+}
+
+message DescribeExternalTableResult {
+    ExternalTableIdentity identity = 1;
+    Ydb.Table.DescribeExternalTableResult description = 2;
+}
+
+message DescribeExternalTableResponse {
+    Ydb.Operations.Operation operation = 1;
 }

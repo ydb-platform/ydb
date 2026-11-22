@@ -25,5 +25,18 @@ private:
     NActors::TActorId GRpcRequestProxyId_;
 };
 
+class TGRpcFqPrivateSchemaService: public NYdbGrpc::TGrpcServiceBase<Fq::Private::V1::FqPrivateSchemaService> {
+public:
+    TGRpcFqPrivateSchemaService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id);
+
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
+
+private:
+    NActors::TActorSystem* ActorSystem_;
+    grpc::ServerCompletionQueue* CQ_ = nullptr;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    NActors::TActorId GRpcRequestProxyId_;
+};
+
 }   // namespace NGRpcService
 }   // namespace NKikimr

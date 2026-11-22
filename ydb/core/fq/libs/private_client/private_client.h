@@ -34,6 +34,16 @@ private:
     std::unique_ptr<TProtoResult> Result;
 };
 
+using TMutateExternalTableResult = TProtoResultInternalWrapper<Fq::Private::MutateExternalTableResult>;
+using TAsyncMutateExternalTableResult = NThreading::TFuture<TMutateExternalTableResult>;
+
+struct TMutateExternalTableSettings: public NYdb::TOperationRequestSettings<TMutateExternalTableSettings> {};
+
+using TDescribeExternalTableResult = TProtoResultInternalWrapper<Fq::Private::DescribeExternalTableResult>;
+using TAsyncDescribeExternalTableResult = NThreading::TFuture<TDescribeExternalTableResult>;
+
+struct TDescribeExternalTableSettings: public NYdb::TOperationRequestSettings<TDescribeExternalTableSettings> {};
+
 using TGetTaskResult = TProtoResultInternalWrapper<Fq::Private::GetTaskResult>;
 using TPingTaskResult = TProtoResultInternalWrapper<Fq::Private::PingTaskResult>;
 using TWriteTaskResult = TProtoResultInternalWrapper<Fq::Private::WriteTaskResultResult>;
@@ -66,6 +76,12 @@ class TPrivateClient {
 public:
     TPrivateClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings(),
         const NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+
+    TAsyncMutateExternalTableResult MutateExternalTable(
+        Fq::Private::MutateExternalTableRequest&& request, const TMutateExternalTableSettings& settings = TMutateExternalTableSettings());
+
+    TAsyncDescribeExternalTableResult DescribeExternalTable(
+        Fq::Private::DescribeExternalTableRequest&& request, const TDescribeExternalTableSettings& settings = TDescribeExternalTableSettings());
 
     TAsyncGetTaskResult GetTask(Fq::Private::GetTaskRequest&& request, const TGetTaskSettings& settings = TGetTaskSettings());
 

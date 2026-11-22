@@ -21,3 +21,8 @@ service FqPrivateTaskService {
     rpc CreateRateLimiterResource(Fq.Private.CreateRateLimiterResourceRequest) returns (Fq.Private.CreateRateLimiterResourceResponse);
     rpc DeleteRateLimiterResource(Fq.Private.DeleteRateLimiterResourceRequest) returns (Fq.Private.DeleteRateLimiterResourceResponse);
 }
+
+service FqPrivateSchemaService {
+    rpc MutateExternalTable(Fq.Private.MutateExternalTableRequest) returns (Fq.Private.MutateExternalTableResponse);
+    rpc DescribeExternalTable(Fq.Private.DescribeExternalTableRequest) returns (Fq.Private.DescribeExternalTableResponse);
+}

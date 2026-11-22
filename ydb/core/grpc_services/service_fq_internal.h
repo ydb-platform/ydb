@@ -15,5 +15,8 @@ void DoFqPrivateNodesHealthCheckRequest(std::unique_ptr<IRequestOpCtx> p, const 
 void DoFqPrivateCreateRateLimiterResourceRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
 void DoFqPrivateDeleteRateLimiterResourceRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
 
+void DoFqPrivateMutateExternalTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
+void DoFqPrivateDescribeExternalTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
+
 } // namespace NGRpcService
 } // namespace NKikimr

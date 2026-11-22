@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/shared_resources
     ydb/core/protos
+    ydb/public/sdk/cpp/src/client/impl/internal/make_request
     ydb/public/sdk/cpp/src/client/table
 )
 

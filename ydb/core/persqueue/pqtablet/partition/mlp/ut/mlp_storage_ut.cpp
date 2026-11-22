@@ -1617,6 +1617,58 @@ Y_UNIT_TEST(StorageSerialization) {
     }
 }
 
+Y_UNIT_TEST(SnapshotRestoreStopsUncommittedOffsetOnDelayed) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+
+    const auto writeTimestamp = timeProvider->Now();
+    const ui64 committedOffset = 3;
+    const ui64 delayedOffset = 4;
+    const ui64 unprocessedOffset = 5;
+
+    {
+        TStorage storage(timeProvider, {});
+        storage.AddMessage(committedOffset, false, 0, writeTimestamp);
+        storage.AddMessage(delayedOffset, false, 0, writeTimestamp, TDuration::Seconds(30));
+        storage.AddMessage(unprocessedOffset, false, 0, writeTimestamp);
+        UNIT_ASSERT(storage.Commit(committedOffset) == EOperationResult::Success);
+
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), delayedOffset);
+
+        storage.SerializeTo(snapshot);
+    }
+
+    {
+        TStorage storage(timeProvider, {});
+        storage.Initialize(snapshot);
+        storage.InitMetrics();
+
+        // Reload must keep the same frontier. Advancing FirstUncommittedOffset past the
+        // delayed message makes Compact fail on FirstUncommittedOffset <= FirstUnlockedOffset.
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), delayedOffset);
+
+        storage.Compact();
+
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetMessageCount(), 2);
+
+        auto it = storage.begin();
+        UNIT_ASSERT(it != storage.end());
+        UNIT_ASSERT_VALUES_EQUAL((*it).Offset, delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL((*it).Status, TStorage::EMessageStatus::Delayed);
+        ++it;
+        UNIT_ASSERT(it != storage.end());
+        UNIT_ASSERT_VALUES_EQUAL((*it).Offset, unprocessedOffset);
+        UNIT_ASSERT_VALUES_EQUAL((*it).Status, TStorage::EMessageStatus::Unprocessed);
+        ++it;
+        UNIT_ASSERT(it == storage.end());
+    }
+}
+
 Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
     TUtils utils;
 

@@ -11,6 +11,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/metadata.h>
+#include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/str.h>
@@ -147,6 +148,82 @@ struct TReadResult {
 };
 
 // All callbacks and observations run on the simulated actor runtime's single thread.
+class TCountingWorkFactory: public IDqSchedulableWorkFactory {
+public:
+    ui64 Starts = 0;
+    ui64 Stops = 0;
+    ui64 Unfinished = 0;
+    ui64 Attempts = 0;
+    ui64 Waiting = 0;
+    bool Throttle = false;
+    TActorId WorkActorId;
+
+    class TWork: public IDqSchedulableWork {
+    public:
+        explicit TWork(TCountingWorkFactory& owner)
+            : Owner(owner)
+        {
+        }
+
+        ~TWork() override {
+            Owner.Unfinished += Active || Throttled;
+        }
+
+        std::optional<TDuration> TryStartExecution(TMonotonic) override {
+            UNIT_ASSERT(!Active);
+            ++Owner.Attempts;
+            if (Owner.Throttle) {
+                if (!Throttled) {
+                    Throttled = true;
+                    ++Owner.Waiting;
+                }
+                return TDuration::Seconds(1);
+            }
+            if (Throttled) {
+                Throttled = false;
+                --Owner.Waiting;
+            }
+            Active = true;
+            ++Owner.Starts;
+            return {};
+        }
+
+        void StopExecution() override {
+            UNIT_ASSERT(Active || Throttled);
+            if (Throttled) {
+                Throttled = false;
+                --Owner.Waiting;
+            }
+            Active = false;
+            ++Owner.Stops;
+        }
+
+        void NotifyResumed(bool) override {
+        }
+
+        void RegisterForResume(const TActorId& actorId) override {
+            Owner.WorkActorId = actorId;
+        }
+
+        TWorkScope GetWorkScope() const override {
+            return Owner.GetWorkScope();
+        }
+
+    private:
+        TCountingWorkFactory& Owner;
+        bool Active = false;
+        bool Throttled = false;
+    };
+
+    std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() override {
+        return std::make_unique<TWork>(*this);
+    }
+
+    TWorkScope GetWorkScope() const override {
+        return { "/Root", "test" };
+    }
+};
+
 class TParquetReader {
 public:
     TReadResult Result;
@@ -184,7 +261,8 @@ public:
     }
 
     void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB, bool batched = true,
-        ui64 batchDecodeTargetBytes = 16_MB)
+        ui64 batchDecodeTargetBytes = 16_MB, IDqSchedulableWorkFactoryPtr workFactory = nullptr,
+        ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr)
     {
         NS3::TRange range;
         auto* path = range.AddPaths();
@@ -198,17 +276,21 @@ public:
             config.DataInflight = dataInflight;
             config.BatchedRowGroupDecode = batched;
             config.BatchDecodeTargetBytes = batchDecodeTargetBytes;
-            auto [input, inputActor] =
-                CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory, std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
+            auto [input, inputActor] = CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory,
+                std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
                 }), gateway, std::move(source), 0, TCollectStatsLevel::None,
-                    TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
-                    config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false);
+                TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
+                config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false, workFactory, cpuCounters);
             actor.InitAsyncInput(input, inputActor);
         });
     }
 
-    void Pump() {
+    void Dispatch() {
         Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    }
+
+    void Pump() {
+        Dispatch();
         Execute([&](TFakeActor& actor) {
             TMaybe<TInstant> watermark;
             TUnboxedValueBatch buffer;
@@ -216,11 +298,23 @@ public:
         });
     }
 
+    TString DebugInfo() {
+        TString result;
+        Execute([&](TFakeActor& actor) {
+            result = actor.DqAsyncInput->GetDebugInfo();
+        });
+        return result;
+    }
+
     void ReadToEnd() {
         for (ui32 step = 0; step < 100 && !Result.Finished && Result.Errors.empty(); ++step) {
             Pump();
         }
         UNIT_ASSERT_C(Result.Finished || !Result.Errors.empty(), "HTTP reader did not complete");
+    }
+
+    void SendToWork(const TActorId& actorId, IEventBase* event) {
+        Runtime.Send(new IEventHandle(actorId, FakeActorId, event));
     }
 
 private:
@@ -255,8 +349,275 @@ TReadResult ReadParquet(TString body, ui64 parallelRowGroups, bool batched, ui64
     return reader.Result;
 }
 
+void CheckQuotaCleanup(const TString& body, const NS3::TSource& source, ui64 expectedRows, bool expectError = false) {
+    for (bool batched : { true, false }) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = body;
+            reader.Start(gateway, source, 200_MB, batched, 16_MB, workFactory);
+            reader.ReadToEnd();
+            if (expectError) {
+                UNIT_ASSERT(!reader.Result.Errors.empty());
+            } else {
+                UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+                UNIT_ASSERT(reader.Result.Finished);
+                UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, expectedRows);
+            }
+            // Quota must already be released when the file completes, not only
+            // later when the compute actor tears down its async source.
+            UNIT_ASSERT(workFactory->Starts > 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, workFactory->Stops);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Unfinished, 0);
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, workFactory->Stops);
+    }
+}
+
 }   // namespace
 
+<<<<<<< HEAD
+=======
+Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
+    Y_UNIT_TEST(CpuCountersWithoutCommonCounters) {
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        workFactory->Throttle = true;
+        const auto group = counters->GetSubgroup("db", "/Root")->GetSubgroup("pool", "test")->GetSubgroup("kind", "reader");
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(10);
+            reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory, counters);
+            reader.Pump();
+            const auto waiting = group->FindCounter("S3CpuWaiting");
+            UNIT_ASSERT(waiting);
+            UNIT_ASSERT_VALUES_EQUAL(waiting->Val(), 1);
+            for (const auto* name : { "QueueDataSize", "QueueDataLimit", "QueueBlockCount", "DownloadCount", "DownloadPaused" }) {
+                UNIT_ASSERT_C(!counters->FindCounter(name), name);
+            }
+            UNIT_ASSERT(!counters->FindHistogram("ChunkSizeBytes"));
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvPoison());
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(group->FindCounter("S3CpuWaiting")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(group->FindCounter("S3CpuActive")->Val(), 0);
+    }
+
+    Y_UNIT_TEST(DebugWaitingConsumer) {
+        for (bool batched : { true, false }) {
+            auto workFactory = std::make_shared<TCountingWorkFactory>();
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(1000, 500);
+            reader.Start(gateway, ParquetSource(1), 1_KB, batched, 1_KB, workFactory);
+            reader.Dispatch();
+            const auto debug = reader.DebugInfo();
+            UNIT_ASSERT_STRING_CONTAINS(debug, "State: WaitingConsumer");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 1 Waiting CPU: 0 CPU holders: 0 Finished: 0");
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 1000);
+        }
+    }
+
+    Y_UNIT_TEST(DebugFinishedAfterError) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquetWithCompressedSizes({ -1 });
+        reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory);
+        reader.ReadToEnd();
+        UNIT_ASSERT(!reader.Result.Errors.empty());
+        const auto debug = reader.DebugInfo();
+        UNIT_ASSERT_STRING_CONTAINS(debug, "State: Finished");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 0 Waiting CPU: 0 CPU holders: 0 Finished: 1");
+    }
+
+    Y_UNIT_TEST(DebugWaitingHttpWithoutCountersOrScheduler) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquet(10);
+        gateway->HoldChunks = true;
+        reader.Start(gateway, ParquetSource(1));
+        reader.Pump();
+        UNIT_ASSERT(!gateway->PendingChunks.empty());
+        const auto debug = reader.DebugInfo();
+        UNIT_ASSERT_STRING_CONTAINS(debug, "State: WaitingHttp");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+        UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 1 Waiting CPU: 0 CPU holders: 0 Finished: 0");
+        gateway->ReleaseChunks();
+        reader.ReadToEnd();
+        UNIT_ASSERT_STRING_CONTAINS(reader.DebugInfo(), "Readers: 0 Waiting CPU: 0 CPU holders: 0 Finished: 0");
+    }
+
+    Y_UNIT_TEST(CancelWhileWaitingForCpu) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        workFactory->Throttle = true;
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(10);
+            reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory);
+            reader.Pump();
+            UNIT_ASSERT(workFactory->Attempts > 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 1);
+
+            const auto debug = reader.DebugInfo();
+            UNIT_ASSERT_STRING_CONTAINS(debug, TStringBuilder() << "ActorId: " << workFactory->WorkActorId);
+            UNIT_ASSERT_STRING_CONTAINS(debug, "State: WaitingCpu");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "CpuHeld: 0");
+            UNIT_ASSERT_STRING_CONTAINS(debug, "Readers: 1 Waiting CPU: 1 CPU holders: 0 Finished: 0");
+
+            // A retry must not register another waiter or cancel the first one.
+            const auto attempts = workFactory->Attempts;
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvWakeup());
+            reader.Pump();
+            UNIT_ASSERT(workFactory->Attempts > attempts);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 1);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Stops, 0);
+
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvPoison());
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Stops, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Unfinished, 0);
+    }
+
+    Y_UNIT_TEST(AdmissionAfterWaiting) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        workFactory->Throttle = true;
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(10);
+            reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory);
+            reader.Pump();
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 1);
+            workFactory->Throttle = false;
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvWakeup());
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 10);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 0);
+            UNIT_ASSERT(workFactory->Starts > 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, workFactory->Stops);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Unfinished, 0);
+    }
+
+    Y_UNIT_TEST(EmptyFile) {
+        CheckQuotaCleanup(MakeParquetWithCompressedSizes({}), ParquetSource(), 0);
+    }
+
+    Y_UNIT_TEST(AllRowGroupsFiltered) {
+        auto source = ParquetSource();
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"pb(
+                comparison {
+                  operation: L
+                  left_value { column: "ts" }
+                  right_value {
+                    typed_value {
+                      type { type_id: TIMESTAMP }
+                      value { int64_value: 0 }
+                    }
+                  }
+                }
+            )pb", source.MutablePredicate()));
+        CheckQuotaCleanup(MakeParquet(10), source, 0);
+    }
+
+    Y_UNIT_TEST(InvalidMetadata) {
+        CheckQuotaCleanup(MakeParquetWithCompressedSizes({ -1 }), ParquetSource(), 0, true);
+    }
+
+    Y_UNIT_TEST(NormalRead) {
+        CheckQuotaCleanup(MakeParquet(10), ParquetSource(), 10);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
+    Y_UNIT_TEST(ZeroCompressedSize) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            auto result = ReadFooter({ 0 }, parallel);
+            UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
+            UNIT_ASSERT(result.Finished);
+            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 0);
+        }
+    }
+
+    Y_UNIT_TEST(NegativeCompressedSize) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            AssertBadRequest(ReadFooter({ -1 }, parallel));
+        }
+    }
+
+    Y_UNIT_TEST(DoubledCompressedSizeOverflow) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            AssertBadRequest(ReadFooter({ i64(1) << 62, i64(1) << 62 }, parallel));
+        }
+    }
+
+    Y_UNIT_TEST(CompressedSizeSumOverflow) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            const auto result = ReadFooter({ Max<i64>() - 4, Max<i64>() - 4, Max<i64>() - 4 }, parallel);
+            AssertBadRequest(result);
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues, "total_compressed_size sum overflow");
+        }
+    }
+
+    Y_UNIT_TEST(LargeCompressedSize) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            AssertBadRequest(ReadFooter({ Max<i64>() - 4 }, parallel));
+        }
+    }
+
+    Y_UNIT_TEST(EmptyFile) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            auto result = ReadFooter({}, parallel);
+            UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
+            UNIT_ASSERT(result.Finished);
+            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 0);
+        }
+    }
+
+    Y_UNIT_TEST(NoSelectedColumns) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(10);
+            reader.Start(gateway, ParquetSource(parallel, false));
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 10);
+            UNIT_ASSERT(reader.Result.Values.empty());
+        }
+    }
+
+    Y_UNIT_TEST(AutomaticReaderCount) {
+        CheckReaderCount(0, 5);
+        CheckReaderCount(0, 1, 1);
+    }
+
+    Y_UNIT_TEST(ExplicitReaderCount) {
+        for (ui64 parallel : { 1, 2, 5, 20 }) {
+            CheckReaderCount(parallel, std::min(parallel, ui64(10)));
+        }
+    }
+
+    Y_UNIT_TEST(FairShareMultiplicationOverflow) {
+        CheckReaderCount(0, 5, ui64(1) << 63);
+    }
+}
+
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 Y_UNIT_TEST_SUITE(TS3ParquetDecode) {
     Y_UNIT_TEST(LargeRowGroupBatched) {
         for (ui64 parallel : { 0, 1, 2 }) {

@@ -1,5 +1,10 @@
 #include "yql_arrow_column_converters.h"
 #include "yql_arrow_push_down.h"
+<<<<<<< HEAD
+=======
+#include "yql_s3_actor_stats.h"
+#include "yql_s3_actors_util.h"
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 #include "yql_s3_decompressor_actor.h"
 #include "yql_s3_actors_util.h"
 #include "yql_s3_raw_read_actor.h"
@@ -55,6 +60,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <map>
 #include <queue>
 
 #undef THROW
@@ -377,7 +383,9 @@ public:
                     break;
                 }
                 Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ActorStats->SetState(IS3ActorStats::EState::WaitingHttp);
                 Coro->ProcessOneEvent();
+                Coro->ActorStats->SetState(IS3ActorStats::EState::Processing);
                 Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
@@ -428,13 +436,27 @@ public:
         if (!Work || Working) {
             return;
         }
+        bool throttled = false;
+        Y_DEFER {
+            // Cancellation can unwind this wait before Working becomes true.
+            // StopExecution also cancels pending admission, unlike StopUnit.
+            if (throttled) {
+                Work->StopExecution();
+                ActorStats->OnStop(TMonotonic::Now());
+            }
+        };
         for (;;) {
             const auto now = TMonotonic::Now();
             const auto delay = Work->TryStartExecution(now);
+            throttled = delay.has_value();
             if (!delay) {
+                ActorStats->OnAllowed(now);
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 break;
             }
 
+            ActorStats->OnRejected(now);
+            ActorStats->SetState(IS3ActorStats::EState::WaitingCpu);
             // A delivered event means the scheduler woke us up.
             const auto resumeEv = WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessEventWhileAcquiringSlot, now + *delay);
             Work->NotifyResumed(/* byScheduler = */ static_cast<bool>(resumeEv));
@@ -447,6 +469,7 @@ public:
             return;
         }
         Work->StopExecution();
+        ActorStats->OnStop(TMonotonic::Now());
         Working = false;
     }
 
@@ -529,7 +552,9 @@ public:
 
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
+                ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 HandleEvent(*ev);
                 StartCycleCount = GetCycleCountFast();
             }
@@ -573,7 +598,9 @@ public:
             Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
+                ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 HandleEvent(*ev);
                 StartCycleCount = GetCycleCountFast();
             }
@@ -729,9 +756,11 @@ public:
         SetUpstreamPause(true);
 
         while (!cache.Ready) {
+            ActorStats->SetState(IS3ActorStats::EState::WaitingHttp);
             auto ev = WaitForSpecificEvent<TEvS3Provider::TEvReadResult2>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
             HandleEvent(*ev);
         }
+        ActorStats->SetState(IS3ActorStats::EState::Processing);
 
         SetUpstreamPause(false);
 
@@ -759,7 +788,9 @@ public:
     void WaitIfPaused() {
         if (IsPaused()) {
             CpuTime += GetCpuTimeDelta();
+            ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
             auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+            ActorStats->SetState(IS3ActorStats::EState::Processing);
             HandleEvent(*ev);
             StartCycleCount = GetCycleCountFast();
         }
@@ -943,10 +974,16 @@ public:
                     CpuTime += GetCpuTimeDelta();
 
                     // if reordering is not allowed wait for row groups sequentially
+<<<<<<< HEAD
                     while (ReadyRowGroups.empty()
                             || (!ReadSpec->RowGroupReordering && ReadyRowGroups.top() > readyGroupCount) ) {
+=======
+                    while (ReadyRowGroups.empty() || (!ReadSpec->RowGroupReordering && ReadyRowGroups.top() > readyGroupCount)) {
+                        ActorStats->SetState(IS3ActorStats::EState::WaitingHttp);
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
                         ProcessOneEvent();
                     }
+                    ActorStats->SetState(IS3ActorStats::EState::Processing);
 
                     StartCycleCount = GetCycleCountFast();
 
@@ -1030,7 +1067,9 @@ public:
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - PAUSED " << SourceContext->GetValue());
+                ActorStats->SetState(IS3ActorStats::EState::WaitingConsumer);
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                ActorStats->SetState(IS3ActorStats::EState::Processing);
                 HandleEvent(*ev);
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - CONTINUE " << SourceContext->GetValue());
                 StartCycleCount = GetCycleCountFast();
@@ -1289,11 +1328,17 @@ public:
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
         TSourceContext::TPtr queueBufferCounter,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
+<<<<<<< HEAD
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize,
         bool asyncDecompressing,
         IDqSchedulableWorkFactoryPtr workFactory)
+=======
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize, const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize, bool asyncDecompressing, IDqSchedulableWorkFactoryPtr workFactory,
+        ::NMonitoring::TDynamicCounterPtr cpuCounters)
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
         : TActorCoroImpl(256_KB)
         , TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
@@ -1313,7 +1358,17 @@ public:
         , AsyncDecompressing(asyncDecompressing)
         , WorkFactory(std::move(workFactory))
         , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
+<<<<<<< HEAD
     {}
+=======
+        , ActorStats(std::make_shared<TS3ActorStats>(cpuCounters, Work.get()))
+    {
+    }
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
+
+    std::shared_ptr<const IS3ActorStats> GetActorStats() const {
+        return ActorStats;
+    }
 
     ~TS3ReadCoroImpl() override {
         if (DeferredDataParts.size() && DeferredQueueSize) {
@@ -1367,6 +1422,13 @@ private:
     }
 
     void Run() final {
+        Y_DEFER {
+            // Metadata reads can acquire quota before any row-group decode scope.
+            // Release it on empty/filtered files and errors as well as normal EOF.
+            StopUnit();
+            ActorStats->OnExit(TMonotonic::Now());
+        };
+        ActorStats->SetState(IS3ActorStats::EState::Processing);
         LOG_CORO_D("Run start: WorkFactory=" << (WorkFactory ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
         if (Work) {
             Work->RegisterForResume(SelfActorId);
@@ -1541,7 +1603,12 @@ private:
     const bool AsyncDecompressing;
     const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
+<<<<<<< HEAD
     bool Working = false;            // holds HDRF slot — allowed to consume CPU
+=======
+    const std::shared_ptr<TS3ActorStats> ActorStats;
+    bool Working = false;   // holds HDRF slot — allowed to consume CPU
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 };
 
 class TS3ReadCoroActor : public TActorCoro {
@@ -1560,6 +1627,7 @@ private:
 
 class TS3StreamReadActor : public TActorBootstrapped<TS3StreamReadActor>, public IDqComputeActorAsyncInput, public TSourceErrorHandler {
 public:
+<<<<<<< HEAD
     TS3StreamReadActor(
         ui64 inputIndex,
         TCollectStatsLevel statsLevel,
@@ -1592,6 +1660,17 @@ public:
         bool asyncDecompressing,
         bool allowLocalFiles,
         IDqSchedulableWorkFactoryPtr workFactory)
+=======
+    TS3StreamReadActor(ui64 inputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, IHTTPGateway::TPtr gateway,
+        const THolderFactory& holderFactory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TString& url,
+        const TS3Credentials& credentials, const TString& pattern, ES3PatternVariant patternVariant, TPathList&& paths, bool addPathIndex,
+        const TReadSpec::TPtr& readSpec, const TActorId& computeActorId, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
+        const TS3ReadActorFactoryConfig& readActorFactoryCfg, ::NMonitoring::TDynamicCounterPtr counters,
+        ::NMonitoring::TDynamicCounterPtr taskCounters, ui64 fileSizeLimit, ui64 readLimit, std::optional<ui64> rowsLimitHint,
+        IMemoryQuotaManager::TPtr memoryQuotaManager, bool useRuntimeListing, TActorId fileQueueActor, ui64 fileQueueBatchSizeLimit,
+        ui64 fileQueueBatchObjectCountLimit, ui64 fileQueueConsumersCountDelta, bool asyncDecoding, bool asyncDecompressing,
+        bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory, ::NMonitoring::TDynamicCounterPtr cpuCounters)
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
         : TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
@@ -1610,6 +1689,7 @@ public:
         , ReadSpec(readSpec)
         , Counters(std::move(counters))
         , TaskCounters(std::move(taskCounters))
+        , CpuCounters(std::move(cpuCounters))
         , FileQueueActor(fileQueueActor)
         , FileSizeLimit(fileSizeLimit)
         , ReadLimit(readLimit)
@@ -1761,6 +1841,7 @@ public:
 
         TActorId actorId;
         const auto& authInfo = Credentials.GetAuthInfo();
+<<<<<<< HEAD
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + object.GetPath(),
@@ -1788,13 +1869,22 @@ public:
             AsyncDecompressing,
             WorkFactory
         );
+=======
+        auto stuff = std::make_shared<TRetryStuff>(Gateway, Url + object.GetPath(),
+            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()), object.GetSize(),
+            TxId, requestId, RetryPolicy);
+        auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, std::move(stuff), ReadSpec, pathIndex, object.GetPath(), Url,
+            RowsRemained, ReadActorFactoryCfg, SourceContext, DeferredQueueSize, HttpInflightSize, HttpDataRps, RawInflightSize,
+            AsyncDecompressing, WorkFactory, CpuCounters);
+        auto stats = impl->GetActorStats();
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));
         } else {
             actorId = RegisterWithSameMailbox(new TS3ReadCoroActor(std::move(impl)));
         }
 
-        CoroActors.insert(actorId);
+        CoroActors.emplace(actorId, std::move(stats));
     }
 
     NS3::FileQueue::TObjectPath ReadPathFromCache() {
@@ -1880,6 +1970,39 @@ private:
         return CpuTime;
     }
 
+    TString GetDebugInfo() const override {
+        TStringBuilder out;
+        out << "    S3 stream reader, TxId: " << TxId << '\n'
+            << "    Bootstrapped: " << Bootstrapped << " CpuSchedulingEnabled: " << bool(WorkFactory) << " AsyncDecoding: " << AsyncDecoding
+            << " AsyncDecompressing: " << AsyncDecompressing << '\n'
+            << "    ListedFiles: " << ListedFiles << " CompletedFiles: " << CompletedFiles << " ReadyBlocks: " << Blocks.size() << '\n'
+            << "    FileQueueActor: " << FileQueueActor << " RuntimeListing: " << UseRuntimeListing << '\n'
+            << "    WaitingFileQueueResponse: " << IsWaitingFileQueueResponse << " FileQueueEmpty: " << IsFileQueueEmpty
+            << " FileQueueFinishConfirmed: " << IsConfirmedFileQueueFinish << " PendingFileQueueEvents: " << FileQueueEvents.HasPendingEvents()
+            << '\n'
+            << "    QueuedPathBatches: " << PathBatchQueue.size() << " CurrentBatchEmpty: " << IsCurrentBatchEmpty << '\n';
+        size_t readers = 0, waitingCpu = 0, cpuHolders = 0, finished = 0;
+        for (const auto& [actorId, stats] : CoroActors) {
+            const auto snapshot = stats->GetSnapshot();
+            out << "      ActorId: " << actorId << " State: " << snapshot.State << " StateFor: " << (TMonotonic::Now() - snapshot.StateSince)
+                << " CpuHeld: " << snapshot.CpuHeld << '\n';
+            if (snapshot.State == IS3ActorStats::EState::Finished) {
+                ++finished;
+            } else {
+                ++readers;
+            }
+            if (snapshot.State == IS3ActorStats::EState::WaitingCpu) {
+                ++waitingCpu;
+            }
+            if (snapshot.CpuHeld) {
+                ++cpuHolders;
+            }
+        }
+        out << "    Readers: " << readers << " Waiting CPU: " << waitingCpu << " CPU holders: " << cpuHolders << " Finished: " << finished
+            << '\n';
+        return out;
+    }
+
     ui64 GetBlockSize(const TReadyBlock& block) const {
         return ReadSpec->Arrow ? NUdf::GetSizeOfArrowBatchInBytes(*block.Batch) : block.Block.bytes();
     }
@@ -1948,7 +2071,7 @@ private:
             }
             SourceContext.reset();
 
-            for (const auto actorId : CoroActors) {
+            for (const auto& [actorId, stats] : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
             LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
@@ -2155,7 +2278,7 @@ private:
         *RowsRemained = SubtractSaturating(*RowsRemained, consumedRows);
         if (*RowsRemained == 0) {
             LOG_T("TS3StreamReadActor", "StopLoadsIfEnough(consumedRows = " << consumedRows << ") sends poison");
-            for (const auto actorId : CoroActors) {
+            for (const auto& [actorId, stats] : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
         }
@@ -2221,8 +2344,9 @@ private:
     ::NMonitoring::THistogramPtr DecodedChunkSizeHist;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
+    const ::NMonitoring::TDynamicCounterPtr CpuCounters;
     ui64 DownloadSize = 0;
-    std::set<TActorId> CoroActors;
+    std::map<TActorId, std::shared_ptr<const IS3ActorStats>> CoroActors;
     TActorId FileQueueActor;
     const ui64 FileSizeLimit;
     const ui64 ReadLimit;
@@ -2380,6 +2504,7 @@ NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName
 
 } // anonymous namespace
 
+<<<<<<< HEAD
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TTypeEnvironment& typeEnv,
     const THolderFactory& holderFactory,
@@ -2401,6 +2526,16 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     IMemoryQuotaManager::TPtr memoryQuotaManager,
     bool allowLocalFiles,
     IDqSchedulableWorkFactoryPtr workFactory)
+=======
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(const TTypeEnvironment& typeEnv, const THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, IHTTPGateway::TPtr gateway, NS3::TSource&& params, ui64 inputIndex,
+    TCollectStatsLevel statsLevel, const TTxId& txId, const THashMap<TString, TString>& secureParams,
+    const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, const TActorId& computeActorId,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
+    const TS3ReadActorFactoryConfig& cfg, ::NMonitoring::TDynamicCounterPtr counters, ::NMonitoring::TDynamicCounterPtr taskCounters,
+    IMemoryQuotaManager::TPtr memoryQuotaManager, bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory,
+    ::NMonitoring::TDynamicCounterPtr cpuCounters)
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -2614,11 +2749,19 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             sizeLimit = FromString<ui64>(it->second);
         }
 
+<<<<<<< HEAD
         const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
                                                   params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, std::move(workFactory));
+=======
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc),
+            params.GetUrl(), credentials, pathPattern, pathPatternVariant, std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
+            cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager, params.GetUseRuntimeListing(),
+            fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, params.GetAsyncDecoding(),
+            params.GetAsyncDecompressing(), allowLocalFiles, std::move(workFactory), std::move(cpuCounters));
+>>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 
         return {actor, actor};
     }

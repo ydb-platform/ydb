@@ -4,6 +4,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
@@ -6718,15 +6719,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!collection.IsResolved() || table.IsEmpty()) {
                 continue;
             }
-            // LeafName is also available for an unresolved target.
+            std::pair<TString, TString> splitPath;
+            TString error;
+            if (!TrySplitPathByDb(tablePath, collection.GetDomainPathString(), splitPath, error)) {
+                if (issue.empty()) {
+                    issue = error;
+                }
+                continue;
+            }
+            const TString& relativeTablePath = splitPath.second;
             const TString prefix = collection.PathString() + "/";
             if (op.HasFullBackupTrimmedName()) {
                 checkPath(TPath::Resolve(prefix + NBackup::FullBackupDirName(op.GetFullBackupTrimmedName())
-                    + "/" + table.LeafName(), Self));
+                    + "/" + relativeTablePath, Self));
             }
             for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
-                checkPath(TPath::Resolve(prefix + NBackup::IncrementalBackupDirName(name)
-                    + "/" + table.LeafName(), Self));
+                const TPath incrementalTable = TPath::Resolve(prefix + NBackup::IncrementalBackupDirName(name)
+                    + "/" + relativeTablePath, Self);
+                // Proposal and dispatch skip absent entries in an incremental
+                // snapshot. Only an existing tombstone is evidence of stale work.
+                if (incrementalTable.IsResolved()) {
+                    checkPath(incrementalTable);
+                }
             }
         }
         return issue;
@@ -6746,9 +6760,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return true;
         }
 
-        // Never forget a live schema transaction or one of its children. Include
-        // ancestors to protect index implementation tables and legacy sub-ops
-        // that have no IncrementalRestoreItem row.
+        // Never forget a live restore transaction or one of its children. Include
+        // ancestors for legacy restore sub-ops with no IncrementalRestoreItem row,
+        // but do not mistake unrelated DDL on the same path for restore work.
         auto touchesPath = [&](TPathId pathId) {
             while (pathId) {
                 if (paths.contains(pathId)) {
@@ -6766,8 +6780,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return true;
         }
         for (const auto& [txId, tx] : Self->TxInFlight) {
+            const bool restoreSubOp = tx.TxType == TTxState::TxRestoreIncrementalBackupAtTable
+                || tx.TxType == TTxState::TxCreateLongIncrementalRestoreOp
+                || tx.TxType == TTxState::TxIncrementalRestoreFinalize
+                || ((tx.TxType == TTxState::TxCopyTable || tx.TxType == TTxState::TxChangePathState)
+                    && tx.TargetPathTargetState
+                    && (*tx.TargetPathTargetState == NKikimrSchemeOp::EPathStateIncomingIncrementalRestore
+                        || *tx.TargetPathTargetState == NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore
+                        || *tx.TargetPathTargetState == NKikimrSchemeOp::EPathStateAwaitingOutgoingIncrementalRestore));
             if (txId.GetTxId() == opId.GetTxId()
-                || touchesPath(tx.SourcePathId) || touchesPath(tx.TargetPathId)) {
+                || (restoreSubOp && (touchesPath(tx.SourcePathId) || touchesPath(tx.TargetPathId)))) {
                 return true;
             }
         }
@@ -6848,8 +6870,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     for (const auto& tablePath : op.GetTablePathList()) {
                         TPath originalTablePath = TPath::Resolve(tablePath, Self);
                         if (originalTablePath.IsResolved()) {
-                            TString tableName = originalTablePath.LeafName();
-                            TString fullBackupTablePath = fullBackupPath + "/" + tableName;
+                            std::pair<TString, TString> splitPath;
+                            TString error;
+                            if (!TrySplitPathByDb(tablePath, backupCollectionPath.GetDomainPathString(), splitPath, error)) {
+                                continue;
+                            }
+                            TString fullBackupTablePath = fullBackupPath + "/" + splitPath.second;
 
                             TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
                             if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
@@ -6871,8 +6897,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     for (const auto& tablePath : op.GetTablePathList()) {
                         TPath originalTablePath = TPath::Resolve(tablePath, Self);
                         if (originalTablePath.IsResolved()) {
-                            TString tableName = originalTablePath.LeafName();
-                            TString incrBackupTablePath = incrBackupPath + "/" + tableName;
+                            std::pair<TString, TString> splitPath;
+                            TString error;
+                            if (!TrySplitPathByDb(tablePath, backupCollectionPath.GetDomainPathString(), splitPath, error)) {
+                                continue;
+                            }
+                            TString incrBackupTablePath = incrBackupPath + "/" + splitPath.second;
 
                             TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
                             if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {

@@ -652,4 +652,165 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
         CheckRestoreRows(runtime, restoreId, 1, 1, 0);
     }
 
+    static void CheckRestoreSnapshotLayout(bool nested, bool missingEntry, bool reboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        SetupBackupDirs(runtime, env, txId);
+        const TString parent = nested ? "/MyRoot/dir" : "/MyRoot";
+        if (nested) {
+            TestMkDir(runtime, ++txId, "/MyRoot", "dir");
+            env.TestWaitNotification(runtime, txId);
+        }
+        for (const TString name : {"First", "Second"}) {
+            TestCreateTable(runtime, ++txId, parent, TStringBuilder()
+                << "Name: \"" << name << "\"\n"
+                << "Columns { Name: \"key\" Type: \"Uint32\" }\n"
+                << "Columns { Name: \"value\" Type: \"Uint32\" }\n"
+                << "KeyColumnNames: [\"key\"]\n");
+            env.TestWaitNotification(runtime, txId);
+            UploadRow(runtime, parent + "/" + name, 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(10u)});
+        }
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", TStringBuilder()
+            << "Name: \"Layout\"\n"
+            << "ExplicitEntryList {\n"
+            << " Entries { Type: ETypeTable Path: \"" << parent << "/First\" }\n"
+            << " Entries { Type: ETypeTable Path: \"" << parent << "/Second\" }\n"
+            << "}\nCluster {}\nIncrementalBackupConfig {}\n");
+        env.TestWaitNotification(runtime, txId);
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/Layout")");
+        env.TestWaitNotification(runtime, txId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, parent + "/First", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(20u)});
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/Layout")");
+        env.TestWaitNotification(runtime, txId);
+        const TString collectionPath = "/MyRoot/.backups/collections/Layout";
+        const auto collection = DescribePath(runtime, collectionPath);
+        TString fullPath, incrementalPath;
+        for (const auto& child : collection.GetPathDescription().GetChildren()) {
+            if (child.GetName().EndsWith("_full")) {
+                fullPath = collectionPath + "/" + child.GetName();
+            } else if (child.GetName().EndsWith("_incremental")) {
+                incrementalPath = collectionPath + "/" + child.GetName();
+            }
+        }
+        UNIT_ASSERT(!fullPath.empty());
+        UNIT_ASSERT(!incrementalPath.empty());
+        const TString relativeDir = nested ? "/dir" : "";
+        if (missingEntry) {
+            // No changes to Second: dispatch supports snapshots without its entry.
+            TestDropTable(runtime, ++txId, incrementalPath + relativeDir, "Second");
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, incrementalPath + relativeDir + "/Second"), {NLs::PathNotExist});
+        }
+        const auto expectedFirst = ReadShards(runtime, TTestTxConfig::SchemeShard, parent + "/First");
+        const auto expectedSecond = ReadShards(runtime, TTestTxConfig::SchemeShard, parent + "/Second");
+        for (const TString name : {"First", "Second"}) {
+            TestDropTable(runtime, ++txId, parent, name);
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TBlockEvents<TEvPrivate::TEvRunIncrementalRestore> blocked(runtime);
+        const ui64 restoreId = ++txId;
+        TestRestoreBackupCollection(runtime, restoreId, "/MyRoot",
+            R"(Name: ".backups/collections/Layout")");
+        env.TestWaitNotification(runtime, restoreId);
+        runtime.WaitFor("restore dispatch blocked after schema completion", [&] { return !blocked.empty(); });
+        CheckRestoreRows(runtime, restoreId, 1, 0, 0);
+        if (reboot) {
+            blocked.clear(); // Messages addressed to the previous SchemeShard actor.
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            CheckRestoreRows(runtime, restoreId, 1, 0, 0);
+            runtime.WaitFor("orphan restore rescheduled", [&] { return !blocked.empty(); });
+            TestDescribeResult(DescribePath(runtime, fullPath + relativeDir + "/First"), {
+                NLs::PathExist,
+                NLs::CheckPathState(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore),
+            });
+            TestDescribeResult(DescribePath(runtime, incrementalPath + relativeDir + "/First"), {
+                NLs::PathExist,
+                NLs::CheckPathState(NKikimrSchemeOp::EPathStateAwaitingOutgoingIncrementalRestore),
+            });
+        }
+        blocked.Stop().Unblock();
+        const auto deadline = runtime.GetCurrentTime() + TDuration::Seconds(120);
+        bool completed = false;
+        while (runtime.GetCurrentTime() < deadline) {
+            const auto response = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+            const auto& restore = response.GetBackupCollectionRestore();
+            if (restore.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                UNIT_ASSERT_VALUES_EQUAL(restore.GetStatus(), Ydb::StatusIds::SUCCESS);
+                completed = true;
+                break;
+            }
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(completed, "Restore must finish with the same data with and without a reboot");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, parent + "/First"), expectedFirst);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, parent + "/Second"), expectedSecond);
+    }
+
+    Y_UNIT_TEST_FLAG(RecoveryPreservesNestedSnapshotPaths, reboot) {
+        CheckRestoreSnapshotLayout(true, false, reboot);
+    }
+
+    Y_UNIT_TEST_FLAG(RecoveryPreservesMissingIncrementalEntries, reboot) {
+        CheckRestoreSnapshotLayout(false, true, reboot);
+    }
+
+    Y_UNIT_TEST_FLAG(RepairIgnoresUnrelatedAlterOnTarget, withState) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        SetupBackupDirs(runtime, env, txId);
+        CreateCollection(runtime, env, txId, "Stale", "/MyRoot/Target");
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Target"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto collectionId = DescribePath(runtime, "/MyRoot/.backups/collections/Stale")
+            .GetPathDescription().GetSelf().GetPathId();
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> blocked(runtime);
+        const ui64 alterId = ++txId;
+        AsyncAlterTable(runtime, alterId, "/MyRoot", R"(
+            Name: "Target"
+            Columns { Name: "extra" Type: "Uint32" }
+        )");
+        TestModificationResult(runtime, alterId);
+        runtime.WaitFor("unrelated alter in flight", [&] { return !blocked.empty(); });
+
+        constexpr ui64 restoreId = 9000001;
+        NKikimrSchemeOp::TLongIncrementalRestoreOp op;
+        op.SetTxId(restoreId);
+        op.MutableBackupCollectionPathId()->SetOwnerId(TTestTxConfig::SchemeShard);
+        op.MutableBackupCollectionPathId()->SetLocalId(collectionId);
+        op.AddTablePathList("/MyRoot/Target");
+        WriteRestoreHeader(runtime, restoreId, op);
+        if (withState) {
+            WriteRestoreState(runtime, restoreId, 1);
+        }
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('Id (Uint64 '%lu))))
+                (let value '('('StepDropped (Uint64 '1000000))))
+                (return (AsList (UpdateRow 'Paths key value)))
+            )
+        )", collectionId));
+        for (ui32 reboot = 0; reboot != 2; ++reboot) {
+            blocked.clear();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            CheckRestoreRows(runtime, restoreId, 0, 0, 0);
+            runtime.WaitFor("alter still in flight after reboot", [&] { return !blocked.empty(); });
+        }
+        blocked.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Target"), {
+            NLs::PathExist,
+            NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+        });
+    }
+
 }

@@ -294,8 +294,107 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..1eed71c39fa1ac40cb27dda2a11d6225
 +		}
 +	}
 +)
+diff --git a/packages/core/src/driver.pinning.test.ts b/packages/core/src/driver.pinning.test.ts
+index 1e3bc95ea62995b4cec9a6d4a58a53d9ac6147cc..29dd54297dee49145dd2b5067aedce5a532cf35a 100644
+--- a/packages/core/src/driver.pinning.test.ts
++++ b/packages/core/src/driver.pinning.test.ts
+@@ -8,6 +8,7 @@ import { setImmediate } from 'node:timers/promises'
+ 
+ import { create } from '@bufbuild/protobuf'
+ import { anyPack } from '@bufbuild/protobuf/wkt'
++import { abortable } from '@ydbjs/abortable'
+ import { StatusIds_StatusCode } from '@ydbjs/api/operation'
+ import { Server } from '@ydbjs/grpc'
+ import { expect, test } from 'vitest'
+@@ -15,14 +16,18 @@ import { expect, test } from 'vitest'
+ import { Driver } from './driver.ts'
+ 
+ // Controlled discovery keeps the pinned node absent; a real cluster may discover it and hide the race.
+-async function pinFixture() {
++async function pinFixture(poll?: (since: unknown, signal: AbortSignal) => Promise<string>) {
+ 	let discovery = new Server()
+ 	let direct = new Server()
+ 	let discoveryPort = 0
+ 	let calls = 0
+ 
+ 	discovery.add(DiscoveryServiceDefinition, {
+-		async listEndpoints() {
++		async listEndpoints(_, ctx) {
++			if (poll) {
++				let generation = await poll(ctx.metadata['x-ydb-if-route-generation'], ctx.signal)
++				ctx.setTrailer({ 'x-ydb-route-generation': generation })
++			}
+ 			return create(ListEndpointsResponseSchema, {
+ 				operation: {
+ 					status: StatusIds_StatusCode.SUCCESS,
+@@ -50,7 +55,9 @@ async function pinFixture() {
+ 
+ 	discoveryPort = await discovery.listen('127.0.0.1:0')
+ 	let port = await direct.listen('127.0.0.1:0')
+-	let driver = new Driver(`grpc://127.0.0.1:${discoveryPort}/local`)
++	let driver = new Driver(`grpc://127.0.0.1:${discoveryPort}/local`, {
++		'ydb.sdk.enable_long_poll': !!poll,
++	})
+ 
+ 	return {
+ 		driver,
+@@ -193,6 +200,54 @@ test('disposing an older client preserves a replacement pin address', async (tc)
+ 	expect(response.operation?.id).toBe('discovery')
+ })
+ 
++test('a retired pin cannot use or release a replacement after a switch and failback', async (tc) => {
++	let next = Promise.withResolvers<string>()
++	let observed = new Set<unknown>()
++	await using fixture = await pinFixture(async (since, signal) => {
++		observed.add(since)
++		return since === undefined ? '1' : abortable(signal, next.promise)
++	})
++	await fixture.driver.ready(tc.signal)
++	using retired = await fixture.driver.createPinnedClient(
++		DiscoveryServiceDefinition,
++		fixture.target
++	)
++	await expect(retired.whoAmI({}, { signal: tc.signal })).resolves.toMatchObject({
++		operation: { id: 'direct' },
++	})
++	await expect.poll(() => observed.has('1')).toBe(true)
++	let advance = async (generation: string) => {
++		let previous = next
++		next = Promise.withResolvers<string>()
++		previous.resolve(generation)
++		// The following conditional poll acknowledges installation of this generation.
++		await expect.poll(() => observed.has(generation)).toBe(true)
++	}
++	await advance('2')
++	using switched = await fixture.driver.createPinnedClient(DiscoveryServiceDefinition, {
++		...fixture.target,
++		endpoint: { host: '127.0.0.1', port: fixture.discoveryPort },
++	})
++	await expect(switched.whoAmI({}, { signal: tc.signal })).resolves.toMatchObject({
++		operation: { id: 'discovery' },
++	})
++	await advance('3')
++	using current = await fixture.driver.createPinnedClient(
++		DiscoveryServiceDefinition,
++		fixture.target
++	)
++	await expect
++		.soft(retired.whoAmI({}, { signal: tc.signal }))
++		.rejects.toThrow(/assignment retired/)
++	retired.close()
++	switched.close()
++	await setImmediate()
++	await expect(current.whoAmI({}, { signal: tc.signal })).resolves.toMatchObject({
++		operation: { id: 'direct' },
++	})
++	expect(fixture.calls).toBe(2)
++})
++
+ test('disposing a retired handle again preserves a newly created pin', async (tc) => {
+ 	await using fixture = await pinFixture()
+ 	await fixture.driver.ready(tc.signal)
 diff --git a/packages/core/src/driver.ts b/packages/core/src/driver.ts
-index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..814e126d4fd99231e1a173a47a3f3b52b4428788 100644
+index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..cabe39122d39b0a8451ad9a204b3d2d010aa2271 100644
 --- a/packages/core/src/driver.ts
 +++ b/packages/core/src/driver.ts
 @@ -1,3 +1,5 @@
@@ -342,7 +441,64 @@ index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..814e126d4fd99231e1a173a47a3f3b52
  				secure: this.isSecure || this.options.secureOptions !== undefined,
  				transportOptions: this.options.transportOptions,
  				hooks: this.options.hooks,
-@@ -541,17 +552,23 @@ export class Driver implements Disposable {
+@@ -317,10 +328,19 @@ export class Driver implements Disposable {
+ 	): ServiceClient<Service> {
+ 		let nodeId = typeof target === 'bigint' ? target : target?.nodeId
+ 		let hard = typeof target === 'object' ? (target.hard ?? false) : false
++		return this.#createClient(service, nodeId, hard, this.#closedController.signal)
++	}
++
++	#createClient<Service extends ServiceDefinition>(
++		service: Service,
++		nodeId: bigint | undefined,
++		hard: boolean,
++		signal: AbortSignal
++	): ServiceClient<Service> {
+ 		let transport = createRoutingTransport(
+ 			this.#endpoints?.pool ?? this.#connection,
+ 			this.#prepareMetadata,
+-			{ signal: this.#closedController.signal, hooks: this.options.hooks, nodeId, hard }
++			{ signal, hooks: this.options.hooks, nodeId, hard }
+ 		)
+ 		return createServiceClient(service, transport)
+ 	}
+@@ -343,6 +363,10 @@ export class Driver implements Disposable {
+ 
+ 		let nodeId = target.nodeId
+ 		let hard = target.hard ?? false
++		let pinSignal = pool.pinSignal
++		let release = () => {
++			if (pinSignal === pool.pinSignal) pool.invalidate(nodeId)
++		}
+ 		let pinned = pool.pin(nodeId, target.endpoint.host, target.endpoint.port, target.endpoint)
+ 
+ 		try {
+@@ -352,7 +376,8 @@ export class Driver implements Disposable {
+ 				throw new Error('Driver is closed')
+ 			}
+ 
+-			let client = this.createClient(service, { nodeId, hard })
++			pinSignal.throwIfAborted()
++			let client = this.#createClient(service, nodeId, hard, pinSignal)
+ 			let close = client.close.bind(client)
+ 			let disposed = false
+ 
+@@ -363,12 +388,12 @@ export class Driver implements Disposable {
+ 
+ 				disposed = true
+ 				close()
+-				pool.invalidate(nodeId)
++				release()
+ 			}
+ 
+ 			return Object.assign(client, { [Symbol.dispose]: () => client.close() })
+ 		} catch (error) {
+-			pool.invalidate(nodeId)
++			release()
+ 			throw error
+ 		}
+ 	}
+@@ -541,17 +566,23 @@ export class Driver implements Disposable {
  	// The listEndpoints seam handed to the endpoints runtime. One plain RPC — the
  	// FSM owns retry/backoff, and the run_discovery_round effect owns the
  	// tracing:ydb:driver.discovery span; this closure must not add either.
@@ -373,7 +529,7 @@ index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..814e126d4fd99231e1a173a47a3f3b52
  		assert.ok(response.operation, new DriverResponseError('Missing operation data.'))
  
 diff --git a/packages/core/src/endpoints/endpoints-runtime.ts b/packages/core/src/endpoints/endpoints-runtime.ts
-index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b4296e84f 100644
+index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..98b24e78053756eedce65647903e07c75b227b79 100644
 --- a/packages/core/src/endpoints/endpoints-runtime.ts
 +++ b/packages/core/src/endpoints/endpoints-runtime.ts
 @@ -55,6 +55,7 @@ let discoveryCh = tracingChannel<{ driver: DriverIdentity }>('tracing:ydb:driver
@@ -393,7 +549,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  export type ListEndpoints = (signal: AbortSignal) => Promise<DiscoveryResult>
  
  // The injectable channel seam (default = GrpcConnection). This is what makes the
-@@ -78,12 +81,14 @@ export const DEFAULT_RETIRED_GRACE_MS = 300_000
+@@ -78,12 +81,15 @@ export const DEFAULT_RETIRED_GRACE_MS = 300_000
  export const DEFAULT_BACKOFF_BASE_MS = 50
  export const DEFAULT_BACKOFF_MAX_MS = 30_000
  
@@ -406,10 +562,19 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  	listEndpoints: ListEndpoints
 +	watchEndpoints?: WatchEndpoints | undefined
 +	watching: boolean
++	pinScope: AbortController
  	connectionFactory: ConnectionFactory
  
  	// I/O-owned channel state — NEVER touched by the transition.
-@@ -270,23 +275,42 @@ let effects = {
+@@ -173,6 +179,7 @@ let finalizeEnv = function finalizeEnv(env: EndpointsEnv): void {
+ 	}
+ 	env.inflight.clear()
+ 	if (!env.ac.signal.aborted) env.ac.abort(new Error('Endpoints finalized'))
++	env.pinScope.abort(env.ac.signal.reason)
+ }
+ 
+ // Bridge topology helpers — pure, shared by the round + pool.stats publishers.
+@@ -270,23 +277,48 @@ let effects = {
  	// them to the discovery span — the async #consume loop has no active span, so
  	// publishing them there would silently drop them from traces.
  	'endpoints.effect.run_discovery_round': (ctx: FullCtx, _effect, runtime) => {
@@ -450,7 +615,13 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
 +								...update,
 +							})
 +						} else {
++							// A node ID and address can both recur after failback.
++							let retired = ctx.pinScope
++							ctx.pinScope = new AbortController()
 +							runtime.dispatch({ type: 'endpoints.discovery.watch_lost' })
++							retired.abort(
++								new EndpointsUnavailableError('Pinned endpoint assignment retired')
++							)
 +						}
 +					}
 +					return
@@ -458,7 +629,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  				let result = await discoveryCh.tracePromise(
  					async () => {
  						let r = await ctx.listEndpoints(link.signal)
-@@ -318,6 +342,7 @@ let effects = {
+@@ -318,6 +350,7 @@ let effects = {
  					retryable: timedOut || isRetryableError(error, true),
  				})
  			} finally {
@@ -466,7 +637,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  				clearTimeout(timer)
  				link[Symbol.dispose]()
  			}
-@@ -350,7 +375,9 @@ let effects = {
+@@ -350,7 +383,9 @@ let effects = {
  					ctx.timers.delete(key)
  					runtime.dispatch(event)
  				}, delay)
@@ -477,10 +648,14 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  		ctx.timers.set(key, handle)
  	},
  
-@@ -436,6 +463,10 @@ export class EndpointPool implements Disposable {
+@@ -436,6 +471,14 @@ export class EndpointPool implements Disposable {
  		return this.#snapshot
  	}
  
++	get pinSignal(): AbortSignal {
++		return this.#env.pinScope.signal
++	}
++
 +	get watchPending(): boolean {
 +		return !!this.#env.watchEndpoints && this.#snapshot === EMPTY_SNAPSHOT
 +	}
@@ -488,7 +663,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  	get closed(): boolean {
  		return (
  			this.#machine.signal.aborted ||
-@@ -540,7 +571,7 @@ export class EndpointPool implements Disposable {
+@@ -540,7 +583,7 @@ export class EndpointPool implements Disposable {
  		signal?.throwIfAborted()
  		this.#machine.signal.throwIfAborted()
  		if (this.#env.isFinalized) throw new Error('Endpoints closed')
@@ -497,7 +672,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  			let waiter = Promise.withResolvers<void>()
  			let onAbort = () => {
  				this.#env.readyWaiters.delete(waiter)
-@@ -819,6 +850,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
+@@ -819,6 +862,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
  export type EndpointsRuntimeConfig = {
  	identity: DriverIdentity
  	listEndpoints: ListEndpoints
@@ -505,12 +680,13 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b
  	secure?: boolean
  	transportOptions?: ClientOptions | undefined
  	connectionFactory?: ConnectionFactory | undefined
-@@ -845,6 +877,8 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
+@@ -845,6 +889,9 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
  		identity: config.identity,
  		hooks: config.hooks,
  		listEndpoints: config.listEndpoints,
 +		watchEndpoints: config.watchEndpoints,
 +		watching: false,
++		pinScope: new AbortController(),
  		connectionFactory: config.connectionFactory ?? defaultFactory,
  		channels: new Map(),
  		pinnedChannels: new Map(),

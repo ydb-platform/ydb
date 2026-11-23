@@ -85,35 +85,6 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
-template<typename TSinkProto>
-bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TSinkProto& sink) {
-    if (sink.GetTypeCase() == TSinkProto::kInternalSink
-        && sink.GetInternalSink().GetSettings().template Is<NKikimrKqp::TKqpTableSinkSettings>())
-    {
-        return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
-    }
-    return false;
-}
-
-bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
-    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-    for (const auto& tx : physicalQuery.GetTransactions()) {
-        for (const auto& stage : tx.GetStages()) {
-            for (auto& sink : stage.GetSinks()) {
-                if (FillTableSinkSettings(sinkSettings, sink) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
-                    return true;
-                }
-            }
-            for (auto& transform : stage.GetOutputTransforms()) {
-                if (FillTableSinkSettings(sinkSettings, transform) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
-                    YDB_LOG_ENSURE(false);
-                }
-            }
-        }
-    }
-    return false;
-}
-
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -1761,14 +1732,11 @@ public:
             }
         }
 
-        const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
-        const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
-        const bool hasOltpRead = ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery);
-        QueryState->TxCtx->HasOlapTable |= hasOlapWrite || hasOlapRead;
-        QueryState->TxCtx->HasOltpTable |= hasOltpWrite || hasOltpRead;
-        QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
-        QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
+        const auto& access = QueryState->PreparedQuery->GetTableAccess();
+        QueryState->TxCtx->HasOlapTable |= access.HasOlapWrite || access.HasOlapRead;
+        QueryState->TxCtx->HasOltpTable |= access.HasOltpWrite || access.HasOltpRead;
+        QueryState->TxCtx->HasTableWrite |= access.HasOlapWrite || access.HasOltpWrite;
+        QueryState->TxCtx->HasTableRead |= access.HasOlapRead || access.HasOltpRead;
 
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
@@ -2026,7 +1994,7 @@ public:
         }
 
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        if (IsBatchQuery(phyQuery)) {
+        if (QueryState->PreparedQuery->IsBatchQuery()) {
             ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for batch queries");
             return false;
         }
@@ -2154,7 +2122,7 @@ public:
             return;
         }
 
-        const bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
+        const bool isBatchQuery = QueryState->PreparedQuery->IsBatchQuery();
         if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {

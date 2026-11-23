@@ -25,7 +25,7 @@
 #include <util/string/printf.h>
 #include <util/system/mutex.h>
 
-#include <atomic>
+#include <optional>
 
 namespace NKikimr::NReplication::NController {
 namespace {
@@ -124,14 +124,7 @@ class TTopicMirroringFixture {
     static constexpr const char* SourceTopic = "/Root/src/topic";
     static constexpr const char* DestinationTopic = "/Root/topic";
 
-    struct TSourceEnv: TEnv<> {
-        TSourceEnv(): TEnv<>(TopicReplicationFlags()) {
-            UNIT_ASSERT_VALUES_EQUAL(MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
-            auto topic = MakeTopicDescription({.Name = "topic"});
-            topic->MutablePQTabletConfig()->AddConsumers()->SetName(Consumer);
-            UNIT_ASSERT_VALUES_EQUAL(CreateTopic("/Root/src", *topic), NMsgBusProxy::MSTATUS_OK);
-        }
-    };
+    std::optional<TEnv<>> RemoteSource;
 
     static TTopicOffsets GetOffsets(TEnv<>& env, const TString& topic, const TString& consumer) {
         const auto offsets = GetTopicOffsets(env, topic, consumer);
@@ -142,14 +135,24 @@ class TTopicMirroringFixture {
     TString MirrorConsumer;
 
 public:
-    TSourceEnv Source;
     TEnv<> Destination;
+    TEnv<>& Source;
     const ui64 SchemeShard = Destination.GetPathId("/Root").OwnerId;
 
+    // The simulated runtime installs a process-wide clock, so the DONE test uses one cluster.
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false,
             TMirrorReaderFactory* mirrorReaderFactory = nullptr, const TString& sourceWriteMode = {})
-        : Destination(TopicReplicationFlags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
+        : RemoteSource(stopBeforeCreateResult ? std::nullopt : std::optional<TEnv<>>(std::in_place, TopicReplicationFlags()))
+        , Destination(TopicReplicationFlags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
+        , Source(RemoteSource ? *RemoteSource : Destination)
     {
+        Source.RunCall([&] {
+            UNIT_ASSERT_VALUES_EQUAL(Source.MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
+            auto topic = MakeTopicDescription({.Name = "topic"});
+            topic->MutablePQTabletConfig()->AddConsumers()->SetName(Consumer);
+            UNIT_ASSERT_VALUES_EQUAL(Source.CreateTopic("/Root/src", *topic), NMsgBusProxy::MSTATUS_OK);
+        });
+
         if (mirrorReaderFactory) {
             auto& runtime = Destination.GetRuntime();
             auto& appData = runtime.GetAppData();
@@ -160,20 +163,25 @@ public:
         if (!sourceWriteMode.empty()) {
             SetSourceWriteMode(sourceWriteMode);
         }
-        std::atomic<bool> createResultBlocked = false;
-        auto observer = Destination.GetRuntime().AddObserver<TEvPrivate::TEvCreateDstResult>(
-            [&](TEvPrivate::TEvCreateDstResult::TPtr& ev) {
-                if (stopBeforeCreateResult && ev->Get()->IsSuccess()) {
-                    ev.Reset();
-                    createResultBlocked = true;
-                }
-            });
+        bool createResultBlocked = false;
+        auto observer = Destination.GetRuntime().AddObserver([&](IEventHandle::TPtr& ev) {
+            if (!stopBeforeCreateResult || ev->GetTypeRewrite() != TEvPrivate::EvCreateDstResult || !ev->HasEvent()) {
+                return;
+            }
+
+            // Other actors can use the same private event ID.
+            if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase())) {
+                UNIT_ASSERT_C(result->IsSuccess(), result->Error);
+                ev.Reset();
+                createResultBlocked = true;
+            }
+        });
         const auto endpoint = sourceHost + Source.GetEndpoint().substr(Source.GetEndpoint().rfind(':'));
         Exec(Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/src/topic` AS `/Root/topic`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
                 CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", endpoint.c_str()));
         if (stopBeforeCreateResult) {
-            WaitForReplication(Destination, [&] { return createResultBlocked.load(); });
+            WaitForReplication(Destination, [&] { return createResultBlocked; });
             return;
         }
         WaitMirror(true);

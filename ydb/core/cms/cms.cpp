@@ -1392,7 +1392,8 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     for (const auto &entry : State->Permissions) {
         const auto &permission = entry.second;
         if (permission.Owner == WALLE_CMS_USER
-            && !State->WalleRequests.contains(permission.RequestId)) {
+            && !State->WalleRequests.contains(permission.RequestId))
+        {
             permissionsToRemove.push_back(permission.PermissionId);
             requestsWithPermissions.insert(permission.RequestId);
         }
@@ -1402,7 +1403,8 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     for (const auto &entry : State->ScheduledRequests) {
         const auto &request = entry.second;
         if (request.Owner == WALLE_CMS_USER
-            && !State->WalleRequests.contains(request.RequestId)) {
+            && !State->WalleRequests.contains(request.RequestId))
+        {
             if (request.Request.GetEvictVDisks() && requestsWithPermissions.contains(request.RequestId)) {
                 // TTxRemovePermissions also removes this eviction request and its host markers.
                 continue;

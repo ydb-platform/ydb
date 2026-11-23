@@ -170,8 +170,14 @@ class TestTopicSqsBotoRollingUpdate(RollingUpgradeAndDowngradeFixture):
                     QueueUrl=queue_url,
                     MessageBody=f"msg-{threading.get_ident()}-{iteration}-b",
                 )
+                client.send_message(
+                    QueueUrl=queue_url,
+                    MessageBody=f"msg-{threading.get_ident()}-{iteration}-delayed",
+                    DelaySeconds=1,
+                )
                 with lock:
-                    stats["sent"] += 2
+                    stats["sent"] += 3
+                    stats["delayed"] += 1
 
                 self._receive_and_delete(client, queue_url, stats, lock)
                 self._receive_and_delete(client, queue_url, stats, lock)
@@ -246,6 +252,7 @@ class TestTopicSqsBotoRollingUpdate(RollingUpgradeAndDowngradeFixture):
         lock = threading.Lock()
         stats = {
             "sent": 0,
+            "delayed": 0,
             "deleted": 0,
             "get_attributes": 0,
             "set_attributes": 0,
@@ -275,6 +282,9 @@ class TestTopicSqsBotoRollingUpdate(RollingUpgradeAndDowngradeFixture):
             # Daemon workers may still be blocked in a boto call after node restart;
             # require that useful work was done rather than that every thread exited.
             assert stats["sent"] > 0, f"no messages were sent at step {step_name}: {stats}"
+            assert 0 < stats["delayed"] < stats["sent"], (
+                f"delayed sends must be a portion of all sends at step {step_name}: {stats}"
+            )
             assert stats["deleted"] > 0, f"no messages were deleted at step {step_name}: {stats}"
             assert stats["get_attributes"] > 0, f"get_queue_attributes was not called at step {step_name}: {stats}"
             assert stats["set_attributes"] > 0, f"set_queue_attributes was not called at step {step_name}: {stats}"

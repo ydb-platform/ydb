@@ -385,6 +385,7 @@ protected:
     void WaitDataRangeRequest();
     void SendDataRangeResponse(ui32 partitionId,
                                ui64 begin, ui64 end, bool isHead);
+    void SendDataRangeResponse(const TKey& key, ui32 valueSize);
     void SendDataRangeNodataResponse();
     void SendDataRangeEmptyOkResponse();
     void WaitDataReadRequest();
@@ -1278,31 +1279,27 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
 {
     Y_ABORT_UNLESS(begin <= end);
 
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
-    event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
-
-    auto read = event->Record.AddReadRangeResult();
-    read->SetStatus(NKikimrProto::OK);
-    auto pair = read->AddPair();
-
-    TKey key;
-    if (isHead) {
-        key = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0);
-    } else {
-        key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0);
-    }
-
-    pair->SetStatus(NKikimrProto::OK);
-    pair->SetKey(key.Data(), key.Size());
     if (isHead) {
         // The range response and the subsequent blob read must describe the same bytes.
         HeadBlobData.clear();
         auto batch = CreateBatch(end - begin, begin);
         batch.SerializeTo(HeadBlobData);
-        pair->SetValueSize(HeadBlobData.size());
+        SendDataRangeResponse(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0), HeadBlobData.size());
     } else {
-        pair->SetValueSize(684);
+        SendDataRangeResponse(TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0), 684);
     }
+}
+
+void TPartitionFixture::SendDataRangeResponse(const TKey& key, ui32 valueSize)
+{
+    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    auto read = event->Record.AddReadRangeResult();
+    read->SetStatus(NKikimrProto::OK);
+    auto pair = read->AddPair();
+    pair->SetStatus(NKikimrProto::OK);
+    pair->SetKey(key.Data(), key.Size());
+    pair->SetValueSize(valueSize);
     pair->SetCreationUnixTime(TInstant::Now().Seconds());
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -5205,6 +5202,48 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
 {
     TestWriteSubDomainOutOfSpace_DeadlineWork(true);
+}
+
+Y_UNIT_TEST_F(GetWriteInfoDuringInitStopsSupportivePartitionCompaction, TPartitionFixture) {
+    auto& appData = Ctx->Runtime->GetAppData();
+    appData.PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+    appData.PQConfig.MutableCompactionConfig()->SetBlobsCount(1);
+    appData.FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(false);
+
+    const TPartitionId partition{2, TWriteId{0, 10}, 100'001};
+    CreatePartitionActor(partition, {}, false);
+    WaitConfigRequest();
+    // The outstanding KV read keeps the partition in init while it handles GetWriteInfo.
+    SendGetWriteInfo(false);
+    SendConfigResponse({});
+    WaitDiskStatusRequest();
+    SendDiskStatusResponse();
+    WaitMetaReadRequest();
+    SendMetaReadResponse(0, 1, Nothing(), Nothing(), Ctx->Runtime->GetCurrentTime());
+    WaitInfoRangeRequest();
+    SendInfoRangeResponse(partition.InternalPartitionId, {});
+    WaitDataRangeRequest();
+
+    bool sawWakeup = false;
+    auto wakeupObserver = Ctx->Runtime->AddObserver<TEvents::TEvWakeup>([&](auto& ev) {
+        if (ev->Sender == ActorId && ev->Recipient == ActorId) {
+            sawWakeup = true;
+        }
+    });
+    auto compactionObserver = Ctx->Runtime->AddObserver<TEvPQ::TEvRunCompaction>([&](auto& ev) {
+        UNIT_ASSERT_C(ev->Recipient != ActorId, "Supportive partition started compaction after handing off its FWZ key");
+    });
+
+    const auto key = TKey::ForFastWrite(TKeyPrefix::TypeData, partition, 0, 0, 1, 0);
+    SendDataRangeResponse(key, 8_MB);
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->BodyKeys.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(response->BodyKeys.front().Key.ToString(), key.ToString());
+    UNIT_ASSERT(response->BodyKeys.front().BlobKeyToken);
+
+    Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT_C(sawWakeup, "Supportive partition did not process its post-init wakeup");
 }
 
 Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {

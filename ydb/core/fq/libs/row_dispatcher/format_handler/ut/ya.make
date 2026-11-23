@@ -5,6 +5,7 @@ SRCS(
     memory_quota_ut.cpp
     topic_filter_ut.cpp
     topic_parser_ut.cpp
+    json_parser_compatibility_ut.cpp
 )
 
 PEERDIR(
@@ -12,8 +13,10 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/format_handler/filters
     ydb/core/fq/libs/row_dispatcher/format_handler/parsers
     ydb/core/fq/libs/row_dispatcher/format_handler/ut/common
+    ydb/core/fq/libs/row_dispatcher/purecalc_compilation
 
     yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 SIZE(MEDIUM)

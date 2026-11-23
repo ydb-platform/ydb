@@ -71,9 +71,8 @@ def test_lockfile_get_packages_meta_ok():
     pkg = packages[0]
 
     assert len(packages) == 1
-    assert pkg.tarball_url == "@babel%2fcli/-/cli-7.6.2.tgz"
+    assert pkg.tarball_url == "https://npm.yandex-team.ru/@babel%2fcli/-/cli-7.6.2.tgz"
     assert pkg.tarball_path == "@babel/cli/-/cli-7.6.2.tgz"
-    assert pkg.sky_id == "rbtorrent:cb1849da3e4947e56a8f6bde6a1ec42703ddd187"
     assert pkg.integrity == "JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ=="
     assert pkg.integrity_algorithm == "sha512"
 
@@ -115,7 +114,7 @@ def test_lockfile_get_packages_meta_scoped_tarball_with_scope_in_filename():
     assert len(packages) == 1
     assert packages[0].tarball_path == "@yandex-lego/storybook-deploy/-/storybook-deploy-0.2.1.tgz"
     assert packages[0].to_uri() == (
-        "https://npm.yandex-team.ru/@yandex-lego/storybook-deploy/-/storybook-deploy-0.2.1.tgz"
+        "https://npm.yandex-team.ru/@yandex-lego%2fstorybook-deploy/-/storybook-deploy-0.2.1.tgz"
         "#integrity=sha512-Z21GgVKGvxWmuBSo5d6OOMqYsYJaw5AMI63uPHJDmpxxrCmRy3VDWuA7Oi3IObaPofVVWZ/BO1op5m4qjRAEgw=="
     )
 
@@ -204,12 +203,47 @@ def test_lockfile_infers_missing_tarball(key, path):
     assert pkg.tarball_url == "https://npm.yandex-team.ru/" + path
     assert pkg.tarball_path == path.replace("%2f", "/")
     assert pkg.to_uri() == "https://npm.yandex-team.ru/" + path + "#integrity=sha512-aGFzaA=="
-    assert pkg.sky_id == ""
     assert "tarball" not in lf.data["packages"][key]["resolution"]
 
-    lf.update_tarball_resolutions(lambda meta: "file:__tarballs__/" + meta.tarball_path)
 
-    assert lf.data["packages"][key]["resolution"]["tarball"] == "file:__tarballs__/" + path.replace("%2f", "/")
+@pytest.mark.parametrize(
+    "explicit_tarball",
+    [
+        "@scope%2fother/-/archive.tgz?rbtorrent=deprecated",
+        "/legacy/archive.tgz",
+        "http://npm.yandex-team.ru/legacy/archive.tgz",
+        "https://example.org/pkg.tgz",
+        "file:./pkg.tgz",
+        None,
+    ],
+)
+def test_tarball_is_derived_from_registry_key(explicit_tarball):
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    key = "@scope/pkg@1.2.3-rc.1+build.2"
+    resolution = {"tarball": explicit_tarball, "integrity": "sha512-aGFzaA=="}
+    lf.data = {"packages": {key: {"resolution": resolution}}}
+
+    (pkg,) = lf.get_packages_meta()
+
+    assert pkg.tarball_path == "@scope/pkg/-/pkg-1.2.3-rc.1+build.2.tgz"
+    assert (
+        pkg.to_uri() == "https://npm.yandex-team.ru/@scope%2fpkg/-/pkg-1.2.3-rc.1+build.2.tgz#integrity=sha512-aGFzaA=="
+    )
+    assert resolution["tarball"] == explicit_tarball
+
+
+def test_rejects_non_registry_key_with_explicit_tarball():
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {
+        "packages": {
+            "pkg@https://example.org/pkg.tgz": {
+                "resolution": {"tarball": "legacy/pkg.tgz", "integrity": "sha512-aGFzaA=="}
+            }
+        }
+    }
+
+    with pytest.raises(TypeError, match="cannot infer tarball URL"):
+        list(lf.get_packages_meta())
 
 
 @pytest.mark.parametrize(
@@ -241,8 +275,6 @@ def test_lockfile_rejects_unsafe_package_names(name, character):
 
     with pytest.raises(TypeError, match="cannot infer tarball URL"):
         list(lf.get_packages_meta())
-    with pytest.raises(TypeError, match="cannot infer tarball URL"):
-        lf.update_tarball_resolutions(lambda meta: "file:__tarballs__/" + meta.tarball_path)
     assert "tarball" not in lf.data["packages"][key]["resolution"]
 
 
@@ -272,8 +304,6 @@ def test_lockfile_rejects_invalid_fixed_semver(version):
 
     with pytest.raises(TypeError, match="cannot infer tarball URL"):
         list(lf.get_packages_meta())
-    with pytest.raises(TypeError, match="cannot infer tarball URL"):
-        lf.update_tarball_resolutions(lambda meta: "file:__tarballs__/" + meta.tarball_path)
     assert "tarball" not in lf.data["packages"][key]["resolution"]
 
 
@@ -290,69 +320,6 @@ def test_lockfile_infers_tarball_for_valid_fixed_semver(version):
 
     assert pkg.tarball_url == "https://npm.yandex-team.ru/pkg/-/pkg-" + version + ".tgz"
     assert pkg.tarball_path == "pkg/-/pkg-" + version + ".tgz"
-
-
-def test_package_meta_missing_rbtorrent():
-    lf = Lockfile(path="/pnpm-lock.yaml")
-    lf.data = {
-        "packages": {
-            "valid@1.2.3": {
-                "resolution": {
-                    "integrity": "sha512-JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ==",
-                    "tarball": "valid-without-rbtorrent-1.2.3.tgz",
-                },
-            },
-        },
-    }
-
-    packages = list(lf.get_packages_meta())
-    pkg = packages[0]
-
-    assert len(packages) == 1
-    assert pkg.sky_id == ""
-
-
-def test_lockfile_meta_file_tarball_prohibits_file_protocol():
-    lf = Lockfile(path="/pnpm-lock.yaml")
-    lf.data = {
-        "packages": {
-            "@babel/cli@7.6.2": {
-                "resolution": {
-                    "integrity": "sha512-JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ==",
-                    "tarball": "file:/some/abs/path.tgz",
-                },
-            },
-        },
-    }
-
-    with pytest.raises(TypeError) as e:
-        list(lf.get_packages_meta())
-
-    assert (
-        str(e.value)
-        == "Invalid package meta for '@babel/cli@7.6.2', parse error: tarball cannot point to a file, got 'file:/some/abs/path.tgz'"
-    )
-
-
-def test_lockfile_update_tarball_resolutions_ok():
-    lf = Lockfile(path="/pnpm-lock.yaml")
-    lf.data = {
-        "packages": {
-            "@babel/cli@7.6.2_@babel+core@7.6.2": {
-                "resolution": {
-                    "integrity": "sha512-JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ==",
-                    "tarball": "@babel%2fcli/-/cli-7.6.2.tgz?rbtorrent=cb1849da3e4947e56a8f6bde6a1ec42703ddd187",
-                },
-            },
-        },
-    }
-
-    lf.update_tarball_resolutions(lambda p: p.tarball_url)
-
-    assert (
-        lf.data["packages"]["@babel/cli@7.6.2_@babel+core@7.6.2"]["resolution"]["tarball"]
-        == "@babel%2fcli/-/cli-7.6.2.tgz"
-    )
 
 
 @pytest.mark.parametrize("content", [None, "", " \n\t\n", "# no dependencies\n", "{}\n", "null\n"])

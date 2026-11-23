@@ -1812,6 +1812,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
 
     PQ_ENSURE(IsSupportive());
 
+    StopCompaction = true;
     ev->Get()->OriginalPartition = ev->Sender;
     AddPendingEvent(ev);
 }

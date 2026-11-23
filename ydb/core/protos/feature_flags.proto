@@ -499,4 +499,8 @@ message TFeatureFlags {
     optional bool EnableTopicReplication = 396 [default = false];
     optional bool EnableRebuildIndex = 397 [default = false];
     optional bool EnableDefaultFromExpression = 398 [default = false];
+    optional bool ShareShardedMkqlProgram = 399 [default = false];
+    // Disables client access to built-in PostgreSQL compatibility in YDB.
+    optional bool DisablePgCompatibility = 400 [default = false];
+    optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
 }

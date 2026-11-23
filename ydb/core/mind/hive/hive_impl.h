@@ -265,6 +265,9 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartPileDrain(TBridgePileInfo& pile);
     bool HasTabletsToDrain(TBridgePileId pileId) const;
+    // marks for drain the piles that have tablets their placement does not allow there (anymore)
+    void MarkPilesWithMisplacedTablets(NIceDb::TNiceDb& db);
+    void OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous);
     void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
@@ -1048,6 +1051,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     NKikimrConfig::THiveConfig::EHiveBootStrategy GetBootStrategy() const {
         return CurrentConfig.GetBootStrategy();
+    }
+
+    NKikimrConfig::THiveConfig::EBridgeTabletPlacement GetBridgeTabletPlacement() const {
+        return CurrentConfig.GetBridgeTabletPlacement();
     }
 
     NKikimrConfig::THiveConfig::EHiveChannelBalanceStrategy GetChannelBalanceStrategy() const {

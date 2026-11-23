@@ -16,13 +16,13 @@ namespace NKikimr::NGRpcProxy::V1 {
 TAclWrapper::TAclWrapper(THolder<NACLib::TSecurityObject> acl)
     : AclOldSchemeCache(std::move(acl))
 {
-    AFL_ENSURE(AclOldSchemeCache);
+    YDB_LOG_ENSURE(AclOldSchemeCache);
 }
 
 TAclWrapper::TAclWrapper(TIntrusivePtr<TSecurityObject> acl)
     : AclNewSchemeCache(std::move(acl))
 {
-    AFL_ENSURE(AclNewSchemeCache);
+    YDB_LOG_ENSURE(AclNewSchemeCache);
 }
 
 bool TAclWrapper::CheckAccess(NACLib::EAccessRights rights, const NACLib::TUserToken& userToken) {
@@ -181,12 +181,12 @@ Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TScheme
 }
 
 void SetBatchSourceId(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch, TString value) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     batch->set_source_id(std::move(value));
 }
 
 void SetBatchSourceId(Ydb::Topic::StreamReadMessage_ReadResponse_Batch* batch, TString value) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     if (IsUtf(value)) {
         batch->set_producer_id(std::move(value));
     } else {

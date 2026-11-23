@@ -225,6 +225,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             } else {
                 Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
                     .WithSetVal(true)
+                    .RequestType("replication")
                     .WithKeyShardBoundary(true)),
                     0,
                     RetryGeneration);

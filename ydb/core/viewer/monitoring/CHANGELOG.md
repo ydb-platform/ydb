@@ -1,5 +1,12 @@
 # Changelog
 
+## [18.1.0-hotfix.3](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0-hotfix.2...v18.1.0-hotfix.3) (2026-11-22)
+
+
+### Features
+
+* **bridge:** backport bridge UI to hotfix 18.1.0 ([#4625](https://github.com/ydb-platform/ydb-embedded-ui/issues/4625)) ([09ebbc4](https://github.com/ydb-platform/ydb-embedded-ui/commit/09ebbc49512285845227cdfa21bcaf6ea17709bb))
+
 ## [18.1.0-hotfix.2](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0-hotfix.1...v18.1.0-hotfix.2) (2026-11-07)
 
 

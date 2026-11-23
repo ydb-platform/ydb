@@ -384,6 +384,7 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                                 const TActorContext& ctx)
 {
     Config = newConfig;
+    Executor()->SetCountersPublishingEnabled(!Config.GetMetricsDisabled());
 
     LOG_D("Apply new config",
         {"config", Config.ShortDebugString()});
@@ -749,6 +750,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         return;
     }
 
+    Executor()->SetCountersPublishingEnabled(!Config.GetMetricsDisabled());
+
     TxWrites.clear();
 
     const auto txs = CollectTransactions(readRanges);
@@ -1104,6 +1107,10 @@ void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
 
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
+    if (Config.GetMetricsDisabled()) {
+        return;
+    }
+
     if (CounterEventsInflight[group].RefCount() <= 1) {
         if (CounterEventsInflight[group].RefCount() == 0) {
             CounterEventsInflight[group] = new TEvTabletCounters::TInFlightCookie;
@@ -2982,6 +2989,13 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();
+}
+
+void TPersQueue::OnActivateExecutor(const TActorContext& ctx)
+{
+    // Wait for the persisted topic config before publishing any tablet counters.
+    Executor()->SetCountersPublishingEnabled(false);
+    NKeyValue::TKeyValueFlat::OnActivateExecutor(ctx);
 }
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)

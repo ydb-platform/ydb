@@ -4365,7 +4365,9 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
             Counters->Simple()[TExecutorCounters::USED_TABLET_TX_MEMORY].Set(memory.Static);
             Counters->Simple()[TExecutorCounters::USED_DYNAMIC_TX_MEMORY].Set(memory.Dynamic);
 
-            executorCounters = Counters->MakeDiffForAggr(*CountersBaseline);
+            if (CountersPublishingEnabled) {
+                executorCounters = Counters->MakeDiffForAggr(*CountersBaseline);
+            }
             Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
 
             if (ResourceMetrics && !Stats->IsFollower()) {
@@ -4386,7 +4388,9 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         }
 
         if (AppCounters) {
-            externalTabletCounters = AppCounters->MakeDiffForAggr(*AppCountersBaseline);
+            if (CountersPublishingEnabled) {
+                externalTabletCounters = AppCounters->MakeDiffForAggr(*AppCountersBaseline);
+            }
             AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
         }
 
@@ -4395,10 +4399,12 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         auto tabletType = Owner->TabletType();
         auto tenantPathId = Owner->Info()->TenantPathId;
 
-        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
-        Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
-            FollowerId));
+        if (CountersPublishingEnabled) {
+            TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
+            Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
+                CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+                FollowerId));
+        }
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4408,6 +4414,10 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 }
 
 void TExecutor::ForceSendCounters() {
+    if (!CountersPublishingEnabled) {
+        return;
+    }
+
     TAutoPtr<TTabletCountersBase> executorCounters;
     TAutoPtr<TTabletCountersBase> externalTabletCounters;
 
@@ -5019,6 +5029,26 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
 const NTable::TScheme& TExecutor::Scheme() const {
     Y_DEBUG_ABORT_UNLESS(Database);
     return Database->GetScheme();
+}
+
+void TExecutor::SetCountersPublishingEnabled(bool enabled) {
+    if (CountersPublishingEnabled == enabled) {
+        return;
+    }
+    CountersPublishingEnabled = enabled;
+
+    // Do not publish increments accumulated while publication was disabled after re-enabling it.
+    if (Counters) {
+        Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
+    }
+    if (AppCounters) {
+        AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
+    }
+
+    if (!enabled) {
+        TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
+    }
 }
 
 void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) {

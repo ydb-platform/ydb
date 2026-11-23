@@ -655,6 +655,8 @@ namespace NFlatExecutorSetup {
         virtual void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0;
         virtual void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) = 0;
+        // Controls publication to tablet counters aggregator; local counters and resource accounting continue.
+        virtual void SetCountersPublishingEnabled(bool enabled) = 0;
         virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0;
 
         virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0;

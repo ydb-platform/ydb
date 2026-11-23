@@ -123,7 +123,7 @@ public:
         LOG_I("Cleaned up IncrementalRestoreState for operation: " << restoreId);
 
         // Clean up IncrementalRestoreOperations table
-        db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
+        Self->PersistRemoveLongIncrementalRestoreOp(db, restoreId);
         LOG_I("Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
 
         auto opIt = Self->IncrementalRestoreOperationToState.begin();

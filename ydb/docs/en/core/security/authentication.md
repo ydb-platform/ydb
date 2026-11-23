@@ -199,4 +199,169 @@ To have {{ ydb-short-name }} automatically establish an encrypted connection wit
 
 #### LDAP protocol extension `StartTls` {#starttls}
 
+<<<<<<< HEAD
 `StartTls` is an LDAP protocol extension that enables message encryption using the TLS protocol. It allows a combination of encrypted and plain-text message transmission within a single connection to the LDAP server. {{ ydb-short-name }} sends a `StartTls` request to the LDAP server to initiate a TLS connection. In {{ ydb-short-name }}, enabling or disabling TLS within an active session is not supported. Therefore, once an encrypted connection is established using `StartTls`, all subsequent messages sent to the LDAP server will be encrypted. One advantage of using this extension, provided the LDAP server is appropriately configured, is the capability to initiate a TLS connection over an unencrypted port. The extension can be enabled in the [`use_tls` section](../reference/configuration/auth_config.md#ldap-auth-config) of the configuration file.
+=======
+`StartTls` is an LDAP protocol extension used to encrypt messages over TLS. It allows sending some messages in encrypted form and others in plaintext within a single connection to the LDAP server. A message with this extension is sent from {{ ydb-short-name }} to the LDAP server to initiate a TLS connection. In the case of {{ ydb-short-name }}, enabling and disabling a TLS connection within a single connection is not supported. Therefore, when using the `StartTls` extension, after establishing an encrypted connection, {{ ydb-short-name }} will send all further messages to the LDAP server in encrypted form. One of the advantages of using this extension instead of the `ldaps` schema (with appropriate LDAP server configuration) is the ability to establish a TLS connection on an unencrypted port. The extension is enabled in the [`use_tls` section](../reference/configuration/auth_config.md#ldap-auth-config) of the configuration file.
+
+## Authentication using an external IdP via the OpenID Connect protocol {#external-idp}
+
+{{ ydb-short-name }} can authenticate users by [JWT tokens](https://www.rfc-editor.org/rfc/rfc7519) issued by an external [identity provider](https://csrc.nist.gov/glossary/term/identity_provider) (Identity Provider, IdP) that supports the [OpenID Connect](https://openid.net/developers/how-connect-works/) (OIDC) protocol. The provider is responsible for authenticating the user and issuing the token, while {{ ydb-short-name }} verifies the signature and claims about the subject and token validity conditions and forms the user's SID and their groups.
+
+Obtaining and refreshing the JWT token is performed on the client and IdP side. The {{ ydb-short-name }} server does not redirect the user to the IdP login page and does not exchange `authorization code` for tokens. The client passes the already obtained JWT token as a Bearer token with each request.
+
+{% note info %}
+
+Single Sign-On (SSO) through an external IdP for the web interface is available via [{{ ydb-short-name }} Enterprise Manager](../devops/enterprise-manager/index.md). For configuration details, see the article [{#T}](../devops/enterprise-manager/sso.md).
+
+{% endnote %}
+
+### How it works
+
+1. The client authenticates with the external IdP and receives a signed JWT token.
+2. The client passes the token in a request to {{ ydb-short-name }} with type `Bearer`.
+3. The {{ ydb-short-name }} node requests the OIDC Discovery document at `<issuer>/.well-known/openid-configuration`, where `<issuer>` is the configured provider URL and token issuer identifier. For example, for `issuer: https://idp.example.com` the request is sent to `https://idp.example.com/.well-known/openid-configuration`. The value of the `issuer` field in the document must exactly match the configured provider address.
+4. From the `jwks_uri` field of the Discovery document, a URL is extracted from which {{ ydb-short-name }} periodically obtains a set of public keys [JWKS](https://www.rfc-editor.org/rfc/rfc7517).
+5. Based on the `alg` (algorithm, signature algorithm) and `kid` (key ID, key identifier) fields of the JWT header, a public key is selected. {{ ydb-short-name }} verifies the token signature, issuer, audience, and expiration times.
+6. The user identifier and group list are extracted from the token fields. The configured authentication domain suffix is added to them, after which the resulting SIDs are used for [authorization](./authorization.md).
+
+The Discovery URL, `issuer`, and `jwks_uri` must use the `https://` scheme. If the Discovery document or JWKS is temporarily unavailable, {{ ydb-short-name }} retries requests with an increasing interval. The obtained keys are cached and periodically refreshed to support key rotation on the IdP side. After the cache lifetime expires, stale keys are removed; until JWKS is successfully refreshed, new token verifications fail with a temporary error.
+
+### Token and key requirements
+
+The JWT token must have a valid compact serialization format and contain the `alg` and `kid` fields in its header. Only asymmetric signature algorithms are supported:
+
+- RSA PKCS#1: `RS256`, `RS384`, `RS512`;
+- RSA-PSS: `PS256`, `PS384`, `PS512`;
+- ECDSA: `ES256`, `ES384`, `ES512`.
+
+Symmetric algorithms of the `HS*` family are not supported. The public key in JWKS must have matching `kty` (key type) and `kid` and contain `x5c` (X.509 certificate chain). The public key is extracted from the first certificate `x5c`; JWKs containing only RSA or EC parameters without `x5c` are skipped.
+
+The following fields are required for successful authentication:
+
+- `alg` and `kid` in the JWT header;
+- The `iss` claim (issuer) matching the value of `issuer` in the configuration;
+- A non-empty string user identifier. To obtain it, the claim specified by the `subject_claim_name` parameter is used. If this claim is missing or has a different type, the standard `sub` claim (subject) is used.
+
+The remaining checked fields are optional:
+
+- The `aud` claim (audience) is checked if the `audience` parameter is set in the configuration; it is recommended to always set the expected audience so that tokens issued for other services are not accepted;
+- When checking time-related claims such as `exp` (expiration time), `nbf` (not before), and `iat` (issued at), the allowed clock skew specified by [the `allowed_clock_skew` parameter](../reference/configuration/auth_config.md#external-idp-auth-config) is taken into account. If `exp` is missing, {{ ydb-short-name }} sets the authentication result expiration to 10 minutes;
+- The claim specified by the `groups_claim_name` parameter contains the list of user groups. It must be an array; only string elements are extracted from the array. If the claim is missing or has a different type, the group list is considered empty.
+
+### Forming the SID
+
+The suffix `@<auth-domain>` is added to the user identifier and each group from the JWT. The value of `<auth-domain>` is set by the `external_idp_authentication_domain` parameter; by default, the value `sso` is used.
+
+For example, with `sub: user1`, `groups: [admins, developers]`, and the default domain, the following SIDs are formed:
+
+- user `user1@sso`;
+- groups `admins@sso` and `developers@sso`.
+
+{{ ydb-short-name }} uses the group list from the token without additional calls to the IdP and without expanding nested groups. You cannot manage users and groups of an external IdP using the `CREATE USER`, `ALTER USER`, `CREATE GROUP`, and `ALTER GROUP` commands. Rights are assigned to the formed SIDs using the methods described in the section [{#T}](./authorization.md).
+
+### Server configuration
+
+Authentication via an external IdP is enabled in [the authentication configuration](../reference/configuration/auth_config.md#external-idp-auth-config) when the `external_idp_config` section is present.
+
+## Client certificate authentication {#client-certificate}
+
+{{ ydb-short-name }} can authenticate a client using the client certificate data obtained when establishing a TLS connection. The verification is performed at the application protocol level (gRPC, etc.), when the server already accepts requests over an open connection.
+
+This approach is suitable, for example, in corporate scenarios with centralized certificate issuance.
+
+### How it works
+
+1. The client establishes a TLS connection with the {{ ydb-short-name }} server, passing the client certificate (and the trust chain).
+2. When processing a request, the server extracts the certificate from the TLS context.
+3. The server uses the certificate for authentication and checks it against the rules of the [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) section.
+4. As a result of successful certificate verification, the client is assigned a security identifier [SID](../concepts/glossary.md#access-sid), which has all the [rights](../concepts/glossary.md#access-right) assigned to the corresponding identifier.
+
+Certificate authentication is applied only to requests without an [authentication token](../concepts/glossary.md#auth-token). If the client passes an authentication token — for example, in the `Authorization` header for HTTP or via SDK/CLI mechanisms for IAM, login, and password — the token takes precedence. In this case, the certificate is passed at the TLS level but is not used for authentication.
+
+### SID generation
+
+{% note info %}
+
+Client certificate verification for [device authentication](#device-auth) and user authentication via client certificate are different mechanisms. Device authentication restricts the network perimeter without generating a SID; user authentication via client certificate generates a SID and groups for [authorization](./authorization.md).
+
+{% endnote %}
+
+Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#certificate-auth-config) `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Name=Value,...@<domain>` notation. The attribute order matches the order of fields in the certificate. Example:
+
+```text
+C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
+```
+
+### Getting groups
+
+If the [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) section specifies `client_certificate_definitions` blocks, the certificate is accepted if it matches at least one of them. For each matching block, the client is included in the groups from `member_groups`. If `member_groups` is not specified, the default group is used — `default_group` (default value: `DefaultClientAuth@cert`).
+
+### Server configuration
+
+Certificate verification and group assignment rules are set in the [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) section of the cluster's static configuration. To enable client certificate requests during the TLS handshake over gRPCs, set the `request_client_certificate: true` parameter.
+
+### Client configuration
+
+For more information about configuring [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), see the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section.
+
+## Device authentication by certificate {#device-auth}
+
+Device authentication is the verification of the [client certificate](../concepts/glossary.md#client-certificate) when establishing a TLS connection; no [SID](../concepts/glossary.md#access-sid) is generated in this case. If a certificate is presented, the chain of trust to the CA is verified; an untrusted certificate causes the connection to be rejected before application requests are processed. Whether a certificate must be presented depends on the interface (see the section [Usage in {{ ydb-short-name }}](#device-auth-interfaces)).
+
+### Why device authentication is needed {#device-auth-motivation}
+
+Device authentication solves the following tasks in {{ ydb-short-name }}:
+
+1. Cluster isolation — restrict the set of hosts and applications that can establish a TLS connection with {{ ydb-short-name }} nodes.
+2. Protection against configuration errors — prevent connections to foreign {{ ydb-short-name }} clusters. For example, if the [node-broker](../devops/configuration-management/configuration-v1/node-authorization.md) parameter is incorrect, a dynamic node will not connect to a foreign cluster, whereas with regular TLS such a connection could be established.
+3. Complicating application-level attacks — a process on a foreign host without a suitable certificate does not get access to the cluster API, even if a network route to the port exists.
+
+After device authentication, [authentication](./authentication.md) of a user or application may be required to access data. It can be performed not only using a verified client certificate, but also using other authentication methods in {{ ydb-short-name }}, for example, by [login and password](./authentication.md#static-credentials).
+
+### How it works {#device-auth-how-it-works}
+
+1. The client establishes a TLS connection with the {{ ydb-short-name }} server and, if the connection interface requires it, presents a client certificate.
+2. If a certificate is presented, the server verifies it at the TLS level: the chain of trust to the configured certificate authority (CA), expiration date, and so on. Additional rules for matching certificate fields (for example, `require_same_issuer`, Subject, and SAN) are applied during [client certificate authentication](./authentication.md#client-certificate).
+3. If verification succeeds, the connection is opened; if it fails, it is rejected.
+
+### Usage in {{ ydb-short-name }} {#device-auth-interfaces}
+
+Device authentication is optional and configured independently: the mechanism can be enabled on some ports and disabled on others.
+
+- **Interconnect** — when TLS is enabled in the [interconnect_config](../reference/configuration/tls.md#interconnect) section, [Interconnect](../concepts/glossary.md#actor-system-interconnect) requires a client certificate.
+- **Kafka API** — when mTLS is enabled, it requires a client certificate; only the chain of trust to the CA is verified, and a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection in the [Device authentication by mTLS](../reference/kafka-api/auth.md#device-auth) section.
+- **gRPC** and **YDB Monitoring** — you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section; YDB Monitoring configuration is described in the [monitoring_config](../reference/configuration/monitoring_config.md#tls) section.
+
+## Authentication using a third-party IAM provider {#iam}
+
+* **Access Token** — a fixed token is set as a parameter for the client (SDK or CLI) and is passed in requests.
+* **Refresh Token** — an [OAuth token](https://auth0.com/blog/refresh-tokens-what-are-they-and-when-to-use-them/) of a personal account is set as a parameter for the client (SDK or CLI), based on which the client periodically accesses the IAM API in the background to rotate (obtain the next) token passed in requests.
+* **Service Account Key** — the attributes of a service account and a signing key are set as parameters for the client (SDK or CLI), based on which the client periodically accesses the IAM API in the background to rotate (obtain the next) token passed in requests.
+* **Metadata** — the client (SDK or CLI) periodically accesses a local service to rotate (obtain the next) token passed in requests.
+* **OAuth 2.0 token exchange** - the client (SDK or CLI) exchanges a token of another type for an access token using the [OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693), which is then passed in requests to the {{ ydb-short-name }} API.
+
+{% note info %}
+
+When using **Service Account Key** authentication, the client (SDK or CLI) builds a [JWT](https://www.rfc-editor.org/rfc/rfc7519) using the host system clock. If the system clock is ahead or behind, IAM may reject the token request. For diagnostics and recommendations, see [{#T}](../troubleshooting/client-clock-skew.md).
+
+{% endnote %}
+
+Any holder of a valid token can gain access to perform operations, so the main task of the security system is to ensure token secrecy and prevent its compromise.
+
+Authentication modes with token rotation, **Refresh Token** and **Service Account Key**, provide a higher level of security compared to the mode with a fixed token, **Access Token**, because only short-lived secrets are transmitted over the network to the {{ ydb-short-name }} server.
+
+Maximum security and performance are ensured when using the **Metadata** mode, as it eliminates the need to work with secrets when deploying an application and also allows you to access IAM and cache the token in advance, before the application starts.
+
+When choosing an authentication mode among those supported by the server and environment, follow these recommendations:
+
+* **Anonymous** is usually used on self-deployed local clusters {{ ydb-short-name }} that are not accessible over the network.
+* **Access Token** is used when other modes are not supported on the server side or for configuration and debugging purposes. It does not require client interactions with IAM. However, if the IAM supports an API for token rotation, the fixed tokens issued by such IAM typically have a short lifetime, which forces you to manually refresh them in IAM on a regular basis.
+* **Refresh Token** can be used for one-off manual operations under a personal account, for example, those related to data maintenance in the database, running ad-hoc operations in the CLI, or launching applications from a workstation. Such a token can be obtained manually in IAM once for a long period and stored in an environment variable on your personal workstation so that it is applied automatically when you run the CLI without additional authentication parameters.
+* **Service Account Key** is primarily used for applications designed to run in environments that support the **Metadata** mode, when testing them outside such environments (for example, on a workstation). It can also be used for applications outside such environments, acting as an analog of **Refresh Token** for service accounts. Unlike a personal account, the access objects and roles of a service account can be limited.
+* **Metadata** is used when deploying applications in clouds. Currently, this mode is supported on virtual machines and in {{ sf-name }} {{ yandex-cloud }}.
+
+The token to be specified in the parameters can be obtained from the IAM system associated with a particular {{ ydb-short-name }} installation. In particular, Yandex.Passport OAuth and service accounts {{ yandex-cloud }} are used for the {{ ydb-short-name }} service in {{ yandex-cloud }}. When using {{ ydb-short-name }} in corporate contexts, standard centralized authentication systems for the organization may be used.
+
+When using modes that involve the {{ ydb-short-name }} client accessing IAM, you can additionally specify the IAM URL that provides the token issuance API. By default, existing SDKs and CLIs attempt to access the IAM API {{ yandex-cloud }} hosted on `iam.api.cloud.yandex.net:443`.
+>>>>>>> e2a95b55c53 ([DOCORG-19503] Интегрировать в документацию информацию (#55378))

@@ -186,7 +186,7 @@ storage
 1. ㉖ Faster **column-tablet restart**: portion metadata is loaded lazily, so the tablet starts serving the table before the full metadata is in memory
 1. 🚧 ㉖ **Storage group decommission** for column tables: a column tablet moves its blobs off groups that are being removed and drops history that no longer references any data
 1. ㉖ Automatic **dictionary encoding** of low-cardinality data fragments, without setting `ENCODING(DICT)` on the column
-1. 🚧 ㉖ **Snapshot isolation** for column tables (from 26.4)
+1. ㉖ **Snapshot isolation** for column tables (from 26.4)
 1. 🚧 ㉖ **`ALTER TABLE ... COMPACT`** for column tables (from 26.3)
 1. 🚧 ㉖ **Parquet export/import** for row and column tables (from 26.4)
 1. 🚧 ㉓ **Tiered Storage for Column-oriented Tables** in S3 (internal use exists; public API and broader product readiness remain in progress)

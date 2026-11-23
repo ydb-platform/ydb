@@ -1599,6 +1599,110 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT id, v FROM TestTable ORDER BY id;", "[[8u;[9]];[42u;[7]]]");
     }
 
+    Y_UNIT_TEST(SetDefaultExprTypeMismatchPreservesDefault) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT AsList(RandomNumber(1));", "type mismatch");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[42u]]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
+    }
+
+    Y_UNIT_TEST(SetNullableDefaultExprOnNotNullColumnRejected) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Uint64 NOT NULL DEFAULT 7ul"));
+
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT IF(RandomNumber(1) = 0ul, NULL, 1ul);",
+            "nullable");
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromLiteral().value().uint64_value(), 7u);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;7u]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;7u]]");
+    }
+
+    Y_UNIT_TEST(SetDefaultExprWithSqlBindingRejected) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+
+        fixture.Rejects(R"(
+            $value = RandomNumber(1);
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT $value;
+        )", "DEFAULT");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[42u]]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
+    }
+
+    Y_UNIT_TEST(SetDefaultExprSubqueryRejected) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT (SELECT v FROM TestTable LIMIT 1);",
+            "subquery");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[42u]]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
+    }
+
+    Y_UNIT_TEST(SetNullableDefaultExprInScript) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Bool DEFAULT true"));
+        NYdb::NScripting::TScriptingClient scriptingClient(fixture.Runner().GetDriver());
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT (RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL);
+            COMMIT;
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0u);
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"),
+            "(RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL)");
+
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;#]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
+    }
+
+    Y_UNIT_TEST(SetNullableDefaultExprInScriptOnNotNullColumnRejected) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Bool NOT NULL DEFAULT true"));
+        NYdb::NScripting::TScriptingClient scriptingClient(fixture.Runner().GetDriver());
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT (RandomNumber(1) * 0ul + 2ul) IN AsList(1ul, NULL);
+            COMMIT;
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), "nullable DEFAULT accepted for a NOT NULL column");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "nullable");
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.ShortDebugString());
+        UNIT_ASSERT(column.GetDefaultFromLiteral().value().bool_value());
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;%true]]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;%true]]");
+    }
+
+    Y_UNIT_TEST(SetAndDropDefaultExprAfterRestartWithIndex) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Uint64 DEFAULT 7ul"));
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_v GLOBAL SYNC ON (v);");
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+
+        fixture.RestartSchemeShard("/Root/TestTable");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (2) RETURNING k, v;", "[[2;[42u]]]");
+        fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 7ul;", "[[1]]");
+        fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 42ul;", "[[2]]");
+
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+        fixture.RestartSchemeShard("/Root/TestTable");
+        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (3) RETURNING k, v;", "[[3;#]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[7u]];[2;[42u]];[3;#]]");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", "[[1;[7u]];[2;[42u]];[3;#]]");
+    }
+
     // Literal defaults retain their metadata kind when replacing an expression.
     Y_UNIT_TEST(SetLiteralDefaultOverExprColumn) {
         TTestFixture fixture;
@@ -1666,6 +1770,14 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;",
             DropDefault ? "[[1;[42u]];[2;#]]" : "[[1;[42u]];[2;[8u]]]");
+
+        const TString replacement = "RandomNumber(1) * 0ul + 9ul";
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << replacement << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), replacement);
+        executePrepared(3);
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", DropDefault
+            ? "[[1;[42u]];[2;#];[3;[9u]]]"
+            : "[[1;[42u]];[2;[8u]];[3;[9u]]]");
     }
 
     Y_UNIT_TEST(AlterOnGeneratedColumnRejected) {

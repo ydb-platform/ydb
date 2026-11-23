@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
     }
 
-    Y_UNIT_TEST(AlterDropDefaultExpression) {
+    Y_UNIT_TEST_TWIN(AlterDropDefaultExpression, FeatureEnabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableDefaultFromExpression(runtime);
@@ -454,15 +454,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
         env.TestWaitNotification(runtime, txId);
 
+        if (!FeatureEnabled) {
+            DisableDefaultFromExpression(runtime);
+        }
+
         TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
               Name: "Table"
               Columns { Name: "ts" EmptyDefault: NULL_VALUE }
         )pb");
         env.TestWaitNotification(runtime, txId);
 
-        auto describe = DescribePath(runtime, "/MyRoot/Table");
-        const auto* column = FindColumn(describe, "ts");
-        UNIT_ASSERT(column && !column->HasDefaultFromExpression());
+        const auto checkNoDefault = [&] {
+            auto describe = DescribePath(runtime, "/MyRoot/Table");
+            const auto* column = FindColumn(describe, "ts");
+            UNIT_ASSERT(column);
+            UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        };
+        checkNoDefault();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkNoDefault();
     }
 
     Y_UNIT_TEST(AlterSetDefaultExpressionFeatureFlagDisabled) {

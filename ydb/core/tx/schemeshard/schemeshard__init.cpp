@@ -6166,10 +6166,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             for (ui64 localId : protoOp.GetFailedShardLocalIds()) {
                                 tableOp.FailedShards.insert(TShardIdx(ssTablet, localId));
                             }
-                            const bool isComplete = !tableOp.ExpectedShards.empty()
-                                && (tableOp.CompletedShards.size() + tableOp.FailedShards.size()
-                                    == tableOp.ExpectedShards.size())
-                                && !tableOp.HasFailures();
+                            // Equal reply counts do not prove that every expected
+                            // shard answered: legacy rows may contain unexpected IDs.
+                            bool isComplete = !tableOp.ExpectedShards.empty() && !tableOp.HasFailures();
+                            for (const auto& shard : tableOp.ExpectedShards) {
+                                if (!tableOp.CompletedShards.contains(shard)) {
+                                    isComplete = false;
+                                    break;
+                                }
+                            }
                             if (isComplete) {
                                 state.CompletedOperations.insert(subOpId);
                             } else {
@@ -6208,8 +6213,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Read incremental restore operations
+        // Read incremental restore operations. Reset on each init attempt:
+        // a previous attempt may have rolled back deletes after a page fault.
         {
+            Self->PersistedIncrementalRestoreOps.clear();
+            Self->PersistedIncrementalRestoreItems.clear();
             auto rowset = db.Table<Schema::IncrementalRestoreOperations>().Select();
             if (!rowset.IsReady()) {
                 return false;
@@ -6234,6 +6242,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     continue;
                 }
                 Self->LongIncrementalRestoreOps[opId] = op;
+                Self->PersistedIncrementalRestoreOps[ui64(txId)] = TPathId(
+                    op.GetBackupCollectionPathId().GetOwnerId(), op.GetBackupCollectionPathId().GetLocalId());
 
                 if (op.HasBackupCollectionPathId()) {
                     // Skip path-state re-locking for terminal restores: leaving paths in
@@ -6309,14 +6319,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui64 waitTxId = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::WaitTxId>(0);
                 ui64 srcTableLocal = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::SrcTablePathId>(0);
 
+                Self->PersistedIncrementalRestoreItems[originalOpId].insert(itemSeq);
                 auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
                 if (stateIt == Self->IncrementalRestoreStates.end()) {
                     // A legacy orphan may still have a live child. Keep its
                     // durable association so another reboot cannot mistake the
                     // parent for abandoned work after losing this evidence.
                     if (waitTxId == 0 || !Self->Operations.contains(TTxId(waitTxId))) {
-                        db.Table<Schema::IncrementalRestoreItem>()
-                            .Key(originalOpId, itemSeq).Delete();
+                        Self->PersistRemoveIncrementalRestoreItem(db, originalOpId, itemSeq);
                     }
                     if (!irow.Next()) return false;
                     continue;
@@ -6341,8 +6351,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Self->TxIdToIncrementalRestore[TTxId(waitTxId)] = originalOpId;
                 } else {
                     // Sub-op didn't survive reboot. Drop; re-entry will re-enqueue.
-                    db.Table<Schema::IncrementalRestoreItem>()
-                        .Key(originalOpId, itemSeq).Delete();
+                    Self->PersistRemoveIncrementalRestoreItem(db, originalOpId, itemSeq);
                 }
 
                 if (!irow.Next()) return false;
@@ -6828,9 +6837,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // yet. Dropped paths retain StepDropped/NotExist; surviving paths are not
         // re-locked. Commit all deletions together, including untracked items.
         for (ui32 seq : itemSeqs) {
-            db.Table<Schema::IncrementalRestoreItem>().Key(id, seq).Delete();
+            Self->PersistRemoveIncrementalRestoreItem(db, id, seq);
         }
-        db.Table<Schema::IncrementalRestoreOperations>().Key(id).Delete();
+        Self->PersistRemoveLongIncrementalRestoreOp(db, id);
         db.Table<Schema::IncrementalRestoreState>().Key(id).Delete();
         Self->CleanupIncrementalRestoreItems(id, db, Self->IncrementalRestoreStates.FindPtr(id));
         for (auto it = Self->IncrementalRestoreOperationToState.begin();

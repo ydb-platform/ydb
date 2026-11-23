@@ -131,7 +131,7 @@ public:
         );
 
         // Clean up IncrementalRestoreOperations table
-        db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
+        Self->PersistRemoveLongIncrementalRestoreOp(db, restoreId);
         YDB_LOG_INFO(GetLogPrefix() << "Cleaned up IncrementalRestoreOperations for operation",
             {"restoreId", restoreId},
         );

@@ -81,6 +81,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             UNIT_ASSERT_C(!ss->FindTx(TOperationId(TTxId(rejectedId), 0)),
                 "Rejected proposal left an orphan TxState");
             UNIT_ASSERT(!ss->LongIncrementalRestoreOps.contains(TOperationId(TTxId(rejectedId), 0)));
+            UNIT_ASSERT(!ss->PersistedIncrementalRestoreOps.contains(rejectedId));
+            UNIT_ASSERT(!ss->PersistedIncrementalRestoreItems.contains(rejectedId));
             return true;
         });
     }

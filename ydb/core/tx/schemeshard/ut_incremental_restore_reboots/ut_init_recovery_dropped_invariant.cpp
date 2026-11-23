@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
     }
 
     static void WriteRestoreItem(TTestBasicRuntime& runtime, ui64 id, ui32 seq, ui64 waitTxId = 0) {
-        // Deliberately untracked: cleanup must enumerate disk rows, not just memory.
+        // Inject a legacy row directly; reboot before expecting the runtime to know about it.
         LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
             (
                 (let key '('('OriginalOpId (Uint64 '%lu)) '('ItemSeq (Uint32 '%u))))
@@ -418,6 +418,56 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
         UNIT_ASSERT_VALUES_EQUAL(value["Headers"]["List"].Size(), headers);
         UNIT_ASSERT_VALUES_EQUAL(value["States"]["List"].Size(), states);
         UNIT_ASSERT_VALUES_EQUAL(value["Items"]["List"].Size(), items);
+    }
+
+    static void CheckRestoreInventory(TTestBasicRuntime& runtime, TSchemeShard* ss) {
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        auto status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+            (
+                (let headers (SelectRange 'IncrementalRestoreOperations
+                    '('('Id (Null) (Void))) '('Id 'Operation) '()))
+                (let items (SelectRange 'IncrementalRestoreItem
+                    '('('OriginalOpId (Null) (Void)) '('ItemSeq (Null) (Void)))
+                    '('OriginalOpId 'ItemSeq) '()))
+                (return (AsList (SetResult 'Headers headers) (SetResult 'Items items)))
+            )
+        )", result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
+        auto value = NClient::TValue::Create(result);
+        THashMap<ui64, TPathId> headers;
+        auto headerRows = value["Headers"]["List"];
+        for (ui32 i = 0; i < headerRows.Size(); ++i) {
+            NKikimrSchemeOp::TLongIncrementalRestoreOp op;
+            UNIT_ASSERT(op.ParseFromString(TString(headerRows[i]["Operation"])));
+            headers[ui64(headerRows[i]["Id"])] = TPathId(
+                op.GetBackupCollectionPathId().GetOwnerId(), op.GetBackupCollectionPathId().GetLocalId());
+        }
+        THashMap<ui64, THashSet<ui32>> items;
+        auto itemRows = value["Items"]["List"];
+        for (ui32 i = 0; i < itemRows.Size(); ++i) {
+            items[ui64(itemRows[i]["OriginalOpId"])].insert(ui32(itemRows[i]["ItemSeq"]));
+        }
+        // Call at quiescent/blocked stages, so no restore writes race the snapshot.
+        runtime.RunCall([&] {
+            UNIT_ASSERT_C(ss->PersistedIncrementalRestoreOps == headers, "Header inventory differs from disk");
+            UNIT_ASSERT_C(ss->PersistedIncrementalRestoreItems == items, "Item inventory differs from disk");
+            return true;
+        });
+    }
+
+    static void WaitRestoreDone(TTestBasicRuntime& runtime, TTestEnv& env, ui64 restoreId) {
+        const auto deadline = runtime.GetCurrentTime() + TDuration::Seconds(120);
+        while (runtime.GetCurrentTime() < deadline) {
+            const auto response = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+            const auto& restore = response.GetBackupCollectionRestore();
+            if (restore.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                UNIT_ASSERT_VALUES_EQUAL(restore.GetStatus(), Ydb::StatusIds::SUCCESS);
+                return;
+            }
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Restore did not finish");
     }
 
     enum class EStalePath {
@@ -551,47 +601,123 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
     }
 
     Y_UNIT_TEST_FLAG(DropCollectionRemovesPersistedRestoreHeader, rebootBeforeDrop) {
+        TSchemeShard* ss = nullptr;
+        auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
+            ss = new TSchemeShard(tablet, info);
+            return ss;
+        };
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true), factory);
         ui64 txId = 100;
         SetupBackupDirs(runtime, env, txId);
-        CreateCollection(runtime, env, txId, "Finished", "/MyRoot/Target");
-        const TString collectionPath = "/MyRoot/.backups/collections/Finished";
-        const ui64 collectionId = DescribePath(runtime, collectionPath)
-            .GetPathDescription().GetSelf().GetPathId();
-        constexpr ui64 restoreId = 9000001;
-        NKikimrSchemeOp::TLongIncrementalRestoreOp op;
-        op.SetTxId(restoreId);
-        op.MutableBackupCollectionPathId()->SetOwnerId(TTestTxConfig::SchemeShard);
-        op.MutableBackupCollectionPathId()->SetLocalId(collectionId);
-        // Mimic finalize: persisted header and terminal state, no in-memory long op.
-        WriteRestoreHeader(runtime, restoreId, op);
-        WriteRestoreState(runtime, restoreId, 3); // Completed
+        auto restoreCollection = [&](const TString& name, const TString& target) {
+            CreateCollection(runtime, env, txId, name, "/MyRoot/" + target);
+            CreateFullBackupDir(runtime, env, txId, name, target);
+            CreateIncrementalBackupDir(runtime, env, txId, name, target);
+            const ui64 id = ++txId;
+            AsyncRestoreBackupCollection(runtime, id, "/MyRoot/.backups/collections/",
+                TStringBuilder() << "Name: \"" << name << "\"\n");
+            TestModificationResult(runtime, id);
+            env.TestWaitNotification(runtime, id);
+            WaitRestoreDone(runtime, env, id);
+            // Finalization removes the active header, but not the durable inventory.
+            runtime.RunCall([&] {
+                UNIT_ASSERT(!ss->LongIncrementalRestoreOps.contains(TOperationId(TTxId(id), 0)));
+                UNIT_ASSERT(ss->PersistedIncrementalRestoreOps.contains(id));
+                return true;
+            });
+            return id;
+        };
+        const ui64 restoreId = restoreCollection("Finished", "Target");
+        const ui64 otherId = restoreCollection("Other", "OtherTarget");
+        CheckRestoreInventory(runtime, ss);
         if (rebootBeforeDrop) {
+            // Old versions could leave item rows outside scheduling state.
+            WriteRestoreItem(runtime, restoreId, 17);
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-            // A healthy terminal record must remain available until DROP/FORGET.
             CheckRestoreRows(runtime, restoreId, 1, 1, 0);
+            CheckRestoreInventory(runtime, ss);
         }
-        WriteRestoreItem(runtime, restoreId, 17);
-        CreateCollection(runtime, env, txId, "Other", "/MyRoot/OtherTarget");
-        op.SetTxId(restoreId + 1);
-        op.MutableBackupCollectionPathId()->SetLocalId(DescribePath(runtime,
-            "/MyRoot/.backups/collections/Other").GetPathDescription().GetSelf().GetPathId());
-        WriteRestoreHeader(runtime, restoreId + 1, op);
-        WriteRestoreState(runtime, restoreId + 1, 3);
 
         TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", "Name: \"Finished\"\n");
         env.TestWaitNotification(runtime, txId);
         CheckRestoreRows(runtime, restoreId, 0, 0, 0);
-        CheckRestoreRows(runtime, restoreId + 1, 1, 1, 0);
+        CheckRestoreRows(runtime, otherId, 1, 1, 0);
+        CheckRestoreInventory(runtime, ss);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         CheckRestoreRows(runtime, restoreId, 0, 0, 0);
-        CheckRestoreRows(runtime, restoreId + 1, 1, 1, 0);
+        CheckRestoreRows(runtime, otherId, 1, 1, 0);
+        CheckRestoreInventory(runtime, ss);
+
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", otherId, Ydb::StatusIds::SUCCESS);
+        CheckRestoreRows(runtime, otherId, 0, 0, 0);
+        CheckRestoreInventory(runtime, ss);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        CheckRestoreInventory(runtime, ss);
+    }
+
+    Y_UNIT_TEST_FLAG(RestoreItemInventorySurvivesRestart, reboot) {
+        TSchemeShard* ss = nullptr;
+        auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
+            ss = new TSchemeShard(tablet, info);
+            return ss;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true), factory);
+        ui64 txId = 100;
+        SetupBackupDirs(runtime, env, txId);
+        CreateCollection(runtime, env, txId, "Coll", "/MyRoot/Target");
+        CreateFullBackupDir(runtime, env, txId, "Coll", "Target");
+        CreateIncrementalBackupDir(runtime, env, txId, "Coll", "Target");
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> finalize(runtime, [](const auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        const ui64 restoreId = ++txId;
+        AsyncRestoreBackupCollection(runtime, restoreId, "/MyRoot/.backups/collections/", "Name: \"Coll\"\n");
+        TestModificationResult(runtime, restoreId);
+        runtime.WaitFor("finalize item dispatched", [&] { return !finalize.empty(); });
+        runtime.RunCall([&] {
+            UNIT_ASSERT(ss->PersistedIncrementalRestoreItems.contains(restoreId));
+            return true;
+        });
+        CheckRestoreInventory(runtime, ss);
+        if (reboot) {
+            finalize.clear(); // Drop the old request: recovery must enqueue a new one.
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            runtime.WaitFor("finalize item redispatched", [&] { return !finalize.empty(); });
+            CheckRestoreInventory(runtime, ss);
+        }
+        // Simulate a lost scheduling entry after the durable item was written.
+        // Finalization must still remove that row using the independent inventory.
+        runtime.RunCall([&] {
+            auto& state = ss->IncrementalRestoreStates.at(restoreId);
+            UNIT_ASSERT(!state.InFlightItems.empty());
+            state.InFlightItems.clear();
+            state.WaitTxIdToItemSeq.clear();
+            return true;
+        });
+        finalize.Stop().Unblock();
+        WaitRestoreDone(runtime, env, restoreId);
+        CheckRestoreRows(runtime, restoreId, 1, 1, 0);
+        CheckRestoreInventory(runtime, ss);
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
+        CheckRestoreRows(runtime, restoreId, 0, 0, 0);
+        CheckRestoreInventory(runtime, ss);
     }
 
     Y_UNIT_TEST_FLAG(RepairPreservesLiveSchemaTransaction, childTransaction) {
+        TSchemeShard* ss = nullptr;
+        auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
+            ss = new TSchemeShard(tablet, info);
+            return ss;
+        };
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true), factory);
         TBlockEvents<TEvDataShard::TEvProposeTransactionResult> blocked(runtime);
         constexpr ui64 schemaTxId = 9000002;
         AsyncCreateTable(runtime, schemaTxId, "/MyRoot", R"(
@@ -616,6 +742,7 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
         for (ui32 reboot = 0; reboot != 2; ++reboot) {
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
             CheckRestoreRows(runtime, restoreId, 1, 0, childTransaction ? 1 : 0);
+            CheckRestoreInventory(runtime, ss);
         }
     }
 
@@ -891,7 +1018,7 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
         UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Target"), expected);
     }
 
-    static void CheckFailedRestoreCleanup(bool terminal, bool allReported) {
+    static void CheckFailedRestoreCleanup(bool terminal, bool allReported, bool unexpectedSuccess = false) {
         TSchemeShard* ss = nullptr;
         auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
             ss = new TSchemeShard(tablet, info);
@@ -915,8 +1042,13 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
         child->AddExpectedShardLocalIds(43);
         child->AddCompletedShardLocalIds(42);
         // Equal counts alone do not prove that each expected shard answered.
-        child->AddFailedShardLocalIds(allReported ? 43 : 44);
-        child->SetHasNonRetriableFailure(true);
+        if (unexpectedSuccess) {
+            UNIT_ASSERT(!allReported);
+            child->AddCompletedShardLocalIds(44);
+        } else {
+            child->AddFailedShardLocalIds(allReported ? 43 : 44);
+            child->SetHasNonRetriableFailure(true);
+        }
         LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
             (
                 (let key '('('OperationId (Uint64 '%lu))))
@@ -933,6 +1065,9 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
             runtime.RunCall([&] {
                 UNIT_ASSERT_VALUES_EQUAL(ss->IncrementalRestoreOperationToState.contains(childId), !removed);
                 UNIT_ASSERT_VALUES_EQUAL(ss->TxIdToIncrementalRestore.contains(childId.GetTxId()), !removed);
+                if (!removed) {
+                    UNIT_ASSERT(!ss->IncrementalRestoreStates.at(restoreId).CompletedOperations.contains(childId));
+                }
                 return true;
             });
         }
@@ -944,6 +1079,10 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
 
     Y_UNIT_TEST(RepairPreservesNonterminalFailedShardWork) {
         CheckFailedRestoreCleanup(false, true);
+    }
+
+    Y_UNIT_TEST_FLAG(RepairPreservesUnexpectedSuccessfulShardReply, terminal) {
+        CheckFailedRestoreCleanup(terminal, false, true);
     }
 
 }

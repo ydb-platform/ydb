@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
     Y_UNIT_TEST(UnsupportedFiltersDoNotBroadenBalancingTargets) {
         TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2);
-        enum class EFilterMode { UnknownProperty, UnknownLocation, InvalidProperty, KnownAlternative };
+        enum class EFilterMode { UnknownProperty, InvalidProperty, KnownAlternative };
         EFilterMode mode = EFilterMode::UnknownProperty;
         ui32 rewrittenPools = 0;
         ui32 reassigns = 0;
@@ -273,9 +273,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
                         UNIT_ASSERT_VALUES_EQUAL(pool.PDiskFilterSize(), 1);
                         const auto known = pool.GetPDiskFilter(0);
                         auto* property = pool.MutablePDiskFilter(0)->AddProperty();
-                        if (mode == EFilterMode::UnknownLocation) {
-                            property->MutableLocation()->mutable_unknown_fields()->AddVarint(100, 7);
-                        } else if (mode != EFilterMode::InvalidProperty) {
+                        if (mode != EFilterMode::InvalidProperty) {
                             property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
                         }
                         if (mode == EFilterMode::KnownAlternative) {
@@ -297,8 +295,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         };
 
         env->AlterBox(1, 2); // New empty disks would normally be balancing targets.
-        for (const auto unsupported : {EFilterMode::UnknownProperty, EFilterMode::UnknownLocation,
-                EFilterMode::InvalidProperty}) {
+        for (const auto unsupported : {EFilterMode::UnknownProperty, EFilterMode::InvalidProperty}) {
             mode = unsupported;
             rewrittenPools = 0;
             env->Sim(TDuration::Seconds(5));

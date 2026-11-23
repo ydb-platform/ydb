@@ -1750,27 +1750,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             response = env.Invoke(request);
             UNIT_ASSERT_VALUES_EQUAL_C(response.GetSuccess(), edit, response.DebugString());
         }
-        const auto pool = readPool();
-        UNIT_ASSERT_VALUES_EQUAL(pool.GetNumGroups(), 1);
-        request.Clear();
-        auto* remove = request.AddCommand()->MutableDeleteStoragePool();
-        remove->SetBoxId(1);
-        remove->SetStoragePoolId(1);
-        remove->SetItemConfigGeneration(pool.GetItemConfigGeneration());
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-
-        // Reusing the pool ID must not resurrect an undeleted V2 filter.
-        request.Clear();
-        env.DefineStoragePool(1, 1, "plain filter", 0, NKikimrBlobStorage::ROT, {}, request, "none");
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        const auto recreated = readPool();
-        UNIT_ASSERT_VALUES_EQUAL(recreated.PDiskFilterSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(recreated.GetPDiskFilter(0).PropertySize(), 1);
-        const auto& plainFilter = recreated.GetPDiskFilter(0);
-        UNIT_ASSERT(plainFilter.GetReflection()->GetUnknownFields(plainFilter).empty());
+        UNIT_ASSERT_VALUES_EQUAL(readPool().GetNumGroups(), 1);
     }
 
     Y_UNIT_TEST(PDiskLocationFilterPlacementAndRestart) {

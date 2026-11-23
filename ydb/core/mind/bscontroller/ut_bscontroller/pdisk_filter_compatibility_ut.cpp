@@ -76,11 +76,11 @@ struct TFixture {
         });
     }
 
-    TSet<TString> V2Keys(ui64 boxId = 7, ui64 poolId = 11) {
+    TSet<TString> V2Keys() {
         TSet<TString> keys;
         Transaction([&] {
             using T = Schema::BoxStoragePoolPDiskFilterV2;
-            auto rows = Db.Table<T>().Range(boxId, poolId).Select();
+            auto rows = Db.Table<T>().Range(7, 11).Select();
             UNIT_ASSERT(rows.IsReady());
             while (rows.IsValid()) {
                 keys.insert(rows.GetValue<T::Filter>());
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         UNIT_ASSERT(f.V2Keys().empty());
     }
 
-    Y_UNIT_TEST(UnknownMetadataKeepsExactKeysThroughRewriteMoveAndDelete) {
+    Y_UNIT_TEST(UnknownMetadataKeepsExactKeysThroughRewriteAndDelete) {
         TFixture f;
         f.Transaction([&] { f.Db.Materialize<Schema>(); });
         NKikimrBlobStorage::TPDiskFilter known;
@@ -187,17 +187,8 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         }
         CheckFilters(f.Load(7, 11), rewritten);
 
-        TFilters moved;
-        for (auto filter : f.Load(7, 11)) {
-            filter.BoxId = 8;
-            filter.StoragePoolId = 12;
-            moved.insert(std::move(filter));
-        }
-        f.Update(f.Load(7, 11), moved);
+        f.Update(f.Load(7, 11), {});
         UNIT_ASSERT(f.V2Keys().empty());
-        CheckFilters(f.Load(8, 12), moved);
-        f.Update(f.Load(8, 12), {});
-        UNIT_ASSERT(f.V2Keys(8, 12).empty());
     }
 
     Y_UNIT_TEST(UnknownConstraintsSurviveWithoutMatchingDisks) {

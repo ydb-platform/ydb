@@ -117,13 +117,15 @@ protected:
         if (ReplicaMissingReported < value) {
             const TMonotonic now = TActivationContext::Monotonic();
             if (LastReplicaMissing == TMonotonic::Max()) {
-                // this if the first time in row we report replica missing
+                // Start the grace period without reporting the first failure.
                 LastReplicaMissing = now;
+                value = false;
             } else {
                 // make it actually "missing" only after a specific amount of time
                 value = LastReplicaMissing + TDuration::Seconds(3) < now;
             }
-        } else if (value < ReplicaMissingReported) {
+        } else if (!value) {
+            // Reset on recovery even if the grace period has not expired.
             LastReplicaMissing = TMonotonic::Max();
         }
         if (value != ReplicaMissingReported) {

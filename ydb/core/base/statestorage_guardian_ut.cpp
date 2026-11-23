@@ -144,6 +144,94 @@ void CheckGuardianRegistration(ERegistrationFailure failure) {
     }, TDuration::Seconds(10));
 }
 
+void CheckGuardianGracePeriod(bool recover) {
+    TTestBasicRuntime runtime;
+    SetupStateStorage(runtime, 0);
+    runtime.Initialize(TAppPrepare().Unwrap());
+
+    constexpr ui64 tabletId = 72075186224037888ull;
+    const TActorId edge = runtime.AllocateEdgeActor();
+    const TActorId follower = runtime.AllocateEdgeActor();
+    const TActorId followerTablet = runtime.AllocateEdgeActor();
+    runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+    auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+    const auto replicas = resolved->Get()->GetPlainReplicas();
+    UNIT_ASSERT_VALUES_EQUAL(replicas.size(), 3);
+
+    THashMap<TActorId, TActorId> children;
+    THashMap<TActorId, ui32> failures;
+    THashSet<TActorId> pingedChildren;
+    TActorId guardian;
+    bool unavailable = true;
+    bool demoted = false;
+    TMonotonic demotedAt;
+    auto registrations = runtime.AddObserver<TEvStateStorage::TEvReplicaRegFollower>([&](auto& ev) {
+        if (ev->Get()->Record.GetTabletID() != tabletId) {
+            return;
+        }
+        children[ev->Recipient] = ev->Sender;
+        if (unavailable && (ev->Recipient == replicas[0] || ev->Recipient == replicas[1])) {
+            ++failures[ev->Recipient];
+            // The child's 250 ms retry wakeup is dropped unless scheduling is enabled.
+            runtime.EnableScheduleForActor(ev->Sender);
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                new TEvents::TEvUndelivered(TEvStateStorage::TEvReplicaRegFollower::EventType,
+                    TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie));
+            ev.Reset();
+        }
+    });
+    auto pings = runtime.AddObserver<TEvTablet::TEvPing>([&](auto& ev) {
+        if (ev->Get()->Record.GetTabletID() == tabletId) {
+            pingedChildren.insert(ev->Recipient);
+        }
+    });
+    auto demotions = runtime.AddObserver<TEvTablet::TEvDemoted>([&](auto& ev) {
+        if (ev->Recipient == follower && !demoted) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Sender, guardian);
+            UNIT_ASSERT(ev->Get()->ByIsolation);
+            demoted = true;
+            demotedAt = runtime.GetCurrentMonotonicTime();
+        }
+    });
+
+    TMonotonic outageFrom = runtime.GetCurrentMonotonicTime();
+    guardian = runtime.Register(CreateStateStorageFollowerGuardian(tabletId, 1, follower));
+    runtime.WaitFor("the guardian attempted registration at every replica", [&] {
+        return children.size() == replicas.size();
+    }, TDuration::Seconds(1));
+
+    if (recover) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!demoted, "the first transient outage caused isolation");
+        UNIT_ASSERT_GT(failures[replicas[0]], 1u);
+        UNIT_ASSERT_GT(failures[replicas[1]], 1u);
+        unavailable = false;
+        runtime.WaitFor("both recovered replicas acknowledged registration", [&] {
+            return pingedChildren.contains(children.at(replicas[0]))
+                && pingedChildren.contains(children.at(replicas[1]));
+        }, TDuration::Seconds(1));
+
+        // Age the first outage's timestamp before failing the same replicas again.
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        unavailable = true;
+        failures.clear();
+        outageFrom = runtime.GetCurrentMonotonicTime();
+        // Changing the initial candidate state makes every child register again.
+        runtime.Send(new IEventHandle(guardian, follower,
+            new TEvTablet::TEvFollowerUpdateState(false, follower, followerTablet)));
+    }
+
+    // Losing two of the three replicas causes observable isolation only after grace.
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_C(!demoted, "replica failures caused isolation before the grace period ended");
+    UNIT_ASSERT_GT(failures[replicas[0]], 1u);
+    UNIT_ASSERT_GT(failures[replicas[1]], 1u);
+    runtime.WaitFor("isolation after continuous replica failures", [&] {
+        return demoted;
+    }, TDuration::Seconds(2));
+    UNIT_ASSERT_GE_C(demotedAt - outageFrom, TDuration::Seconds(3), "isolated after " << demotedAt - outageFrom);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
@@ -275,6 +363,14 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
 
         UNIT_ASSERT_C(refreshes > refreshesBefore, "the leader didn't get the list again");
         UNIT_ASSERT_C(followerList.empty(), "the follower of the removed child is kept: " << JoinSeq(", ", followerList));
+    }
+
+    Y_UNIT_TEST(MissingReplicaReportedAfterGracePeriod) {
+        CheckGuardianGracePeriod(false);
+    }
+
+    Y_UNIT_TEST(GracePeriodStartsAgainAfterRecovery) {
+        CheckGuardianGracePeriod(true);
     }
 }
 

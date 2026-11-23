@@ -930,7 +930,7 @@ namespace NActors {
                     // allows to prevent such situations
                     TQueuePair::TQpState res = qp.GetState(false);
                     if (std::holds_alternative<TQueuePair::TQpErr>(res)) {
-                        LOG_ERROR_IC_SESSION("ICRDMA", "unable to get qp state, %d err is: %s",
+                        LOG_ERROR_IC_SESSION("ICRDMA", "unable to get qp state, %u err is: %d",
                             qp.GetQpNum(), std::get<TQueuePair::TQpErr>(res).Err);
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }

@@ -438,3 +438,67 @@ def test_numeric_parameter_error_names_parameter(converter, value):
     with pytest.raises(ValueError, match="tpc-lbr-test") as error:
         parse_numeric_parameter("tpc-lbr-test", value, converter)
     assert repr(value) in str(error.value)
+
+
+@pytest.mark.parametrize("exit_code", [0, -signal.SIGINT, 128 + signal.SIGINT])
+def test_interrupted_workload_reports_incomplete_schedule(tmp_path, fake_perf, monkeypatch, exit_code):
+    class InterruptedProcess:
+        pid = 999999
+        returncode = None
+
+        def __init__(self, command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(b"partial data")
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = exit_code
+            return exit_code
+
+    monkeypatch.setattr(subprocess, "Popen", InterruptedProcess)
+    monkeypatch.setattr(os, "killpg", lambda *args: None)
+    collector = LbrCollector([os.getpid()], tmp_path / "workload", 10, record_seconds=1, snapshots=1, perf=fake_perf)
+    collector.output_dir.mkdir()
+    collector.started = time.monotonic()
+    collector.started_at = time.time()
+    collector._stop.set()
+    with pytest.raises(RuntimeError, match="Workload ended before all LBR snapshots completed"):
+        collector._record(1, 1)
+    assert not collector.records[0]["complete"]
+
+
+def test_unstarted_phase_writes_manifest_and_preserves_body_error(tmp_path):
+    calls = []
+
+    class Conversion:
+        def finish_phase(self, phase, valid):
+            calls.append((phase, valid))
+
+    collector = LbrCollector([os.getpid()], tmp_path / "workload", 1800, phase="workload", conversion=Conversion())
+    original = ValueError("save_nodes_state failed")
+    with pytest.raises(ValueError) as caught:
+        with collector.ensure_started():
+            raise original
+    assert caught.value is original
+    data = manifest(collector.output_dir)
+    assert data["started_at"] is None
+    assert data["error"] == "LBR phase was not started"
+    assert data["workload_failed"] and not data["valid"] and not data["records"]
+    assert calls == [("workload", False)]
+
+
+def test_successful_body_without_collection_is_rejected(tmp_path):
+    collector = LbrCollector([os.getpid()], tmp_path / "workload", 1800)
+    with pytest.raises(RuntimeError, match="LBR phase was not started"):
+        with collector.ensure_started():
+            pass
+    assert not manifest(collector.output_dir)["valid"]
+
+
+def test_started_phase_guard_does_not_overwrite_manifest(tmp_path, fake_perf):
+    collector = LbrCollector([os.getpid()], tmp_path / "import", None, perf=fake_perf)
+    with collector.ensure_started():
+        with collector:
+            time.sleep(0.1)
+    assert manifest(collector.output_dir)["valid"]

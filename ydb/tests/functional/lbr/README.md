@@ -45,7 +45,10 @@ Workload collection starts after an explicit warmup. The default warmup is 600
 seconds, configurable with `--test-param=tpc-lbr-warmup-seconds=300` for the
 100-warehouse experiment. Three snapshots are spaced evenly inside the measured
 workload, after that delay. A workload that ends before its scheduled snapshots
-finish is rejected. The CLI may enforce a minimum warmup for terminal startup;
+finish is rejected with an incomplete-workload error, including interruption
+of an active snapshot at phase end. If the workload fails before collection
+starts, its manifest has `started_at: null`, no records and `valid: false`;
+the original test error is preserved. The CLI may enforce a minimum warmup for terminal startup;
 the parameter must be at least `warehouses // 10 + 1` seconds for the baseline CLI.
 This bound comes from ten terminals per warehouse, started at 10 ms intervals.
 Another CLI build may enforce a different minimum and silently extend warmup,

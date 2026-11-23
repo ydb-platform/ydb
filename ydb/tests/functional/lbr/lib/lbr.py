@@ -3,6 +3,7 @@ import json
 import math
 import os
 from pathlib import Path
+from contextlib import contextmanager
 import signal
 import shutil
 import subprocess
@@ -60,6 +61,7 @@ class LbrCollector:
         self.phase = phase
         self.conversion = conversion
         self.valid = False
+        self.started_at = None
         self.records = []
         self.error = None
         self.startup_error = None
@@ -68,6 +70,28 @@ class LbrCollector:
         self._thread = None
         self._phase_failed = False
         self._entry_failed = threading.Event()
+
+    def report_unstarted(self):
+        if self.started_at is not None:
+            return
+        self._phase_failed = True
+        self.error = RuntimeError("LBR phase was not started")
+        self.output_dir.mkdir(parents=True, exist_ok=False)
+        if self.conversion is not None:
+            self.conversion.finish_phase(self.phase, False)
+        self._write_manifest()
+
+    @contextmanager
+    def ensure_started(self):
+        try:
+            yield
+        except BaseException:
+            self.report_unstarted()
+            raise
+        else:
+            self.report_unstarted()
+            if self.started_at is None:
+                raise self.error
 
     def __enter__(self):
         self.output_dir.mkdir(parents=True, exist_ok=False)
@@ -158,10 +182,12 @@ class LbrCollector:
                 record["return_code"] = process.returncode
                 record["finished_at"] = time.time()
                 record["actual_seconds"] = record["finished_at"] - record["started_at"]
-        graceful_stop = (
-            self.periodic
-            and record["stopped_on_phase_end"]
-            and record["return_code"] in (0, -signal.SIGINT, 128 + signal.SIGINT, -signal.SIGTERM, 128 + signal.SIGTERM)
+        graceful_stop = record["stopped_on_phase_end"] and record["return_code"] in (
+            0,
+            -signal.SIGINT,
+            128 + signal.SIGINT,
+            -signal.SIGTERM,
+            128 + signal.SIGTERM,
         )
         valid_exit = record["return_code"] == 0 or graceful_stop
         record["complete"] = (
@@ -171,6 +197,8 @@ class LbrCollector:
             and output.is_file()
             and output.stat().st_size > 0
         )
+        if not self.periodic and record["stopped_on_phase_end"] and graceful_stop:
+            raise RuntimeError("Workload ended before all LBR snapshots completed")
         if not valid_exit or (not self._stop.is_set() and not record["complete"]):
             raise RuntimeError(f"LBR collection failed; see {self.output_dir / f'snap{index}.log'}")
 

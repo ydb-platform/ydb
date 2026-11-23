@@ -4,10 +4,8 @@
 #include <util/generic/yexception.h>
 
 #include <algorithm>
-#include <array>
 #include <iterator>
 #include <memory>
-#include <new>
 
 namespace NPagedVector {
     template <class T, ui32 PageSize = 1u << 20u>

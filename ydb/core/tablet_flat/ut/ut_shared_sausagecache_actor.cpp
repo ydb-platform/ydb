@@ -11,6 +11,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 
+#include <limits>
+
 namespace NKikimr::NSharedCache {
 using namespace NActors;
 using namespace NTabletFlatExecutor;
@@ -1616,6 +1618,214 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissInMemoryPages->Val(), 2);
     }
 
+    Y_UNIT_TEST(InMemory_MaxRatioPreservesRegularCapacity) {
+        for (ui32 collectionPages : {1u, 4u}) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetTryKeepInMemoryMaxRatio(0.5);
+            TSharedPageCacheMock sharedCache(config);
+            sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, collectionPages);
+
+            const ui32 inMemoryPages = Min(collectionPages, 2u);
+            TVector<TPageLocation> inMemoryLocations;
+            TVector<TPageLocation> regularLocations;
+            for (ui32 i : xrange(inMemoryPages)) {
+                inMemoryLocations.push_back(_P(i));
+            }
+            for (ui32 i : xrange(4 - inMemoryPages)) {
+                regularLocations.push_back(_P(i));
+            }
+
+            sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, regularLocations);
+            sharedCache.CheckFetches({TFetch{10 * regularLocations.size(), sharedCache.Collection2, regularLocations}});
+            sharedCache.Provide(sharedCache.Collection2, regularLocations);
+            sharedCache.CheckResults({TFetch{1, sharedCache.Collection2, regularLocations}});
+
+            sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+            sharedCache.CheckFetches({TFetch{10 * inMemoryLocations.size(), sharedCache.Collection1, inMemoryLocations}});
+            sharedCache.Provide(sharedCache.Collection1, inMemoryLocations, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+            sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, inMemoryLocations}});
+            sharedCache.CheckFetches({});
+
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), inMemoryPages * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collectionPages * PAGE_TOTAL_SIZE);
+
+            // Unused in-memory capacity stays available to regular pages, and a full in-memory
+            // tier does not displace the regular pages that fit in the remaining capacity.
+            sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, regularLocations);
+            sharedCache.CheckFetches({});
+            sharedCache.CheckResults({TFetch{2, sharedCache.Collection2, regularLocations}});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), regularLocations.size());
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), regularLocations.size());
+
+            if (collectionPages == 4) {
+                // Raising the ratio to one must release regular capacity for the pending preload.
+                NKikimrConfig::TAppConfig appConfig;
+                appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+                appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(1.0);
+                sharedCache.UpdateConfig(appConfig);
+                sharedCache.CheckFetches({TFetch{20, sharedCache.Collection1, {_P(2), _P(3)}}});
+                sharedCache.Provide(sharedCache.Collection1, {_P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+                sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(2), _P(3)}}});
+                UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), DefaultMemoryLimit);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioBoundaries) {
+        struct TCase {
+            ui64 MemoryLimit;
+            double Ratio;
+            ui32 PreloadedPages;
+        };
+        for (const auto& test : {
+                TCase{4 * PAGE_TOTAL_SIZE, 0.0, 0},
+                TCase{2 * PAGE_TOTAL_SIZE - 1, 0.5, 0},
+                TCase{2 * PAGE_TOTAL_SIZE, 0.5, 1},
+                TCase{4 * PAGE_TOTAL_SIZE, 0.875, 3},
+                TCase{4 * PAGE_TOTAL_SIZE, 1.0, 4}}) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetMemoryLimit(test.MemoryLimit);
+            config.SetTryKeepInMemoryMaxRatio(test.Ratio);
+            TSharedPageCacheMock sharedCache(config);
+            sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
+
+            sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+            TVector<TPageLocation> locations;
+            for (ui32 i : xrange(test.PreloadedPages)) {
+                locations.push_back(_P(i));
+            }
+            if (locations) {
+                sharedCache.CheckFetches({TFetch{10 * locations.size(), sharedCache.Collection1, locations}});
+                sharedCache.Provide(sharedCache.Collection1, locations, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+                sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, locations}});
+            }
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), test.PreloadedPages * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+
+            if (test.Ratio == 0.0) {
+                // Disabling in-memory retention must not prevent demand reads from completing.
+                sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {_P(3)});
+                sharedCache.CheckFetches({TFetch{10, sharedCache.Collection1, {_P(3)}}});
+                sharedCache.Provide(sharedCache.Collection1, {_P(3)});
+                sharedCache.CheckResults({TFetch{1, sharedCache.Collection1, {_P(3)}}});
+                sharedCache.Wakeup();
+                sharedCache.CheckFetches({});
+                UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioConfigUpdate) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(8 * PAGE_TOTAL_SIZE);
+        config.SetTryKeepInMemoryMaxRatio(0.5);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 6u);
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+        sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.25);
+        sharedCache.UpdateConfig(appConfig);
+        // Total usage is below the unchanged cache limit; tier eviction must still happen.
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 8 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 2 * PAGE_TOTAL_SIZE);
+        sharedCache.Wakeup();
+        sharedCache.CheckFetches({});
+
+        appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.75);
+        sharedCache.UpdateConfig(appConfig);
+        sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(4), _P(5)}}});
+        sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(4), _P(5)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1), _P(4), _P(5)}}});
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 6 * PAGE_TOTAL_SIZE);
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioMemoryLimitUpdate) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(8 * PAGE_TOTAL_SIZE);
+        config.SetTryKeepInMemoryMaxRatio(0.5);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.SetLimit(4 * PAGE_TOTAL_SIZE);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 6u);
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({TFetch{20, sharedCache.Collection1, {_P(0), _P(1)}}});
+        sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1)}}});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 2 * PAGE_TOTAL_SIZE);
+
+        sharedCache.SetLimit(8 * PAGE_TOTAL_SIZE);
+        sharedCache.CheckFetches({TFetch{20, sharedCache.Collection1, {_P(2), _P(3)}}});
+        sharedCache.Provide(sharedCache.Collection1, {_P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(2), _P(3)}}});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 4 * PAGE_TOTAL_SIZE);
+
+        sharedCache.SetLimit(6 * PAGE_TOTAL_SIZE);
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 6 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioIncludesPendingPreload) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(8 * PAGE_TOTAL_SIZE);
+        config.SetTryKeepInMemoryMaxRatio(0.5);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 6u);
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+        // There is room in the overall cache, but these four pending pages already fill the tier.
+        sharedCache.Wakeup();
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 4);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.25);
+        sharedCache.UpdateConfig(appConfig);
+        sharedCache.CheckFetches({});
+
+        sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(2), _P(3)}}});
+        sharedCache.Wakeup();
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 2 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioInvalidConfig) {
+        for (double ratio : {-0.1, 1.1, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+            for (bool update : {false, true}) {
+                auto config = TSharedPageCacheMock::DefaultConfig();
+                config.SetTryKeepInMemoryMaxRatio(update ? 0.25 : ratio);
+                TSharedPageCacheMock sharedCache(config);
+                sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
+                if (update) {
+                    NKikimrConfig::TAppConfig appConfig;
+                    appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+                    appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(ratio);
+                    sharedCache.UpdateConfig(appConfig);
+                }
+
+                // Invalid runtime configuration falls back to the backwards-compatible default.
+                sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+                sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+                sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+                sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+                UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), DefaultMemoryLimit);
+            }
+        }
+    }
+
     Y_UNIT_TEST(InMemory_StaleBtreeSeed) {
         // A seed that references a collection which is not attached (its part is already gone)
         // must not wedge the walk and must not try to fetch anything.
@@ -3041,6 +3251,172 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckResults({
             TFetch{++fetchNo, sharedCache.Collection1, {_P(1), _P(2), _P(3)}}
         });
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioIncrementalDecrease) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMaxLimitDecreaseStepBytes(PAGE_TOTAL_SIZE);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+        sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+
+        TBlockEvents<TKikimrEvents::TEvWakeup> continuations(sharedCache.Runtime, [](const auto& ev) {
+            return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoLimitDecrease);
+        });
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.0);
+        sharedCache.UpdateConfig(appConfig);
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(continuations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 1);
+
+        // An ordinary request can use the released capacity while the next decrease is queued.
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, {_P(0)});
+        sharedCache.CheckFetches({TFetch{10, sharedCache.Collection2, {_P(0)}}});
+        sharedCache.Provide(sharedCache.Collection2, {_P(0)});
+        sharedCache.CheckResults({TFetch{1, sharedCache.Collection2, {_P(0)}}});
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, {_P(0)});
+        sharedCache.CheckFetches({});
+        sharedCache.CheckResults({TFetch{2, sharedCache.Collection2, {_P(0)}}});
+        sharedCache.Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), 1);
+
+        for (ui32 remaining : {2u, 1u, 0u}) {
+            continuations.Unblock(1);
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), DefaultMemoryLimit);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), remaining * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 4 - remaining);
+            UNIT_ASSERT_VALUES_EQUAL(continuations.size(), remaining ? 1 : 0);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioUpdateDuringIncrementalDecrease) {
+        for (double newRatio : {0.5, 1.0}) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetMaxLimitDecreaseStepBytes(PAGE_TOTAL_SIZE);
+            TSharedPageCacheMock sharedCache(config);
+            sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
+            sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+            sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+            sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+            sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+
+            TBlockEvents<TKikimrEvents::TEvWakeup> continuations(sharedCache.Runtime, [](const auto& ev) {
+                return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoLimitDecrease);
+            });
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+            appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.0);
+            sharedCache.UpdateConfig(appConfig);
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(continuations.size(), 1);
+
+            appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(newRatio);
+            sharedCache.UpdateConfig(appConfig);
+            if (newRatio == 1.0) {
+                // Increases apply immediately, even with a continuation for an older target.
+                sharedCache.CheckFetches({TFetch{10, sharedCache.Collection1, {_P(0)}}});
+                sharedCache.Provide(sharedCache.Collection1, {_P(0)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+                sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0)}}});
+            } else {
+                sharedCache.CheckFetches({});
+                UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+            }
+
+            continuations.Unblock(1);
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), newRatio == 1.0 ? 4 * PAGE_TOTAL_SIZE : 2 * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), newRatio == 1.0 ? 1 : 2);
+            UNIT_ASSERT(continuations.empty());
+        }
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioModeChangeDuringIncrementalDecrease) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMaxLimitDecreaseStepBytes(PAGE_TOTAL_SIZE);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+        sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+
+        TBlockEvents<TKikimrEvents::TEvWakeup> continuations(sharedCache.Runtime, [](const auto& ev) {
+            return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoLimitDecrease);
+        });
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.0);
+        sharedCache.UpdateConfig(appConfig);
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(continuations.size(), 1);
+
+        // The remaining pages change tiers, so their former reservation must be released immediately.
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular);
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 1);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {_P(1), _P(2), _P(3)});
+        sharedCache.CheckFetches({});
+        sharedCache.CheckResults({TFetch{1, sharedCache.Collection1, {_P(1), _P(2), _P(3)}}});
+        continuations.Unblock(1);
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 1);
+        UNIT_ASSERT(continuations.empty());
+    }
+
+    Y_UNIT_TEST(InMemory_MaxRatioAndMemoryIncrementalDecrease) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMaxLimitDecreaseStepBytes(PAGE_TOTAL_SIZE);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({TFetch{40, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+        sharedCache.Provide(sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({TFetch{0, sharedCache.Collection1, {_P(0), _P(1), _P(2), _P(3)}}});
+
+        TBlockEvents<TKikimrEvents::TEvWakeup> continuations(sharedCache.Runtime, [](const auto& ev) {
+            return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoLimitDecrease);
+        });
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetMemoryLimit(2 * PAGE_TOTAL_SIZE);
+        appConfig.MutableSharedCacheConfig()->SetTryKeepInMemoryMaxRatio(0.0);
+        sharedCache.UpdateConfig(appConfig);
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(continuations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 1);
+
+        // A new controller limit updates the destination, without taking another step early.
+        sharedCache.SetLimit(PAGE_TOTAL_SIZE);
+        sharedCache.Wakeup();
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(continuations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+
+        for (ui32 remaining : {2u, 1u, 0u}) {
+            continuations.Unblock(1);
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), Max(remaining, 1u) * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), remaining * PAGE_TOTAL_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 4 - remaining);
+            UNIT_ASSERT_VALUES_EQUAL(continuations.size(), remaining ? 1 : 0);
+        }
     }
 
     Y_UNIT_TEST(IncrementalGC) {

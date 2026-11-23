@@ -6,6 +6,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr::NSharedCache {
 
@@ -250,11 +251,12 @@ void RestartAndClearCache(TMyEnvBase& env, ui64 memoryLimit = Max<ui64>()) {
 }
 
 void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit = false,
-        ui64 inMemoryInFlyLimit = 0) {
+        ui64 inMemoryInFlyLimit = 0, double tryKeepInMemoryMaxRatio = 1.0) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto config = request->Record.MutableConfig()->MutableSharedCacheConfig();
     config->SetMemoryLimit(limit);
+    config->SetTryKeepInMemoryMaxRatio(tryKeepInMemoryMaxRatio);
     if (inMemoryInFlyLimit) {
         config->SetInMemoryInFlyLimit(inMemoryInFlyLimit);
     }
@@ -1621,8 +1623,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TinyInFlyLimit) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 }
 
-Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TableLargerThanMemory) {
-    // A TryKeepInMemory table larger than the cache: load what fits, park the rest.
+Y_UNIT_TEST_TWIN(TryKeepInMemoryMode_BTreeIndex_V2_TableLargerThanMemory, LimitedRatio) {
+    // A TryKeepInMemory table larger than its tier: load what fits, park the rest.
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
@@ -1632,10 +1634,12 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TableLargerThanMemory) {
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-    SetupSharedCache(env, 2_MB, true);
+    const ui64 cacheLimit = LimitedRatio ? 32_MB : 2_MB;
+    // With a ratio cap the table fits the overall cache, but only 2 MiB is available to its tier.
+    SetupSharedCache(env, cacheLimit, true, 0, LimitedRatio ? 0.0625 : 1.0);
 
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
-    // write 200 rows, each ~100KB (~20MB), ~10x the shared cache limit
+    // write 200 rows, each ~100KB (~20MB), ~10x the in-memory tier limit
     for (i64 key = 0; key < 200; ++key) {
         TString value(size_t(100 * 1024), char('a' + key % 26));
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
@@ -1647,8 +1651,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TableLargerThanMemory) {
 
     LogCounters(counters);
 
-    // The shared cache must not grow past its limit.
-    UNIT_ASSERT_LT(counters->ActiveBytes->Val(), static_cast<i64>(2_MB));
+    // The shared cache and its in-memory tier must stay within their respective limits.
+    UNIT_ASSERT_LE(counters->ActiveBytes->Val(), static_cast<i64>(cacheLimit));
     UNIT_ASSERT_LT(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(2_MB));
     UNIT_ASSERT_GT(counters->TargetInMemoryBytes->Val(), static_cast<i64>(0_MB));
 
@@ -1656,13 +1660,14 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TableLargerThanMemory) {
     TRetriedCounters retried;
     for (i64 key = 199; key >= 0; --key) {
         DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+        UNIT_ASSERT_LE(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(2_MB));
     }
 
     UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);
     UNIT_ASSERT(retried.size() <= 10);
 }
 
-Y_UNIT_TEST(TryKeepInMemoryMode_TableLargerThanMemory) {
+Y_UNIT_TEST_TWIN(TryKeepInMemoryMode_TableLargerThanMemory, LimitedRatio) {
     // The same oversized case without the V2 index: the reload/reload-evict hazard lives in the
     // target-versus-capacity pair, so it is not V2 specific.
     TMyEnvBase env;
@@ -1672,10 +1677,11 @@ Y_UNIT_TEST(TryKeepInMemoryMode_TableLargerThanMemory) {
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-    SetupSharedCache(env, 2_MB, true);
+    const ui64 cacheLimit = LimitedRatio ? 32_MB : 2_MB;
+    SetupSharedCache(env, cacheLimit, true, 0, LimitedRatio ? 0.0625 : 1.0);
 
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
-    // write 200 rows, each ~100KB (~20MB), ~10x the shared cache limit
+    // write 200 rows, each ~100KB (~20MB), ~10x the in-memory tier limit
     for (i64 key = 0; key < 200; ++key) {
         TString value(size_t(100 * 1024), char('a' + key % 26));
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
@@ -1683,8 +1689,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_TableLargerThanMemory) {
     env.SendSync(new NFake::TEvCompact(TableId));
     env.WaitFor<NFake::TEvCompacted>();
 
-    // The shared cache must not grow past its limit.
-    UNIT_ASSERT_LT(counters->ActiveBytes->Val(), static_cast<i64>(2_MB));
+    // The shared cache and its in-memory tier must stay within their respective limits.
+    UNIT_ASSERT_LE(counters->ActiveBytes->Val(), static_cast<i64>(cacheLimit));
     UNIT_ASSERT_LT(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(2_MB));
     UNIT_ASSERT_GT(counters->TargetInMemoryBytes->Val(), static_cast<i64>(0_MB));
 
@@ -1692,6 +1698,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_TableLargerThanMemory) {
     TRetriedCounters retried;
     for (i64 key = 199; key >= 0; --key) {
         DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+        UNIT_ASSERT_LE(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(2_MB));
     }
 
     UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);

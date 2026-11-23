@@ -176,8 +176,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         RequestFromQueue(ScanRequests);
     }
 
-    // True if after a large drop in target cache limit, we couldn't decrease it right away
-    // and yielded to process other events.
+    // A large decrease of the total limit or in-memory cap continues after other events run.
     bool LimitDecreaseScheduled = false;
 
     ui64 GetTargetCacheLimitBytes() const {
@@ -190,6 +189,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     ui64 GetInMemoryLimitBytes() {
         ui64 remainInFlyLimit = Config.GetInMemoryInFlyLimit() > InFlyInMemoryBytes ? Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes : 0;
         return Min(AliveInMemoryBytes + remainInFlyLimit, TargetInMemoryBytes);
+    }
+
+    void SanitizeConfig(const TActorContext& ctx) {
+        const double ratio = Config.GetTryKeepInMemoryMaxRatio();
+        // Legacy config notifications and direct actor creation may bypass config validation.
+        if (!(ratio >= 0.0 && ratio <= 1.0)) {
+            LOG_ERROR_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE,
+                "Invalid TryKeepInMemoryMaxRatio: " << ratio << "; using the default");
+            Config.ClearTryKeepInMemoryMaxRatio();
+        }
     }
 
     // Reloading into a full tier would evict another page, and the two would trade places forever.
@@ -214,34 +223,44 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     void ActualizeCacheSizeLimit() {
         Counters.ConfigLimitBytes->Set(Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0);
 
-        const ui64 currentLimit = Cache.GetLimit();
+        // Share one continuation between total-limit and tier-cap decreases. Other events must
+        // not apply another step while that continuation is pending.
+        const ui64 decreaseStep = LimitDecreaseScheduled ? 0 : Config.GetMaxLimitDecreaseStepBytes();
+        const auto adjustLimit = [decreaseStep](ui64 current, ui64 target) {
+            return current > target ? current - Min(current - target, decreaseStep) : target;
+        };
+
         const ui64 targetLimit = GetTargetCacheLimitBytes();
-        ui64 newLimit;
-        if (targetLimit >= currentLimit) {
-            // Limit increased, no problem, do it right away.
-            newLimit = targetLimit;
-        } else if (LimitDecreaseScheduled) {
-            // Limit decreased, but we can't update it yet.
-            newLimit = currentLimit;
-        } else if (targetLimit + Config.GetMaxLimitDecreaseStepBytes() >= currentLimit) {
-            // Limit decreased by a small amount, do it right away.
-            newLimit = targetLimit;
-        } else {
-            // A large decrease in target limit, decrease the current limit for a bit
-            // and schedule another decrease after we process the current event queue.
-            newLimit = currentLimit - Config.GetMaxLimitDecreaseStepBytes();
-            LimitDecreaseScheduled = true;
-            Send(SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoLimitDecrease)));
-        }
+        const ui64 newLimit = adjustLimit(Cache.GetLimit(), targetLimit);
 
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache.UpdateLimit(newLimit, GetInMemoryLimitBytes());
+        const double ratio = Config.GetTryKeepInMemoryMaxRatio();
+        // Avoid converting the unlimited ui64 value through double when no cap is configured.
+        const ui64 maxInMemoryBytes = ratio == 1.0 ? newLimit : static_cast<ui64>(newLimit * ratio);
+        const ui32 inMemoryTier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
+        const ui64 inMemoryLimit = adjustLimit(Cache.GetTierLimit(inMemoryTier), maxInMemoryBytes);
+        // Demand changes still release reservations immediately when pages move to the regular tier.
+        Cache.UpdateLimit(newLimit, Min(GetInMemoryLimitBytes(), inMemoryLimit));
         Counters.ActiveLimitBytes->Set(newLimit);
+
+        if (!LimitDecreaseScheduled &&
+            (newLimit > targetLimit || Cache.GetTierLimit(inMemoryTier) > maxInMemoryBytes)) {
+            LimitDecreaseScheduled = true;
+            Send(SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoLimitDecrease)));
+        }
     }
 
     void DoGC() {
+        // A tier can exceed its new limit even when total cache usage is below the overall limit.
+        // Enforce limits here, after handlers finish moving pages between tiers.
+        // With no in-memory allocation or pages, preserve the regular-only GC eviction order.
+        const ui32 inMemoryTier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
+        if (Cache.GetTierLimit(inMemoryTier) != 0 || Cache.GetTierSize(inMemoryTier) != 0) {
+            Evict(Cache.EnsureLimits());
+        }
+
         // maybe we already have enough useless pages
         // update StatActiveBytes + StatPassiveBytes
         ProcessGCList();
@@ -1490,8 +1509,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             Cache.GetLimit() > GetStatAllBytes() ? Cache.GetLimit() - GetStatAllBytes() : 0,                               // available in cache
             Config.GetInMemoryInFlyLimit() > InFlyInMemoryBytes ? Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes : 0  // available in in-fly limit
         );
-        // A preloaded page is inserted into the tier on arrival, so it must fit or it evicts a partner.
-        remainBytes = Min(remainBytes, InMemoryTierRoomBytes());
+        // Reserve room for preloads already in flight, or their arrivals would evict each other.
+        const ui64 tierRoomBytes = InMemoryTierRoomBytes();
+        remainBytes = Min(remainBytes, tierRoomBytes > InFlyInMemoryBytes ? tierRoomBytes - InFlyInMemoryBytes : 0);
 
         while (PendingInMemoryPages) {
             auto it = PendingInMemoryPages.begin();
@@ -1647,6 +1667,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             Config.Swap(&config);
         }
 
+        SanitizeConfig(ctx);
         ActualizeCacheSizeLimit();
 
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
@@ -1744,6 +1765,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Bootstrap with config " << Config.ShortDebugString());
 
+        SanitizeConfig(ctx);
         MemLimitBytes = Config.HasMemoryLimit()
             ? Config.GetMemoryLimit()
             : 128_MB; // soon will be updated by MemoryController

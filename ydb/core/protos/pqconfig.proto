@@ -556,8 +556,6 @@ message TPQTabletConfig {
     };
 
     optional EWriteMode WriteMode = 51 [default = WRITE_AVAILABLE];
-    // Disable monitoring metrics exported by PQRB, keeping internal topic statistics.
-    optional bool MetricsDisabled = 52 [default = false];
 }
 
 message THeartbeat {

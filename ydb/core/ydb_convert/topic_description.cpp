@@ -198,10 +198,6 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         (*out.mutable_attributes())["_allow_unauthenticated_read"] = "true";
     }
 
-    if (config.HasMetricsDisabled()) {
-        (*out.mutable_attributes())["_metrics_disabled"] = config.GetMetricsDisabled() ? "true" : "false";
-    }
-
     if (inDesc.GetPartitionPerTablet() != 2) {
         (*out.mutable_attributes())["_partitions_per_tablet"] =
             TStringBuilder() << inDesc.GetPartitionPerTablet();

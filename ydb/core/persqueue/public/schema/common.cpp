@@ -180,15 +180,6 @@ TResult ProcessTopicAttributes(
                     return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Attribute allow_unauthenticated_write is " << attrValue << ", which is not bool"};
                 }
             }
-        } else if (attrName == "_metrics_disabled") {
-            if (attrValue == "true") {
-                tabletConfig->SetMetricsDisabled(true);
-            } else if (attrValue == "false") {
-                tabletConfig->SetMetricsDisabled(false);
-            } else {
-                return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid _metrics_disabled: '" << attrValue
-                    << "', expected true or false"};
-            }
         } else if (attrName == "_write_mode") {
             if (attrValue == "available") {
                 tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);

@@ -51,10 +51,6 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
             }
         }
 
-        // Ordinary SDK settings do not expose the system _metrics_disabled attribute.
-        if (sourceTabletConfig.HasMetricsDisabled()) {
-            targetConfig.MutablePQTabletConfig()->SetMetricsDisabled(sourceTabletConfig.GetMetricsDisabled());
-        }
         // Ordinary SDK settings do not expose the system _write_mode attribute.
         if (sourceTabletConfig.HasWriteMode()) {
             targetConfig.MutablePQTabletConfig()->SetWriteMode(sourceTabletConfig.GetWriteMode());

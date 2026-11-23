@@ -1104,7 +1104,7 @@ void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
 
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
-    if (Config.GetMetricsDisabled()) {
+    if (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DISABLED) {
         auto it = CounterEventsInflight.find(group);
         if (it != CounterEventsInflight.end() && it->second.RefCount() <= 1) {
             // Drop previously published labeled counters once, without touching tablet counters.

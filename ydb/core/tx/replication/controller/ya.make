@@ -65,6 +65,7 @@ SRCS(
     tx_resolve_secret_result.cpp
     tx_worker_error.cpp
     worker_lag_expiry_queue.cpp
+    topic_mirror.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)

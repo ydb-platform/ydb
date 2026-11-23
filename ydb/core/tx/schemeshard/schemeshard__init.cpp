@@ -6685,12 +6685,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     // rather than just skipping a bad path, also makes the repaired database safe
     // for readers which do not have this recovery check.
     TString ValidateIncrementalRestoreOp(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op,
-                                        bool terminal, THashSet<TPathId>& paths) {
+                                        bool terminal) {
         TString issue;
         auto checkPath = [&](const TPath& path) {
-            if (path.IsResolved()) {
-                paths.insert(path.Base()->PathId);
-            }
             if (issue.empty() && (!path.IsResolved() || path.Base()->Dropped())) {
                 issue = TStringBuilder() << "Missing or dropped path: " << path.PathString();
             }
@@ -6754,18 +6751,34 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         const auto* state = Self->IncrementalRestoreStates.FindPtr(id);
         const bool terminal = state && (state->State == TIncrementalRestoreState::EState::Completed
             || state->State == TIncrementalRestoreState::EState::Failed);
-        THashSet<TPathId> paths;
-        const TString issue = ValidateIncrementalRestoreOp(op, terminal, paths);
+        const TString issue = ValidateIncrementalRestoreOp(op, terminal);
         if (issue.empty()) {
             return true;
         }
 
-        // Never forget a live restore transaction or one of its children. Include
-        // ancestors for legacy restore sub-ops with no IncrementalRestoreItem row,
-        // but do not mistake unrelated DDL on the same path for restore work.
-        auto touchesPath = [&](TPathId pathId) {
+        // Full-copy and path-state parts share the original restore's TxId.
+        // A destination name may now belong to a different restore, so resolving
+        // that name (even to a restore-specific TxState) cannot prove ownership.
+        if (Self->Operations.contains(opId.GetTxId())) {
+            return true;
+        }
+        // Legacy sub-ops may have no item row. Use the persisted collection
+        // identity: finalization targets it, and incremental schema sub-ops read
+        // its descendants. A recreated collection has a different PathId.
+        const TPathId collectionId(op.GetBackupCollectionPathId().GetOwnerId(),
+                                   op.GetBackupCollectionPathId().GetLocalId());
+        for (const auto& [txId, tx] : Self->TxInFlight) {
+            if (txId.GetTxId() == opId.GetTxId()
+                || (collectionId && tx.TxType == TTxState::TxIncrementalRestoreFinalize
+                    && tx.TargetPathId == collectionId)) {
+                return true;
+            }
+            if (tx.TxType != TTxState::TxRestoreIncrementalBackupAtTable || !collectionId) {
+                continue;
+            }
+            auto pathId = tx.SourcePathId;
             while (pathId) {
-                if (paths.contains(pathId)) {
+                if (pathId == collectionId) {
                     return true;
                 }
                 const auto* path = Self->PathsById.FindPtr(pathId);
@@ -6774,30 +6787,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
                 pathId = (*path)->ParentPathId;
             }
-            return false;
-        };
-        if (Self->Operations.contains(opId.GetTxId())) {
-            return true;
-        }
-        for (const auto& [txId, tx] : Self->TxInFlight) {
-            const bool restoreSubOp = tx.TxType == TTxState::TxRestoreIncrementalBackupAtTable
-                || tx.TxType == TTxState::TxCreateLongIncrementalRestoreOp
-                || tx.TxType == TTxState::TxIncrementalRestoreFinalize
-                || ((tx.TxType == TTxState::TxCopyTable || tx.TxType == TTxState::TxChangePathState)
-                    && tx.TargetPathTargetState
-                    && (*tx.TargetPathTargetState == NKikimrSchemeOp::EPathStateIncomingIncrementalRestore
-                        || *tx.TargetPathTargetState == NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore
-                        || *tx.TargetPathTargetState == NKikimrSchemeOp::EPathStateAwaitingOutgoingIncrementalRestore));
-            if (txId.GetTxId() == opId.GetTxId()
-                || (restoreSubOp && (touchesPath(tx.SourcePathId) || touchesPath(tx.TargetPathId)))) {
-                return true;
-            }
         }
 
-        // DataShard work can outlive its schema sub-operation. Its persisted
-        // per-shard progress must not be discarded just because TxInFlight is empty.
-        if (state && !state->InProgressOperations.empty()) {
-            return true;
+        // A recorded failure is a reply, not outstanding work. For terminal
+        // records require an answer for every expected shard before cleanup.
+        // Nonterminal restores may still retry failures and must be preserved.
+        if (state) {
+            for (const auto& childId : state->InProgressOperations) {
+                if (!terminal || Self->Operations.contains(childId.GetTxId())) {
+                    return true;
+                }
+                const auto* tableOp = state->TableOperations.FindPtr(childId);
+                if (!tableOp || tableOp->ExpectedShards.empty()) {
+                    return true;
+                }
+                for (const auto& shard : tableOp->ExpectedShards) {
+                    if (!tableOp->CompletedShards.contains(shard) && !tableOp->FailedShards.contains(shard)) {
+                        return true;
+                    }
+                }
+            }
         }
         TVector<ui32> itemSeqs;
         auto items = db.Table<Schema::IncrementalRestoreItem>().Range(id).Select();
@@ -6823,6 +6832,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
         db.Table<Schema::IncrementalRestoreOperations>().Key(id).Delete();
         db.Table<Schema::IncrementalRestoreState>().Key(id).Delete();
+        Self->CleanupIncrementalRestoreItems(id, db, Self->IncrementalRestoreStates.FindPtr(id));
+        for (auto it = Self->IncrementalRestoreOperationToState.begin();
+             it != Self->IncrementalRestoreOperationToState.end();) {
+            if (it->second == id) {
+                const auto toErase = it++;
+                Self->IncrementalRestoreOperationToState.erase(toErase);
+            } else {
+                ++it;
+            }
+        }
         Self->IncrementalRestoreStates.erase(id);
         removed = true;
         YDB_LOG_WARN_CTX(ctx, "TTxInit removed stale incremental restore operation",

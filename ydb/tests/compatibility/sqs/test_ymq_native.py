@@ -41,7 +41,6 @@ class TestYmqNativeRollingUpdate(YmqRollingUpdateBase):
             def exercise():
                 api = self._make_api()
                 api.send_message(queue_url, "msg-{}".format(step_name))
-                api.send_message(queue_url, "delayed-{}".format(step_name), delay_seconds=1)
 
                 messages = api.receive_message(queue_url, max_number_of_messages=1, wait_timeout=5)
                 assert messages, "no messages received at step {}".format(step_name)

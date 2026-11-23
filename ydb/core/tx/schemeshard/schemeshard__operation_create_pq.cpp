@@ -43,6 +43,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     }
 
     if (op.PartitionsToAddSize()) {
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("creating topic with providing of partitions count is forbidden");
         return nullptr;
     }
@@ -56,6 +57,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (op.HasPQTabletConfig() && op.GetPQTabletConfig().HasPartitionStrategy()) {
         const auto strategy = op.GetPQTabletConfig().GetPartitionStrategy();
         if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
             return nullptr;
         }

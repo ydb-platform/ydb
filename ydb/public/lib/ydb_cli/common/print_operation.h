@@ -7,12 +7,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_tablet.h>
 
 namespace NYdb {
 namespace NConsoleClient {
 
 /// Common
 void PrintOperation(const TOperation& operation, EDataFormat format);
+void PrintOperation(const NTablet::TReassignTabletsOperation& operation, EDataFormat format);
 
 /// YT
 void PrintOperation(const NExport::TExportToYtResponse& operation, EDataFormat format);

@@ -97,18 +97,38 @@ void ResolveAndParseYamlConfig(
     NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true, std::move(unknownFieldsCollector)), appConfig, true, /*phase=*/ nullptr, /*relaxed=*/ true);
 }
 
-void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {
-    if (from.HasNameserviceConfig()) {
-        to.MutableNameserviceConfig()->CopyFrom(from.GetNameserviceConfig());
-    }
-
+ENameserviceNodesOverride ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to,
+        const NKikimrConfig::TAppConfig& bootstrapConfig) {
     if (from.HasNetClassifierDistributableConfig()) {
         to.MutableNetClassifierDistributableConfig()->CopyFrom(from.GetNetClassifierDistributableConfig());
     }
-
     if (from.NamedConfigsSize()) {
         to.MutableNamedConfigs()->CopyFrom(from.GetNamedConfigs());
     }
+
+    const bool bridgedYaml = to.GetYamlConfigEnabled() && (to.HasBridgeConfig() || bootstrapConfig.HasBridgeConfig());
+    const bool keepYamlNodes = bridgedYaml && to.GetNameserviceConfig().NodeSize();
+    if (from.HasNameserviceConfig()) {
+        auto nameservice = from.GetNameserviceConfig();
+        if (keepYamlNodes) {
+            // A pre-conversion Console item can list only the original pile and omit its name.
+            nameservice.MutableNode()->Swap(to.MutableNameserviceConfig()->MutableNode());
+        }
+        to.MutableNameserviceConfig()->Swap(&nameservice);
+    }
+    if (keepYamlNodes) {
+        return ENameserviceNodesOverride::Yaml;
+    }
+
+    const auto& registeredNodes = bootstrapConfig.GetNameserviceConfig().GetNode();
+    if (bridgedYaml && !registeredNodes.empty()) {
+        // With no nameservice section, startup takes the whole section from registration.
+        if (to.HasNameserviceConfig()) {
+            to.MutableNameserviceConfig()->MutableNode()->CopyFrom(registeredNodes);
+        }
+        return ENameserviceNodesOverride::NodeRegistration;
+    }
+    return ENameserviceNodesOverride::None;
 }
 
 class TLegacyValidators

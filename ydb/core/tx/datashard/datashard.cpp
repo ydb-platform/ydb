@@ -300,6 +300,11 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 }
 
 void TDataShard::Die(const TActorContext& ctx) {
+    InvalidateHnswIndexes();
+    if (HnswCacheMemoryTracker) {
+        Send(NMemory::MakeMemoryControllerId(),
+            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache, true));
+    }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();
     }
@@ -428,6 +433,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncSchemeOnFollowerNeeded = true;
         // Do not rely on a sync queued before the reactivation, an extra one is a no-op
         SyncSchemeOnFollowerPending = false;
+        InvalidateHnswIndexes();
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -474,6 +480,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     }
 
     SignalTabletActive(ctx);
+    ScheduleHnswInitialBuilds();
     DoPeriodicTasks(ctx);
 
     NotifySchemeshard(ctx);
@@ -2056,6 +2063,8 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
 
     NKikimrSchemeOp::TTableDescription schema;
     newTableInfo->GetSchema(schema);
+    newId.ToProto(schema.MutablePathId());
+    schema.SetId_Deprecated(newId.LocalPathId);
     for (auto& indexDesc: *schema.MutableTableIndexes()) {
         Y_ENSURE(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
         auto prevPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
@@ -2066,8 +2075,22 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetLocalPathId(newPathId.LocalPathId);
 
         auto node = newTableInfo->Indexes.extract(prevPathId);
+        Y_ENSURE(!node.empty());
         node.key() = newPathId;
         newTableInfo->Indexes.insert(std::move(node));
+    }
+    if (schema.HasLocalHnswIndex() && schema.GetLocalHnswIndex().HasIndexId()) {
+        auto& indexDesc = *schema.MutableLocalHnswIndex();
+        const auto prevPathId = TPathId::FromProto(indexDesc.GetIndexId());
+        if (const auto it = remap.find(prevPathId); it != remap.end()) {
+            const auto& newPathId = it->second;
+            newPathId.ToProto(indexDesc.MutableIndexId());
+            auto hnswNode = newTableInfo->HnswIndexes.extract(prevPathId);
+            if (!hnswNode.empty()) {
+                hnswNode.key() = newPathId;
+                newTableInfo->HnswIndexes.insert(std::move(hnswNode));
+            }
+        }
     }
     newTableInfo->SetSchema(schema);
 
@@ -2245,6 +2268,8 @@ void TDataShard::DropUserTable(TTransactionContext& txc, ui64 tableId) {
     db.Table<Schema::UserTables>().Key(ti->first).Delete();
     db.Table<Schema::UserTablesStats>().Key(ti->first).Delete();
 
+    InvalidateHnswTable(ti->second->LocalTid);
+    HnswIndexCache.erase(ti->second->LocalTid);
     TableInfos.erase(ti);
 }
 
@@ -2267,6 +2292,8 @@ void TDataShard::DropAllUserTables(TTransactionContext& txc) {
         db.Table<Schema::UserTablesStats>().Key(ti.first).Delete();
     }
 
+    InvalidateHnswIndexes();
+    HnswIndexCache.clear();
     TableInfos.clear();
 }
 
@@ -4183,6 +4210,7 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     // Unrelated executor commits may update yellow-stop flags without notifying
     // the shard. Stop active direct imports on the next periodic check as well.
     AbortDirectImportsForSpace();
+    PruneHnswIndexes();
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
@@ -4665,6 +4693,15 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
 }
 
 void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+    if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType) {
+        // Some embedded runtimes, including tests, have no controller.
+        // Distinguish that disabled cache from a pending first limit grant.
+        if (HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker->SetLimit(0);
+        }
+        return;
+    }
+
     auto op = Pipeline.FindOp(ev->Cookie);
     if (op) {
         op->AddInputEvent(ev.Release());

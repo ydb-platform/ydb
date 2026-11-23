@@ -13,6 +13,9 @@
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
+#include <util/stream/output.h>
+
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
 
@@ -160,6 +163,35 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         ResponseQueue.pop_front();
         Send(Worker, event.Release());
+        CheckStatus();
+    }
+
+    void CheckStatus() {
+        // Requires source-side statuses to follow read responses on the stream.
+        // The proxy preserves SDK event order; finish local decompression too.
+        if (!PendingStatusReadOffset || !DecompressQueue.empty() || !ResponseQueue.empty()) {
+            return;
+        }
+
+        if (*PendingStatusReadOffset > NextReadOffset) {
+            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                << "Topic " << Settings.GetBase().Topics_.at(0).Path_
+                << ", partition " << Settings.GetBase().Topics_.at(0).PartitionIds_.at(0)
+                << ", consumer " << Settings.GetBase().ConsumerName_
+                << ": expected offset " << NextReadOffset
+                << " is before server read offset " << *PendingStatusReadOffset);
+        }
+        PendingStatusReadOffset.reset();
+    }
+
+    void Handle(TEvYdbProxy::TEvTopicReaderStatus::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!Settings.FailOnDataLoss_ || !Settings.CheckStatusForDataLoss_ || result.ReadSessionId != ReadSessionId) {
+            return;
+        }
+
+        PendingStatusReadOffset = result.ReadOffset;
+        CheckStatus();
     }
 
     void Handle(TEvYdbProxy::TEvEndTopicPartition::TPtr& ev) {
@@ -177,6 +209,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         const auto& result = ev->Get()->Result;
         ReadSessionId = result.ReadSessionId;
         NextReadOffset = result.ReadOffset;
+        PendingStatusReadOffset.reset();
         if (Settings.FailOnDataLoss_ && result.RetainedStartOffset && *result.RetainedStartOffset > NextReadOffset) {
             return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
                 << "Topic " << Settings.GetBase().Topics_.at(0).Path_
@@ -349,6 +382,7 @@ public:
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
+            hFunc(TEvYdbProxy::TEvTopicReaderStatus, Handle);
             hFunc(TEvYdbProxy::TEvEndTopicPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             hFunc(TEvents::TEvWakeup, HandleWakeup);
@@ -378,6 +412,7 @@ private:
     TString ReadSessionId;
     ui64 CommittedOffset = 0;
     ui64 NextReadOffset = 0;
+    std::optional<ui64> PendingStatusReadOffset;
     TMaybe<ui64> CommitInFlight;
     TMaybe<ui64> PendingCommit;
 

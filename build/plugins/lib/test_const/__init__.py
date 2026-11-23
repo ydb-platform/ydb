@@ -29,7 +29,9 @@ CANON_RESULT_FILE_NAME = "result.json"
 CANONIZATION_RESULT_FILE_NAME = "canonization_res.json"
 COMMON_CONTEXT_FILE_NAME = "common_test.context"
 CONSOLE_SNIPPET_LIMIT = 5000
-FAKE_OUTPUT_EXTS = frozenset([".mf", ".fake", ".cpf", ".cpsf"])
+# Lists the class files compiled by a jar module that passed the coverage filters, lies next to the jar
+JAVA_COVERAGE_CLASSES_EXT = ".covcls"
+FAKE_OUTPUT_EXTS = frozenset([".mf", ".fake", ".cpf", ".cpsf", JAVA_COVERAGE_CLASSES_EXT])
 LIST_NODE_LOG_FILE = "test_list.log"
 LIST_NODE_RESULT_FILE = "test_list.json"
 LIST_RESULT_NODE_LOG_FILE = "list_result.log"
@@ -178,7 +180,6 @@ NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 # XXX: These resource keys are used in linter tools in `tools/` which are run by test_tool.
 # test_tool and `tools/` have different release cycles. Beware when modifying.
-FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
@@ -453,7 +454,6 @@ class PythonLinterName(Enum):
     Black = "black"
     DummyLinter = "dummy_linter"
     Flake8 = "flake8"
-    Py2Flake8 = "py2_flake8"
     Ruff = "ruff"
 
 
@@ -489,7 +489,6 @@ LINTER_TO_GLOBAL_RESOURCES = {
     PythonLinterName.Black: (('build/external_resources/black', BLACK_RESOURCE),),
     PythonLinterName.Ruff: (('build/external_resources/ruff', RUFF_RESOURCE),),
     PythonLinterName.Flake8: (('build/external_resources/flake8_py3', FLAKE8_PY3_RESOURCE),),
-    PythonLinterName.Py2Flake8: (('build/external_resources/flake8_py2', FLAKE8_PY2_RESOURCE),),
     CppLinterName.ClangFormat: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.ClangFormatJson: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.Yamlfmt: (('build/external_resources/yamlfmt', YAMLFMT_FORMAT_RESOURCE),),

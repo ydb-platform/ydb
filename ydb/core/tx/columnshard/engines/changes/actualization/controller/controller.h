@@ -17,7 +17,7 @@ public:
             {"count", ActualizationsInProgress[address]},
             {"limit", GetLimitForAddress(address)},
             {"rw", address.DebugString()});
-        AFL_VERIFY(++ActualizationsInProgress[address] <= (i32)GetLimitForAddress(address));
+        YDB_LOG_VERIFY(++ActualizationsInProgress[address] <= (i32)GetLimitForAddress(address));
     }
 
     void FinishActualization(const NActualizer::TRWAddress& address) {
@@ -26,7 +26,7 @@ public:
             {"count", ActualizationsInProgress[address]},
             {"limit", GetLimitForAddress(address)},
             {"rw", address.DebugString()});
-        AFL_VERIFY(--ActualizationsInProgress[address] >= 0);
+        YDB_LOG_VERIFY(--ActualizationsInProgress[address] >= 0);
     }
 
     bool IsNewTaskAvailable(const NActualizer::TRWAddress& address, const ui32 readyTemporaryTasks) const {

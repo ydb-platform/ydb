@@ -56,7 +56,7 @@ NArrow::NMerger::TCursor TDuplicateManager::GetVersionBatch(const TSnapshot& sna
 std::shared_ptr<TPortionStore> TDuplicateManager::MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
     THashMap<ui64, TPortionInfo::TConstPtr> portionsStore;
     for (const auto& portion : portions) {
-        AFL_VERIFY(portionsStore.emplace(portion->GetPortionId(), portion).second);
+        YDB_LOG_VERIFY(portionsStore.emplace(portion->GetPortionId(), portion).second);
     }
     return std::make_shared<TPortionStore>(std::move(portionsStore));
 }
@@ -178,7 +178,7 @@ void TDuplicateManager::HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev) {
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());
         constructor->AddFilter(std::move(filter));
-        AFL_VERIFY(constructor->IsDone());
+        YDB_LOG_VERIFY(constructor->IsDone());
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
         YDB_LOG_TRACE("",
             {"component", "duplicates_manager"},
@@ -264,7 +264,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
                 {"event", "empty_borders_without_inflight"},
                 {"portionId", portionId},
                 {"bordersFlowController", BordersFlowController.DebugString()});
-            AFL_VERIFY(FiltersStore.AbortWaitingPortion(portionId, "no borders to build duplicate filter"));
+            YDB_LOG_VERIFY(FiltersStore.AbortWaitingPortion(portionId, "no borders to build duplicate filter"));
             OnFilterRequestCompleted();
             return;
         }
@@ -327,7 +327,7 @@ void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
     OnProgress();
     if (!event.Context.GetExecutor()->ScheduleNext(event.Context.ExtractGlobalContext())) {
         Counters->OnFetchInflight(-1);
-        AFL_VERIFY(InflightExecutors > 0);
+        YDB_LOG_VERIFY(InflightExecutors > 0);
         --InflightExecutors;
         TryStartPendingExecutor();
     }
@@ -353,7 +353,7 @@ void TDuplicateManager::TryStartPendingExecutor() {
 }
 
 void TDuplicateManager::OnFilterRequestCompleted() {
-    AFL_VERIFY(InflightFilterRequests > 0);
+    YDB_LOG_VERIFY(InflightFilterRequests > 0);
     --InflightFilterRequests;
     TryStartPendingFilterRequest();
 }

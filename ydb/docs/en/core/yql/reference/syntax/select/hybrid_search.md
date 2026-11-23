@@ -245,7 +245,6 @@ LIMIT 10;
 ## Limitations {#limitations}
 
 * `HybridRank(...)` must be the entire `ORDER BY` key; it cannot be negated, nested in a larger expression, or combined with other sort keys.
-* The current implementation supports only tables with a single-column primary key.
 * At least two scoring arguments are required — a single branch is not a hybrid query.
 * `LIMIT` must be a literal (it sizes the per-branch candidate pools). Use an explicit `AS Limits` to allow a parameterized `LIMIT`.
 * A custom fusion lambda (`RankLambda` or `ScoreLambda`) replaces the built-in fusion and cannot be combined with `Mode`, `Weights`, `K`, or `Normalize`. At most one of `RankLambda` or `ScoreLambda` may be specified.

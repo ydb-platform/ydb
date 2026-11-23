@@ -16,6 +16,10 @@
 namespace NKikimr::NReplication::NTestHelpers {
 
 class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
+public:
+    TFeatureFlags() {
+        FeatureFlags.SetEnableAsyncReplicationTableOwnership(true);
+    }
 };
 
 enum class ERuntimeMode {
@@ -142,6 +146,7 @@ public:
             .SetDomainName(DomainName)
             .SetNodeCount(nodeCount)
             .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
+            .SetFeatureFlags(TFeatureFlags().FeatureFlags)
         )
         , Server(Settings)
         , Client(Settings)
@@ -151,10 +156,11 @@ public:
         }
     }
 
-    TEnv(const TFeatureFlags& featureFlags, bool init = true)
+    TEnv(const TFeatureFlags& featureFlags, bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
             .SetFeatureFlags(featureFlags.FeatureFlags)
+            .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
         )
         , Server(Settings)
         , Client(Settings)
@@ -209,6 +215,12 @@ public:
             Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
                 new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
         }
+    }
+
+    ~TEnv() {
+        RunCall([&] {
+            Server.ShutdownGRpc();
+        });
     }
 
     void RotatePassword(const TString& user, const TString& newPassword, const TString& oldPassword) {

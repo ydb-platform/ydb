@@ -1,46 +1,33 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: PyJWT
-Version: 2.4.0
+Version: 2.15.1
 Summary: JSON Web Token implementation in Python
-Home-page: https://github.com/jpadilla/pyjwt
-Author: Jose Padilla
-Author-email: hello@jpadilla.com
-License: MIT
+Author-email: Jose Padilla <hello@jpadilla.com>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/jpadilla/pyjwt
 Keywords: json,jwt,security,signing,token,web
-Platform: UNKNOWN
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Natural Language :: English
-Classifier: License :: OSI Approved :: MIT License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.6
-Classifier: Programming Language :: Python :: 3.7
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Topic :: Utilities
-Requires-Python: >=3.6
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
+License-File: LICENSE
+License-File: AUTHORS.rst
+Requires-Dist: typing_extensions>=4.0; python_version < "3.11"
 Provides-Extra: crypto
-Requires-Dist: cryptography (>=3.3.1) ; extra == 'crypto'
-Provides-Extra: dev
-Requires-Dist: sphinx ; extra == 'dev'
-Requires-Dist: sphinx-rtd-theme ; extra == 'dev'
-Requires-Dist: zope.interface ; extra == 'dev'
-Requires-Dist: cryptography (>=3.3.1) ; extra == 'dev'
-Requires-Dist: pytest (<7.0.0,>=6.0.0) ; extra == 'dev'
-Requires-Dist: coverage[toml] (==5.0.4) ; extra == 'dev'
-Requires-Dist: mypy ; extra == 'dev'
-Requires-Dist: pre-commit ; extra == 'dev'
-Provides-Extra: docs
-Requires-Dist: sphinx ; extra == 'docs'
-Requires-Dist: sphinx-rtd-theme ; extra == 'docs'
-Requires-Dist: zope.interface ; extra == 'docs'
-Provides-Extra: tests
-Requires-Dist: pytest (<7.0.0,>=6.0.0) ; extra == 'tests'
-Requires-Dist: coverage[toml] (==5.0.4) ; extra == 'tests'
+Requires-Dist: cryptography>=3.4.0; extra == "crypto"
+Dynamic: license-file
 
 PyJWT
 =====
@@ -62,11 +49,12 @@ A Python implementation of `RFC 7519 <https://tools.ietf.org/html/rfc7519>`_. Or
 Sponsor
 -------
 
-+--------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| |auth0-logo| | If you want to quickly add secure token-based authentication to Python projects, feel free to check Auth0's Python SDK and free plan at `auth0.com/developers <https://auth0.com/developers?utm_source=GHsponsor&utm_medium=GHsponsor&utm_campaign=pyjwt&utm_content=auth>`_. |
-+--------------+-----------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+.. |auth0-logo| image:: https://github.com/user-attachments/assets/ee98379e-ee76-4bcb-943a-e25c4ea6d174
+   :width: 160px
 
-.. |auth0-logo| image:: https://user-images.githubusercontent.com/83319/31722733-de95bbde-b3ea-11e7-96bf-4f4e8f915588.png
++--------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| |auth0-logo| | If you want to quickly add secure token-based authentication to Python projects, feel free to check Auth0's Python SDK and free plan at `auth0.com/signup <https://auth0.com/signup?utm_source=external_sites&utm_medium=pyjwt&utm_campaign=devn_signup>`_. |
++--------------+-----------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 Installing
 ----------
@@ -86,7 +74,7 @@ Usage
     >>> import jwt
     >>> encoded = jwt.encode({"some": "payload"}, "secret", algorithm="HS256")
     >>> print(encoded)
-    eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzb21lIjoicGF5bG9hZCJ9.Joh1R2dYzkRvDkqv3sygm5YyK8Gi4ShZqbhK2gxcs2U
+    eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzb21lIjoicGF5bG9hZCJ9.4twFt5NiznN84AWoo1d7KO1T_yoc0Z6XOpOVswacPZg
     >>> jwt.decode(encoded, "secret", algorithms=["HS256"])
     {'some': 'payload'}
 
@@ -104,5 +92,3 @@ You can run tests from the project root after cloning with:
 .. code-block:: console
 
     $ tox
-
-

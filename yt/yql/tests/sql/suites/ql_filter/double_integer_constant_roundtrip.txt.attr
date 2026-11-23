@@ -1,0 +1,8 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["x";["DataType";"Double"]];
+            ["y";["DataType";"Double"]]
+        ]]
+    }
+}

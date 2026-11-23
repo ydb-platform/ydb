@@ -28,7 +28,7 @@
 # FILE_IGNORE - ignore file (do nothing)
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
-IGNORE_FILES icudt78_dat.rodata
+IGNORE_FILES icudt79_dat.rodata
 
 KEEP     Unicode              0285f1da3a441f34fd441c30fe7aa87e
 BELONGS ya.make
@@ -41,18 +41,6 @@ BELONGS ya.make
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
         include/unicode/uvernum.h [50:50]
-
-KEEP     Unicode              110d3101a4390964af6105c359edb37e
-BELONGS ya.make
-    License text:
-             License & terms of use: http://www.unicode.org/copyright.html
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-unicode
-        Score           : 55.00
-        Match type      : REFERENCE
-        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
-    Files with this license:
-        APIChangeReport.html [4:4]
 
 KEEP     BSD-3-Clause         14fa598c20c2900706910e0a6b8704e5
 BELONGS ya.make
@@ -128,13 +116,14 @@ BELONGS ya.make
 KEEP     Unicode              4c6205d2789acc5f0eaf022758f1caaf
 BELONGS ya.make
     License text:
-        // License & terms of use: http://www.unicode.org/copyright.html
+             License & terms of use: http://www.unicode.org/copyright.html
     Scancode info:
         Original SPDX id: LicenseRef-scancode-unicode
         Score           : 55.00
         Match type      : REFERENCE
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
+        APIChangeReport.html [4:4]
         i18n/utmscale.cpp [2:2]
 
 KEEP     MIT-0                4e9e8bd8dca7c8a676cd1e67eceb3291
@@ -185,6 +174,18 @@ BELONGS ya.make
     Files with this license:
         LICENSE [444:460]
 
+KEEP     Unicode              565f38e2de6f835d90f982ee97962301
+BELONGS ya.make
+    License text:
+                License &amp; terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        APIChangeReport.html [1315:1315]
+
 KEEP     Unicode              5878933f57b4a51e1a476204a3d5dd26
 BELONGS ya.make
     License text:
@@ -209,9 +210,9 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
     Files with this license:
-        include/unicode/ures.h [415:415]
+        include/unicode/ures.h [414:414]
         include/unicode/ures.h [681:681]
-        include/unicode/ures.h [774:774]
+        include/unicode/ures.h [775:775]
 
 KEEP     Unicode              751c1c53100f387cfba9896a0a000d23
 BELONGS ya.make
@@ -1220,18 +1221,6 @@ BELONGS ya.make
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         LICENSE [183:209]
-
-KEEP     Unicode              82f4c9f53f2419878d32098c415360dc
-BELONGS ya.make
-    License text:
-                License &amp; terms of use: http://www.unicode.org/copyright.html
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-unicode
-        Score           : 55.00
-        Match type      : REFERENCE
-        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
-    Files with this license:
-        APIChangeReport.html [1708:1708]
 
 KEEP     BSD-3-Clause         8324f1990c82a65667a0b4767115a5fa
 BELONGS ya.make

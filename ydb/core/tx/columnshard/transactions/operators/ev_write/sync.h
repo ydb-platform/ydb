@@ -58,7 +58,7 @@ public:
 
     NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() {
         NKikimrTxColumnShard::TCommitWriteTxBody result;
-        AFL_VERIFY(LockId);
+        YDB_LOG_VERIFY(LockId);
         result.SetLockId(LockId);
         DoSerializeToProto(result);
         return result;

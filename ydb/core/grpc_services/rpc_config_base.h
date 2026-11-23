@@ -186,7 +186,14 @@ protected:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         auto *self = Self();
-        if (ev->Get()->SelfManagementEnabled || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
+        bool useDistconf;
+        try {
+            useDistconf = ev->Get()->SelfManagementEnabled || self->IsDistconfEnableQuery();
+        } catch (const std::exception& ex) {
+            return self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed to parse configuration: " << ex.what(),
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+        }
+        if (useDistconf) {
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             self->FillDistconfQuery(*ev);
             self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());

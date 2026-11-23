@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/core/project_settings/yql_project_settings.h>
+
 #include "yql_graph_transformer.h"
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/core/layers/layers.h>
@@ -113,6 +115,7 @@ public:
     };
 
     virtual bool Initialize(TExprContext& ctx) = 0;
+    virtual bool AcceptsProjectSetting(const TProjectSettings::TPragma&) const = 0;
 
     //-- configuration
     virtual IGraphTransformer& GetConfigurationTransformer() = 0;

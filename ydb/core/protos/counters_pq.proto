@@ -263,6 +263,9 @@ enum EPartitionLabeledCounters {
     METRIC_READ_QUOTA_NO_CONSUMER_MESSAGES_USAGE = 48             [(LabeledCounterOpts) = {Name: "ReadWithoutConsumerMessagesMax" AggrFunc : EAF_MAX SVName: "topic.partition.read_without_consumer.messages_max"}];
     METRIC_READ_QUOTA_NO_CONSUMER_BYTES_USAGE = 49                [(LabeledCounterOpts) = {Name: "ReadWithoutConsumerBytesMax" AggrFunc : EAF_MAX SVName: "topic.partition.read_without_consumer.bytes_max"}];
     METRIC_READ_QUOTA_NO_CONSUMER_MESSAGES = 50                   [(LabeledCounterOpts) = {Name: "ReadWithoutConsumerMessagesQuota" AggrFunc : EAF_MIN SVName: "topic.partition.read_without_consumer.speed_limit_messages_per_second"}];
+    METRIC_WRITE_INIT_THROTTLED_MS = 51                           [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.write.init_throttled_milliseconds_max"}];
+    METRIC_WRITE_INIT_SESSIONS_USAGE = 52                         [(LabeledCounterOpts) = {Name: "WriteInitSessionsUsage" AggrFunc : EAF_MAX SVName: "topic.partiton.steam_write.sessions_created_max"}];
+    METRIC_WRITE_INIT_SESSIONS_LIMIT = 53                         [(LabeledCounterOpts) = {Name: "WriteInitSessionsLimit" AggrFunc : EAF_MAX SVName: "topic.partition.stream_write.limit_session_creations_per_second"}];
 }
 
 enum EPartitionKeyCompactionLabeledCounters {

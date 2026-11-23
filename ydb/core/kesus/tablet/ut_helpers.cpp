@@ -608,6 +608,49 @@ TTestContext::TSimpleSemaphoreDescription TTestContext::DescribeSemaphore(const 
     return MakeSimpleSemaphoreDescription(desc);
 }
 
+NKikimrKesus::TEvDescribeSemaphoresResult TTestContext::DescribeSemaphores(Ydb::StatusIds::StatusCode status) {
+    const ui64 cookie = RandomNumber<ui64>();
+    const auto edge = Runtime->AllocateEdgeActor();
+    SendFromEdge(edge, new TEvKesus::TEvDescribeSemaphores(), cookie);
+    auto result = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoresResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetError().GetStatus(), status, result->Record.GetError().DebugString());
+    return std::move(result->Record);
+}
+
+NKikimrKesus::TSemaphoreDescription MakeSemaphoreDescription(
+        const TString& name, ui64 limit, const TString& data, ui64 count, bool ephemeral)
+{
+    NKikimrKesus::TSemaphoreDescription description;
+    description.SetName(name);
+    description.SetLimit(limit);
+    description.SetData(data);
+    description.SetCount(count);
+    description.SetEphemeral(ephemeral);
+    return description;
+}
+
+void VerifySemaphoreDescriptions(const NKikimrKesus::TEvDescribeSemaphoresResult& result,
+        const TVector<NKikimrKesus::TSemaphoreDescription>& expected)
+{
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS, result.GetError().DebugString());
+    UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), expected.size());
+    THashMap<TString, const NKikimrKesus::TSemaphoreDescription*> descriptions;
+    for (const auto& description : result.GetSemaphores()) {
+        UNIT_ASSERT_C(descriptions.emplace(description.GetName(), &description).second,
+            "Duplicate semaphore: " << description.GetName());
+    }
+    for (const auto& description : expected) {
+        const auto it = descriptions.find(description.GetName());
+        UNIT_ASSERT_C(it != descriptions.end(), "Missing semaphore: " << description.GetName());
+        const auto& actual = *it->second;
+        UNIT_ASSERT_VALUES_EQUAL_C(actual.GetLimit(), description.GetLimit(), description.GetName());
+        UNIT_ASSERT_VALUES_EQUAL_C(actual.GetData(), description.GetData(), description.GetName());
+        UNIT_ASSERT_VALUES_EQUAL_C(actual.GetCount(), description.GetCount(), description.GetName());
+        UNIT_ASSERT_VALUES_EQUAL_C(actual.GetEphemeral(), description.GetEphemeral(), description.GetName());
+        descriptions.erase(it);
+    }
+}
+
 void TTestContext::VerifySemaphoreNotFound(const TString& name) {
     ui64 cookie = RandomNumber<ui64>();
     TActorId edge = Runtime->AllocateEdgeActor();

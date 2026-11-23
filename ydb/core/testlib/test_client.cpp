@@ -60,6 +60,7 @@
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -76,10 +77,19 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
@@ -603,6 +613,13 @@ namespace Tests {
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            const auto& featureFlags = appData.FeatureFlags;
+            auto schedulerAppConfig = *Settings->AppConfig;
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
+            appData.KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
+
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
@@ -642,6 +659,17 @@ namespace Tests {
             &Settings->AppConfig->GetSharedCacheConfig(),
             Settings->EnableForceFollowers,
             Settings->ProxyDSMocks);
+
+        {
+            auto& appData = Runtime->GetAppData(0);
+            const auto& pqConfig = appData.PQConfig;
+            if (pqConfig.GetEnabled() && pqConfig.GetMirrorConfig().GetEnabled() && appData.PersQueueMirrorReaderFactory) {
+                appData.PersQueueMirrorReaderFactory->Initialize(
+                    Runtime->GetActorSystem(0),
+                    pqConfig.GetMirrorConfig().GetPQLibSettings()
+                );
+            }
+        }
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -1232,6 +1260,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::CdcAggregator] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NCdcAggregator::CreateCdcAggregator, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -1264,9 +1296,19 @@ namespace Tests {
             if (!initial.HasImmediateControlsConfig()) {
                 initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
             }
+
+            TMap<TString, TString> labels;
+            for (const auto& label : initial.GetLabels()) {
+                labels[label.GetName()] = label.GetValue();
+            }
+
+            labels["tenant"] = canonicalTenantName;
+            labels["node_id"] = ToString(Runtime->GetNodeId(nodeIdx));
+            labels["host"] = Settings->GrpcHost;
             auto *dispatcher = NConsole::CreateConfigsDispatcher(
                     NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = initial,
+                        .Labels = std::move(labels),
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
@@ -1416,7 +1458,10 @@ namespace Tests {
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
         }
 
-        {
+        // Stopping a dynamic tenant leaves its KQP proxy alive. Reuse it on restart:
+        // a second proxy would start another scheduler actor on the same node's scheduler state.
+        const auto kqpProxyId = NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx));
+        if (!Runtime->GetLocalServiceId(kqpProxyId, nodeIdx)) {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
@@ -1518,13 +1563,6 @@ namespace Tests {
                 }
             }
 
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            const auto& featureFlags = Runtime->GetAppData(nodeIdx).FeatureFlags;
-            auto schedulerAppConfig = *Settings->AppConfig;
-            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
-            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
-            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
-
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
                 Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);
             }
@@ -1538,7 +1576,7 @@ namespace Tests {
                                                                   std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
+            Runtime->RegisterService(kqpProxyId, kqpProxyServiceId, nodeIdx);
         }
 
         {
@@ -1598,6 +1636,11 @@ namespace Tests {
             IActor* pqReadCacheService = NPQ::CreatePQDReadCacheService(Runtime->GetDynamicCounters());
             TActorId readCacheId = Runtime->Register(pqReadCacheService, nodeIdx, userPoolId);
             Runtime->RegisterService(NPQ::MakePQDReadCacheServiceActorId(), readCacheId, nodeIdx);
+        }
+        {
+            IActor* writeSessionsQuoter = NPQ::CreateWriteSessionsQuoter();
+            TActorId writeSessionsQuoterId = Runtime->Register(writeSessionsQuoter, nodeIdx, userPoolId);
+            Runtime->RegisterService(NPQ::MakeWriteSessionsQuoterId(), writeSessionsQuoterId, nodeIdx);
         }
         {
             IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
@@ -1784,7 +1827,7 @@ namespace Tests {
                 auto& privateApiConfig = *protoConfig.MutablePrivateApi();
                 privateApiConfig.SetEnabled(true);
                 privateApiConfig.SetTaskServiceEndpoint(endpoint);
-                privateApiConfig.SetTaskServiceDatabase("Root");
+                privateApiConfig.SetTaskServiceDatabase("/Root");
             }
 
             {

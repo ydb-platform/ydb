@@ -15,7 +15,7 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TDoubleArrayTest, TestToString)
+TEST_F(TDoubleArrayTest, ToString)
 {
     TDoubleArray<5> arr = {0, 1, 2, 3, 4};
     std::string result = "[0.000000 1.000000 2.000000 3.000000 4.000000]";

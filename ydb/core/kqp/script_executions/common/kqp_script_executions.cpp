@@ -140,11 +140,11 @@ TString CheckScriptExecutionAccess(std::optional<TString>& userSID) {
         return "";
     }
 
-    if (!userSID) {
+    if (!userSID && AppData()->EnforceUserTokenRequirement) {
         return "Access to script execution operations without user token is not allowed";
     }
 
-    if (NACLib::TUserToken(*userSID, {}).IsSystemUser()) {
+    if (userSID && NACLib::TUserToken(*userSID, {}).IsSystemUser()) {
         userSID = std::nullopt;
     }
 

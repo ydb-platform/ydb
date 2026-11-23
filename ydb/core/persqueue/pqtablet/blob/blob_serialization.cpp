@@ -337,6 +337,12 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
     AFL_ENSURE(Batch.PackedData.size());
 
     ui32 totalBlobs = GetBatchClientBlobCount(Batch.Header);
+    // The compressed Data chunk stores one ui32 cumulative offset per client
+    // blob, so the payload of any well-formed batch is at least
+    // totalBlobs * sizeof(ui32) bytes.
+    AFL_ENSURE(static_cast<ui64>(totalBlobs) * sizeof(ui32) <= Batch.PackedData.size())
+        ("description", "Batch header blob count is inconsistent with the payload size")
+        ("totalBlobs", totalBlobs)("payloadSize", Batch.PackedData.size());
     ui32 partsSize = 0;
     TVector<ui32> end;
     TVector<ui32> pos;
@@ -410,6 +416,9 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         partsSize = ReadUnaligned<ui32>(iter->Next().Data());
+        AFL_ENSURE(partsSize <= totalBlobs)
+            ("description", "Batch part data count is inconsistent with the blob count")
+            ("partsSize", partsSize)("totalBlobs", totalBlobs);
         partData.reserve(partsSize);
         for (ui32 i = 0; i < partsSize; ++i) {
             ui32 ps = ReadUnaligned<ui32>(iter->Next().Data());

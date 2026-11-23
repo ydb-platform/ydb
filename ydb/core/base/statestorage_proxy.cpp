@@ -117,24 +117,22 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        Send(
-            Source,
-            new TEvStateStorage::TEvInfo(
-                status,
-                TabletID,
-                Cookie,
-                ReplyLeader,
-                ReplyLeaderTablet,
-                ReplyGeneration,
-                ReplyStep,
-                ReplyLocked,
-                ReplyLockedFor,
-                Signature,
-                GetFollowersAsVector(Followers)
-            ),
-            0,
-            SourceCookie
+        auto* msg = new TEvStateStorage::TEvInfo(
+            status,
+            TabletID,
+            Cookie,
+            ReplyLeader,
+            ReplyLeaderTablet,
+            ReplyGeneration,
+            ReplyStep,
+            ReplyLocked,
+            ReplyLockedFor,
+            Signature,
+            GetFollowersAsVector(Followers)
         );
+        msg->ClusterStateGeneration = Info->ClusterStateGeneration;
+        msg->ClusterStateGuid = Info->ClusterStateGuid;
+        Send(Source, msg, 0, SourceCookie);
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
@@ -955,6 +953,9 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             Signature,
             GetFollowersAsVector(Followers)
         );
+
+        msg->ClusterStateGeneration = Info->ClusterStateGeneration;
+        msg->ClusterStateGuid = Info->ClusterStateGuid;
 
         YDB_LOG_DEBUG("RingGroupProxyRequest::Reply TEvInfo",
             {"ev", msg->ToString()});

@@ -28,9 +28,9 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
     if (PathIds.empty()) {
         return TConclusionStatus::Fail("PathIds empty.");
     }
-    AFL_VERIFY(PathIds.size());
+    YDB_LOG_VERIFY(PathIds.size());
     Cursor = std::make_shared<TSourceCursor>(SelfTabletId, PathIds, TransferContext);
-    AFL_VERIFY(!!protoCursor == !!protoCursorStatic);
+    YDB_LOG_VERIFY(!!protoCursor == !!protoCursorStatic);
     if (protoCursor) {
         auto parsed = Cursor->DeserializeFromProto(*protoCursor, *protoCursorStatic);
         if (!parsed) {
@@ -79,8 +79,8 @@ void TSourceSession::SaveCursorToDatabase(NIceDb::TNiceDb& db) {
 
 void TSourceSession::ActualizeDestination(
     const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
-    AFL_VERIFY(IsInProgress() || IsPrepared());
-    AFL_VERIFY(Cursor);
+    YDB_LOG_VERIFY(IsInProgress() || IsPrepared());
+    YDB_LOG_VERIFY(Cursor);
     if (Cursor->IsValid()) {
         if (!Cursor->IsAckDataReceived()) {
             const THashMap<TInternalPathId, NEvents::TPathIdData>& packPortions = Cursor->GetSelected();
@@ -112,8 +112,8 @@ void TSourceSession::ActualizeDestination(
 void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard,
     THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions,
     std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory) {
-    AFL_VERIFY(Cursor);
-    AFL_VERIFY(Cursor->Start(shard.GetStoragesManager(), std::move(portions), std::move(schemeHistory), shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex()));
+    YDB_LOG_VERIFY(Cursor);
+    YDB_LOG_VERIFY(Cursor->Start(shard.GetStoragesManager(), std::move(portions), std::move(schemeHistory), shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex()));
     ActualizeDestination(shard, shard.GetDataLocksManager());
 }
 

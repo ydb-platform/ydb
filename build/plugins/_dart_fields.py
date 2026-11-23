@@ -633,7 +633,7 @@ class LintConfigs:
             raise DartValueError(message)
         assert_file_exists(unit, config)
         configs = [config]
-        if linter_name in ('flake8', 'py2_flake8'):
+        if linter_name == 'flake8':
             configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
         unit.on_data_files(configs)
         return serialize_list(configs)
@@ -744,7 +744,7 @@ class LintName:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         lint_name = spec_args['NAME'][0]
-        if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
+        if lint_name == 'flake8' and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
             raise HaltDartConstruction()
         return lint_name
 

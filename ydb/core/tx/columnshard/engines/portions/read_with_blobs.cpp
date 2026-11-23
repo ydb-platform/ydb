@@ -15,8 +15,10 @@ namespace NKikimr::NOlap {
 
 void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
     auto address = chunk->GetChunkAddressVerified();
-    AFL_VERIFY(PortionInfo.HasEntityAddress(address))("address", address.DebugString());
-    AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
+    YDB_LOG_VERIFY(PortionInfo.HasEntityAddress(address),
+        {"address", address.DebugString()});
+    YDB_LOG_VERIFY(Chunks.emplace(address, chunk).second,
+        {"address", address.DebugString()});
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
@@ -63,7 +65,9 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TReadPortionInfoWithBlobs::GetEn
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& i : sortedChunks) {
-        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())("idx", i.second->GetChunkIdxVerified())("size", result.size());
+        YDB_LOG_VERIFY(i.second->GetChunkIdxVerified() == result.size(),
+            {"idx", i.second->GetChunkIdxVerified()},
+            {"size", result.size()});
         result.emplace_back(i.second);
     }
     return result;
@@ -78,7 +82,7 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
     std::vector<std::shared_ptr<IPortionDataChunk>> chunksLocal;
     for (auto it = Chunks.begin(); it != Chunks.end();) {
         if (it->first.GetEntityId() == entityId) {
-            AFL_VERIFY(chunksLocal.empty() || chunksLocal.back()->GetChunkAddressVerified() < it->second->GetChunkAddressVerified());
+            YDB_LOG_VERIFY(chunksLocal.empty() || chunksLocal.back()->GetChunkAddressVerified() < it->second->GetChunkAddressVerified());
             chunksLocal.emplace_back(std::move(it->second));
             it = Chunks.erase(it);
         } else {
@@ -106,7 +110,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> columnChunks;
     for (auto&& c : source.Chunks) {
         auto& chunks = columnChunks[c.first.GetColumnId()];
-        AFL_VERIFY(c.first.GetChunkIdx() == chunks.size());
+        YDB_LOG_VERIFY(c.first.GetChunkIdx() == chunks.size());
         chunks.emplace_back(c.second);
     }
 
@@ -116,7 +120,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
         if (it != columnChunks.end()) {
             newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
-            AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+            YDB_LOG_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
         }
     }
 
@@ -159,7 +163,9 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {
     auto it = Chunks.find(TChunkAddress(columnId, chunkId));
-    AFL_VERIFY(it != Chunks.end())("column_id", columnId)("chunk_idx", chunkId);
+    YDB_LOG_VERIFY(it != Chunks.end(),
+        {"columnId", columnId},
+        {"chunkIdx", chunkId});
     return it->second->GetData();
 }
 

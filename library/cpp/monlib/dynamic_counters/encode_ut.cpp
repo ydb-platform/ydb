@@ -169,6 +169,25 @@ namespace NMonitoring {
             AssertResult(samples);
         }
 
+        Y_UNIT_TEST(MemOnly) {
+            using EVisibility = TCountableBase::EVisibility;
+            TDynamicCounterPtr data(new TDynamicCounters());
+            data->GetCounter("counter", false, EVisibility::Public, true);
+            data->GetHistogram("histogram", ExplicitHistogram({1}), true, EVisibility::Public, true);
+            data->GetCounter("plain");
+            auto expiring = data->GetExpiringCounter("expiring", false, EVisibility::Public, true);
+            auto expiringHist = data->GetExpiringHistogram("expiringHist", ExplicitHistogram({1}), true, EVisibility::Public, true);
+
+            NProto::TMultiSamplesList samples;
+            data->Accept(TString(), TString(), *AsCountableConsumer(EncoderProtobuf(&samples)));
+
+            UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 5);
+            for (const auto& s : samples.GetSamples()) {
+                const TString& name = s.GetLabels(0).GetValue();
+                UNIT_ASSERT_VALUES_EQUAL_C(s.GetIsMemOnly(), name != "plain", name);
+            }
+        }
+
         Y_UNIT_TEST(PrivateSubgroupIsNotSerialized) {
             TBuffer result;
             auto subGroup = MakeIntrusive<TDynamicCounters>(TCountableBase::EVisibility::Private);

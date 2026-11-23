@@ -56,12 +56,13 @@ public:
     }
 
     template <typename TOp>
-    NThreading::TFuture<TOp> Get(Ydb::Operations::GetOperationRequest&& request) {
+    NThreading::TFuture<TOp> Get(Ydb::Operations::GetOperationRequest&& request, const TGetOperationSettings& settings) {
         return RunOperation<Ydb::Operation::V1::OperationService,
                             Ydb::Operations::GetOperationRequest,
                             Ydb::Operations::GetOperationResponse, TOp>(
             std::move(request),
-            &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation);
+            &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation,
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus Cancel(Ydb::Operations::CancelOperationRequest&& request) {
@@ -122,10 +123,15 @@ public:
 
 template <typename TOp>
 NThreading::TFuture<TOp> TOperationClient::Get(const TOperation::TOperationId& id) {
+    return Get<TOp>(id, TGetOperationSettings());
+}
+
+template <typename TOp>
+NThreading::TFuture<TOp> TOperationClient::Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings) {
     auto request = MakeRequest<Ydb::Operations::GetOperationRequest>();
     request.set_id(TStringType{id.ToString()});
 
-    return Impl_->Get<TOp>(std::move(request));
+    return Impl_->Get<TOp>(std::move(request), settings);
 }
 
 template <typename TOp>

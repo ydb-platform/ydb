@@ -260,13 +260,15 @@ public:
 
     template <class T>
     const T* GetAs() const {
-        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
+        YDB_LOG_VERIFY(T::CheckTypeCast(Type),
+            {"type", Type});
         return static_cast<const T*>(this);
     }
 
     template <class T>
     T* MutableAs() {
-        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
+        YDB_LOG_VERIFY(T::CheckTypeCast(Type),
+            {"type", Type});
         return static_cast<T*>(this);
     }
 
@@ -391,7 +393,7 @@ public:
     }
 
     void SetInFlightReleased() {
-        AFL_VERIFY(!InFlightReleasedFlag);
+        YDB_LOG_VERIFY(!InFlightReleasedFlag);
         InFlightReleasedFlag = true;
     }
 
@@ -454,7 +456,7 @@ public:
     explicit TDataSourceLease(std::shared_ptr<IDataSource>&& source)
         : Source(std::move(source))
     {
-        AFL_VERIFY(Source);
+        YDB_LOG_VERIFY(Source);
     }
 
     IDataSource& GetSource() const {
@@ -467,7 +469,8 @@ public:
 
     template <class T>
     std::shared_ptr<const T> ShareReadOnlyAs() const {
-        AFL_VERIFY(T::CheckTypeCast(Source->GetType()))("type", Source->GetType());
+        YDB_LOG_VERIFY(T::CheckTypeCast(Source->GetType()),
+            {"type", Source->GetType()});
         return std::static_pointer_cast<const T>(Source);
     }
 };

@@ -99,18 +99,16 @@ void AssertSingleOperatorName(const NJson::TJsonValue& plan, const TString& opNa
 
 Y_UNIT_TEST_SUITE(KqpStats) {
 
-// A miss is reported once per logical request, at the last cache lookup that can still succeed:
-// the text lookup without the AST cache, the AST lookup after parsing with it. Recompile and SPLIT
-// requests are not lookups. The miss is reported before the request is queued.
-Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false);
+// A miss is reported once per query lookup, before the request is queued.
+// Recompile and SPLIT requests are not lookups.
+Y_UNIT_TEST(CompilationCacheHitMissCounters) {
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(true);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
-    config->SetEnableAstCache(AstCache);
     config->SetEnableCreateTableAs(true);
     config->SetEnableDataShardCreateTableAs(true);
     TKikimrRunner kikimr(settings);
     // The compile service is registered during the KQP proxy bootstrap; a session is the readiness barrier.
-    UNIT_ASSERT(kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess());
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     const auto counters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
     UNIT_ASSERT(counters);
@@ -134,12 +132,12 @@ Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
     tempTables->Database = "/Root";
     tempTables->TempDirName = "cache-counters-session";
     auto send = [&](const TString& text, NKikimrKqp::EQueryType type = NKikimrKqp::QUERY_TYPE_SQL_DML,
-                    TMaybe<TQueryAst> ast = Nothing(), bool split = false, TInstant deadline = TInstant::Max()) {
+                    bool split = false, TInstant deadline = TInstant::Max()) {
         TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
             TKqpQuerySettings(type), nullptr, *gucSettings);
         runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
-            token, "", Nothing(), std::move(query), true, false, false, deadline, nullptr, gucSettings,
-            Nothing(), std::make_shared<std::atomic<bool>>(true), context, NLWTrace::TOrbit(), tempTables, false, ast, split)));
+            token, "", Nothing(), std::move(query), true, false, deadline, nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context, NLWTrace::TOrbit(), tempTables, false, split)));
     };
     auto receive = [&](TMaybe<Ydb::StatusIds::StatusCode> status = Ydb::StatusIds::SUCCESS) {
         auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
@@ -159,16 +157,81 @@ Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
     UNIT_ASSERT(receive()->Get()->Stats.FromCache);
     check(1, 0);
 
-    // Same AST, different text: the text miss followed by an AST hit is a hit, not a miss.
+    // Different SQL text requires a separate compilation, even when its AST is identical.
     send(Q1_("select 42 as cache_counter;"));
-    UNIT_ASSERT_VALUES_EQUAL(receive()->Get()->Stats.FromCache, AstCache);
-    check(AstCache, !AstCache);
+    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
+    check(0, 1);
 
     // Recompile bypasses the cache and is neither a hit nor a miss.
-    runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, Nothing(), false,
-        TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
-    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
-    check(0, 0);
+    auto recompile = [&](const TMaybe<TKqpQueryId>& query, bool disablePgCompatibility) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, query, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context,
+            NLWTrace::TOrbit(), nullptr, false, nullptr, nullptr, false, false, disablePgCompatibility)));
+        auto response = receive();
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(result.Uid, uid);
+        UNIT_ASSERT(result.Query);
+        UNIT_ASSERT_VALUES_EQUAL(result.Query->DisablePgCompatibility, disablePgCompatibility);
+        check(0, 0);
+    };
+    recompile(Nothing(), true);
+    auto& appData = runtime.GetAppData();
+    NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const TString textUid = receive()->Get()->CompileResult->Uid;
+    UNIT_ASSERT_UNEQUAL(textUid, uid);
+    check(0, 1);
+
+    TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+        TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+    query->DisablePgCompatibility = true;
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    auto sendByUid = [&](const TString& cachedUid) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(token, "", cachedUid, Nothing(), true, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    {
+        const auto serviceActor = runtime.GetLocalServiceId(service);
+        const auto forceUncacheable = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
+            [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
+                const auto& result = ev->Get()->CompileResult;
+                if (ev->Recipient == serviceActor && result->Uid == uid) {
+                    std::const_pointer_cast<TKqpCompileResult>(result)->AllowCache = false;
+                }
+            });
+        recompile(query, false);
+    }
+    sendByUid(uid);
+    const auto oldModeHit = receive();
+    UNIT_ASSERT(oldModeHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(oldModeHit->Get()->CompileResult->Uid, uid);
+    check(1, 0);
+
+    recompile(query, false);
+
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const auto textHit = receive();
+    UNIT_ASSERT(textHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(textHit->Get()->CompileResult->Uid, textUid);
+    check(1, 0);
+
+    for (const auto& cachedUid : { uid, textUid }) {
+        sendByUid(cachedUid);
+        const auto uidHit = receive();
+        UNIT_ASSERT(uidHit->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(uidHit->Get()->CompileResult->Uid, cachedUid);
+        check(1, 0);
+    }
+
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    recompile(Nothing(), true);
 
     // NeedToSplit is an ordinary miss; the follow-up SPLIT request is not a lookup.
     // A NeedToSplit reply carries no success status, the session actor checks the flag first.
@@ -177,21 +240,19 @@ Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
     const auto ctasResult = receive(Nothing())->Get()->CompileResult;
     UNIT_ASSERT(ctasResult->NeedToSplit);
     check(0, 1);
-    send(ctas, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, ctasResult->QueryAst, true);
+    send(ctas, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, true);
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvKqp::TEvSplitResponse>(edge, TDuration::Seconds(30)));
     check(0, 0);
 
     // The miss is reported at lookup time, so a request that then times out in the queue still counts.
-    // With the AST cache the text miss is deferred to the AST lookup, which a timed out parse never reaches.
-    send(Q1_("SELECT 43 AS cache_counter;"), NKikimrKqp::QUERY_TYPE_SQL_DML, Nothing(), false, TInstant::MicroSeconds(1));
+    send(Q1_("SELECT 43 AS cache_counter;"), NKikimrKqp::QUERY_TYPE_SQL_DML, false, TInstant::MicroSeconds(1));
     receive(Ydb::StatusIds::TIMEOUT);
-    check(0, !AstCache);
+    check(0, 1);
 }
 
-Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
+Y_UNIT_TEST(PathAliasesInvalidateCompilationCache) {
     auto settings = TKikimrSettings().SetUseRealThreads(false);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
-    config->SetEnableAstCache(AstCache);
     auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
     rule->SetSrc("/Alias");
     rule->SetDst("/Root");
@@ -207,7 +268,7 @@ Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
         TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin",
             "SELECT Key FROM `/Alias/KeyValue`;", TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
         runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
-            token, "", Nothing(), std::move(query), true, false, false, TInstant::Max(), nullptr, gucSettings,
+            token, "", Nothing(), std::move(query), true, false, TInstant::Max(), nullptr, gucSettings,
             Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
         auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
         UNIT_ASSERT(response && response->Get()->CompileResult);
@@ -247,9 +308,8 @@ Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
 
 // A compilation that was in flight during a cache-invalidating config change
 // must not land in the cleared cache: its result is compiled with the old config.
-Y_UNIT_TEST_TWIN(InFlightCompileResultDroppedFromCacheOnConfigChange, AstCache) {
+Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
     auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(AstCache);
     TKikimrRunner kikimr(settings);
     UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -268,7 +328,7 @@ Y_UNIT_TEST_TWIN(InFlightCompileResultDroppedFromCacheOnConfigChange, AstCache) 
     auto send = [&](const TString& text) {
         TMaybe<TKqpQueryId> query = makeQuery(text);
         runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
-            token, "", Nothing(), std::move(query), true, false, false, TInstant::Max(), nullptr, gucSettings,
+            token, "", Nothing(), std::move(query), true, false, TInstant::Max(), nullptr, gucSettings,
             Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
     };
     auto recompile = [&](const TString& uid) {
@@ -1772,8 +1832,6 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
         .SetEnableTempTables(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
-    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
     TKikimrRunner kikimr(serverSettings);
     auto client = kikimr.GetQueryClient();
 

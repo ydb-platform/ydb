@@ -46,6 +46,8 @@ class HPackTable {
 
   HPackTable(const HPackTable&) = delete;
   HPackTable& operator=(const HPackTable&) = delete;
+  HPackTable(HPackTable&&) = default;
+  HPackTable& operator=(HPackTable&&) = default;
 
   void SetMaxBytes(uint32_t max_bytes);
   bool SetCurrentTableSize(uint32_t bytes);
@@ -152,7 +154,7 @@ class HPackTable {
   // HPack table entries
   MementoRingBuffer entries_;
   // Static mementos
-  const StaticMementos* const static_mementos_ = GetStaticMementos();
+  const StaticMementos* static_mementos_ = GetStaticMementos();
 };
 
 }  // namespace grpc_core

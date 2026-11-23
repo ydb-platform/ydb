@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/kqp/common/simple
     ydb/core/kqp/ut/common
     ydb/library/yql/providers/common/http_gateway/ut_helpers
     ydb/services/metadata

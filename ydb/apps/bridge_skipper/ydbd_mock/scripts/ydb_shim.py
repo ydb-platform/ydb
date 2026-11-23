@@ -18,6 +18,7 @@ Environment:
 
 Only the standard library is used, so any python3 works.
 """
+import ipaddress
 import json
 import os
 import sys
@@ -61,13 +62,36 @@ def split_endpoint(value):
         scheme, rest = value.split("://", 1)
     rest = rest.rstrip("/")
     if rest.startswith("["):
-        die("IPv6 endpoints are not mock endpoints: %r" % value)
-    if ":" in rest:
-        host, port = rest.rsplit(":", 1)
-        if not port.isdigit():
+        end = rest.find("]")
+        if end < 0:
             die("bad endpoint %r" % value)
-        return scheme, host, int(port)
-    return scheme, rest, None
+        host, suffix = rest[1:end], rest[end + 1:]
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            die("bad IPv6 endpoint %r" % value)
+        if not suffix:
+            return scheme, host, None
+        if not suffix.startswith(":"):
+            die("bad endpoint %r" % value)
+        port = suffix[1:]
+    elif ":" in rest:
+        host, port = rest.rsplit(":", 1)
+    else:
+        return scheme, rest, None
+    if not port.isascii() or not port.isdecimal() or not 1 <= int(port) <= 65535:
+        die("bad endpoint %r" % value)
+    return scheme, host, int(port)
+
+
+def authority(host, port):
+    if ":" in host:
+        try:
+            host = str(ipaddress.IPv6Address(host))
+        except ValueError:
+            die("bad IPv6 endpoint host %r" % host)
+        host = "[%s]" % host
+    return "%s:%d" % (host, port)
 
 
 def translate(value, endpoint_map):
@@ -76,9 +100,12 @@ def translate(value, endpoint_map):
         die("unsupported scheme in %r" % value)
     if host in endpoint_map:
         return "%s://%s" % (scheme, endpoint_map[host])
-    explicit = "%s:%s" % (host, port)
-    if port is not None and explicit in set(endpoint_map.values()):
-        return "%s://%s" % (scheme, explicit)
+    if port is not None:
+        explicit = authority(host, port)
+        for endpoint in endpoint_map.values():
+            _, mapped_host, mapped_port = split_endpoint(endpoint)
+            if mapped_port is not None and explicit == authority(mapped_host, mapped_port):
+                return "%s://%s" % (scheme, endpoint)
     die("%r is not a ydbd_mock endpoint (known labels: %s)" % (value, ", ".join(sorted(endpoint_map)) or "none; is the cluster up?"))
 
 

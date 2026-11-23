@@ -38,6 +38,8 @@ message TEvCreateImportRequest {
     optional TCreateImportRequest Request = 4;
     optional string PeerName = 5;
     optional string SanitizedToken = 6;
+    // Computed by the authenticated RPC, never taken from public import settings.
+    optional bool CanRestoreRateLimiterMetering = 7 [default = false];
 }
 
 message TCreateImportResponse {

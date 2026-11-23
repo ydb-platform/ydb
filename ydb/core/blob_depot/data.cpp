@@ -119,6 +119,7 @@ namespace NKikimr::NBlobDepot {
             const bool uncertainWriteBefore = value.UncertainWrite;
             const bool wasUncertain = value.IsWrittenUncertainly();
             const bool wasGoingToAssimilate = value.GoingToAssimilate;
+            const ui32 valueVersionBefore = value.ValueVersion;
 
             const ui32 generation = Self->Executor()->Generation();
 
@@ -271,12 +272,17 @@ namespace NKikimr::NBlobDepot {
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize;
 
-            if (Self->MoveData.IsBlobMovingInProgress() && !Self->MoveData.ApplyingIndexUpdate) {
+            if (outcome != EUpdateOutcome::NO_CHANGE &&
+                    Self->MoveData.IsBlobMovingInProgress() &&
+                    !Self->MoveData.ApplyingIndexUpdate) {
                 const TString binaryKey = key.MakeBinaryKey();
-                if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey) {
+                if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey &&
+                        Self->MoveData.BlobLocator.HasBlobSeqId() &&
+                        (outcome == EUpdateOutcome::DROP || value.ValueVersion != valueVersionBefore)) {
                     Self->MoveData.RecordTouched = true;
                 }
-                if (outcome != EUpdateOutcome::DROP && !Self->MoveData.NeedsAnotherPass) {
+                if (outcome != EUpdateOutcome::DROP && !Self->MoveData.NeedsAnotherPass &&
+                        (inserted || value.ValueVersion != valueVersionBefore)) {
                     for (const auto& item : value.ValueChain) {
                         if (item.HasBlobLocator() && Self->NeedMoveBlob(item.GetBlobLocator())) {
                             Self->MoveData.NeedsAnotherPass = true;

@@ -64,7 +64,7 @@ public:
     TWritingBlob() = default;
 
     bool AddData(TWideSerializedBatch& batch) {
-        AFL_VERIFY(!Extracted);
+        YDB_LOG_VERIFY(!Extracted);
         if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
             BlobSize += batch.GetSplittedBlobs().GetSize();
@@ -73,7 +73,7 @@ public:
             BlobData.emplace_back(batch.GetSplittedBlobs().GetData());
             return true;
         } else {
-            AFL_VERIFY(BlobData.size());
+            YDB_LOG_VERIFY(BlobData.size());
             return false;
         }
     }
@@ -105,7 +105,7 @@ private:
 
 public:
     const std::shared_ptr<arrow::RecordBatch>& GetRecordBatch() const {
-        AFL_VERIFY(RecordBatch);
+        YDB_LOG_VERIFY(RecordBatch);
         return RecordBatch;
     }
 
@@ -134,7 +134,7 @@ public:
         , SchemaSubset(writeData.GetSchemaSubsetVerified())
         , RecordBatch(batch)
     {
-        AFL_VERIFY(WriteMeta);
+        YDB_LOG_VERIFY(WriteMeta);
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
         }
@@ -149,7 +149,7 @@ public:
         , Size(writeData.GetSize())
         , BlobsAction(writeData.GetBlobsAction())
     {
-        AFL_VERIFY(!writeData.GetSchemaSubset());
+        YDB_LOG_VERIFY(!writeData.GetSchemaSubset());
     }
 };
 
@@ -167,7 +167,7 @@ public:
         : BlobsAction(action)
         , Aggregations(std::move(aggregations))
     {
-        AFL_VERIFY(BlobsAction);
+        YDB_LOG_VERIFY(BlobsAction);
         for (auto&& aggr : Aggregations) {
             SumSize += aggr->GetSize();
         }
@@ -199,7 +199,7 @@ public:
                 return;
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     std::vector<std::shared_ptr<IBlobsWritingAction>> GetAddActions() const {

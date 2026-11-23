@@ -3,20 +3,21 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 
 #include "kqp_query_stats.h"
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/buffer/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -76,6 +77,11 @@ public:
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
+        , DisablePgCompatibility_(ev->Get()->DisablePgCompatibility.value_or(
+            AppData()->FeatureFlags.GetDisablePgCompatibility()
+            && !(ev->Get()->IsInternalCall()
+                && ev->Get()->GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && IsAnalyzeRequest(ev->Get()->GetRequestType()))))
         , StartTime(TInstant::Now())
         , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
@@ -185,6 +191,7 @@ public:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
     bool IsWarmupCompilation_ = false;
+    const bool DisablePgCompatibility_;
 
     TInstant StartTime;
     TInstant ContinueTime;
@@ -232,11 +239,7 @@ public:
 
     NYql::TIssues Issues;
 
-    TVector<TQueryAst> Statements;
-    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for all statements
-    ui32 CurrentStatementId = 0;
-    ui32 StatementResultIndex = 0;
-    ui32 StatementResultSize = 0;
+    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for the query
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
@@ -246,6 +249,10 @@ public:
     i32 RuntimeParameterSizeLimit = 0;
     bool RuntimeParameterSizeLimitSatisfied = false;
 
+
+    bool GetDisablePgCompatibility() const {
+        return DisablePgCompatibility_;
+    }
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -529,7 +536,7 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        AFL_ENSURE(UserRequestContext);
+        YDB_LOG_ENSURE(UserRequestContext);
         if (UserRequestContext->IsStreamingQuery) {
             // Streaming queries are long-running: held-open read locks would be
             // broken by any concurrent write and abort the query.
@@ -547,7 +554,7 @@ public:
             return false;
         }
 
-        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        YDB_LOG_ENSURE(!TxCtx->TxManager->BrokenLocks());
         if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }
@@ -614,28 +621,6 @@ public:
 
     NKqpProto::EIsolationLevel GetIsolationLevel(TKqpTransactionContext* txCtx = nullptr) const;
 
-    bool ProcessingLastStatement() const {
-        return CurrentStatementId + 1 >= Statements.size();
-    }
-
-    void PrepareCurrentStatement() {
-        QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
-        PreparedQuery = {};
-        CompileResult = {};
-        CurrentTx = 0;
-        TableVersions = {};
-        MaxReadType = ETableReadType::Other;
-        TopicOperations = {};
-        ReplayMessage = {};
-    }
-
-    void PrepareNextStatement() {
-        CurrentStatementId++;
-        StatementResultIndex += StatementResultSize;
-        StatementResultSize = 0;
-        PrepareCurrentStatement();
-    }
-
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
      bool EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response);
@@ -645,7 +630,6 @@ public:
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr compileResult);
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
-    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
 
     bool TryGetFromCache(

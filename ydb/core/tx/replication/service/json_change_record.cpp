@@ -7,6 +7,7 @@
 #include <ydb/core/tx/replication/common/family_settings.h>
 
 #include <contrib/libs/rapidjson/include/rapidjson/reader.h>
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/rapidjson_helpers.h>
@@ -19,6 +20,13 @@
 namespace NKikimr::NReplication::NService {
 
 namespace {
+
+bool IsSupportedSetting(TStringBuf setting) {
+    return setting == "data"
+        || setting == "compression"
+        || setting == "compressionLevel"
+        || setting == "cacheMode";
+}
 
 // NJson::ReadJson does not expose kParseFullPrecisionFlag, and its RapidJSON
 // callback adapter is private to the JSON library. This local bridge lets
@@ -479,8 +487,27 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
                 return false;
             }
 
+            if (definition.Has("compressionLevel")) {
+                if (compression != NKikimrReplication::TSchemaChange::TFamily::COMPRESSION_ZSTD) {
+                    error = TStringBuilder() << "compression level in column family " << name
+                        << " is only supported for ZSTD";
+                    return false;
+                }
+                const auto& level = definition["compressionLevel"];
+                if (!level.IsInteger() && !level.IsUInteger()) {
+                    error = TStringBuilder() << "compression level in column family " << name << " must be an integer";
+                    return false;
+                }
+                const auto maxLevel = static_cast<ui64>(ZSTD_maxCLevel());
+                if (!level.IsUInteger() || level.GetUInteger() > maxLevel) {
+                    error = TStringBuilder() << "compression level in column family " << name
+                        << " must be between 0 and " << maxLevel << ": " << level.GetStringRobust();
+                    return false;
+                }
+            }
+
             for (const auto& [setting, value] : definition.GetMap()) {
-                if (setting != "data" && setting != "compression" && setting != "cacheMode") {
+                if (!IsSupportedSetting(setting)) {
                     error = TStringBuilder() << "unsupported setting '" << setting << "' in column family " << name;
                     return false;
                 }
@@ -507,6 +534,9 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
             family->SetName(name);
             family->SetCompression(CompressionFromString(definition["compression"].GetString()));
             family->SetCacheMode(CacheModeFromString(definition["cacheMode"].GetString()));
+            if (definition.Has("compressionLevel")) {
+                family->SetCompressionLevel(definition["compressionLevel"].GetUInteger());
+            }
             if (definition.Has("data")) {
                 family->SetMedia(definition["data"]["media"].GetString());
             }

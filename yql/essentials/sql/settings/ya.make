@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core/project_settings
     library/cpp/deprecated/split
     library/cpp/json
     yql/essentials/public/issue

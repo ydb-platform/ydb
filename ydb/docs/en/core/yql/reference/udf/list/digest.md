@@ -2,6 +2,12 @@
 
 A set of commonly used hash functions.
 
+{% if backend_name == "YDB" %}
+
+To compare entire tables, use [`CHECKSUM TABLE`](../../syntax/checksum-table.md). To check selected rows, columns, or groups, see the [DigestAggregate examples](digest-aggregate.md#examples).
+
+{% endif %}
+
 ## List of functions
 
 * `Digest::Crc32c(String{Flags::AutoMap}) -> Uint32`

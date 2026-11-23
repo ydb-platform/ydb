@@ -16,12 +16,14 @@
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
 #include "viewer_database_stats.h"
 #include "viewer_cluster.h"
+#include "viewer_bridge_storage.h"
 #include "viewer_groups.h"
 #include "viewer_healthcheck.h"
 #include "viewer_nodelist.h"
@@ -993,14 +995,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
 
         void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            const TCgiParameters paths("database=/alias&path=/alias/a,/alias/b&topic=relative");
             const auto normalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
                 [normalizer = AppData()->GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("path"), "/Root/a,/alias/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer, true).Get("path"), "/Root/a,/Root/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("topic"), "relative");
             NJson::TJsonValue jsonPaths;
-            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"/alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
             NormalizePathParameters(jsonPaths, normalizer);
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
@@ -1083,7 +1085,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         TStringStream relativeResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=/alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         headers["Content-Type"] = "application/json";
@@ -1093,7 +1095,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         headers["Content-Type"] = "application/x-www-form-urlencoded";
         TStringStream formResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=/alias&path=/alias", &formResponse, headers), HTTP_OK);
         UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         TStringStream directoryResponse;
@@ -1228,6 +1230,52 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 UNIT_ASSERT_VALUES_EQUAL(group["DiskSpace"].GetString(), *expectedGroupDiskSpace);
             } else {
                 UNIT_ASSERT(!group.GetMap().contains("DiskSpace"));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NbsStorageDiscovery) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        enum class EMode { RealController, Configured, Legacy };
+        EMode mode = EMode::RealController;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                if (mode == EMode::Configured) {
+                    record.SetHasDDiskPools(true);
+                } else if (mode == EMode::Legacy) {
+                    record.ClearHasDDiskPools();
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        for (EMode responseMode : {EMode::RealController, EMode::Configured, EMode::Legacy}) {
+            mode = responseMode;
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /storage/nbs HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(result->Response->Body, &json));
+            UNIT_ASSERT(json.Has("Configured"));
+            if (mode == EMode::Legacy) {
+                UNIT_ASSERT_VALUES_EQUAL(json["Configured"].GetType(), NJson::JSON_NULL);
+            } else {
+                UNIT_ASSERT(json["Configured"].IsBoolean());
+                UNIT_ASSERT_VALUES_EQUAL(json["Configured"].GetBoolean(), mode == EMode::Configured);
             }
         }
     }
@@ -1450,6 +1498,427 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    void AddBridgePoolSnapshotRow(NKikimrBridge::TStorageState& state, ui64 poolId, const TString& name,
+            NKikimrBridge::EStorageMode mode, const TString& pile, NKikimrBridge::ESynchronizationStatus status) {
+        auto* row = state.MutableDatabases()->add_databases();
+        auto* pool = row->add_storage_pools();
+        pool->mutable_id()->set_box_id(1);
+        pool->mutable_id()->set_pool_id(poolId);
+        pool->set_name(name);
+        row->set_storage_mode(mode);
+        row->set_pile_name(pile);
+        auto* counts = row->mutable_groups();
+        if (mode == NKikimrBridge::BRIDGED && status != NKikimrBridge::NOT_REQUIRED) {
+            counts->set_required(1);
+            counts->set_synced(status == NKikimrBridge::SYNCED);
+            counts->set_syncing(status == NKikimrBridge::SYNCING);
+            counts->set_pending(status == NKikimrBridge::PENDING);
+            counts->set_unknown(status == NKikimrBridge::UNKNOWN);
+        }
+    }
+
+    Y_UNIT_TEST(BridgeDatabaseStoragePoolUnion) {
+        NKikimrBridge::TStorageState state;
+        state.SetStatus(Ydb::StatusIds::SUCCESS);
+        AddBridgePoolSnapshotRow(state, 10, "bridge-pool", NKikimrBridge::BRIDGED, "pile0", NKikimrBridge::SYNCED);
+        AddBridgePoolSnapshotRow(state, 10, "bridge-pool", NKikimrBridge::BRIDGED, "pile2", NKikimrBridge::SYNCING);
+        AddBridgePoolSnapshotRow(state, 20, "own-ordinary", NKikimrBridge::ORDINARY, "pile2", NKikimrBridge::NOT_REQUIRED);
+        const TBridgeStorageSnapshot snapshot(state);
+        UNIT_ASSERT(snapshot.IsValid());
+        UNIT_ASSERT_VALUES_EQUAL(state.OwnersSize(), 0);
+        const auto shared = snapshot.Resolve(THashSet<TString>{"bridge-pool"});
+        UNIT_ASSERT(shared);
+        UNIT_ASSERT(shared->Mode == NKikimrBridge::BRIDGED);
+        UNIT_ASSERT(shared->GetStatus() == NKikimrBridge::SYNCING);
+        const auto ordinary = snapshot.Resolve(THashSet<TString>{"own-ordinary"});
+        UNIT_ASSERT(ordinary);
+        UNIT_ASSERT(ordinary->Mode == NKikimrBridge::ORDINARY);
+        UNIT_ASSERT(ordinary->GetStatus() == NKikimrBridge::NOT_REQUIRED);
+
+        const TPathId databaseKey(1, 10);
+        const TPathId resourceKey(1, 20);
+        NSchemeCache::TSchemeCacheNavigate::TEntry database;
+        database.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        database.DomainInfo = new NSchemeCache::TDomainInfo(databaseKey, resourceKey);
+        auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+        description->Description.AddStoragePools()->SetName("own-ordinary");
+        description->Description.AddStoragePools()->SetName("bridge-pool");
+        database.DomainDescription = description;
+        NSchemeCache::TSchemeCacheNavigate::TEntry resource;
+        resource.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        resource.DomainInfo = new NSchemeCache::TDomainInfo(resourceKey, resourceKey);
+        description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+        description->Description.AddStoragePools()->SetName("bridge-pool");
+        resource.DomainDescription = description;
+        const auto pools = GetBridgeDatabaseStoragePools(database, &resource);
+        UNIT_ASSERT(pools);
+        UNIT_ASSERT_VALUES_EQUAL(pools->size(), 2);
+        const auto mixed = snapshot.Resolve(*pools);
+        UNIT_ASSERT(mixed);
+        UNIT_ASSERT(mixed->Mode == NKikimrBridge::MIXED);
+        UNIT_ASSERT(mixed->GetStatus() == NKikimrBridge::SYNCING);
+        UNIT_ASSERT_VALUES_EQUAL(mixed->Groups.Required, 2);
+        UNIT_ASSERT(!GetBridgeDatabaseStoragePools(database));
+        resource.DomainInfo = new NSchemeCache::TDomainInfo(TPathId(1, 30), TPathId(1, 30));
+        UNIT_ASSERT(!GetBridgeDatabaseStoragePools(database, &resource));
+        UNIT_ASSERT(!snapshot.Resolve(THashSet<TString>{}));
+        UNIT_ASSERT(!snapshot.Resolve(THashSet<TString>{"missing"}));
+        AddBridgePoolSnapshotRow(state, 30, "bridge-pool", NKikimrBridge::BRIDGED, "pile0", NKikimrBridge::SYNCED);
+        const TBridgeStorageSnapshot ambiguous(state);
+        UNIT_ASSERT(!ambiguous.Resolve(THashSet<TString>{"bridge-pool"}));
+        UNIT_ASSERT(ambiguous.Resolve(THashSet<TString>{"own-ordinary"}));
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorage) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto& appData = runtime.GetAppData();
+        appData.BridgeModeEnabled = true;
+        const auto sender = runtime.AllocateEdgeActor();
+
+        auto mode = NKikimrBridge::BRIDGED;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult &&
+                    dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->GetRecipientRewrite()))) {
+                auto& entry = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>()->Request->ResultSet.front();
+                auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+                if (entry.DomainDescription) {
+                    description->Description.CopyFrom(entry.DomainDescription->Description);
+                }
+                description->Description.ClearStoragePools();
+                description->Description.AddStoragePools()->SetName("database-pool");
+                entry.DomainDescription = description;
+            }
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvControllerQueryBridgeStorage) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            UNIT_ASSERT(ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record.GetView() ==
+                NKikimrBridge::TStorageQuery::DATABASES);
+            UNIT_ASSERT(ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record.GetGroupByStoragePool());
+            auto result = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
+            auto& record = result->Record;
+            if (mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED) {
+                record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+            } else {
+                record.SetStatus(Ydb::StatusIds::SUCCESS);
+                for (ui32 pile = 0; pile < 2; ++pile) {
+                    AddBridgePoolSnapshotRow(record, 10, "database-pool", mode, TStringBuilder() << "pile" << pile,
+                        pile ? NKikimrBridge::PENDING : NKikimrBridge::SYNCED);
+                }
+            }
+            runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release(), 0, ev->Cookie));
+            return TTestActorRuntime::EEventAction::DROP;
+        });
+
+        auto getTenant = [&] {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /viewer/tenantinfo HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            const auto& tenants = json["TenantInfo"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+            return tenants.front();
+        };
+        auto tenant = getTenant();
+        UNIT_ASSERT(tenant["BridgeMode"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+
+        mode = NKikimrBridge::ORDINARY;
+        tenant = getTenant();
+        UNIT_ASSERT(tenant.Has("BridgeMode"));
+        UNIT_ASSERT(!tenant["BridgeMode"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "NOT_REQUIRED");
+
+        mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
+        tenant = getTenant();
+        UNIT_ASSERT(!tenant.Has("BridgeMode"));
+        UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
+    }
+
+    enum class EBridgeStorageScopeCase {
+        Dedicated,
+        Shared,
+        SharedOnly,
+        SharedMixed,
+        MissingPool,
+        AmbiguousPool,
+        MissingMetadata,
+        MissingResourceMetadata,
+        EmptyPools,
+        EmptyResult,
+    };
+
+    void CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase testCase) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto& appData = runtime.GetAppData();
+        appData.BridgeModeEnabled = true;
+        const auto root = appData.DomainsInfo->GetDomain()->SchemeRoot;
+        const TPathId databaseKey(root, 10);
+        const TPathId resourceKey(root, 20);
+        const TPathId rootKey(root, 1);
+        const bool shared = testCase == EBridgeStorageScopeCase::Shared ||
+            testCase == EBridgeStorageScopeCase::SharedOnly || testCase == EBridgeStorageScopeCase::SharedMixed ||
+            testCase == EBridgeStorageScopeCase::MissingResourceMetadata;
+        const bool unavailable = testCase == EBridgeStorageScopeCase::MissingPool ||
+            testCase == EBridgeStorageScopeCase::AmbiguousPool || testCase == EBridgeStorageScopeCase::MissingMetadata ||
+            testCase == EBridgeStorageScopeCase::MissingResourceMetadata;
+        THashSet<TActorId> actors;
+        ui32 bridgeRequests = 0;
+        auto mode = testCase == EBridgeStorageScopeCase::SharedMixed ? NKikimrBridge::MIXED : NKikimrBridge::BRIDGED;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet &&
+                    dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->Sender))) {
+                actors.insert(ev->Sender);
+                auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+                request->ResultSet.resize(1);
+                auto& entry = request->ResultSet.front();
+                const auto& incoming = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->ResultSet.front();
+                const TString path = CanonizePath(incoming.Path);
+                const bool resource = incoming.TableId.PathId == resourceKey || path == "/Root/shared";
+                const bool domainRoot = path == "/Root";
+                entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                entry.Path = SplitPath(domainRoot ? "/Root" : resource ? "/Root/shared" : "/Root/db");
+                entry.TableId.PathId = domainRoot ? rootKey : resource ? resourceKey : databaseKey;
+                auto* domain = new NSchemeCache::TDomainInfo(entry.TableId.PathId,
+                    domainRoot ? rootKey : shared ? resourceKey : databaseKey);
+                domain->Params.SetHive(appData.DomainsInfo->GetHive());
+                domain->Params.SetSchemeShard(root);
+                entry.DomainInfo = domain;
+                if (testCase != EBridgeStorageScopeCase::MissingMetadata &&
+                        !(resource && testCase == EBridgeStorageScopeCase::MissingResourceMetadata)) {
+                    auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+                    if (testCase != EBridgeStorageScopeCase::EmptyPools &&
+                            (domainRoot || resource || testCase != EBridgeStorageScopeCase::SharedOnly)) {
+                        description->Description.AddStoragePools()->SetName(domainRoot ? "root-pool"
+                            : resource ? "shared-pool" : "database-pool");
+                        if (!domainRoot && !resource && mode == NKikimrBridge::MIXED) {
+                            description->Description.AddStoragePools()->SetName("database-ordinary-pool");
+                        }
+                    }
+                    entry.DomainDescription = description;
+                }
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request.release()), 0, ev->Cookie));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == NConsole::TEvConsole::EvListTenantsResponse &&
+                    dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->GetRecipientRewrite()))) {
+                actors.insert(ev->GetRecipientRewrite());
+                Ydb::Cms::ListDatabasesResult databases;
+                databases.add_paths("/Root/db");
+                ev->Get<NConsole::TEvConsole::TEvListTenantsResponse>()->Record.MutableResponse()
+                    ->mutable_operation()->mutable_result()->PackFrom(databases);
+            }
+            if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo &&
+                    actors.contains(ev->GetRecipientRewrite()) &&
+                    ev->Get<TEvStateStorage::TEvBoardInfo>()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+                runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                    new TEvStateStorage::TEvBoardInfo(TEvStateStorage::TEvBoardInfo::EStatus::Ok,
+                        ev->Get<TEvStateStorage::TEvBoardInfo>()->Path), 0, ev->Cookie));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse &&
+                    actors.contains(ev->GetRecipientRewrite())) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                record.ClearEntries();
+                auto addPool = [&](ui64 id, const TString& name) {
+                    auto* pool = record.AddEntries();
+                    pool->MutableKey()->SetBoxId(1);
+                    pool->MutableKey()->SetStoragePoolId(id);
+                    pool->MutableInfo()->SetName(name);
+                };
+                if (testCase != EBridgeStorageScopeCase::MissingPool) {
+                    addPool(10, "database-pool");
+                }
+                addPool(11, "shared-pool");
+                addPool(12, "other-database-pool");
+                addPool(14, "database-ordinary-pool");
+                if (testCase == EBridgeStorageScopeCase::AmbiguousPool) {
+                    addPool(13, "database-pool");
+                }
+            }
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvControllerQueryBridgeStorage ||
+                    !dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->Sender))) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            actors.insert(ev->Sender);
+            ++bridgeRequests;
+            const auto& query = ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record;
+            UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
+            UNIT_ASSERT(query.GetGroupByStoragePool());
+            UNIT_ASSERT(!query.HasStoragePool());
+            UNIT_ASSERT_VALUES_EQUAL(query.PoolNamesSize(), 0);
+            std::set<std::pair<ui64, ui64>> actual;
+            for (const auto& pool : query.GetStoragePoolIds()) {
+                actual.emplace(pool.box_id(), pool.pool_id());
+            }
+            std::set<std::pair<ui64, ui64>> expected;
+            if (testCase != EBridgeStorageScopeCase::EmptyPools) {
+                if (testCase != EBridgeStorageScopeCase::SharedOnly) {
+                    expected.emplace(1, 10);
+                    if (mode == NKikimrBridge::MIXED) {
+                        expected.emplace(1, 14);
+                    }
+                }
+                if (shared) {
+                    expected.emplace(1, 11);
+                }
+            }
+            UNIT_ASSERT(query.GetFilterPools() ? actual == expected : actual.empty());
+            auto result = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
+            auto& record = result->Record;
+            record.SetStatus(mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SUCCESS);
+            if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
+                record.MutableDatabases();
+                if (!expected.empty() && testCase != EBridgeStorageScopeCase::EmptyResult) {
+                    auto reportPools = expected;
+                    if (!query.GetFilterPools()) {
+                        reportPools = {{1, 10}, {1, 11}, {1, 12}, {1, 90}};
+                        if (mode == NKikimrBridge::MIXED) {
+                            reportPools.emplace(1, 14);
+                        }
+                    }
+                    for (const auto& [boxId, poolId] : reportPools) {
+                        UNIT_ASSERT_VALUES_EQUAL(boxId, 1);
+                        const TString name = poolId == 10 ? "database-pool"
+                            : poolId == 11 ? "shared-pool" : poolId == 12 ? "other-database-pool"
+                            : poolId == 90 ? "root-pool" : "database-ordinary-pool";
+                        const auto poolMode = poolId == 90 ? NKikimrBridge::ORDINARY : mode == NKikimrBridge::MIXED
+                            ? poolId == 14 ? NKikimrBridge::ORDINARY : NKikimrBridge::BRIDGED : mode;
+                        for (ui32 pile = 0; pile < 2; ++pile) {
+                            AddBridgePoolSnapshotRow(record, poolId, name, poolMode,
+                                TStringBuilder() << "pile" << pile,
+                                poolId == 12 ? NKikimrBridge::UNKNOWN : pile ? NKikimrBridge::PENDING : NKikimrBridge::SYNCED);
+                        }
+                    }
+                }
+            }
+            runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release(), 0, ev->Cookie));
+            return TTestActorRuntime::EEventAction::DROP;
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        auto getTenant = [&](bool general = false) {
+            const auto before = bridgeRequests;
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                general ? "GET /viewer/tenantinfo?storage=false&direct=true HTTP/1.1\r\n\r\n"
+                        : "GET /viewer/tenantinfo?database=/Root/db&storage=false&direct=true HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            UNIT_ASSERT_VALUES_EQUAL(bridgeRequests - before, unavailable ? 0 : 1);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            const auto& tenants = json["TenantInfo"].GetArray();
+            if (!general) {
+                UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+            }
+            for (const auto& tenant : tenants) {
+                if (tenant["Name"].GetString() == "/Root/db") {
+                    return tenant;
+                }
+            }
+            UNIT_FAIL("Requested database missing from tenantinfo");
+            return NJson::TJsonValue{};
+        };
+        auto tenant = getTenant();
+        if (unavailable || testCase == EBridgeStorageScopeCase::EmptyPools || testCase == EBridgeStorageScopeCase::EmptyResult) {
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
+        } else if (testCase == EBridgeStorageScopeCase::SharedMixed) {
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+        } else {
+            UNIT_ASSERT(tenant["BridgeMode"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+        }
+        if (shared && !unavailable) {
+            const auto general = getTenant(true);
+            UNIT_ASSERT_VALUES_EQUAL(general.Has("BridgeMode"), tenant.Has("BridgeMode"));
+            if (tenant.Has("BridgeMode")) {
+                UNIT_ASSERT_VALUES_EQUAL(general["BridgeMode"].GetBoolean(), tenant["BridgeMode"].GetBoolean());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(general["BridgeSyncStatus"].GetString(), tenant["BridgeSyncStatus"].GetString());
+        }
+        if (testCase == EBridgeStorageScopeCase::Dedicated) {
+            mode = NKikimrBridge::ORDINARY;
+            tenant = getTenant();
+            UNIT_ASSERT(tenant.Has("BridgeMode"));
+            UNIT_ASSERT(!tenant["BridgeMode"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "NOT_REQUIRED");
+            mode = NKikimrBridge::MIXED;
+            tenant = getTenant();
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+            mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
+            tenant = getTenant();
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
+        }
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageScoped) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::Dedicated);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageShared) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::Shared);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageSharedOnly) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::SharedOnly);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageSharedMixed) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::SharedMixed);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageMissingPool) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::MissingPool);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageAmbiguousPool) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::AmbiguousPool);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageMissingMetadata) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::MissingMetadata);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageMissingResourceMetadata) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::MissingResourceMetadata);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageEmptyPools) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::EmptyPools);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageEmptyResult) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::EmptyResult);
+    }
+
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnits)
     {
         CheckStorageLimitWithGroupSizeInUnits(false);
@@ -1463,6 +1932,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
     struct TClusterBridgeOptions {
         bool OffloadMerge = false;
         bool IncludeSyncInfo = false;
+        std::optional<ui64> DatabaseCountsGeneration;
+        bool DatabaseCountsUnattributedPool = false;
+        bool DatabaseCountsMixedOwner = false;
+        bool DatabaseCountsBridgedRoot = false;
+        bool DatabaseCountsUnavailable = false;
+        bool DatabaseCountsLegacyResponse = false;
+        bool DatabaseCountsLegacyPileCounts = false;
+        bool DatabaseCountsMissingPile = false;
         bool ProvidePileMap = true;
         bool DropNodesInfo = false;
         bool DropWhiteboard = false;
@@ -1536,6 +2013,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bridgeInfo->Piles[0].State = options.LocalState;
         bridgeInfo->Piles[1].IsFreeSlot = true;
         bridgeInfo->Piles[2].State = options.RemoteState;
+        if (options.DatabaseCountsGeneration) {
+            bridgeInfo->Piles[3].State = NKikimrBridge::TClusterState::INACTIVE;
+        }
         bridgeInfo->SelfNodePile = &bridgeInfo->Piles[0];
         auto remoteBridgeInfo = std::make_shared<TBridgeInfo>();
         remoteBridgeInfo->Piles = bridgeInfo->Piles;
@@ -1551,6 +2031,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         ui32 httpsRequests = 0;
+        ui32 bridgeDatabaseQueries = 0;
         std::unordered_set<ui32> skippedOffloadNodeIndexes;
         struct TForwardedRequest {
             TActorId Sender;
@@ -1649,7 +2130,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         info->SetBridgeSyncCopyBytesPerSecond(100);
                         info->SetBridgeSyncRemainingBytesComplete(true);
                     }
-                    [[fallthrough]];
+                    if (options.DropClusterResponses && isClusterActor(ev->GetRecipientRewrite())) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
                 case NConsole::TEvConsole::EvListTenantsResponse:
                 case TEvHive::EvResponseHiveNodeStats:
                 case NSysView::TEvSysView::EvGetPDisksResponse:
@@ -1660,15 +2144,90 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
-                case TEvBlobStorage::EvNodeWardenQueryStorageConfig:
+                case TEvBlobStorage::EvControllerQueryBridgeStorage: {
                     if (!isClusterActor(ev->Sender)) {
                         break;
                     }
+                    UNIT_ASSERT(!options.LocalPileNodeStats);
+                    ++bridgeDatabaseQueries;
+                    const auto& query = ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record;
+                    UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::PILES);
+                    UNIT_ASSERT(!query.GetGroupByStoragePool());
+                    UNIT_ASSERT(!query.GetFilterPools());
+                    UNIT_ASSERT(!query.HasStoragePool());
+                    UNIT_ASSERT_VALUES_EQUAL(query.StoragePoolIdsSize(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(query.PoolNamesSize(), 0);
+                    auto response = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
+                    auto& record = response->Record;
+                    record.SetStatus(options.DatabaseCountsGeneration && !options.DatabaseCountsUnavailable
+                        ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE);
+                    if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
+                        auto* snapshot = record.MutablePiles();
+                        snapshot->set_cluster_state_generation(*options.DatabaseCountsGeneration);
+                        snapshot->set_unattributed_storage_pools(options.DatabaseCountsUnattributedPool ? 1 : 0);
+                        // Shared storage contributes one owner, regardless of its serverless databases.
+                        const ui64 owners = 3 + options.DatabaseCountsBridgedRoot - options.DatabaseCountsMixedOwner;
+                        snapshot->set_bridge_databases(owners);
+                        auto* global = snapshot->mutable_bridge_databases_by_sync_status();
+                        global->set_total(owners);
+                        global->set_synced(1 + options.DatabaseCountsBridgedRoot);
+                        global->set_syncing(options.DatabaseCountsMixedOwner ? 0 : 1);
+                        global->set_pending(1);
+                        for (ui32 pile : {0, 2, 3}) {
+                            if (options.DatabaseCountsMissingPile && pile == 2) {
+                                continue;
+                            }
+                            auto* row = snapshot->add_piles();
+                            row->set_pile_name(TStringBuilder() << "pile" << pile);
+                            auto* counts = row->mutable_bridge_databases();
+                            counts->set_total(owners);
+                            if (pile == 3) {
+                                counts->set_not_required(owners);
+                            } else if (pile == 0) {
+                                counts->set_synced(owners);
+                            } else {
+                                counts->set_synced(1 + options.DatabaseCountsBridgedRoot);
+                                counts->set_syncing(options.DatabaseCountsMixedOwner ? 0 : 1);
+                                counts->set_pending(1);
+                            }
+                            // The pre-existing counters also include ordinary and mixed storage owners.
+                            row->mutable_databases()->CopyFrom(*counts);
+                            row->mutable_databases()->set_total(owners + 2);
+                            row->mutable_databases()->set_not_required(counts->not_required() + 2);
+                        }
+                        if (options.DatabaseCountsLegacyResponse || options.DatabaseCountsLegacyPileCounts) {
+                            snapshot->clear_bridge_databases_by_sync_status();
+                        }
+                        if (options.DatabaseCountsLegacyResponse) {
+                            snapshot->clear_bridge_databases();
+                            for (auto& row : *snapshot->mutable_piles()) {
+                                row.clear_bridge_databases();
+                            }
+                        }
+                    }
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
+                        ev->Sender.NodeId() - firstNodeId);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySet: {
+                    UNIT_ASSERT_C(!isClusterActor(ev->Sender), "/viewer/cluster must not navigate database metadata");
+                    break;
+                }
+                case TEvBlobStorage::EvNodeWardenQueryStorageConfig: {
+                    if (!isClusterActor(ev->Sender)) {
+                        break;
+                    }
+                    std::shared_ptr<NKikimrBlobStorage::TStorageConfig> config;
+                    if (options.DatabaseCountsGeneration) {
+                        config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+                        config->MutableClusterState()->SetGeneration(42);
+                    }
                     runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                        new TEvNodeWardenStorageConfig(nullptr, false,
+                        new TEvNodeWardenStorageConfig(config, false,
                             ev->Sender.NodeId() - firstNodeId >= 4 ? remoteBridgeInfo : bridgeInfo), 0, ev->Cookie),
                         ev->Sender.NodeId() - firstNodeId);
                     return TTestActorRuntime::EEventAction::DROP;
+                }
                 case TEvInterconnect::EvListNodes: {
                     if (!isClusterActor(ev->Sender)) {
                         break;
@@ -1762,6 +2321,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, options.ExpectedStatus, response->Response->Body);
         UNIT_ASSERT_VALUES_EQUAL(httpsRequests, options.ExpectedHttpsRequests);
+        if (options.DatabaseCountsGeneration) {
+            UNIT_ASSERT_VALUES_EQUAL(bridgeDatabaseQueries, 1);
+        }
         UNIT_ASSERT_VALUES_EQUAL_C(skippedOffloadNodeIndexes.size(), options.MissingOffloadNodeIndexes.size(),
             "The partial offload response was not simulated for all requested nodes");
         NJson::TJsonValue json;
@@ -1809,6 +2371,119 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(pools.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pools[0]["Name"].GetStringSafe(), "static");
         UNIT_ASSERT_VALUES_EQUAL(pools[0]["Sync"]["BytesRemaining"].GetStringRobust(), "1200");
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeDatabaseCounts, staleGeneration) {
+        const auto json = GetClusterBridgeInfo({
+            .IncludeSyncInfo = true,
+            .DatabaseCountsGeneration = staleGeneration ? 41 : 42,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        const auto& piles = bridgeInfo["Piles"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(json["Version"].GetUInteger(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
+        for (const auto& pile : piles) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
+        AssertBridgePileCounts(piles[0], 2, 2);
+        AssertBridgePileAliveCounts(piles[0], 2, 1);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        AssertBridgePileAliveCounts(piles[1], 1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(piles[1]["Sync"]["SecondsLeft"].GetStringRobust(), "12");
+        if (staleGeneration) {
+            UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+            UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
+            UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+            UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        } else {
+            UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+            const auto& counts = bridgeInfo["DatabaseCountsBySyncStatus"];
+            for (const char* status : {"SYNCED", "PENDING"}) {
+                UNIT_ASSERT_VALUES_EQUAL(counts[status].GetStringRobust(), "1");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(counts["SYNCING"].GetStringRobust(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(counts["UNKNOWN"].GetStringRobust(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(counts["NOT_REQUIRED"].GetStringRobust(), "0");
+        }
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsPartial) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsUnattributedPool = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+        UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "1");
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsMixedOwner) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsMixedOwner = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "2");
+        UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "0");
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsIncludesRoot) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsBridgedRoot = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
+        UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "2");
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeDatabaseCountsUnavailable, legacyResponse) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsUnavailable = !legacyResponse,
+            .DatabaseCountsLegacyResponse = legacyResponse,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+        UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
+        UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        for (const auto& pile : bridgeInfo["Piles"].GetArraySafe()) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsMissingPile) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsMissingPile = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+        UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+        UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        const auto& piles = bridgeInfo["Piles"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "1");
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsLegacyPileCounts) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsLegacyPileCounts = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT(!bridgeInfo.Has("DatabaseCountsBySyncStatus"));
+        for (const auto& pile : bridgeInfo["Piles"].GetArraySafe()) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeNoAliveNodes, offloadMerge) {
@@ -2179,6 +2854,146 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
     {
         CheckStorageLimitWithGroupSizeInUnits(true, true);
+    }
+
+    // Returns the only tenant of /viewer/tenantinfo?storage=true, with the domain description patched by `fill`
+    NJson::TJsonValue GetTenantInfoWithDomainDescription(std::function<void(NKikimrSubDomains::TDomainDescription&)> fill) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
+                auto* response = ev->Get<TEvSchemeShard::TEvDescribeSchemeResult>();
+                auto* domain = response->MutableRecord()->MutablePathDescription()->MutableDomainDescription();
+                domain->ClearStoragePools();
+                domain->ClearDiskSpaceUsage();
+                domain->ClearDiskSpaceQuotaUsage();
+                domain->ClearDomainState();
+                domain->ClearDatabaseQuotas();
+                fill(*domain);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/tenantinfo?storage=true&use_cache=false HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Response->Status, "200", result->Response->Body);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const auto& tenants = json["TenantInfo"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+        return tenants[0];
+    }
+
+    void AddStoragePools(NKikimrSubDomains::TDomainDescription& domain, std::initializer_list<TString> kinds) {
+        for (const auto& kind : kinds) {
+            auto* pool = domain.AddStoragePools();
+            pool->SetName("/Root:" + kind);
+            pool->SetKind(kind);
+        }
+    }
+
+    void AddPoolUsage(NKikimrSubDomains::TDomainDescription& domain, const TString& kind, ui64 size) {
+        auto* poolUsage = domain.MutableDiskSpaceUsage()->AddStoragePoolsUsage();
+        poolUsage->SetPoolKind(kind);
+        poolUsage->SetTotalSize(size);
+    }
+
+    // soft or hard quota equal to 0 means that the field must be absent
+    void CheckTablesStorage(const NJson::TJsonValue& tenant, const TString& type, ui64 size, ui64 soft, ui64 hard) {
+        const NJson::TJsonValue* found = nullptr;
+        for (const auto& tablesStorage : tenant["TablesStorage"].GetArray()) {
+            if (tablesStorage["Type"].GetString() == type) {
+                UNIT_ASSERT_C(!found, "duplicate TablesStorage " << type);
+                found = &tablesStorage;
+            }
+        }
+        UNIT_ASSERT_C(found, "no TablesStorage " << type << " in " << tenant["TablesStorage"].GetStringRobust());
+        const auto& tablesStorage = *found;
+        UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["Size"].GetString(), ToString(size), type);
+        if (soft) {
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["SoftQuota"].GetString(), ToString(soft), type);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["Limit"].GetString(), ToString(soft), type);
+        } else {
+            UNIT_ASSERT_C(!tablesStorage.Has("SoftQuota"), tablesStorage.GetStringRobust());
+            UNIT_ASSERT_C(!tablesStorage.Has("Limit"), tablesStorage.GetStringRobust());
+        }
+        if (hard) {
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["HardQuota"].GetString(), ToString(hard), type);
+        } else {
+            UNIT_ASSERT_C(!tablesStorage.Has("HardQuota"), tablesStorage.GetStringRobust());
+        }
+    }
+
+    Y_UNIT_TEST(TenantInfoDomainStateAndDiskSpaceQuotaUsage)
+    {
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "hdd"});
+            AddPoolUsage(domain, "ssd", 100);
+            AddPoolUsage(domain, "hdd", 50);
+            domain.MutableDiskSpaceUsage()->MutableTopics()->SetDataSize(30);
+            // only the hard quota is configured, the effective soft quota is equal to it
+            domain.MutableDatabaseQuotas()->set_data_size_hard_quota(1000);
+            auto& quotaUsage = *domain.MutableDiskSpaceQuotaUsage();
+            quotaUsage.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_OVERALL);
+            auto* entry = quotaUsage.AddEntries();
+            entry->SetPoolKind("");
+            entry->SetUsage(180);
+            entry->SetSoftQuota(1000);
+            entry->SetHardQuota(1000);
+            domain.MutableDomainState()->SetDiskQuotaExceeded(true);
+            domain.MutableDomainState()->SetStorageSpaceExhausted(true);
+        });
+
+        // both are copied from the SchemeShard description as is
+        const auto& domainState = tenant["DomainState"];
+        UNIT_ASSERT_C(domainState.IsMap(), tenant.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(domainState["DiskQuotaExceeded"].GetBoolean(), true);
+        UNIT_ASSERT_VALUES_EQUAL(domainState["StorageSpaceExhausted"].GetBoolean(), true);
+        UNIT_ASSERT_C(!domainState.Has("SmallBlobsQuotaExceeded"), domainState.GetStringRobust());
+        const auto& quotaUsage = tenant["DiskSpaceQuotaUsage"];
+        UNIT_ASSERT_C(quotaUsage.IsMap(), tenant.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["Mode"].GetString(), "MODE_OVERALL");
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["Entries"].GetArray().size(), 1);
+        const auto& entry = quotaUsage["Entries"][0];
+        UNIT_ASSERT_VALUES_EQUAL(entry["PoolKind"].GetString(), "");
+        UNIT_ASSERT_VALUES_EQUAL(entry["Usage"].GetString(), "180");
+        UNIT_ASSERT_VALUES_EQUAL(entry["SoftQuota"].GetString(), "1000");
+        UNIT_ASSERT_VALUES_EQUAL(entry["HardQuota"].GetString(), "1000");
+
+        // TablesStorage keeps the raw configured database quotas on the main storage type
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 2);
+        CheckTablesStorage(tenant, "SSD", 130, 0, 1000);
+        CheckTablesStorage(tenant, "HDD", 50, 0, 0);
+    }
+
+    Y_UNIT_TEST(TenantInfoWithoutDomainStateAndDiskSpaceQuotaUsage)
+    {
+        // e.g. an older SchemeShard that doesn't report DiskSpaceQuotaUsage, and no flag of DomainState is set
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "hdd"});
+            AddPoolUsage(domain, "ssd", 100);
+            domain.MutableDatabaseQuotas()->set_data_size_soft_quota(800);
+            domain.MutableDatabaseQuotas()->set_data_size_hard_quota(1000);
+        });
+
+        UNIT_ASSERT_C(!tenant.Has("DomainState"), tenant.GetStringRobust());
+        UNIT_ASSERT_C(!tenant.Has("DiskSpaceQuotaUsage"), tenant.GetStringRobust());
+
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 1);
+        CheckTablesStorage(tenant, "SSD", 100, 800, 1000);
     }
 
     Y_UNIT_TEST(StorageLimitsCappedByUserChunkPool) {
@@ -2669,6 +3484,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     Y_UNIT_TEST(PDiskReportsDDisksSeparately) {
+        using TDDiskState = NKikimrWhiteboard::TDDiskStateInfo;
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))
                 .SetNodeCount(1)
@@ -2678,18 +3494,30 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .InitKikimrRunConfig();
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
+        const auto bscActor = ResolveTablet(runtime, MakeBSControllerID());
         const auto sender = runtime.AllocateEdgeActor();
+        const auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         bool withSample = true;
         bool includeDDisks = false;
+        bool returnDDiskPoolNames = false;
+        bool legacyController = false;
+        std::optional<TDDiskState::EComponentStatus> bufferStatus;
         ui32 storagePoolRequests = 0;
         ui32 groupRequests = 0;
+        std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse> cachedVSlots;
         std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> cachedPools;
         std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> cachedGroups;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsRequest) {
-                ++storagePoolRequests;
-            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsRequest) {
-                ++groupRequests;
+            const auto type = ev->GetTypeRewrite();
+            if (ev->GetRecipientRewrite() == bscActor) {
+                // The controller forwards these requests to its system views collector.
+                storagePoolRequests += type == NSysView::TEvSysView::EvGetStoragePoolsRequest;
+                groupRequests += type == NSysView::TEvSysView::EvGetGroupsRequest;
+            }
+            if (type == NSysView::TEvSysView::EvGetVSlotsRequest) {
+                const auto& request = ev->Get<NSysView::TEvSysView::TEvGetVSlotsRequest>()->Record;
+                returnDDiskPoolNames = request.GetIncludeDDiskPoolNames();
+                UNIT_ASSERT_VALUES_EQUAL(returnDDiskPoolNames, includeDDisks);
             }
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
@@ -2701,12 +3529,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     entry->MutableKey()->SetVSlotId(slot);
                     entry->MutableInfo()->SetGroupId(42);
                     entry->MutableInfo()->SetDDisk(true);
+                    if (returnDDiskPoolNames && !legacyController) {
+                        entry->MutableInfo()->SetStoragePoolName("ddisk-pool");
+                    }
                 }
                 auto* ordinary = record.AddEntries();
                 ordinary->MutableKey()->SetNodeId(runtime.GetNodeId(0));
                 ordinary->MutableKey()->SetPDiskId(1);
                 ordinary->MutableKey()->SetVSlotId(1001);
                 ordinary->MutableInfo()->SetGroupId(43);
+                if (legacyController) {
+                    cachedVSlots = std::make_shared<NSysView::TEvSysView::TEvGetVSlotsResponse>();
+                    cachedVSlots->Record.CopyFrom(record);
+                }
             } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
                 record.ClearEntries();
@@ -2730,16 +3565,33 @@ Y_UNIT_TEST_SUITE(Viewer) {
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse) {
                 auto& record = ev->Get<TEvWhiteboard::TEvPDiskStateResponse>()->Record;
                 record.ClearDDiskStateInfo();
+                if (bufferStatus) {
+                    record.ClearPDiskStateInfo();
+                    auto* pdisk = record.AddPDiskStateInfo();
+                    pdisk->SetPDiskId(1);
+                    pdisk->SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                    pdisk->SetTotalSize(1000);
+                    pdisk->SetAvailableSize(900);
+                }
                 if (withSample) {
                     for (auto [pdisk, slot] : {std::make_pair(2u, 1009u), {1u, 1012u}, {1u, 1010u}, {1u, 1011u}}) {
                         auto* sample = record.AddDDiskStateInfo();
                         sample->SetPDiskId(pdisk);
                         sample->SetDDiskSlotId(slot);
+                        if (slot == 1012) {
+                            sample->SetHasWhiteboardData(false);
+                            sample->SetDDiskStatus(TDDiskState::Ready);
+                            continue;
+                        }
                         sample->SetDDiskOccupancy(0.25);
                         sample->SetPersistentBufferOccupancy(0.5);
                         sample->SetAllocatedSize(1024);
                         if (slot == 1010) {
                             sample->SetPersistentBufferId("whiteboard-buffer-id");
+                            if (bufferStatus) {
+                                sample->SetPersistentBufferStatus(*bufferStatus);
+                                sample->SetPersistentBufferOccupancy(0.95);
+                            }
                         }
                     }
                 }
@@ -2748,6 +3600,36 @@ Y_UNIT_TEST_SUITE(Viewer) {
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+        auto queryNodes = [&](TStringBuf params) {
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /viewer/nodes?" << params << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(result->Response->Body, &json));
+            return json;
+        };
+        auto queryPDisk = [&](const TString& mode) {
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetNodeId(0)));
+            httpReq.CgiParameters.emplace("pdisk_id", "1");
+            if (!mode.empty()) {
+                httpReq.CgiParameters.emplace("include_ddisks", mode);
+            }
+            auto page = MakeHolder<TMonPage>("pdisk", "title");
+            TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/info", nullptr);
+            auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release()));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+            const auto bodyPos = result->Answer.find("\r\n\r\n");
+            UNIT_ASSERT_C(bodyPos != TString::npos, result->Answer);
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(result->Answer.substr(bodyPos + 4), &json), result->Answer);
+            return json;
+        };
         auto checkDisks = [&](const NJson::TJsonValue& disks, bool sample, bool fallback) {
             const auto& vdisks = disks["VDisks"].GetArray();
             UNIT_ASSERT_VALUES_EQUAL(vdisks.size(), fallback ? (includeDDisks ? 1 : 4) : 0);
@@ -2785,6 +3667,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 sample ? TString("whiteboard-buffer-id") : MakeBlobStoragePersistentBufferId(runtime.GetNodeId(0), 1, 1010).ToString());
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("DDiskOccupancy"), sample);
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("AllocatedSize"), sample);
+            const auto& healthOnly = ddisks[2];
+            UNIT_ASSERT(healthOnly.Has("HasWhiteboardData"));
+            UNIT_ASSERT(!healthOnly["HasWhiteboardData"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(healthOnly.Has("DDiskStatus"), sample);
+            UNIT_ASSERT(!healthOnly.Has("DDiskOccupancy"));
+            UNIT_ASSERT(!healthOnly.Has("AllocatedSize"));
         };
         for (const TString& mode : {TString(), TString("false"), TString("true")}) {
             includeDDisks = mode == "true";
@@ -2794,78 +3682,215 @@ Y_UNIT_TEST_SUITE(Viewer) {
             }
             for (bool sample : {true, false}) {
                 withSample = sample;
-                THttpRequest httpReq(HTTP_METHOD_GET);
-                httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetNodeId(0)));
-                httpReq.CgiParameters.emplace("pdisk_id", "1");
-                if (!mode.empty()) {
-                    httpReq.CgiParameters.emplace("include_ddisks", mode);
-                }
-                auto page = MakeHolder<TMonPage>("pdisk", "title");
-                TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/info", nullptr);
-                auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
-                runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release()));
-                TAutoPtr<IEventHandle> handle;
-                auto* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
-                const auto bodyPos = result->Answer.find("\r\n\r\n");
-                UNIT_ASSERT_C(bodyPos != TString::npos, result->Answer);
-                NJson::TJsonValue json;
-                UNIT_ASSERT_C(NJson::ReadJsonTree(result->Answer.substr(bodyPos + 4), &json), result->Answer);
-                auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+                storagePoolRequests = 0;
+                groupRequests = 0;
+                const auto json = queryPDisk(mode);
                 checkDisks(json["Whiteboard"], sample, true);
+                UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
+                if (includeDDisks) {
+                    for (const auto& disk : json["Whiteboard"]["DDisks"].GetArray()) {
+                        UNIT_ASSERT_VALUES_EQUAL(disk["StoragePoolName"].GetString(), "ddisk-pool");
+                    }
+                }
                 for (bool offload : {false, true}) {
                     storagePoolRequests = 0;
                     groupRequests = 0;
-                    NHttp::THttpIncomingRequestPtr minimalRequest = new NHttp::THttpIncomingRequest(
-                        TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId"
-                            << extraParams << "&offload_merge=" << (offload ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});
-                    runtime.Send(new IEventHandle(MakeViewerID(0), sender,
-                        new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(minimalRequest)));
-                    TAutoPtr<IEventHandle> minimalHandle;
-                    auto* minimalResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(minimalHandle);
-                    NJson::TJsonValue minimalJson;
-                    NJson::ReadJsonTree(minimalResult->Response->Body, &minimalJson, true);
+                    const auto minimalJson = queryNodes(TStringBuilder() << "type=static&fields_required=NodeId"
+                        << extraParams << "&offload_merge=" << (offload ? "true" : "false"));
                     UNIT_ASSERT_VALUES_EQUAL(minimalJson["Nodes"].GetArray().size(), 1);
                     UNIT_ASSERT(!minimalJson["Nodes"][0].Has("DDisks"));
+                    UNIT_ASSERT_VALUES_EQUAL(minimalJson["FieldsAvailable"].GetString().size(), 37);
+                    UNIT_ASSERT_VALUES_EQUAL(minimalJson["FieldsRequired"].GetString().size(), 37);
                     UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
                     UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
                     for (bool useCache : {false, true}) {
-                        if (useCache && includeDDisks) {
-                            // Refresh the cache on the local viewer service before the request.
-                            UNIT_ASSERT(cachedPools && cachedGroups);
-                            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
-                                new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedPools)));
-                            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
-                                new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedGroups)));
-                        }
                         storagePoolRequests = 0;
                         groupRequests = 0;
-                        NHttp::THttpIncomingRequestPtr nodesRequest = new NHttp::THttpIncomingRequest(
-                            TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks"
-                                << extraParams << "&offload_merge=" << (offload ? "true" : "false")
-                                << "&use_cache=" << (useCache ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});
-                        runtime.Send(new IEventHandle(MakeViewerID(0), sender,
-                            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(nodesRequest)));
-                        TAutoPtr<IEventHandle> nodesHandle;
-                        auto* nodesResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(nodesHandle);
-                        NJson::TJsonValue nodesJson;
-                        NJson::ReadJsonTree(nodesResult->Response->Body, &nodesJson, true);
+                        const auto nodesJson = queryNodes(TStringBuilder() << "type=static&fields_required=NodeId,VDisks"
+                            << extraParams << "&offload_merge=" << (offload ? "true" : "false")
+                            << "&use_cache=" << (useCache ? "true" : "false"));
                         const auto& nodes = nodesJson["Nodes"].GetArray();
                         UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
                         // A successful empty whiteboard response does not trigger the nodes VDisk fallback.
                         checkDisks(nodes[0], sample, false);
+                        const auto& required = nodesJson["FieldsRequired"].GetString();
+                        const auto& available = nodesJson["FieldsAvailable"].GetString();
+                        UNIT_ASSERT_VALUES_EQUAL(required.size(), includeDDisks ? 38 : 37);
+                        UNIT_ASSERT_VALUES_EQUAL(available.size(), required.size());
                         if (includeDDisks) {
+                            UNIT_ASSERT_VALUES_EQUAL(required.front(), '1');
+                            UNIT_ASSERT_VALUES_EQUAL(available.front(), '1');
                             for (ui32 i = 0; i < 3; ++i) {
                                 UNIT_ASSERT_VALUES_EQUAL(nodes[0]["DDisks"][i]["StoragePoolName"].GetString(), "ddisk-pool");
                             }
                         }
-                        if (useCache && includeDDisks) {
-                            // Completed cached responses must provide metadata without controller requests.
-                            UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
-                            UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
-                        }
+                        UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                        UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
                     }
                 }
             }
+        }
+
+        includeDDisks = true;
+        legacyController = true;
+        for (bool useCache : {false, true}) {
+            if (useCache) {
+                // Install completed legacy snapshots to exercise fallback without additional controller requests.
+                UNIT_ASSERT(cachedVSlots && cachedPools && cachedGroups);
+                runtime.Send(new IEventHandle(MakeViewerID(0), sender, new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedVSlots)));
+                runtime.Send(new IEventHandle(MakeViewerID(0), sender, new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedPools)));
+                runtime.Send(new IEventHandle(MakeViewerID(0), sender, new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedGroups)));
+            }
+            storagePoolRequests = 0;
+            groupRequests = 0;
+            const auto json = queryNodes(useCache ? "type=static&fields_required=DDisks&use_cache=true"
+                                                  : "type=static&fields_required=DDisks&use_cache=false");
+            const auto& disks = json["Nodes"][0]["DDisks"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(disks.size(), 3);
+            for (const auto& disk : disks) {
+                UNIT_ASSERT_VALUES_EQUAL(disk["StoragePoolName"].GetString(), "ddisk-pool");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, useCache ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(groupRequests, useCache ? 0 : 1);
+        }
+
+        withSample = false;
+        storagePoolRequests = 0;
+        groupRequests = 0;
+        const auto legacyPDisk = queryPDisk("true");
+        checkDisks(legacyPDisk["Whiteboard"], false, true);
+        for (const auto& disk : legacyPDisk["Whiteboard"]["DDisks"].GetArray()) {
+            UNIT_ASSERT_VALUES_EQUAL(disk["StoragePoolName"].GetString(), "ddisk-pool");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(groupRequests, 1);
+
+        legacyController = false;
+        withSample = true;
+        for (const auto status : {TDDiskState::Broken, TDDiskState::Stopping}) {
+            bufferStatus = status;
+            for (TStringBuf filter : {"missing", "space"}) {
+                const auto json = queryNodes(TStringBuilder() << "type=static&fields_required=DDisks&offload_merge=false&with=" << filter);
+                const bool expectedNode = status == TDDiskState::Broken || filter == "space";
+                UNIT_ASSERT(json.Has("FoundNodes"));
+                UNIT_ASSERT_VALUES_EQUAL(json["FoundNodes"].GetUIntegerRobust(), expectedNode ? 1 : 0);
+                if (expectedNode) {
+                    const auto& node = json["Nodes"][0];
+                    UNIT_ASSERT(!node.Has("PDisks"));
+                    UNIT_ASSERT(!node.Has("VDisks"));
+                    UNIT_ASSERT_VALUES_EQUAL(node["DDisks"].GetArray().size(), 4);
+                    UNIT_ASSERT_VALUES_EQUAL(node["DDisks"][0]["PersistentBufferStatus"].GetString(),
+                        status == TDDiskState::Broken ? "Broken" : "Stopping");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PDiskMergesMixedSlotsFromWhiteboardAndBSC) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const ui32 nodeId = runtime.GetNodeId(0);
+        bool hasWhiteboardPDisk = true;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetPDisksResponse>()->Record;
+                    record.ClearEntries();
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetNodeId(nodeId);
+                    entry->MutableKey()->SetPDiskId(1);
+                    entry->MutableInfo()->SetExpectedSlotCount(7);
+                    entry->MutableInfo()->SetNumActiveSlots(3);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
+                    record.ClearEntries();
+                    for (ui32 slotId : {1001, 1002, 1010}) {
+                        auto* entry = record.AddEntries();
+                        entry->MutableKey()->SetNodeId(nodeId);
+                        entry->MutableKey()->SetPDiskId(1);
+                        entry->MutableKey()->SetVSlotId(slotId);
+                        entry->MutableInfo()->SetGroupId(slotId);
+                        entry->MutableInfo()->SetGroupGeneration(1);
+                        entry->MutableInfo()->SetDDisk(slotId == 1010);
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    auto& record = ev->Get<TEvWhiteboard::TEvPDiskStateResponse>()->Record;
+                    record.ClearPDiskStateInfo();
+                    record.ClearDDiskStateInfo();
+                    if (hasWhiteboardPDisk) {
+                        auto* disk = record.AddPDiskStateInfo();
+                        disk->SetPDiskId(1);
+                        disk->SetExpectedSlotCount(9);
+                    }
+                    auto* disk = record.AddDDiskStateInfo();
+                    disk->SetPDiskId(1);
+                    disk->SetDDiskSlotId(1010);
+                    disk->SetHasWhiteboardData(false);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto& record = ev->Get<TEvWhiteboard::TEvVDiskStateResponse>()->Record;
+                    record.ClearVDiskStateInfo();
+                    for (ui32 slotId : {1001, 1010}) {
+                        auto* vdisk = record.AddVDiskStateInfo();
+                        vdisk->SetPDiskId(1);
+                        vdisk->SetVDiskSlotId(slotId);
+                        vdisk->MutableVDiskId()->SetGroupID(slotId);
+                        vdisk->MutableVDiskId()->SetGroupGeneration(1);
+                        vdisk->SetAllocatedSize(123);
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (const bool withPDisk : {true, false}) {
+            hasWhiteboardPDisk = withPDisk;
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            httpReq.CgiParameters.emplace("node_id", ToString(nodeId));
+            httpReq.CgiParameters.emplace("pdisk_id", "1");
+            httpReq.CgiParameters.emplace("include_ddisks", "true");
+            auto page = MakeHolder<TMonPage>("pdisk", "title");
+            TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/info", nullptr);
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NMon::TEvHttpInfo(monReq)));
+            TAutoPtr<IEventHandle> handle;
+            const auto* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+            const auto bodyPos = result->Answer.find("\r\n\r\n");
+            UNIT_ASSERT_C(bodyPos != TString::npos, result->Answer);
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(result->Answer.substr(bodyPos + 4), &json), result->Answer);
+            const auto& whiteboard = json["Whiteboard"];
+            UNIT_ASSERT_VALUES_EQUAL(whiteboard["PDisk"]["ExpectedSlotCount"].GetUInteger(), withPDisk ? 9 : 7);
+            UNIT_ASSERT_VALUES_EQUAL(whiteboard["PDisk"]["NumActiveSlots"].GetUInteger(), 3);
+
+            const auto& vdisks = whiteboard["VDisks"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(vdisks.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[0]["VDiskSlotId"].GetUInteger(), 1001);
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[0]["AllocatedSize"].GetString(), "123");
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[1]["VDiskSlotId"].GetUInteger(), 1002);
+            UNIT_ASSERT_VALUES_EQUAL(vdisks[1]["NodeId"].GetUInteger(), nodeId);
+            UNIT_ASSERT(vdisks[1].Has("HasWhiteboardData"));
+            UNIT_ASSERT(!vdisks[1]["HasWhiteboardData"].GetBoolean());
+
+            const auto& ddisks = whiteboard["DDisks"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(ddisks.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ddisks[0]["DDiskSlotId"].GetUInteger(), 1010);
+            UNIT_ASSERT(ddisks[0].Has("HasWhiteboardData"));
+            UNIT_ASSERT(!ddisks[0]["HasWhiteboardData"].GetBoolean());
         }
     }
 
@@ -2921,6 +3946,80 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (!paginate) {
                 UNIT_ASSERT_VALUES_EQUAL(groups.front().GetMap().at("GroupId"), "0");
             }
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsExcludeDDisksFromWhiteboard) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        bool useController = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (useController && ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(11);
+                entry->MutableInfo()->SetDDisk(true);
+            } else if (useController && ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                // Trigger Whiteboard fallback after the controller has supplied the group types.
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateRequest) {
+                const auto& fields = ev->Get<TEvWhiteboard::TEvBSGroupStateRequest>()->Record.GetFieldsRequired();
+                UNIT_ASSERT(std::ranges::find(fields, NKikimrWhiteboard::TBSGroupStateInfo::kDDiskFieldNumber) != fields.end());
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                auto& record = ev->Get<TEvWhiteboard::TEvBSGroupStateResponse>()->Record;
+                record.ClearBSGroupStateInfo();
+                const ui32 nodeId = ev->Sender.NodeId();
+                for (ui32 groupId : {10, 11, 12}) {
+                    NKikimrBlobStorage::TGroupInfo group;
+                    group.SetGroupID(groupId);
+                    group.SetGroupGeneration(1);
+                    group.SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+                    group.SetStoragePoolName(groupId == 11 ? "nbs-ddisk" : "nbs-metadata");
+                    auto* slot = group.AddRings()->AddFailDomains()->AddVDiskLocations();
+                    slot->SetNodeID(nodeId);
+                    slot->SetPDiskID(1);
+                    slot->SetVDiskSlotID(groupId);
+                    if (!useController && nodeId == runtime.GetNodeId(0) && groupId != 10) {
+                        group.SetDDisk(groupId == 11);
+                    }
+                    TEvWhiteboard::TEvBSGroupStateUpdate update(TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
+                    record.AddBSGroupStateInfo()->Swap(&update.Record);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        for (bool withController : {false, true}) {
+            useController = withController;
+            const TString path = useController
+                ? "/storage/groups?fields_required=GroupId,PoolName&use_cache=false"
+                : "/storage/groups?whiteboard_only=true";
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), result->Response->Body);
+            UNIT_ASSERT_VALUES_EQUAL(json["TotalGroups"].GetUInteger(), 2);
+            const auto& groups = json["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+            THashSet<TString> groupIds;
+            for (const auto& group : groups) {
+                groupIds.insert(group["GroupId"].GetString());
+            }
+            UNIT_ASSERT_C(groupIds.contains("10") && groupIds.contains("12"), result->Response->Body);
         }
     }
 
@@ -3135,6 +4234,389 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(checkedParameters, 4);
     }
 
+    Y_UNIT_TEST(StorageGroupsBridgeSync) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto observer = runtime.AddObserver<NSysView::TEvSysView::TEvGetGroupsResponse>([](auto& ev) {
+            auto& record = ev->Get()->Record;
+            record.ClearEntries();
+            for (ui32 id : {1, 2, 3}) {
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(id);
+                entry->MutableInfo()->SetErasureSpeciesV2("none");
+            }
+            auto* syncing = record.MutableEntries(0)->MutableInfo();
+            syncing->SetBridgeSyncStatus(NKikimrBridge::SYNCING);
+            syncing->SetBridgeSyncStage("BLOCKS");
+            syncing->SetBridgeSyncLastError("Synchronization failed");
+            syncing->SetBridgeSyncLastProgressTimestamp(2'000'000);
+            syncing->SetBridgeSyncCopyBytesPerSecond(80'000'000);
+            syncing->SetBridgeSyncRemainingBytes(120'000'000'000);
+            syncing->SetBridgeSyncRemainingBytesComplete(false);
+            syncing->SetBridgeSyncRunning(true);
+            syncing->SetBridgeSyncLastErrorTimestamp(1'000'000);
+            syncing->SetBridgeSyncErrorCount(2);
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncStage("SYNCED");
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncStatus(NKikimrBridge::SYNCED);
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncLastProgressTimestamp(3'000'000);
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncCopyBytesPerSecond(0);
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncRunning(false);
+        });
+
+        auto get = [&](TStringBuf params) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups" << params << " HTTP/1.1\r\n\r\n", endpoint, {});
+            const auto sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            return json;
+        };
+        const auto json = get("");
+        UNIT_ASSERT_VALUES_EQUAL(json["Version"].GetUInteger(), 18);
+        const auto& groups = json["StorageGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStatus"].GetString(), "SYNCING");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStage"].GetString(), "BLOCKS");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastError"].GetString(), "Synchronization failed");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastProgressTimestamp"].GetString(), "2000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncCopyBytesPerSecond"].GetString(), "80000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncRemainingBytes"].GetString(), "120000000000");
+        UNIT_ASSERT(groups[0].Has("BridgeSyncRemainingBytesComplete"));
+        UNIT_ASSERT(!groups[0]["BridgeSyncRemainingBytesComplete"].GetBoolean());
+        UNIT_ASSERT(groups[0]["BridgeSyncRunning"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastErrorTimestamp"].GetString(), "1000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncErrorCount"].GetUInteger(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncStage"].GetString(), "SYNCED");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncStatus"].GetString(), "SYNCED");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncLastProgressTimestamp"].GetString(), "3000000");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncCopyBytesPerSecond"].GetString(), "0");
+        UNIT_ASSERT(groups[1].Has("BridgeSyncRunning"));
+        UNIT_ASSERT(!groups[1]["BridgeSyncRunning"].GetBoolean());
+        UNIT_ASSERT(!groups[1].Has("BridgeSyncLastError"));
+        UNIT_ASSERT(!groups[2].Has("BridgeSyncStage"));
+        UNIT_ASSERT(!groups[2].Has("BridgeSyncStatus"));
+        UNIT_ASSERT(!groups[2].Has("BridgeSyncLastError"));
+        for (const char* field : {"BridgeSyncLastProgressTimestamp", "BridgeSyncCopyBytesPerSecond", "BridgeSyncRemainingBytes",
+                "BridgeSyncRemainingBytesComplete", "BridgeSyncRunning", "BridgeSyncLastErrorTimestamp", "BridgeSyncErrorCount"}) {
+            UNIT_ASSERT_C(!groups[2].Has(field), field);
+        }
+
+        const std::pair<const char*, EGroupFields> bridgeFields[] = {
+            {"BridgeSyncStatus", EGroupFields::BridgeSyncStatus},
+            {"BridgeSyncStage", EGroupFields::BridgeSyncStage},
+            {"BridgeSyncLastError", EGroupFields::BridgeSyncLastError},
+            {"BridgeSyncLastProgressTimestamp", EGroupFields::BridgeSyncLastProgressTimestamp},
+            {"BridgeSyncCopyBytesPerSecond", EGroupFields::BridgeSyncCopyBytesPerSecond},
+            {"BridgeSyncRemainingBytes", EGroupFields::BridgeSyncRemainingBytes},
+            {"BridgeSyncRemainingBytesComplete", EGroupFields::BridgeSyncRemainingBytesComplete},
+            {"BridgeSyncRunning", EGroupFields::BridgeSyncRunning},
+            {"BridgeSyncLastErrorTimestamp", EGroupFields::BridgeSyncLastErrorTimestamp},
+            {"BridgeSyncErrorCount", EGroupFields::BridgeSyncErrorCount},
+        };
+        const auto onlyIds = get("?fields_required=GroupId");
+        for (const auto& group : onlyIds["StorageGroups"].GetArray()) {
+            UNIT_ASSERT(group.Has("GroupId"));
+            for (const auto& [name, field] : bridgeFields) {
+                Y_UNUSED(field);
+                UNIT_ASSERT_C(!group.Has(name), name);
+            }
+        }
+        for (const auto& [requestedName, requestedField] : bridgeFields) {
+            const auto selected = get(TStringBuilder() << "?fields_required=" << requestedName);
+            const TStorageGroups::TFieldsType required(selected["FieldsRequired"].GetString().c_str());
+            const TStorageGroups::TFieldsType available(selected["FieldsAvailable"].GetString().c_str());
+            UNIT_ASSERT(required.test(+requestedField));
+            UNIT_ASSERT(available.test(+requestedField));
+            const auto& selectedGroups = selected["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(selectedGroups.size(), 3);
+            for (const auto& [name, field] : bridgeFields) {
+                UNIT_ASSERT_VALUES_EQUAL_C(selectedGroups[0].Has(name), field == requestedField, name);
+                UNIT_ASSERT_C(!selectedGroups[2].Has(name), name);
+            }
+        }
+        for (TStringBuf params : {"?fields_required=", "?fields_required=all"}) {
+            const auto all = get(params);
+            const auto& allGroups = all["StorageGroups"].GetArray();
+            for (const auto& [name, field] : bridgeFields) {
+                Y_UNUSED(field);
+                UNIT_ASSERT_C(allGroups[0].Has(name), name);
+                UNIT_ASSERT_C(!allGroups[2].Has(name), name);
+            }
+            UNIT_ASSERT(allGroups[1].Has("BridgeSyncCopyBytesPerSecond"));
+            UNIT_ASSERT_VALUES_EQUAL(allGroups[1]["BridgeSyncCopyBytesPerSecond"].GetString(), "0");
+            UNIT_ASSERT(allGroups[1].Has("BridgeSyncRunning"));
+            UNIT_ASSERT(!allGroups[1]["BridgeSyncRunning"].GetBoolean());
+            UNIT_ASSERT(allGroups[0].Has("BridgeSyncRemainingBytesComplete"));
+            UNIT_ASSERT(!allGroups[0]["BridgeSyncRemainingBytesComplete"].GetBoolean());
+        }
+        bool fieldsDocumented = false;
+        const auto swagger = TStorageGroups::GetSwagger()["get"];
+        for (const auto& parameter : swagger["parameters"]) {
+            if (parameter["name"].as<std::string>() == "fields_required") {
+                fieldsDocumented = true;
+                const auto description = parameter["description"].as<std::string>();
+                for (const auto& [name, field] : bridgeFields) {
+                    Y_UNUSED(field);
+                    UNIT_ASSERT(description.find("`" + std::string(name) + "`") != std::string::npos);
+                }
+            }
+        }
+        UNIT_ASSERT(fieldsDocumented);
+    }
+
+    Y_UNIT_TEST(StorageGroupsBridgeNavigation) {
+        TPortManager ports;
+        TServer server(TServerSettings(ports.GetPort(2134)).SetNodeCount(1).SetUseRealThreads(false)
+            .SetDomainName("Root").SetUseSectorMap(true).InitKikimrRunConfig());
+        auto& runtime = *server.GetRuntime();
+        auto bridgeInfo = std::make_shared<TBridgeInfo>();
+        for (ui32 i = 0; i < 3; ++i) {
+            auto& pile = bridgeInfo->Piles.emplace_back();
+            pile.BridgePileId = TBridgePileId::FromPileIndex(i);
+            pile.Name = TStringBuilder() << "pile" << i;
+        }
+        auto configObserver = runtime.AddObserver<TEvNodeWardenQueryStorageConfig>([&](auto& ev) {
+            if (dynamic_cast<TStorageGroups*>(runtime.FindActor(ev->Sender))) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvNodeWardenStorageConfig(nullptr, false, bridgeInfo), 0, ev->Cookie));
+                ev.Reset();
+            }
+        });
+        auto groupsObserver = runtime.AddObserver<NSysView::TEvSysView::TEvGetGroupsResponse>([&](auto& ev) {
+            if (!dynamic_cast<TStorageGroups*>(runtime.FindActor(ev->GetRecipientRewrite()))) {
+                return;
+            }
+            auto& record = ev->Get()->Record;
+            record.ClearEntries();
+            // Inline group 1 with parts 2/3; separate proxy 4 with parts 5/6/7; ordinary group 8.
+            for (ui32 id = 1; id <= 8; ++id) {
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(id);
+                auto* info = entry->MutableInfo();
+                info->SetErasureSpeciesV2("none");
+                if (id <= 3) {
+                    info->SetBridgePileId(id);
+                    if (id != 1) {
+                        info->SetProxyGroupId(1);
+                    }
+                } else if (id >= 5 && id <= 7) {
+                    info->SetBridgePileId(id - 4);
+                    info->SetProxyGroupId(4);
+                }
+            }
+        });
+        auto get = [&](TStringBuf params) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups" << params << " HTTP/1.1\r\n\r\n", endpoint, {});
+            const auto sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            return json;
+        };
+        // Bootstrap BSC before bridge mode makes NodeWarden wait for a real bridge configuration.
+        const auto onlyIds = get("?fields_required=GroupId");
+        UNIT_ASSERT_VALUES_EQUAL(onlyIds["StorageGroups"].GetArray().size(), 8);
+        for (const auto& row : onlyIds["StorageGroups"].GetArray()) {
+            UNIT_ASSERT(!row.Has("BridgeMode"));
+            UNIT_ASSERT(!row.Has("BridgeGroups"));
+        }
+        runtime.GetAppData().BridgeModeEnabled = true;
+        for (ui32 id = 1; id <= 8; ++id) {
+            const auto json = get(TStringBuilder() << "?group_id=" << id << "&fields_required=BridgeMode,BridgeGroups,PileName");
+            const auto& rows = json["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL_C(rows.size(), 1, TStringBuilder() << "group_id=" << id << ": " << NJson::WriteJson(json, false));
+            UNIT_ASSERT(rows[0].Has("BridgeMode"));
+            UNIT_ASSERT_VALUES_EQUAL(rows[0]["BridgeMode"].GetBoolean(), id != 8);
+            THashSet<TString> peers;
+            for (const auto& peer : rows[0]["BridgeGroups"].GetArray()) {
+                peers.insert(peer["GroupId"].GetString());
+                const ui32 peerId = FromString<ui32>(peer["GroupId"].GetString());
+                UNIT_ASSERT_VALUES_EQUAL(peer["PileName"].GetString(), TStringBuilder() << "pile" << (peerId <= 3 ? peerId - 1 : peerId - 5));
+            }
+            THashSet<TString> expected;
+            for (ui32 peerId : id <= 3 ? TVector<ui32>{1, 2, 3} : id <= 7 ? TVector<ui32>{5, 6, 7} : TVector<ui32>{}) {
+                if (peerId != id) {
+                    expected.insert(ToString(peerId));
+                }
+            }
+            UNIT_ASSERT(peers == expected);
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsBridgeSyncStatusGrouping) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto observer = runtime.AddObserver<NSysView::TEvSysView::TEvGetGroupsResponse>([](auto& ev) {
+            const NKikimrBridge::ESynchronizationStatus statuses[] = {
+                NKikimrBridge::NOT_REQUIRED, NKikimrBridge::SYNCED, NKikimrBridge::SYNCING,
+                NKikimrBridge::UNKNOWN, NKikimrBridge::PENDING, NKikimrBridge::SYNCING,
+            };
+            auto& record = ev->Get()->Record;
+            record.ClearEntries();
+            for (ui32 id = 1; id <= 7; ++id) {
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(id);
+                entry->MutableInfo()->SetErasureSpeciesV2("none");
+                if (id <= std::size(statuses)) {
+                    entry->MutableInfo()->SetBridgeSyncStatus(statuses[id - 1]);
+                }
+            }
+        });
+        auto get = [&](TStringBuf params, const TString& userToken = {}) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups" << params << " HTTP/1.1\r\n\r\n", endpoint, {});
+            const auto sender = runtime.AllocateEdgeActor();
+            auto event = std::make_unique<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(request);
+            event->UserToken = userToken;
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, event.release(), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            return json;
+        };
+
+        const auto flat = get("?fields_required=BridgeSyncStatus");
+        UNIT_ASSERT_VALUES_EQUAL(flat["Version"].GetUInteger(), 18);
+        const TStorageGroups::TFieldsType required(flat["FieldsRequired"].GetString().c_str());
+        UNIT_ASSERT(required.test(+EGroupFields::BridgeSyncStatus));
+        const auto& groups = flat["StorageGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 7);
+        const char* statuses[] = {"NOT_REQUIRED", "SYNCED", "SYNCING", "UNKNOWN", "PENDING", "SYNCING"};
+        for (size_t i = 0; i < std::size(statuses); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(groups[i]["BridgeSyncStatus"].GetString(), statuses[i]);
+        }
+        UNIT_ASSERT(!groups[6].Has("BridgeSyncStatus"));
+
+        const auto grouped = get("?group=BridgeSyncStatus");
+        UNIT_ASSERT(!grouped.Has("NeedGroup"));
+        const auto& buckets = grouped["StorageGroupGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(buckets.size(), 5);
+        for (const auto& bucket : buckets) {
+            const auto& status = bucket["GroupName"].GetString();
+            const auto expected = status == "SYNCING" || status == "UNKNOWN" ? "2" : "1";
+            UNIT_ASSERT_VALUES_EQUAL(bucket["GroupCount"].GetStringRobust(), expected);
+        }
+        const char* groupedStatuses[] = {"SYNCED", "SYNCING", "PENDING", "NOT_REQUIRED", "UNKNOWN"};
+        for (size_t i = 0; i < std::size(groupedStatuses); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(buckets[i]["GroupName"].GetString(), groupedStatuses[i]);
+        }
+
+        for (const char* status : {"SYNCING", "UNKNOWN"}) {
+            const auto filtered = get(TStringBuilder() << "?filter_group_by=BridgeSyncStatus&filter_group=" << status);
+            UNIT_ASSERT(!filtered.Has("NeedFilter"));
+            const auto& matches = filtered["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(matches.size(), 2);
+            for (const auto& group : matches) {
+                const auto actual = group.Has("BridgeSyncStatus") ? group["BridgeSyncStatus"].GetString() : TString("UNKNOWN");
+                UNIT_ASSERT_VALUES_EQUAL(actual, status);
+            }
+        }
+
+        const char* sortedStatuses[] = {"SYNCED", "SYNCING", "SYNCING", "PENDING", "NOT_REQUIRED", "UNKNOWN", "UNKNOWN"};
+        for (bool reverse : {false, true}) {
+            const auto sorted = get(reverse ? "?sort=-BridgeSyncStatus" : "?sort=BridgeSyncStatus");
+            UNIT_ASSERT(!sorted.Has("NeedSort"));
+            const auto& rows = sorted["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), std::size(sortedStatuses));
+            for (size_t i = 0; i < rows.size(); ++i) {
+                const auto actual = rows[i].Has("BridgeSyncStatus") ? rows[i]["BridgeSyncStatus"].GetString() : TString("UNKNOWN");
+                UNIT_ASSERT_VALUES_EQUAL(actual, sortedStatuses[reverse ? rows.size() - 1 - i : i]);
+            }
+        }
+        const auto numeric = get("?enums=false");
+        UNIT_ASSERT_VALUES_EQUAL(numeric["StorageGroups"][2]["BridgeSyncStatus"].GetUInteger(),
+            static_cast<ui32>(NKikimrBridge::SYNCING));
+
+        const auto swagger = TStorageGroups::GetSwagger()["get"];
+        ui32 documentedParameters = 0;
+        for (const auto& parameter : swagger["parameters"]) {
+            const auto name = parameter["name"].as<std::string>();
+            if (name == "sort" || name == "group" || name == "filter_group_by" || name == "fields_required") {
+                UNIT_ASSERT(parameter["description"].as<std::string>().find("`BridgeSyncStatus`") != std::string::npos);
+                ++documentedParameters;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(documentedParameters, 4);
+
+        auto& appData = runtime.GetAppData();
+        auto& security = *appData.DomainsConfig.MutableSecurityConfig();
+        security.AddAdministrationAllowedSIDs("admin");
+        security.AddMonitoringAllowedSIDs("monitoring");
+        security.AddViewerAllowedSIDs("viewer");
+        security.AddDatabaseAllowedSIDs("database-user");
+        appData.AdministrationAllowedSIDs = {"admin"};
+        appData.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
+        const TPathId rootKey(appData.DomainsInfo->GetDomain()->SchemeRoot, 1);
+        THashSet<TActorId> scopedActors;
+        auto navigate = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
+            if (!dynamic_cast<TStorageGroups*>(runtime.FindActor(ev->Sender))) {
+                return;
+            }
+            scopedActors.insert(ev->Sender);
+            auto result = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+            result->ResultSet.resize(1);
+            auto& entry = result->ResultSet.front();
+            entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+            entry.Path = SplitPath("/Root");
+            entry.DomainInfo = new NSchemeCache::TDomainInfo(rootKey, rootKey);
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                new TEvTxProxySchemeCache::TEvNavigateKeySetResult(result.release()), 0, ev->Cookie));
+            ev.Reset();
+        });
+        auto board = runtime.AddObserver<TEvStateStorage::TEvBoardInfo>([&](auto& ev) {
+            if (scopedActors.contains(ev->GetRecipientRewrite()) &&
+                    ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+                runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                    new TEvStateStorage::TEvBoardInfo(TEvStateStorage::TEvBoardInfo::EStatus::Ok, ev->Get()->Path),
+                    0, ev->Cookie));
+                ev.Reset();
+            }
+        });
+        const NACLib::TUserToken token({.UserSID = "database-user"});
+        for (const char* status : {"SYNCING", "PENDING"}) {
+            const auto scoped = get(TStringBuilder()
+                << "?database=/Root&direct=true&filter_group_by=BridgeSyncStatus&filter_group=" << status,
+                token.SerializeAsString());
+            UNIT_ASSERT(scoped["NeedFilter"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(scoped["FoundGroups"].GetStringRobust(), "7");
+            const auto& rows = scoped["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 7);
+            std::set<TString> ids;
+            for (const auto& row : rows) {
+                UNIT_ASSERT(!row.Has("BridgeSyncStatus"));
+                ids.insert(row["GroupId"].GetString());
+            }
+            UNIT_ASSERT(ids == std::set<TString>({"1", "2", "3", "4", "5", "6", "7"}));
+        }
+    }
+
     void CheckStorageGroupsStateInfoFieldsRequired(bool whiteboard, bool missingStatuses = false) {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))
@@ -3225,7 +4707,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             const auto& groups = json.GetMap().at("StorageGroups").GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 18);
             UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
             const auto& group = groups[0].GetMap();
             UNIT_ASSERT_VALUES_EQUAL(group.at("GroupId").GetString(), "2");

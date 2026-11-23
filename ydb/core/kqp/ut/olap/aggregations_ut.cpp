@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
-        AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        YDB_LOG_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
 
         {
             TString query = R"(

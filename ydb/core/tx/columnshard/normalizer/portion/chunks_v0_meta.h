@@ -47,11 +47,11 @@ private:
         if (!rowset.IsReady()) {
             return TConclusionStatus::Fail("Not ready");
         }
-        AFL_VERIFY(!rowset.EndOfSet());
+        YDB_LOG_VERIFY(!rowset.EndOfSet());
         NKikimrTxColumnShard::TIndexColumnMeta metaProto;
-        AFL_VERIFY(metaProto.ParseFromString(rowset.GetValue<NColumnShard::Schema::IndexPortions::Metadata>()));
+        YDB_LOG_VERIFY(metaProto.ParseFromString(rowset.GetValue<NColumnShard::Schema::IndexPortions::Metadata>()));
         auto emplaced = PortionMetaCache.emplace(key, metaProto.GetPortionMeta());
-        AFL_VERIFY(emplaced.second);
+        YDB_LOG_VERIFY(emplaced.second);
         return emplaced.first->second;
     }
 

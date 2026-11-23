@@ -8,7 +8,9 @@ TEST_SRCS(
     test_workload_topic.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
+
 REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE)

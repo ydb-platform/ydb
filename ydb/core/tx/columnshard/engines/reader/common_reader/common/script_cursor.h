@@ -15,7 +15,7 @@ public:
         : CurrentStepIdx(index)
         , Script(script)
     {
-        AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
+        YDB_LOG_VERIFY(!Script->IsFinished(CurrentStepIdx));
     }
 
     const TString& GetName() const {
@@ -45,7 +45,7 @@ public:
     }
 
     bool Next() {
-        AFL_VERIFY(StepStartInstant != TMonotonic::Zero());
+        YDB_LOG_VERIFY(StepStartInstant != TMonotonic::Zero());
         const auto now = TMonotonic::Now();
         Script->AddStepDuration(CurrentStepIdx, TDuration::Zero(), now - StepStartInstant);
         StepStartInstant = TMonotonic::Now();

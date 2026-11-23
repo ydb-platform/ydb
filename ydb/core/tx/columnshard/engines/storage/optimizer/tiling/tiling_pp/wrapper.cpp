@@ -206,6 +206,10 @@ protected:
         Core.ModifyPortions(add, std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
     }
 
+    void DoAddLoadedPortions(const std::vector<TPortionInfo::TPtr>& add) override {
+        Core.AddLoadedPortions(add);
+    }
+
     bool DoUsesPullCompactionScheduling() const override {
         return true;
     }
@@ -287,7 +291,7 @@ public:
         , PortionExpectedSize(settings.PortionExpectedSize)
         , CompactionThreads(settings.CompactionThreads)
     {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 };
 

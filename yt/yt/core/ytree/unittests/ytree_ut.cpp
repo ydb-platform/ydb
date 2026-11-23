@@ -34,7 +34,7 @@ void SyncYPathMultisetAttributes(
         .ThrowOnError();
 }
 
-TEST(TYTreeTest, TestMultisetAttributes)
+TEST(TYTreeTest, MultisetAttributes)
 {
     std::vector<std::pair<std::string, TYsonString>> attributes1 = {
         {"k1", TYsonString(TStringBuf("v1"))},
@@ -66,7 +66,7 @@ TEST(TYTreeTest, TestMultisetAttributes)
 
 }
 
-TEST(TYTreeTest, TestMultisetInvalidAttributes)
+TEST(TYTreeTest, MultisetInvalidAttributes)
 {
     std::vector<std::pair<std::string, TYsonString>> validAttributes = {
         {"k1", TYsonString(TStringBuf("v1"))},
@@ -87,7 +87,7 @@ TEST(TYTreeTest, TestMultisetInvalidAttributes)
     EXPECT_THROW(SyncYPathMultisetAttributes(node, "/@", invalidAttributes), std::exception);
 }
 
-TEST(TYTreeTest, TestMultisetAttributesByPath)
+TEST(TYTreeTest, MultisetAttributesByPath)
 {
     std::vector<std::pair<std::string, TYsonString>> attributes1 = {
         {"a", TYsonString(TStringBuf("{}"))},
@@ -110,7 +110,7 @@ TEST(TYTreeTest, TestMultisetAttributesByPath)
     EXPECT_EQ(attribute->GetKeys(), std::vector<std::string>({"b", "c"}));
 }
 
-TEST(TYTreeTest, TestGetWithAttributes)
+TEST(TYTreeTest, GetWithAttributes)
 {
     auto yson = TYsonStringBuf(
         "{"

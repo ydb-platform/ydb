@@ -6,8 +6,13 @@
 #include <util/generic/ylimits.h>
 #include <util/generic/array_ref.h>
 
+#include <variant>
+
 namespace NKikimr {
 namespace NTable {
+
+    class TMemTable;
+    class TPart;
 
     using TRowId = ui64;
     using TTag  = ui32;
@@ -108,6 +113,8 @@ namespace NTable {
             return Valid;
         }
     };
+
+    using TRowSource = std::variant<const TMemTable*, const TPart*>;
 
     struct TSelectRowVersionResult {
         EReady Ready;

@@ -225,7 +225,7 @@ std::vector<TErrorAttribute> SkiffYsonErrorAttributes(const TComplexTypeFieldDes
     return {
         TErrorAttribute("complex_type_field", descriptor.GetDescription()),
         TErrorAttribute("logical_type_dbg", ToString(*descriptor.GetType())),
-        TErrorAttribute("skiff_schema_dbg", GetShortDebugString(skiffSchema)),
+        TErrorAttribute("skiff_schema_dbg", GetShortDebugString(skiffSchema, /*includeNames*/ true)),
     };
 }
 

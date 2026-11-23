@@ -1,3 +1,4 @@
+#include "kqp_explain_context.h"
 #include "../kqp_operator.h"
 
 #include <yql/essentials/utils/log/log.h>
@@ -21,16 +22,37 @@ void AddOptimizerEstimates(NJson::TJsonValue& json, IOperator* op) {
     addEstimate("E-Cost", *op->Props.Cost);
 }
 
-NJson::TJsonValue MakeJson(IOperator* op, ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = op->ToJson(explainFlags, registry);
+NJson::TJsonValue MakeJson(IOperator* op, ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext& explain) {
+    auto res = op->ToJson(explainFlags, registry, &explain);
 
     AddOptimizerEstimates(res, op);
     return res;
 }
 
-NJson::TJsonValue MakeJson(IOperator* op, ui32 operatorId, ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = MakeJson(op, explainFlags, registry);
+NJson::TJsonValue MakeJson(IOperator* op, ui32 operatorId, ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext& explain) {
+    auto res = MakeJson(op, explainFlags, registry, explain);
     res["OperatorId"] = operatorId;
+    // Internal categories match Stats.Operator[].Type supplied by DQ. Display
+    // names are not suitable for correlation (they may contain expressions).
+    switch (op->Kind) {
+        case EOperator::Filter:
+            res["RuntimeStatsType"] = "Filter";
+            break;
+        case EOperator::Aggregate:
+            res["RuntimeStatsType"] = "Aggregation";
+            break;
+        case EOperator::Join: {
+            const auto& join = CastOperator<TOpJoin>(*op);
+            // Scalar cross joins and MapJoin do not emit Join counters.
+            if (op->Props.UseBlockHashJoin.value_or(false) ||
+                (join.JoinKind != "Cross" && op->Props.JoinAlgo != EJoinAlgoType::MapJoin)) {
+                res["RuntimeStatsType"] = "Join";
+            }
+            break;
+        }
+        default:
+            break;
+    }
     return res;
 }
 
@@ -40,6 +62,7 @@ struct TExplainJsonContext {
     ui64& NodeCounter;
     const THashMap<IOperator*, ui32>& OperatorIds;
     ui32 ExplainFlags;
+    TExplainContext& Explain;
 
     ui64 NextNodeId() {
         return NodeCounter++;
@@ -64,7 +87,7 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
     result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    auto operatorJson = MakeJson(op, ctx.ExplainFlags, ctx.Registry);
+    auto operatorJson = MakeJson(op, ctx.ExplainFlags, ctx.Registry, ctx.Explain);
     // Synthetic operators that are absent from the execution plan cannot be correlated with runtime stats.
     if (auto operatorId = ctx.OperatorIds.find(op); operatorId != ctx.OperatorIds.end()) {
         operatorJson["OperatorId"] = operatorId->second;
@@ -105,8 +128,9 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
 
 } // anonymous namespace
 
-NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
-    Y_UNUSED(explainFlags);
+NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags, TExplainContext* explain) {
+    TExplainContext local;
+    if (!explain) explain = &local;
 
     // First construct the ResultSet
     NJson::TJsonValue result;
@@ -159,6 +183,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
 
         // First, build the list of operators in the stage
         auto operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+        bool stageStatsAssigned = false;
         for (auto & op : ops) {
             if (stageName == "") {
                 stageName = op->GetExplainName();
@@ -166,7 +191,15 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
                 stageName = stageName + "-" + op->GetExplainName();
             }
 
-            operatorList.AppendValue(MakeJson(op, operatorIds.at(op), explainFlags, PlanProps.InfoUnitRegistry));
+            auto json = MakeJson(op, operatorIds.at(op), explainFlags, PlanProps.InfoUnitRegistry, *explain);
+            // Operators are output-first. The first non-Map is the last one
+            // executed in this stage; use stage output for its missing metrics,
+            // including when runtime counters cannot be matched unambiguously.
+            if (!stageStatsAssigned && op->Kind != EOperator::Map) {
+                json["UseStageStats"] = true;
+                stageStatsAssigned = true;
+            }
+            operatorList.AppendValue(std::move(json));
         }
 
         // Build a list of subplans - these are connection objects of input stages
@@ -231,14 +264,16 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
 }
 
 // For explain JSON we recurse over the operators of the plan
-NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags, TExplainContext* explain) {
+    TExplainContext local;
+    if (!explain) explain = &local;
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
     result["PlanNodeType"] = "ResultSet";
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    TExplainJsonContext ctx{PlanProps, PlanProps.InfoUnitRegistry, nodeCounter, operatorIds, explainFlags};
+    TExplainJsonContext ctx{PlanProps, PlanProps.InfoUnitRegistry, nodeCounter, operatorIds, explainFlags, *explain};
     plans.AppendValue(GetExplainJsonRec(GetInput().Get(), ctx));
     result["Plans"] = plans;
 

@@ -39,6 +39,7 @@ class TpccSuiteBase(LoadSuiteBase):
     warehouses: int = 4500
     threads: int = 4
     time_s: float = 60 * float(getenv('TPCC_TIME_MINUTES', 30))
+    warmup_s: float = 0.0
     # Legacy compaction timeout must not depend solely on low warehouse counts
     # (e.g. functional tests with 5 warehouses), otherwise setup becomes flaky.
     legacy_compaction_min_timeout_s: int = 60
@@ -186,6 +187,7 @@ class TpccSuiteBase(LoadSuiteBase):
             users=self.get_users(),
             path=self.get_tpcc_path(),
             bench_time=self.time_s,
+            warmup=self.warmup_s,
             warehouses=self.warehouses,
             threads=self.threads,
             tx_mode=self.tx_mode

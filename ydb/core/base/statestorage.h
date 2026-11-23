@@ -358,6 +358,9 @@ struct TEvStateStorage {
         const ui64 LockedFor;
         const TSignature Signature;
         TVector<TFollowerInfo> Followers;
+        // Cluster-state version of this request's immutable StateStorage configuration; zero means unknown.
+        ui64 ClusterStateGeneration = 0;
+        ui64 ClusterStateGuid = 0;
 
         TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, TVector<TFollowerInfo>&& followers)
             : Status(status)

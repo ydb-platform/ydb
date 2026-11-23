@@ -2,6 +2,7 @@
 #include "flat_iterator_ops.h"
 #include "flat_mem_iter.h"
 #include "flat_part_iter.h"
+#include "flat_row_eggs.h"
 #include "flat_row_remap.h"
 #include "flat_row_state.h"
 #include "flat_range_cache.h"
@@ -353,8 +354,18 @@ public:
     ui64 GetDeltaTxId() const;
     EReady SkipUncommitted();
     std::tuple<ELockMode, ui64> GetLockInfo() const;
+
+    // Next(All/Data) starts at the newest version visible at SnapshotVersion.
+    // Next(Uncommitted) exposes the newest state without applying that bound.
+    // Pass a strictly lower version to SkipToRowVersion to visit older rows.
     TRowVersion GetRowVersion() const;
     EReady SkipToRowVersion(TRowVersion rowVersion);
+
+    using TSource = TRowSource;
+
+    // Valid after a successful read. For a reconstructed row this is the
+    // newest contributing source, independent of the sources filling its base.
+    TSource GetSource() const;
 
 public:
     const TRowScheme* Scheme;
@@ -789,6 +800,23 @@ inline std::tuple<ELockMode, ui64> TTableIterBase<TIteratorOps>::GetLockInfo() c
             auto& it = *RunIters[ai.Index];
             return it.GetLockInfo();
         }
+        default:
+            Y_TABLET_ERROR("Unexpected iterator type");
+    }
+}
+
+template<class TIteratorOps>
+inline typename TTableIterBase<TIteratorOps>::TSource TTableIterBase<TIteratorOps>::GetSource() const
+{
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
+
+    const TIteratorId ai = TReverseIter(Inactive)->IteratorId;
+    switch (ai.Type) {
+        case EType::Mem:
+            return MemIters[ai.Index]->MemTable;
+        case EType::Run:
+            return RunIters[ai.Index]->Part();
         default:
             Y_TABLET_ERROR("Unexpected iterator type");
     }

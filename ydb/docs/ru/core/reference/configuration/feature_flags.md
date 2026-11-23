@@ -69,10 +69,12 @@ feature_flags:
 | `enable_json_index`                                      | [JSON-индексы](../../dev/json-indexes.md) для ускорения поиска в полях JSON |
 | `enable_json_index_auto_select`                          | Автоматический выбор [JSON-индексов](../../dev/json-indexes.md) при выполнении запросов |
 | `enable_fulltext_index`                                  | [Полнотекстовый индекс](../../dev/fulltext-indexes.md) для полнотекстового поиска |
+| `enable_fulltext_index_row_id`                           | [Полнотекстовые индексы](../../dev/fulltext-indexes.md#primary-key) на таблицах с нецелочисленным или составным первичным ключом через `__ydb_row_id` |
 | `enable_local_bloom_filter_index`                        | [Локальный Блум-индекс](../../dev/bloom-skip-indexes.md#types) типа `bloom_filter` |
 | `enable_local_bloom_ngram_filter_index`                  | [Локальный Блум-индекс](../../dev/bloom-skip-indexes.md#types) типа `bloom_ngram_filter` |
 | `enable_local_min_max_index`                             | [Локальный min_max-индекс](../../dev/min_max-skip-index.md) |
 | `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирование топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
+| `enable_online_add_unique_index` | [Построение уникального вторичного индекса](../../concepts/query_execution/secondary_indexes.md#index-add) в существующей таблице без блокировки записи на время построения |
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
 | `enable_view_export`                                     | Поддержка представлений (`VIEW`) в операциях резервного копирования и восстановления |

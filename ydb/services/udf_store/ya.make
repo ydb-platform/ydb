@@ -16,24 +16,24 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/lib/udf/manifest
-    ydb/library/actors/core
+    library/cpp/digest/md5
+    library/cpp/json
     ydb/core/base
-    ydb/core/kqp/common
     ydb/core/keyvalue
+    ydb/core/kqp/common/dynamic_function_registry
     ydb/core/tx/scheme_cache
     ydb/library/aclib
+    ydb/library/actors/core
     ydb/library/table_creator
+    ydb/public/lib/udf/manifest
+    ydb/services/metadata
+    ydb/services/metadata/abstract
+    ydb/services/metadata/manager
+    ydb/services/metadata/request
     ydb/services/udf_store/compile_controller/protos
     ydb/services/udf_store/metadata_subscription
     ydb/services/udf_store/wasm
-    ydb/services/metadata/request
-    ydb/services/metadata/abstract
-    ydb/services/metadata/manager
-    ydb/services/metadata
     yql/essentials/minikql
-    library/cpp/digest/md5
-    library/cpp/json
 )
 
 END()

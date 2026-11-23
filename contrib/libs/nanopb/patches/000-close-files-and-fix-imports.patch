@@ -1,6 +1,6 @@
---- contrib/libs/nanopb/generator/nanopb_generator.py   (index)
-+++ contrib/libs/nanopb/generator/nanopb_generator.py   (working tree)
-@@ -17,6 +17,8 @@ import shlex
+--- contrib/libs/nanopb/generator/nanopb_generator.py
++++ contrib/libs/nanopb/generator/nanopb_generator.py
+@@ -17,6 +17,8 @@
  import os
  from functools import reduce
  
@@ -9,7 +9,7 @@
  # Python-protobuf breaks easily with protoc version differences if
  # using the cpp or upb implementation. Force it to use pure Python
  # implementation. Performance is not very important in the generator.
-@@ -33,7 +35,6 @@ except:
+@@ -27,7 +29,6 @@
  try:
      import google.protobuf.text_format as text_format
      import google.protobuf.descriptor_pb2 as descriptor
@@ -17,7 +17,7 @@
      import google.protobuf.descriptor
      import google.protobuf.message_factory as message_factory
  except:
-@@ -60,7 +61,7 @@ else:
+@@ -63,7 +64,7 @@
  
  if getattr(sys, 'frozen', False):
      # Binary package, just import the file
@@ -26,7 +26,7 @@
  else:
      # Import nanopb_pb2.py, rebuilds if necessary and not disabled
      # by env variable NANOPB_PB2_NO_REBUILD
-@@ -2612,7 +2613,8 @@ def main_plugin():
+@@ -2741,7 +2742,8 @@
          msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
          msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
  
@@ -36,9 +36,9 @@
  
      request = plugin_pb2.CodeGeneratorRequest.FromString(data)
  
-@@ -2676,7 +2678,8 @@ def main_plugin():
-     if hasattr(plugin_pb2.CodeGeneratorResponse, "FEATURE_PROTO3_OPTIONAL"):
-         response.supported_features = plugin_pb2.CodeGeneratorResponse.FEATURE_PROTO3_OPTIONAL
+@@ -2810,7 +2812,8 @@
+         response.minimum_edition = descriptor.EDITION_PROTO2
+         response.maximum_edition = descriptor.EDITION_2024
  
 -    io.open(sys.stdout.fileno(), "wb").write(response.SerializeToString())
 +    with io.open(sys.stdout.fileno(), "wb") as output:

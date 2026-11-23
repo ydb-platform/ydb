@@ -33,6 +33,32 @@ void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
         : TStringBuf("..");
     SubstGlobal(blob, "{{MON_ROOT}}", monRoot);
 
+    TStringBuilder hnsw;
+    if (AppData()->FeatureFlags.GetEnableHnswIndex() && !HnswIndexCache.empty()) {
+        hnsw << "<h3>HNSW indexes</h3><p>Snapshot at page load; reload to refresh.</p>"
+             << "<table class='table table-sm'><thead><tr>"
+             << "<th>Local table</th><th>Index path</th><th>Ready</th><th>Building</th>"
+             << "<th>Reserved bytes</th><th>Builds</th><th>Rebuilds</th>"
+             << "<th>Cache hits</th><th>Cache misses</th>"
+             << "<th>Unsupported reads</th><th>Range fallbacks</th><th>Candidate fallbacks</th>"
+             << "</tr></thead><tbody>";
+        for (const auto& [localTid, indexes] : HnswIndexCache) {
+            for (const auto& [indexId, entry] : indexes) {
+                Y_UNUSED(entry);
+                const auto stats = GetHnswIndexStats(localTid, indexId);
+                hnsw << "<tr><td>" << localTid << "</td><td>" << indexId
+                     << "</td><td>" << stats->Ready << "</td><td>" << stats->Building
+                     << "</td><td>" << stats->MemoryBytes << "</td><td>" << stats->Builds
+                     << "</td><td>" << stats->Rebuilds << "</td><td>" << stats->CacheHits
+                     << "</td><td>" << stats->CacheMisses << "</td><td>" << stats->UnsupportedReads
+                     << "</td><td>" << stats->RangeFallbacks << "</td><td>" << stats->CandidateFallbacks
+                     << "</td></tr>";
+            }
+        }
+        hnsw << "</tbody></table>";
+    }
+    SubstGlobal(blob, "{{HNSW_INDEX_STATS}}", hnsw);
+
     TStringBuilder response;
     response << "HTTP/1.1 200 Ok\r\n";
     response << "Content-Type: text/html\r\n";

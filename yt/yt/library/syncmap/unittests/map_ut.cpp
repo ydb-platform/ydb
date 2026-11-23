@@ -50,7 +50,7 @@ TEST(TSyncMapTest, SingleEmplace)
     }
 }
 
-TEST(TSyncMapTest, TestInsertLoop)
+TEST(TSyncMapTest, InsertLoop)
 {
     TSyncMap<int, int> map;
 
@@ -66,7 +66,7 @@ TEST(TSyncMapTest, TestInsertLoop)
     }
 }
 
-TEST(TSyncMapTest, TestFlush)
+TEST(TSyncMapTest, Flush)
 {
     TSyncMap<int, int> map;
 

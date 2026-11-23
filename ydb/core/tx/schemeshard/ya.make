@@ -19,6 +19,7 @@ RECURSE_FOR_TESTS(
     ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
+    ut_database_freeze
     ut_shred
     ut_shred_reboots
     ut_export
@@ -47,6 +48,7 @@ RECURSE_FOR_TESTS(
     ut_olap
     ut_olap_reboots
     ut_partition_stats
+    ut_pq_configure_bench
     ut_pq_reboots
     ut_reboots
     ut_replication
@@ -110,6 +112,8 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__index_shadow_data_repair.cpp
+    schemeshard__index_shadow_data_repair.h
     schemeshard__list_users.cpp
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
@@ -143,6 +147,7 @@ SRCS(
     schemeshard__operation_alter_streaming_query.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
+    schemeshard__operation_repair_index_shadow_data.cpp
     schemeshard__operation_alter_user_attrs.cpp
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
@@ -240,6 +245,7 @@ SRCS(
     schemeshard__state_changed_reply.cpp
     schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard_database_freeze.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
@@ -300,6 +306,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_import_kesus_restorer.cpp
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
@@ -357,6 +364,7 @@ GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweep
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zstd
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
     library/cpp/iterator
@@ -415,6 +423,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
+    ydb/public/lib/ydb_cli/dump/util/compatibility
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     yql/essentials/public/udf

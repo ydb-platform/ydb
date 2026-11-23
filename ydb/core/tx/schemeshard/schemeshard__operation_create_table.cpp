@@ -9,6 +9,9 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
 
+#include <util/generic/algorithm.h>
+#include <util/generic/is_in.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
@@ -361,6 +364,7 @@ class TCreateTable: public TSubOperation {
     virtual const char* Name() const override final { return "TCreateTable"; }
 
     bool AllowShadowData = false;
+    bool AllowPgForBackup = false;
     THashSet<TString> LocalSequences;
 
     static TTxState::ETxState NextState() {
@@ -406,6 +410,10 @@ public:
 
     void SetAllowShadowDataForBuildIndex() {
         AllowShadowData = true;
+    }
+
+    void SetAllowPgForBackup(bool allowPgForBackup) {
+        AllowPgForBackup = allowPgForBackup;
     }
 
     void SetLocalSequences(const THashSet<TString>& localSequences) {
@@ -607,8 +615,13 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        const bool disablePgCompatibility = !AllowPgForBackup && AppData()->FeatureFlags.GetDisablePgCompatibility();
+        const bool checkIndexPgCompatibility = disablePgCompatibility && parentPath.Base()->IsTableIndex()
+            && (Transaction.GetInternal() || (context.IsAllowedPrivateTables
+                && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable));
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
             .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+            .DisablePgCompatibility = disablePgCompatibility && !checkIndexPgCompatibility,
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
             .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
@@ -629,6 +642,26 @@ public:
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
+        }
+
+        if (checkIndexPgCompatibility) {
+            const auto& indexInfo = *context.SS->Indexes.at(parentPath.Base()->PathId);
+            const auto& index = indexInfo.AlterData ? *indexInfo.AlterData : indexInfo;
+            const auto& baseTable = *context.SS->Tables.at(parentPath.Parent().Base()->PathId);
+            for (const auto& [_, column] : alterData->Columns) {
+                if (column.PType.GetTypeId() != NScheme::NTypeIds::Pg) {
+                    continue;
+                }
+                const bool inheritedKey = AnyOf(baseTable.KeyColumnIds, [&](ui32 keyId) {
+                    const auto& key = baseTable.Columns.at(keyId);
+                    return key.Name == column.Name && key.PType == column.PType && key.PTypeMod == column.PTypeMod;
+                });
+                if (!inheritedKey || IsIn(index.IndexKeys, column.Name) || IsIn(index.IndexDataColumns, column.Name)) {
+                    result->SetError(NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "PostgreSQL compatibility is disabled for index column '" << column.Name << "'");
+                    return result;
+                }
+            }
         }
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
@@ -827,9 +860,11 @@ bool SetName<TTag>(
 
 } // namespace NOperation
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, bool allowPgForBackup) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
-    static_cast<TCreateTable*>(obj.Get())->SetLocalSequences(localSequences);
+    auto* table = static_cast<TCreateTable*>(obj.Get());
+    table->SetLocalSequences(localSequences);
+    table->SetAllowPgForBackup(allowPgForBackup);
     return obj;
 }
 

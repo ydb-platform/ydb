@@ -86,7 +86,7 @@ TEST(TAsyncOutputStreamTest, MultipleWrites)
     ASSERT_TRUE(closeResult.IsSet());
 }
 
-TEST(TAsyncOutputStreamTest, TestEmptyString)
+TEST(TAsyncOutputStreamTest, EmptyString)
 {
     auto pipe = New<TAsyncStreamPipe>();
     auto asyncWriter = CreateZeroCopyAdapter(static_cast<IAsyncOutputStreamPtr>(pipe));

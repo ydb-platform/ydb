@@ -156,6 +156,15 @@ SET(ORIG_SOURCES
     mkql_window_range_pg_caller.h
     mkql_withcontext.cpp
     mkql_zip.cpp
+    mkql_block_agg_state_helper.cpp
+    mkql_block_coalesce_blending_helper.cpp
+    mkql_counters.cpp
+    mkql_factories.cpp
+    mkql_match_recognize_matched_vars.cpp
+    mkql_match_recognize_nfa.cpp
+    mkql_match_recognize_save_load.cpp
+    mkql_match_recognize_version.cpp
+    mkql_saveload.cpp
 )
 
 ADDINCL(

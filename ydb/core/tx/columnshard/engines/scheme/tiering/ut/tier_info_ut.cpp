@@ -85,6 +85,30 @@ Y_UNIT_TEST_SUITE(ColumnShardTtlTypes) {
         }
     }
 
+    Y_UNIT_TEST(NullNeverExpires) {
+        const auto tier = TTierInfo::MakeTtl(TDuration::Seconds(1), "ts");
+        const std::vector<std::pair<std::shared_ptr<arrow::DataType>, NScheme::TTypeId>> types = {
+            { arrow::timestamp(arrow::TimeUnit::MICRO), NScheme::NTypeIds::Timestamp },
+            { arrow::uint16(), NScheme::NTypeIds::Date },
+            { arrow::uint32(), NScheme::NTypeIds::Datetime },
+            { arrow::int32(), NScheme::NTypeIds::Date32 },
+            { arrow::int64(), NScheme::NTypeIds::Timestamp64 },
+            { arrow::binary(), NScheme::NTypeIds::DyNumber },
+        };
+        for (const auto& [type, typeId] : types) {
+            UNIT_ASSERT_VALUES_EQUAL_C(*tier->ScalarToInstant(arrow::MakeNullScalar(type), typeId), TInstant::Max(), type->ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(*tier->ScalarToInstant(nullptr, NScheme::NTypeIds::Timestamp), TInstant::Max());
+
+        TTiering tiering;
+        UNIT_ASSERT(tiering.Add(TTierInfo::MakeTtl(TDuration::Seconds(10), "ts")));
+        const auto context = tiering.GetTierToMove(
+            arrow::MakeNullScalar(arrow::timestamp(arrow::TimeUnit::MICRO)), TInstant::Seconds(100), false, NScheme::NTypeIds::Timestamp);
+        UNIT_ASSERT_VALUES_UNEQUAL(context.GetCurrentTierName(), TTierInfo::GetTtlTierName());
+        UNIT_ASSERT(context.GetNextTierName());
+        UNIT_ASSERT(*context.GetNextTierWaiting() > TDuration::Days(365));
+    }
+
     Y_UNIT_TEST(ExpirationBoundary) {
         TTiering tiering;
         UNIT_ASSERT(tiering.Add(TTierInfo::MakeTtl(TDuration::Seconds(10), "ts", 1)));

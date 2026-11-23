@@ -471,6 +471,7 @@ NJson::TJsonValue BuildPresentation(const TSkipperSnapshot& snapshot, TMonotonic
             }
             card["participating"] = participating ? TJson(*participating) : Null();
             const bool excluded = state == EPileState::Disconnected || state == EPileState::Inactive
+                || state == EPileState::HotStandby
                 || (state == EPileState::NotSynchronized && viewFresh && participating && !*participating);
             card["assessment"] = excluded ? "not_assessed" : assessed ? "available"
                 : assessment && assessment->Verdict.NewestEvidenceSentAt && !evidenceFresh ? "expired" : "unavailable";

@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -38,6 +38,8 @@
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -3840,6 +3842,176 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateAlterZstdColumnFamilies, UseQueryService) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableRowTableZstdCompression(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        const TString tableName = "/Root/ZstdColumnFamilies";
+
+        auto checkFamilies = [&](const THashMap<TString, EColumnFamilyCompression>& expected) {
+            auto result = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& families = result.GetTableDescription().GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), expected.size());
+            for (const auto& family : families) {
+                UNIT_ASSERT_C(expected.contains(family.GetName()), family.GetName());
+                UNIT_ASSERT_C(family.GetCompression().has_value(), family.GetName());
+                UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), expected.at(family.GetName()));
+            }
+        };
+
+        auto create = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+            CREATE TABLE `/Root/ZstdColumnFamilies` (
+                Key Uint64,
+                Value String,
+                Other String FAMILY Family1,
+                PRIMARY KEY (Key),
+                FAMILY default (COMPRESSION = "zstd"),
+                FAMILY Family1 (COMPRESSION = "ZSTD")
+            );
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+        checkFamilies({{"default", EColumnFamilyCompression::ZSTD}, {"Family1", EColumnFamilyCompression::ZSTD}});
+
+        auto write = session.ExecuteDataQuery(R"sql(
+            UPSERT INTO `/Root/ZstdColumnFamilies` (Key, Value, Other)
+            VALUES (1u, "one", "first");
+        )sql", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(write.GetStatus(), EStatus::SUCCESS, write.GetIssues().ToString());
+
+        auto add = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+            ALTER TABLE `/Root/ZstdColumnFamilies`
+                ADD FAMILY Family2 (COMPRESSION = "zStD"),
+                ADD COLUMN Added String FAMILY Family2,
+                ALTER FAMILY default SET COMPRESSION "lz4",
+                ALTER FAMILY Family1 SET COMPRESSION "off";
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(add.GetStatus(), EStatus::SUCCESS, add.GetIssues().ToString());
+        checkFamilies({{"default", EColumnFamilyCompression::LZ4}, {"Family1", EColumnFamilyCompression::None},
+            {"Family2", EColumnFamilyCompression::ZSTD}});
+
+        auto alter = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+            ALTER TABLE `/Root/ZstdColumnFamilies`
+                ALTER FAMILY default SET COMPRESSION "ZSTD",
+                ALTER FAMILY Family1 SET COMPRESSION "zstd",
+                ALTER FAMILY Family2 SET COMPRESSION "off";
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(), EStatus::SUCCESS, alter.GetIssues().ToString());
+        checkFamilies({{"default", EColumnFamilyCompression::ZSTD}, {"Family1", EColumnFamilyCompression::ZSTD},
+            {"Family2", EColumnFamilyCompression::None}});
+
+        auto read = session.ExecuteDataQuery(R"sql(
+            UPSERT INTO `/Root/ZstdColumnFamilies` (Key, Value, Other, Added)
+            VALUES (2u, "two", "second", "new");
+            SELECT Key, Value, Other, Added FROM `/Root/ZstdColumnFamilies` ORDER BY Key;
+        )sql", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(read.GetStatus(), EStatus::SUCCESS, read.GetIssues().ToString());
+        CompareYson(R"([[[1u];["one"];["first"];#];[[2u];["two"];["second"];["new"]]])",
+            FormatResultSetYson(read.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_TWIN(ZstdColumnFamilyCompressionLevels, UseQueryService) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableRowTableZstdCompression(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        const TString tableName = "/Root/ZstdCompressionLevels";
+
+        auto checkLevels = [&](const THashMap<TString, std::optional<int32_t>>& expected) {
+            auto result = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& families = result.GetTableDescription().GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), expected.size());
+            for (const auto& family : families) {
+                UNIT_ASSERT_C(expected.contains(family.GetName()), family.GetName());
+                UNIT_ASSERT(family.GetCompressionLevel() == expected.at(family.GetName()));
+            }
+        };
+
+        auto create = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+            CREATE TABLE `/Root/ZstdCompressionLevels` (
+                Key Uint64,
+                Value String FAMILY archive,
+                PRIMARY KEY (Key),
+                FAMILY default (COMPRESSION = "zstd"),
+                FAMILY archive (COMPRESSION = "zstd", COMPRESSION_LEVEL = 0)
+            );
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+        checkLevels({{"default", std::nullopt}, {"archive", 0}});
+
+        const auto maxLevel = ZSTD_maxCLevel();
+        auto alter = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder() << R"sql(
+            ALTER TABLE `/Root/ZstdCompressionLevels`
+                ALTER FAMILY default SET COMPRESSION_LEVEL 5,
+                ALTER FAMILY archive SET COMPRESSION_LEVEL )sql" << maxLevel << R"sql(,
+                ADD FAMILY cold (COMPRESSION = "zstd", COMPRESSION_LEVEL = 1);
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(), EStatus::SUCCESS, alter.GetIssues().ToString());
+        checkLevels({{"default", 5}, {"archive", maxLevel}, {"cold", 1}});
+
+        for (const auto level : {-1, maxLevel + 1}) {
+            auto invalid = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder()
+                << "ALTER TABLE `/Root/ZstdCompressionLevels` ALTER FAMILY archive SET COMPRESSION_LEVEL "
+                << level << ";");
+            UNIT_ASSERT_C(!invalid.IsSuccess(), invalid.GetIssues().ToString());
+        }
+        checkLevels({{"default", 5}, {"archive", maxLevel}, {"cold", 1}});
+
+        auto clear = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+            ALTER TABLE `/Root/ZstdCompressionLevels` ALTER FAMILY archive SET COMPRESSION "off";
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(clear.GetStatus(), EStatus::SUCCESS, clear.GetIssues().ToString());
+        checkLevels({{"default", 5}, {"archive", std::nullopt}, {"cold", 1}});
+
+        auto invalidCodec = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+            ALTER TABLE `/Root/ZstdCompressionLevels` ALTER FAMILY archive SET COMPRESSION_LEVEL 0;
+        )sql");
+        UNIT_ASSERT_C(!invalidCodec.IsSuccess(), invalidCodec.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(ZstdColumnFamiliesFeatureDisabled, UseQueryService) {
+        TKikimrRunner kikimr;
+        UNIT_ASSERT(
+            !kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableRowTableZstdCompression());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        for (const auto* family : {"default", "archive"}) {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder()
+                << "CREATE TABLE `/Root/DisabledZstd` (Key Uint64, PRIMARY KEY (Key), FAMILY "
+                << family << " (COMPRESSION = 'zstd')); ");
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ZSTD compression for row tables is disabled");
+        }
+
+        auto create = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+            CREATE TABLE `/Root/DisabledZstd` (
+                Key Uint64, PRIMARY KEY (Key), FAMILY default (COMPRESSION = "lz4")
+            );
+        )sql");
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        for (const auto* change : {
+            "ALTER FAMILY default SET COMPRESSION 'zstd'",
+            "ADD FAMILY archive (COMPRESSION = 'zstd', COMPRESSION_LEVEL = 7)",
+        })
+        {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, TStringBuilder()
+                << "ALTER TABLE `/Root/DisabledZstd` " << change << ";");
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ZSTD compression for row tables is disabled");
+        }
+        auto described = session.DescribeTable("/Root/DisabledZstd").GetValueSync();
+        UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+        const auto& families = described.GetTableDescription().GetColumnFamilies();
+        UNIT_ASSERT_VALUES_EQUAL(families.size(), 1);
+        UNIT_ASSERT(families[0].GetCompression() == EColumnFamilyCompression::LZ4);
+    }
+
     Y_UNIT_TEST(CreateFamilyWithCompressionLevel) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -3860,8 +4032,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ),
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "ZSTD", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AlterCompressionLevelInColumnFamily) {
@@ -3891,7 +4063,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER FAMILY Family1 SET COMPRESSION_LEVEL 5;)";
         auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::BAD_REQUEST, resultAlter.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "ZSTD", resultAlter.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AddColumnFamilyWithCompressionLevel) {
@@ -3925,7 +4097,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
         auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::BAD_REQUEST, resultAlter.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "ZSTD", resultAlter.GetIssues().ToString());
     }
 
     Y_UNIT_TEST_TWIN(CreateFamilyWithCacheModeFeatureDisabled, UseQueryService) {
@@ -4319,7 +4491,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateTableWithPgColumn) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -6538,6 +6710,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(RebuildVectorIndexSameColumnsSql) {
         // Rebuild without changing the column set (columns omitted entirely) must still work.
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -6579,6 +6752,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(RebuildVectorIndexInvalidClustersAndLevelsSql) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRebuildIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -6839,7 +7013,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterTableWithPgColumn) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString tableName = "/Root/TableWithPgColumn";
@@ -9917,7 +10091,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"Value1\"}`))";
+                NAME=min_max_value1, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"Value1\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             result = session.ExecuteSchemeQuery(query2).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -9926,7 +10101,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value2, TYPE=MAX, FEATURES=`{\"column_name\": \"Value2\"}`))";
+                NAME=min_max_value2, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"Value2\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             result = session.ExecuteSchemeQuery(query2).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -10186,7 +10362,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "_serial_column_Key");
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 9223372036854775807);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 2147483647);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 50);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 1);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 11);
@@ -16249,7 +16425,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+                NAME=min_max_value1, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"created_at\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
 
@@ -16585,6 +16762,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AddPgColumnWithStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -16906,7 +17084,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"created_at\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17217,7 +17396,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"timestamp\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17256,7 +17436,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << R"(
             --!syntax_v1
             ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
-                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+                NAME=min_max_pk_int, TYPE=MIN_MAX,
+                FEATURES=`{\"column_name\": \"timestamp\", \"storage_id\": \"__LOCAL_METADATA\", \"inherit_portion_storage\": false}`))";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -17617,6 +17798,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     void CheckPgColumnRejected(const TString& typeName) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -17655,6 +17837,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     Y_UNIT_TEST(PgMultipleTypesColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

@@ -10,14 +10,14 @@ bool TFixStringBitsStorage::DoGet(const ui32 idx) const {
     if (!Data.size()) {
         return false;
     }
-    AFL_VERIFY(idx < Data.size() * 8);
+    YDB_LOG_VERIFY(idx < Data.size() * 8);
     const ui8 start = (*(ui8*)&Data[idx / 8]);
     return start & (1 << (idx % 8));
 }
 
 TString TFixStringBitsStorageConstructor::DoSerializeToString(TDynBitMap&& bitsVector) const {
     TString result;
-    AFL_VERIFY(bitsVector.Size() % 8 == 0);
+    YDB_LOG_VERIFY(bitsVector.Size() % 8 == 0);
     result.resize(bitsVector.Size() / 8, '\0');
     ui32 byteIdx = 0;
     ui8 byteCurrent = 0;
@@ -37,7 +37,9 @@ TString TFixStringBitsStorageConstructor::DoSerializeToString(TDynBitMap&& bitsV
     if (byteCurrent) {
         result[byteIdx] = (char)byteCurrent;
     }
-    AFL_VERIFY(byteIdx + 1 == result.size())("idx", byteIdx)("data", result.size());
+    YDB_LOG_VERIFY(byteIdx + 1 == result.size(),
+        {"idx", byteIdx},
+        {"data", result.size()});
     return result;
 }
 

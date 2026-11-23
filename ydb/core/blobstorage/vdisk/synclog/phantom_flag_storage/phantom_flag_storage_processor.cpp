@@ -167,7 +167,7 @@ private:
 
         Initialized = true;
         Become(&TThis::StateWork);
-        if (manifestFiltered && !Ctx.SyncLogCtx->IsReadOnlyVDisk) {
+        if (manifestFiltered && !DropPending && !Ctx.SyncLogCtx->IsReadOnlyVDisk) {
             // A new allocation must not reuse an index still referenced by the durable manifest.
             CommitState(true);
         }
@@ -296,11 +296,15 @@ private:
     }
 
     void Handle(const TEvPhantomFlagStorageDrop::TPtr&) {
-        if (RequestInFlight || CommitInFlight) {
-            DropPending = true;
-            return;
+        // Discard only batches already received. Writes arriving while the drop waits belong to the next build.
+        for (const TWriteBatch& batch : BatchQueue) {
+            if (batch.SourceChunkIdx) {
+                PendingRetiredChunks.push_back(*batch.SourceChunkIdx);
+            }
         }
-        DropStorage();
+        BatchQueue.clear();
+        DropPending = true;
+        ProcessQueues();
     }
 
     void DropStorage() {
@@ -309,7 +313,9 @@ private:
             {"chunkCount", Data.Chunks.size()});
         TailChunkIdx = std::nullopt;
         TailAvailableSize = 0;
-        BatchQueue.clear();
+        if (ActiveBatch && ActiveBatch->SourceChunkIdx) {
+            PendingRetiredChunks.push_back(*ActiveBatch->SourceChunkIdx);
+        }
         ActiveBatch.reset();
         PendingWrite.clear();
         PendingWriteSize = 0;
@@ -346,6 +352,7 @@ private:
         const TVDiskID vdiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
         auto result = std::make_unique<TEvListFlagChunksResult>(status, vdiskId);
         if (status == NKikimrProto::OK) {
+            result->Record.SetVDiskIncarnationGuid(Ctx.VDiskIncarnationGuid.Guid);
             for (const auto& [chunkIdx, chunk] : Data.Chunks) {
                 if (chunk.DataSize) {
                     auto* descriptor = result->Record.AddChunks();
@@ -373,13 +380,17 @@ private:
         if (record.HasReadSize()) {
             request.ReadSize = std::min(record.GetReadSize(), MaxFlagChunkReadSize);
         }
-        if (!request.ChunkIdx || !request.ReadSize) {
+        if (!request.ChunkIdx || !request.ReadSize || !record.HasVDiskIncarnationGuid()) {
             ReplyToFlagChunkRead(request, NKikimrProto::ERROR);
             return;
         }
         const NKikimrProto::EReplyStatus status = GetExportStatus();
         if (status != NKikimrProto::OK) {
             ReplyToFlagChunkRead(request, status);
+            return;
+        }
+        if (record.GetVDiskIncarnationGuid() != Ctx.VDiskIncarnationGuid.Guid) {
+            ReplyToFlagChunkRead(request, NKikimrProto::RACE);
             return;
         }
         const ui32 chunkIdx = *request.ChunkIdx;

@@ -172,10 +172,11 @@ namespace NKikimr {
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk() = default;
 
     TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk(
-            const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex, ui64 generation, std::optional<ui32> readOffset,
-            std::optional<ui32> readSize) {
+            const TVDiskID& source, const TVDiskID& target, TVDiskIncarnationGuid vdiskIncarnationGuid,
+            ui32 chunkIndex, ui64 generation, std::optional<ui32> readOffset, std::optional<ui32> readSize) {
         VDiskIDFromVDiskID(source, Record.MutableSourceVDiskID());
         VDiskIDFromVDiskID(target, Record.MutableVDiskID());
+        Record.SetVDiskIncarnationGuid(vdiskIncarnationGuid.Guid);
         Record.SetChunkIndex(chunkIndex);
         Record.SetGeneration(generation);
         if (readOffset) {

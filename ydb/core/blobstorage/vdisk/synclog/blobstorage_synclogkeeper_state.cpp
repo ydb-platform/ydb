@@ -69,7 +69,7 @@ namespace NKikimr {
                 TPhantomFlagStorageData phantomFlagStorageData = SyncLogPtr->GetPhantomFlagStorageData();
                 ChunksToExtract = SyncLogPtr->GetChunksToExtract();
                 PhantomFlagStorageState.InitializePersistent(std::move(phantomFlagStorageData), SelfId,
-                        SlCtx->ChunkKeeperId, SyncLogPtr->GetAppendBlockSize());
+                        SlCtx->ChunkKeeperId, SyncLogPtr->Header.VDiskIncarnationGuid, SyncLogPtr->GetAppendBlockSize());
                 for (const auto& [chunkIdx, usedPagesNum] : ChunksToExtract) {
                     TActivationContext::Register(CreatePhantomFlagChunkExtractorActor(
                             SlCtx, PhantomFlagStorageState.GetProcessorId(),

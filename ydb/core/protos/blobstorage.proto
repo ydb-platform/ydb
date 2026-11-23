@@ -855,6 +855,8 @@ message TEvVPhantomFlagStorageListChunksResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional TVDiskID VDiskID = 2;
     repeated TChunk Chunks = 3;
+    // Present on success. Start a paged read only if the donor supplied its incarnation.
+    optional uint64 VDiskIncarnationGuid = 4;
 }
 
 message TEvVPhantomFlagStorageReadChunk {
@@ -868,6 +870,8 @@ message TEvVPhantomFlagStorageReadChunk {
     optional uint32 ReadSize = 5;
     // Must match the generation returned by ListChunks for the entire paged read.
     optional uint64 Generation = 6;
+    // Echo the donor incarnation from ListChunks on every page, including the first.
+    optional uint64 VDiskIncarnationGuid = 7;
 }
 
 message TEvVPhantomFlagStorageReadChunkResult {

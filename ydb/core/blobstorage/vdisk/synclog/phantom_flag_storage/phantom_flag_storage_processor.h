@@ -2,6 +2,7 @@
 
 #include "phantom_flag_storage_data.h"
 
+#include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/library/actors/core/actor.h>
 
@@ -11,6 +12,7 @@ struct TPhantomFlagStorageProcessorContext {
     const TIntrusivePtr<TSyncLogCtx> SyncLogCtx;
     const NActors::TActorId SyncLogKeeperId;
     const NActors::TActorId ChunkKeeperId;
+    const TVDiskIncarnationGuid VDiskIncarnationGuid;
     const ui32 AppendBlockSize;
     const bool EnableReplication;
 };

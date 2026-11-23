@@ -84,8 +84,7 @@ TString RenderQueryText(const TParsedTokenList& tokens, TTokenSpan span, TQueryT
             }
         }
 
-        if (options.NormalizeAnsiQuotes && !token.Content.empty()
-            && (token.Content.front() == '\'' || token.Content.front() == '"'))
+        if (options.NormalizeAnsiQuotes && !token.Content.empty() && (token.Content.front() == '\'' || token.Content.front() == '"'))
         {
             const char quote = token.Content.front();
             const auto end = token.Content.rfind(quote);

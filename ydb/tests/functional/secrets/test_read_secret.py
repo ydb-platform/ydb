@@ -8,6 +8,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 ADMIN = "root@builtin"
 USER = "reader@builtin"
 DESCRIBE_SCHEMA = "ydb.granular.describe_schema"
+DATABASE_USE = "ydb.generic.use"
 
 # TODO(vlad-serikov): After rebasing onto the EnableReadSecrets change, enable the flag for these tests
 # and add a case with it disabled: even ADMIN must get grpc.StatusCode.FAILED_PRECONDITION.
@@ -40,14 +41,11 @@ def create_secret_with_private_acl(driver, path, value, owner):
     driver.scheme_client.modify_permissions(path, permissions)
 
 
-def test_read_requires_cluster_administrator(stub, ydb_database, ydb_client):
+def test_read_requires_use_on_database_root(stub, ydb_database, ydb_client):
     driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
     driver.scheme_client.modify_permissions(
         ydb_database,
-        ydb.ModifyPermissionsSettings().grant_permissions(
-            USER,
-            ["ydb.generic.full"],
-        ),
+        ydb.ModifyPermissionsSettings().grant_permissions(USER, ["ydb.database.connect"]),
     )
     path = f"{ydb_database}/secret"
     with ydb.QuerySessionPool(driver) as pool:
@@ -58,8 +56,22 @@ def test_read_requires_cluster_administrator(stub, ydb_database, ydb_client):
         for target in (path, f"{ydb_database}/missing"):
             operation = read_secret(stub, ydb_database, target, token)
             assert operation.ready and operation.status == ydb_status_codes_pb2.StatusIds.UNAUTHORIZED, operation.issues
-            assert any("cluster administrator" in issue.message for issue in operation.issues), operation.issues
             assert not operation.HasField("result")
+
+
+def test_cluster_administrator_without_database_use_cannot_read(stub, ydb_database, ydb_client):
+    driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+    path = f"{ydb_database}/secret"
+    create_secret_with_private_acl(driver, path, "test-value", ADMIN)
+    root_acl = ydb.ModifyPermissionsSettings().clear_permissions().change_owner(USER)
+    root_acl.grant_permissions(ADMIN, ["ydb.database.connect", DESCRIBE_SCHEMA])
+    root_acl.to_pb().interrupt_inheritance = True
+    driver.scheme_client.modify_permissions(ydb_database, root_acl)
+
+    denied = read_secret(stub, ydb_database, path, ADMIN)
+    assert denied.ready and denied.status == ydb_status_codes_pb2.StatusIds.UNAUTHORIZED, denied.issues
+    assert any("USE on the database root" in issue.message for issue in denied.issues), denied.issues
+    assert not denied.HasField("result")
 
 
 def test_admin_read_rejects_missing_secret_and_directory(stub, ydb_database, ydb_client):
@@ -71,20 +83,29 @@ def test_admin_read_rejects_missing_secret_and_directory(stub, ydb_database, ydb
         assert operation.status == ydb_status_codes_pb2.StatusIds.SCHEME_ERROR, operation.issues
         assert not operation.HasField("result")
 
+    path = f"{directory}/secret"
+    create_secret_with_private_acl(driver, path, "test-value", ADMIN)
+    operation = read_secret(stub, directory, path, ADMIN)
+    assert operation.status == ydb_status_codes_pb2.StatusIds.BAD_REQUEST, operation.issues
+    assert not operation.HasField("result")
+
 
 @pytest.mark.parametrize("value", ["test-value", ""])
-def test_administrator_requires_describe_schema(stub, ydb_database, ydb_client, value):
+def test_database_use_requires_describe_schema(stub, ydb_database, ydb_client, value):
     driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
     path = f"{ydb_database}/secret"
-    create_secret_with_private_acl(driver, path, value, USER)
-    denied = read_secret(stub, ydb_database, path, ADMIN)
+    create_secret_with_private_acl(driver, path, value, ADMIN)
+    driver.scheme_client.modify_permissions(
+        ydb_database, ydb.ModifyPermissionsSettings().grant_permissions(USER, [DATABASE_USE])
+    )
+    denied = read_secret(stub, ydb_database, path, USER)
     assert denied.ready and denied.status == ydb_status_codes_pb2.StatusIds.UNAUTHORIZED, denied.issues
     assert not denied.HasField("result")
 
     driver.scheme_client.modify_permissions(
-        path, ydb.ModifyPermissionsSettings().grant_permissions(ADMIN, [DESCRIBE_SCHEMA])
+        path, ydb.ModifyPermissionsSettings().grant_permissions(USER, [DESCRIBE_SCHEMA])
     )
-    operation = read_secret(stub, ydb_database, path, ADMIN)
+    operation = read_secret(stub, ydb_database, path, USER)
     assert operation.ready and operation.status == ydb_status_codes_pb2.StatusIds.SUCCESS, operation.issues
     result = ydb_secret_pb2.ReadSecretResult()
     assert operation.result.Unpack(result)
@@ -122,7 +143,7 @@ def test_describe_schema_is_checked_per_secret_and_after_revoke(stub, ydb_databa
     assert not after_revoke.HasField("result")
 
 
-def test_non_admin_with_describe_schema_can_only_describe_secret(stub, ydb_database, ydb_client):
+def test_read_rechecks_database_use_after_revoke(stub, ydb_database, ydb_client):
     driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
     path = f"{ydb_database}/secret"
     create_secret_with_private_acl(driver, path, "test-value", ADMIN)
@@ -131,6 +152,15 @@ def test_non_admin_with_describe_schema_can_only_describe_secret(stub, ydb_datab
     )
     driver.scheme_client.modify_permissions(
         path, ydb.ModifyPermissionsSettings().grant_permissions(USER, [DESCRIBE_SCHEMA])
+    )
+
+    driver.scheme_client.modify_permissions(
+        ydb_database, ydb.ModifyPermissionsSettings().grant_permissions(USER, [DATABASE_USE])
+    )
+    allowed = read_secret(stub, ydb_database, path, USER)
+    assert allowed.ready and allowed.status == ydb_status_codes_pb2.StatusIds.SUCCESS, allowed.issues
+    driver.scheme_client.modify_permissions(
+        ydb_database, ydb.ModifyPermissionsSettings().revoke_permissions(USER, [DATABASE_USE])
     )
 
     description = stub.DescribeSecret(

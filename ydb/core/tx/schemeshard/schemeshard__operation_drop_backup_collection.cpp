@@ -131,57 +131,43 @@ TTxTransaction CreateTableDropTransaction(const TPath& tablePath) {
     return tableDropTx;
 }
 
-// TODO: replace UGLY scan
 void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOperationContext& context, NIceDb::TNiceDb& db) {
-    YDB_LOG_INFO_CTX(context.Ctx, "CleanupIncrementalRestoreState for backup collection",
-        {"pathId", backupCollectionPathId},
-        {"schemeshard", context.SS->TabletID()},
-    );
-
-    TVector<ui64> statesToCleanup;
-
-    for (auto it = context.SS->IncrementalRestoreStates.begin(); it != context.SS->IncrementalRestoreStates.end(); ++it) {
-        if (it->second.BackupCollectionPathId == backupCollectionPathId) {
-            statesToCleanup.push_back(it->first);
+    THashSet<ui64> operationsToCleanup;
+    for (const auto& [opId, state] : context.SS->IncrementalRestoreStates) {
+        if (state.BackupCollectionPathId == backupCollectionPathId) {
+            operationsToCleanup.insert(opId);
         }
     }
 
-    for (const auto& stateId : statesToCleanup) {
-        // Prefix-scan per opId, then delete tracked + untracked rows for that op.
-        // The state-tracked CleanupIncrementalRestoreItems only deletes rows whose
-        // seq is in the in-memory PendingItems/InFlightItems set; without the
-        // prefix scan, rows that slipped tracking (e.g. mid-flight reboot, partial
-        // rehydration) linger on disk until the next reboot self-heals them.
-        auto irow = db.Table<Schema::IncrementalRestoreItem>().Range(stateId).Select();
-        if (irow.IsReady()) {
-            while (!irow.EndOfSet()) {
-                const ui32 itemSeq = irow.GetValue<Schema::IncrementalRestoreItem::ItemSeq>();
-                db.Table<Schema::IncrementalRestoreItem>().Key(stateId, itemSeq).Delete();
-                if (!irow.Next()) {
-                    break;
-                }
-            }
+    // Include retained history and legacy headers without a state. This
+    // inventory survives finalization and is rebuilt from durable rows on init.
+    for (const auto& [opId, collectionPathId] : context.SS->PersistedIncrementalRestoreOps) {
+        if (collectionPathId == backupCollectionPathId) {
+            operationsToCleanup.insert(opId);
         }
-
-        auto* state = context.SS->IncrementalRestoreStates.FindPtr(stateId);
-        context.SS->CleanupIncrementalRestoreItems(stateId, db, state);
-        context.SS->IncrementalRestoreStates.erase(stateId);
-        db.Table<Schema::IncrementalRestoreState>().Key(stateId).Delete();
     }
 
-    for (auto opIt = context.SS->IncrementalRestoreOperationToState.begin();
-         opIt != context.SS->IncrementalRestoreOperationToState.end();) {
-        if (std::find(statesToCleanup.begin(), statesToCleanup.end(), opIt->second) != statesToCleanup.end()) {
-            auto toErase = opIt;
-            ++opIt;
+    for (ui64 opId : operationsToCleanup) {
+        context.SS->CleanupIncrementalRestoreItems(opId, db,
+            context.SS->IncrementalRestoreStates.FindPtr(opId));
+        context.SS->IncrementalRestoreStates.erase(opId);
+        context.SS->LongIncrementalRestoreOps.erase(TOperationId(opId, 0));
+        db.Table<Schema::IncrementalRestoreState>().Key(opId).Delete();
+        context.SS->PersistRemoveLongIncrementalRestoreOp(db, opId);
+    }
+    for (auto it = context.SS->IncrementalRestoreOperationToState.begin();
+         it != context.SS->IncrementalRestoreOperationToState.end();) {
+        if (operationsToCleanup.contains(it->second)) {
+            const auto toErase = it++;
             context.SS->IncrementalRestoreOperationToState.erase(toErase);
         } else {
-            ++opIt;
+            ++it;
         }
     }
 
-    YDB_LOG_INFO_CTX(context.Ctx, "CleanupIncrementalRestoreState: Cleaned up incremental restore states",
-        {"count", statesToCleanup.size()},
+    YDB_LOG_INFO_CTX(context.Ctx, "CleanupIncrementalRestoreState: removed incremental restore operations",
+        {"count", operationsToCleanup.size()},
+        {"pathId", backupCollectionPathId},
         {"schemeshard", context.SS->TabletID()},
     );
 }
@@ -221,13 +207,14 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
+        // Exact-key deletes cannot page-fault. Cleanup and the collection drop
+        // commit together without reads in this non-retryable callback.
+        CleanupIncrementalRestoreState(pathId, context, db);
+
         Y_ABORT_UNLESS(!pathPtr->Dropped());
         pathPtr->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         context.SS->PersistRemoveBackupCollection(db, pathId);
-
-        // Clean up incremental restore state for this backup collection
-        CleanupIncrementalRestoreState(pathId, context, db);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside(context.SS);
@@ -475,79 +462,6 @@ public:
         );
         context.OnComplete.DoneOperation(OperationId);
     }
-};
-
-// Cleanup operation for incremental restore state
-class TIncrementalRestoreCleanup : public TSubOperationState {
-    virtual const char* Name() const override final { return "TIncrementalRestoreCleanup"; }
-
-public:
-    explicit TIncrementalRestoreCleanup(TOperationId id, TPathId backupCollectionPathId)
-        : OperationId(std::move(id))
-        , BackupCollectionPathId(backupCollectionPathId)
-    {}
-
-    bool ProgressState(TOperationContext& context) override {
-        YDB_LOG_INFO_CTX(context.Ctx, "");
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        TVector<ui64> operationsToCleanup;
-
-        for (const auto& [opId, restoreState] : context.SS->IncrementalRestoreStates) {
-            if (restoreState.BackupCollectionPathId == BackupCollectionPathId) {
-                operationsToCleanup.push_back(opId);
-            }
-        }
-
-        for (ui64 opId : operationsToCleanup) {
-            YDB_LOG_INFO_CTX(context.Ctx, "Cleaning up incremental restore state for operation",
-                {"opId", opId},
-            );
-
-            db.Table<Schema::IncrementalRestoreOperations>()
-                .Key(opId)
-                .Delete();
-
-            context.SS->IncrementalRestoreStates.erase(opId);
-
-            auto txIt = context.SS->TxIdToIncrementalRestore.begin();
-            while (txIt != context.SS->TxIdToIncrementalRestore.end()) {
-                if (txIt->second == opId) {
-                    auto toErase = txIt;
-                    ++txIt;
-                    context.SS->TxIdToIncrementalRestore.erase(toErase);
-                } else {
-                    ++txIt;
-                }
-            }
-
-            auto opIt = context.SS->IncrementalRestoreOperationToState.begin();
-            while (opIt != context.SS->IncrementalRestoreOperationToState.end()) {
-                if (opIt->second == opId) {
-                    auto toErase = opIt;
-                    ++opIt;
-                    context.SS->IncrementalRestoreOperationToState.erase(toErase);
-                } else {
-                    ++opIt;
-                }
-            }
-        }
-
-        YDB_LOG_INFO_CTX(context.Ctx, "Cleaned up incremental restore operations",
-            {"count", operationsToCleanup.size()},
-        );
-
-        return true;
-    }
-
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr&, TOperationContext&) override {
-        return true;
-    }
-
-private:
-    TOperationId OperationId;
-    TPathId BackupCollectionPathId;
 };
 
 }  // anonymous namespace

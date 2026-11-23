@@ -40,6 +40,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 
+#include <tuple>
+
 //TODO: move this code to vieiwer
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 

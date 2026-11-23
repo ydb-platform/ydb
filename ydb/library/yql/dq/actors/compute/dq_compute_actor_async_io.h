@@ -90,6 +90,10 @@ struct IDqComputeActorAsyncInput {
 
     virtual const TDqAsyncStats& GetIngressStats() const = 0;
 
+    // Plain text for monitoring, called from the compute actor's mailbox.
+    // Do not access state owned by actors in other mailboxes.
+    virtual TString GetDebugInfo() const { return {}; }
+
     // Gets data and returns space used by filled data batch.
     // Watermark will be returned if source watermark was moved forward. Watermark should be handled AFTER data.
     // Method should be called under bound mkql allocator.

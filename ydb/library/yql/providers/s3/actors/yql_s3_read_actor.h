@@ -53,6 +53,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     ::NMonitoring::TDynamicCounterPtr taskCounters,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
     bool allowLocalFiles,
-    IDqSchedulableWorkFactoryPtr workFactory = nullptr);
+    IDqSchedulableWorkFactoryPtr workFactory = nullptr,
+    ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr);
 
 } // namespace NYql::NDq

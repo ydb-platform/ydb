@@ -2878,6 +2878,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
     Y_UNIT_TEST(ChangefeedIncludesStoredAndExcludesVirtualColumns) {
         auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
         TKikimrSettings settings(appConfig);
         settings.SetWithSampleTables(false).SetPQConfig(GeneratedColumnsPQConfig());
         TKikimrRunner kikimr(settings);
@@ -2892,7 +2893,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             CREATE TABLE `/Root/TestTable` (
                 k Int32 NOT NULL,
                 payload String,
-                value Int32,
+                value Int32 DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 10, 0),
                 stored_value Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(value, 0) * 10) STORED,
                 virtual_value Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(value, 0) * 10 + 1) VIRTUAL,
                 PRIMARY KEY (k)
@@ -2906,7 +2907,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER `test_consumer`;");
 
         exec(R"(
-            INSERT INTO `/Root/TestTable` (k, payload, value) VALUES (1, "one", 10);
+            INSERT INTO `/Root/TestTable` (k, payload) VALUES (1, "one");
         )");
         exec(R"(
             UPDATE `/Root/TestTable` SET payload = "updated", value = 20 WHERE k = 1;
@@ -3104,6 +3105,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
     Y_UNIT_TEST(InplaceUpdateRecomputesStoredColumn) {
         auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
         auto unsafeCommitSetting = NKikimrKqp::TKqpSetting();
         unsafeCommitSetting.SetName("_KqpAllowUnsafeCommit");
         unsafeCommitSetting.SetValue("true");
@@ -3118,7 +3120,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         auto scheme = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/InplaceGenerated` (
                 Key Uint64 NOT NULL,
-                a Uint64 NOT NULL,
+                a Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 100ul,
                 g Uint64 NOT NULL GENERATED ALWAYS AS (a + 1ul) STORED,
                 PRIMARY KEY (Key)
             ) WITH (
@@ -3129,9 +3131,8 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             scheme.GetIssues().ToString());
 
         auto result = session.ExecuteDataQuery(R"(
-            UPSERT INTO `/Root/InplaceGenerated` (Key, a) VALUES
-                (1u, 100u),
-                (20u, 200u);
+            INSERT INTO `/Root/InplaceGenerated` (Key) VALUES (1u);
+            UPSERT INTO `/Root/InplaceGenerated` (Key, a) VALUES (20u, 200u);
         )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
             result.GetIssues().ToString());
@@ -3742,6 +3743,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
     Y_UNIT_TEST(StoredMultiShardSplitRetriesGeneratedWrites) {
         auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
         auto& writeActorSettings = *appConfig.MutableTableServiceConfig()->MutableWriteActorSettings();
         writeActorSettings.SetStartRetryDelayMs(100);
         writeActorSettings.SetMaxRetryDelayMs(1000);
@@ -3754,6 +3756,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
                     k Uint32 NOT NULL,
                     a Int32,
                     b Int32,
+                    v Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 42ul,
                     g Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) * 10 + COALESCE(b, 0)) STORED,
                     PRIMARY KEY (k)
                 ) WITH (
@@ -3886,12 +3889,13 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         auto check = kikimr.RunCall([&] {
             return session.ExecuteQuery(R"(
-                SELECT k, g FROM `/Root/SplitStored` ORDER BY k;
+                SELECT k, g, v FROM `/Root/SplitStored` ORDER BY k;
             )", TTxControl::NoTx()).ExtractValueSync();
         });
 
         UNIT_ASSERT_C(check.IsSuccess(), check.GetIssues().ToString());
-        CompareYson("[[1u;11];[5u;51];[9u;91];[10u;101];[15u;151];[20u;201]]", FormatResultSetYson(check.GetResultSet(0)));
+        CompareYson("[[1u;11;42u];[5u;51;42u];[9u;91;42u];[10u;101;42u];[15u;151;42u];[20u;201;42u]]",
+            FormatResultSetYson(check.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(DropGeneratedUnlocksDependencyAlterAndDrop) {
@@ -4578,13 +4582,14 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
     Y_UNIT_TEST(ExecuteScriptMaterializesStoredColumn) {
         auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto queryClient = kikimr.GetQueryClient();
 
         auto setup = queryClient.ExecuteQuery(R"(
             CREATE TABLE `/Root/TestTable` (
                 k Int32 NOT NULL,
-                a Int32 NOT NULL,
+                a Int32 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 50, 0),
                 g Int32 NOT NULL GENERATED ALWAYS AS (a + 1) STORED,
                 PRIMARY KEY (k)
             );
@@ -4598,7 +4603,8 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         auto operation = queryClient.ExecuteScript(R"(
             UPDATE `/Root/TestTable` SET a = 40 WHERE k = 1;
-            SELECT k, a, g FROM `/Root/TestTable`;
+            INSERT INTO `/Root/TestTable` (k) VALUES (2);
+            SELECT k, a, g FROM `/Root/TestTable` ORDER BY k;
         )").ExtractValueSync();
         UNIT_ASSERT_C(operation.Status().IsSuccess(), operation.Status().GetIssues().ToString());
 
@@ -4616,13 +4622,13 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         auto fetched = queryClient.FetchScriptResults(operation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(fetched.IsSuccess(), fetched.GetIssues().ToString());
-        CompareYson("[[1;40;41]]", FormatResultSetYson(fetched.GetResultSet()));
+        CompareYson("[[1;40;41];[2;50;51]]", FormatResultSetYson(fetched.GetResultSet()));
 
         auto selected = queryClient.ExecuteQuery(R"(
-            SELECT k, a, g FROM `/Root/TestTable`;
+            SELECT k, a, g FROM `/Root/TestTable` ORDER BY k;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(selected.IsSuccess(), selected.GetIssues().ToString());
-        CompareYson("[[1;40;41]]", FormatResultSetYson(selected.GetResultSet(0)));
+        CompareYson("[[1;40;41];[2;50;51]]", FormatResultSetYson(selected.GetResultSet(0)));
     }
 }
 

@@ -108,6 +108,11 @@ public:
         return issues;
     }
 
+    void RejectsWithStatus(const std::string& query, EStatus expectedStatus) {
+        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, query << "\n" << result.GetIssues().ToString());
+    }
+
     void Check(const std::string& query, const TString& expected) {
         CompareYson(expected, QueryYson(query));
     }
@@ -211,6 +216,10 @@ public:
 
     TKikimrRunner& Runner() {
         return Kikimr;
+    }
+
+    NYdb::NQuery::TSession& QuerySession() {
+        return Session;
     }
 
 private:
@@ -1378,6 +1387,35 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;9u;[2u];11u];[2;4u;[3u];7u]]");
     }
 
+    Y_UNIT_TEST(StoredAndVirtualColumnsUseDefaultedValue) {
+        auto appConfig = DefaultExprAppConfig(TFixtureOptions{.GeneratedStored = true});
+        appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 42ul,
+                s Uint64 NOT NULL GENERATED ALWAYS AS (v + 1ul) STORED,
+                g Uint64 NOT NULL GENERATED ALWAYS AS (v + 2ul) VIRTUAL,
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL SYNC ON (v) COVER (s)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v, s, g;",
+            "[[1;42u;43u;44u]]");
+
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 50ul;");
+        fixture.CheckUnordered("UPSERT INTO TestTable (k) VALUES (1), (2) RETURNING k, v, s, g;",
+            "[[1;42u;43u;44u];[2;50u;51u;52u]]");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+        fixture.RestartSchemeShard("/Root/TestTable");
+        fixture.Check("UPDATE TestTable SET v = 7ul WHERE k = 1 RETURNING k, v, s, g;",
+            "[[1;7u;8u;9u]]");
+        fixture.Check("SELECT k, v, s, g FROM TestTable VIEW idx_v ORDER BY k;",
+            "[[1;7u;8u;9u];[2;50u;51u;52u]]");
+    }
+
     Y_UNIT_TEST_QUAD(FailingDefaultOnlyRunsOnUpsertInsert, StreamWrite, WithIndex) {
         TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
         fixture.Exec(DefaultExprDDL(
@@ -1532,6 +1570,239 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("INSERT INTO TestTable (k) SELECT k + 10 FROM TestTable;");
         fixture.CheckUnordered("SELECT k, v FROM TestTable WHERE k > 10;",
             "[[11;[42u]];[12;[42u]];[13;[42u]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(ReturningSelectSourceForms, EnableStreamWrite) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("CREATE TABLE Source (k Int32 NOT NULL, other Int32, PRIMARY KEY (k));");
+        fixture.Exec("UPSERT INTO Source (k, other) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (4, 7ul), (6, 8ul);");
+
+        fixture.CheckUnordered(R"(
+            INSERT INTO TestTable (k, other) SELECT k, other FROM Source WHERE k IN (1, 2) RETURNING *;
+        )", "[[1;[11];[42u]];[2;[22];[42u]]]");
+        fixture.Check(R"(
+            INSERT OR REVERT INTO TestTable (k, other) SELECT k, other FROM Source WHERE k = 3 RETURNING k;
+        )", "[[3]]");
+        fixture.CheckUnordered(R"(
+            UPSERT INTO TestTable (k, other) SELECT k, other FROM Source WHERE k IN (4, 5) RETURNING v, k;
+        )", "[[[7u];4];[[42u];5]]");
+        fixture.CheckUnordered(R"(
+            REPLACE INTO TestTable (k, other) SELECT k, other FROM Source WHERE k IN (5, 6) RETURNING v;
+        )", "[[[42u]];[[42u]]]");
+        fixture.Check(R"(
+            UPDATE TestTable ON SELECT k, other + 1 AS other FROM Source WHERE k = 4 RETURNING v, other, k;
+        )", "[[[7u];[45];4]]");
+        fixture.Check(R"(
+            DELETE FROM TestTable ON SELECT k FROM Source WHERE k = 2 RETURNING v, k;
+        )", "[[[42u];2]]");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;",
+            "[[1;[11];[42u]];[3;[33];[42u]];[4;[45];[7u]];[5;[55];[42u]];[6;[66];[42u]]]");
+    }
+
+    Y_UNIT_TEST(ParameterizedSelectSourceAppliesDefaults) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 7ul), (4, 8ul);");
+        auto params = TParamsBuilder()
+            .AddParam("$rows").BeginList()
+                .AddListItem().BeginStruct().AddMember("k").Int32(1).EndStruct()
+                .AddListItem().BeginStruct().AddMember("k").Int32(2).EndStruct()
+                .AddListItem().BeginStruct().AddMember("k").Int32(3).EndStruct()
+                .AddListItem().BeginStruct().AddMember("k").Int32(4).EndStruct()
+            .EndList().Build()
+            .Build();
+        const auto write = [&](const TString& statement, const TString& expected) {
+            auto result = fixture.QuerySession().ExecuteQuery(
+                "DECLARE $rows AS List<Struct<k:Int32>>;\n" + statement,
+                TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), statement << "\n" << result.GetIssues().ToString());
+            CompareYsonUnordered(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        write("INSERT INTO TestTable (k) SELECT k FROM AS_TABLE($rows) WHERE k = 1 RETURNING k, v;",
+            "[[1;[42u]]]");
+        write("UPSERT INTO TestTable (k) SELECT k FROM AS_TABLE($rows) WHERE k IN (2, 3) RETURNING k, v;",
+            "[[2;[7u]];[3;[42u]]]");
+        write("REPLACE INTO TestTable (k) SELECT k FROM AS_TABLE($rows) WHERE k = 4 RETURNING k, v;",
+            "[[4;[42u]]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[7u]];[3;[42u]];[4;[42u]]]");
+    }
+
+    Y_UNIT_TEST(EmptyWritesDoNotEvaluateDefault) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL(R"(v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default ran"))"));
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul);");
+        fixture.Exec("CREATE TABLE Source (k Int32 NOT NULL, PRIMARY KEY (k));");
+        const auto params = TParamsBuilder()
+            .AddParam("$rows").BeginList().AddListItem().BeginStruct().AddMember("k").Int32(2).EndStruct()
+            .EndList().Build()
+            .Build();
+
+        for (TStringBuf operation : {"INSERT", "INSERT OR REVERT", "UPSERT", "REPLACE"}) {
+            fixture.Check(TStringBuilder() << operation << " INTO TestTable (k) SELECT k FROM Source RETURNING v;", "[]");
+            const TString query = TStringBuilder() << "DECLARE $rows AS List<Struct<k:Int32>>; "
+                << operation << " INTO TestTable (k) SELECT k FROM AS_TABLE($rows) WHERE k < 0 RETURNING v;";
+            auto result = fixture.QuerySession().ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        fixture.Check("UPDATE TestTable SET other = 5 WHERE k = 99 RETURNING v;", "[]");
+        fixture.Check("UPDATE TestTable ON (k, other) VALUES (99, 5) RETURNING v;", "[]");
+        fixture.Check("DELETE FROM TestTable WHERE k = 99 RETURNING v;", "[]");
+        fixture.Check("DELETE FROM TestTable ON (k) VALUES (99) RETURNING v;", "[]");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[7u]]]");
+    }
+
+    Y_UNIT_TEST(InsertConflictAndRevertPreserveStoredDefaults) {
+        TTestFixture fixture;
+        fixture.Exec(DmlMatrixDDL(ESecondaryIndexKind::Sync));
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (1, 11, 7ul);");
+
+        fixture.RejectsWithStatus("INSERT INTO TestTable (k, other) VALUES (2, 20), (2, 21);",
+            EStatus::PRECONDITION_FAILED);
+        fixture.RejectsWithStatus("INSERT INTO TestTable (k, other) VALUES (2, 20), (1, 21);",
+            EStatus::PRECONDITION_FAILED);
+        fixture.Exec("INSERT OR REVERT INTO TestTable (k, other) VALUES (2, 20), (3, 30), (2, 21);");
+        fixture.Exec("INSERT OR REVERT INTO TestTable (k, other) VALUES (2, 20), (1, 21);");
+        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[11];[7u]]]");
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v;", "[[1;[11];[7u]]]");
+
+        fixture.CheckUnordered("INSERT OR REVERT INTO TestTable (k, other) VALUES (2, 20), (3, 30) RETURNING k, v;",
+            "[[2;[42u]];[3;[42u]]]");
+        fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (4, 40), (4, 41);");
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;",
+            "[[1;[11];[7u]];[2;[20];[42u]];[3;[30];[42u]];[4;[41];[42u]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(InteractiveTransactionSeesDefaultAndIndex, Commit) {
+        TTestFixture fixture;
+        fixture.Exec(DmlMatrixDDL(ESecondaryIndexKind::Sync));
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (1, 10, 7ul);");
+        auto& session = fixture.QuerySession();
+
+        auto insert = session.ExecuteQuery("INSERT INTO TestTable (k, other) VALUES (2, 20) RETURNING k, v;",
+            TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+        CompareYson("[[2;[42u]]]", FormatResultSetYson(insert.GetResultSet(0)));
+        auto tx = insert.GetTransaction();
+        UNIT_ASSERT(tx && tx->IsActive());
+
+        // The following partial UPSERT must read this uncommitted override.
+        auto update = session.ExecuteQuery("UPDATE TestTable SET v = 8ul WHERE k = 2 AND v = 42ul;",
+            TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+        auto upsert = session.ExecuteQuery(R"(
+            UPSERT INTO TestTable (k, other) VALUES (1, 11), (2, 21) RETURNING k, other, v;
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        const TString expected = "[[1;[11];[7u]];[2;[21];[8u]]]";
+        CompareYsonUnordered(expected, FormatResultSetYson(upsert.GetResultSet(0)));
+
+        const std::string indexQuery = "SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;";
+        auto read = session.ExecuteQuery(indexQuery, TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        CompareYson(expected, FormatResultSetYson(read.GetResultSet(0)));
+
+        if (Commit) {
+            auto result = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            auto result = tx->Rollback().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        const TString stored = Commit ? expected : "[[1;[10];[7u]]]";
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", stored);
+        fixture.Check(indexQuery, stored);
+    }
+
+    Y_UNIT_TEST(InteractiveTransactionConflictRollsBackDefaultAndIndex) {
+        TTestFixture fixture;
+        fixture.Exec(DmlMatrixDDL(ESecondaryIndexKind::Sync));
+        auto& session = fixture.QuerySession();
+        auto insert = session.ExecuteQuery("INSERT INTO TestTable (k) VALUES (1);",
+            TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+        auto tx = insert.GetTransaction();
+        UNIT_ASSERT(tx && tx->IsActive());
+
+        auto conflict = session.ExecuteQuery("INSERT INTO TestTable (k) VALUES (2), (1);",
+            TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), EStatus::PRECONDITION_FAILED, conflict.GetIssues().ToString());
+        auto commit = tx->Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::NOT_FOUND, commit.GetIssues().ToString());
+        fixture.Check("SELECT k, v FROM TestTable;", "[]");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v;", "[]");
+    }
+
+    Y_UNIT_TEST(MultipleStatementsReturnDefaultsAndRollBackOnConflict) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+        auto& session = fixture.QuerySession();
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO TestTable (k, other) VALUES (1, 10), (2, 20) RETURNING *;
+            UPDATE TestTable SET other = 11 WHERE k = 1 AND v = 42ul RETURNING v, k;
+            DELETE FROM TestTable WHERE k = 2 AND v = 42ul RETURNING k;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3u);
+        CompareYsonUnordered("[[1;[10];[42u]];[2;[20];[42u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson("[[[42u];1]]", FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson("[[2]]", FormatResultSetYson(result.GetResultSet(2)));
+
+        auto conflict = session.ExecuteQuery(R"(
+            INSERT INTO TestTable (k) VALUES (3);
+            INSERT INTO TestTable (k) VALUES (1);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), EStatus::PRECONDITION_FAILED, conflict.GetIssues().ToString());
+        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[11];[42u]]]");
+    }
+
+    Y_UNIT_TEST(MultiShardBatchWritesMaintainDefaultedIndex) {
+        auto appConfig = DefaultExprAppConfig();
+        auto* batch = appConfig.MutableTableServiceConfig()->MutableBatchOperationSettings();
+        batch->SetMaxBatchSize(2);
+        batch->SetPartitionExecutionLimit(2);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Uint32 NOT NULL,
+                other Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL SYNC ON (v) COVER (other)
+            ) WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                UNIFORM_PARTITIONS = 4
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (1u, 10, 7ul);");
+        fixture.Exec(R"(
+            INSERT INTO TestTable (k, other) VALUES (1500000000u, 20), (3500000000u, 30);
+        )");
+        fixture.CheckUnordered(R"(
+            UPSERT INTO TestTable (k, other) VALUES (1u, 11), (2500000000u, 21), (3500000000u, 31)
+            RETURNING k, other, v;
+        )", "[[1u;11;7u];[2500000000u;21;42u];[3500000000u;31;42u]]");
+
+        fixture.RejectsWithStatus(R"(
+            INSERT INTO TestTable (k, other) VALUES (2u, 12), (3500000000u, 32);
+        )", EStatus::PRECONDITION_FAILED);
+        fixture.Check("SELECT k, v FROM TestTable WHERE k = 2u;", "[]");
+        fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE other = 12;", "[]");
+
+        fixture.Exec("BATCH UPDATE TestTable SET v = v + 1ul WHERE v = 42ul;");
+        fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 42ul;", "[]");
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;",
+            "[[1u;11;7u];[1500000000u;20;43u];[2500000000u;21;43u];[3500000000u;31;43u]]");
+        fixture.Exec("BATCH DELETE FROM TestTable WHERE v = 43ul AND other > 20;");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1u;11;7u];[1500000000u;20;43u]]");
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;", "[[1u;11;7u];[1500000000u;20;43u]]");
     }
 
     Y_UNIT_TEST(RandomDefaultWithConstantDependencyIsSharedBetweenRows) {
@@ -1746,6 +2017,118 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 7ul);");
         fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 42ul;", "[[1]]");
         fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 7ul;", "[[2]]");
+    }
+
+    Y_UNIT_TEST(UniqueIndexRejectsDefaultCollisionsAtomically) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL UNIQUE SYNC ON (v)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul), (2, 8ul);");
+
+        // The omitted values collide with each other, so neither row may be inserted.
+        fixture.RejectsWithStatus("INSERT INTO TestTable (k) VALUES (3), (4);", EStatus::PRECONDITION_FAILED);
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;7u];[2;8u]]");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", "[[1;7u];[2;8u]]");
+
+        fixture.Check("INSERT INTO TestTable (k) VALUES (3) RETURNING k, v;", "[[3;42u]]");
+        fixture.RejectsWithStatus("INSERT INTO TestTable (k) VALUES (4);", EStatus::PRECONDITION_FAILED);
+        fixture.RejectsWithStatus(
+            "UPDATE TestTable SET v = CASE WHEN k = 1 THEN 42ul ELSE 99ul END WHERE k < 3;",
+            EStatus::PRECONDITION_FAILED);
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;7u];[2;8u];[3;42u]]");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", "[[1;7u];[2;8u];[3;42u]]");
+    }
+
+    Y_UNIT_TEST(NullableDefaultTracksUniqueIndexTransitions) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Uint64 DEFAULT CAST("invalid" || CAST(RandomNumber(1) AS String) AS Uint64),
+                PRIMARY KEY (k),
+                INDEX idx_v GLOBAL UNIQUE SYNC ON (v)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1), (2);");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v IS NULL ORDER BY k;", "[[1;#];[2;#]]");
+        fixture.Exec("UPDATE TestTable SET v = 42ul WHERE k = 1;");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = 42ul;", "[[1;[42u]]]");
+        fixture.RejectsWithStatus("INSERT INTO TestTable (k, v) VALUES (3, 42ul);", EStatus::PRECONDITION_FAILED);
+
+        fixture.Check("REPLACE INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;#]]");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = 42ul;", "[]");
+        fixture.Exec("UPDATE TestTable SET v = 42ul WHERE k = 2;");
+        fixture.Check("SELECT k, v FROM TestTable VIEW idx_v WHERE v = 42ul;", "[[2;[42u]]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;#];[2;[42u]]]");
+    }
+
+    Y_UNIT_TEST(CompositeAndCoveringIndexesUseStoredDefaultValues) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                tenant Int32 NOT NULL,
+                k Int32 NOT NULL,
+                bucket Int32 NOT NULL,
+                v Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (tenant, k),
+                INDEX idx_async GLOBAL ASYNC ON (bucket) COVER (v)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (tenant, k, bucket) VALUES (1, 1, 10);");
+        fixture.Exec("INSERT INTO TestTable (tenant, k, bucket, v) VALUES (2, 1, 20, 7ul);");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 43ul;");
+        fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_pair GLOBAL SYNC ON (v, bucket);");
+        fixture.Exec("ALTER TABLE TestTable ADD INDEX idx_cover GLOBAL SYNC ON (bucket) COVER (v);");
+
+        const auto checkIndexes = [&](const TString& expected) {
+            fixture.Check("SELECT tenant, k, bucket, v FROM TestTable ORDER BY tenant, k;", expected);
+            fixture.Check("SELECT tenant, k, bucket, v FROM TestTable VIEW idx_pair ORDER BY tenant, k;", expected);
+            fixture.Check("SELECT tenant, k, bucket, v FROM TestTable VIEW idx_cover ORDER BY tenant, k;", expected);
+            fixture.CheckEventually("SELECT tenant, k, bucket, v FROM TestTable VIEW idx_async ORDER BY tenant, k;", expected);
+        };
+        checkIndexes("[[1;1;10;42u];[2;1;20;7u]]");
+        fixture.Exec("UPSERT INTO TestTable (tenant, k, bucket) VALUES (1, 1, 11), (2, 2, 22);");
+        fixture.Exec("REPLACE INTO TestTable (tenant, k, bucket) VALUES (2, 1, 21);");
+        checkIndexes("[[1;1;11;42u];[2;1;21;43u];[2;2;22;43u]]");
+        fixture.Check("SELECT tenant, k FROM TestTable VIEW idx_pair WHERE v = 7ul;", "[]");
+        fixture.Check("SELECT tenant, k FROM TestTable VIEW idx_cover WHERE bucket IN (10, 20);", "[]");
+    }
+
+    Y_UNIT_TEST_TWIN(FulltextIndexUsesDefaultValueWithReturning, Compact) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableCompactFulltextIndex(Compact);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                text String NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, "Cats love naps.", "other"),
+                PRIMARY KEY (k),
+                INDEX idx_text GLOBAL USING fulltext_plain ON (text)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "text"),
+            R"(IF(RandomNumber(1) * 0ul = 0ul, "Cats love naps.", "other"))");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, text;", R"([[1;"Cats love naps."]])");
+        fixture.Check(R"(SELECT k, text FROM TestTable VIEW idx_text WHERE FulltextMatch(text, "cats");)",
+            R"([[1;"Cats love naps."]])");
+        fixture.Check(R"(UPDATE TestTable SET text = "Dogs bark." WHERE k = 1 RETURNING k, text;)",
+            R"([[1;"Dogs bark."]])");
+        fixture.Check(R"(SELECT k FROM TestTable VIEW idx_text WHERE FulltextMatch(text, "cats");)", "[]");
+        fixture.Check(R"(SELECT k FROM TestTable VIEW idx_text WHERE FulltextMatch(text, "dogs");)", "[[1]]");
     }
 
     Y_UNIT_TEST(SetDefaultExpr) {
@@ -1981,6 +2364,32 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", DropDefault
             ? "[[1;[42u]];[2;#];[3;[9u]]]"
             : "[[1;[42u]];[2;[8u]];[3;[9u]]]");
+    }
+
+    Y_UNIT_TEST(CachedWriteStopsUsingReplacedDefault) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+        auto session = fixture.Runner().GetTableClient().CreateSession().ExtractValueSync().GetSession();
+        const TString query = R"(
+            DECLARE $k AS Int32;
+            INSERT INTO TestTable (k) VALUES ($k);
+        )";
+        const auto settings = NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)
+            .CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
+        const auto fromCache = [&](i32 key) {
+            auto params = TParamsBuilder().AddParam("$k").Int32(key).Build().Build();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params, settings)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStats().has_value());
+            return TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache();
+        };
+
+        UNIT_ASSERT(!fromCache(1));
+        UNIT_ASSERT(fromCache(2));
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 50ul;");
+        UNIT_ASSERT(!fromCache(3));
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[42u]];[3;[50u]]]");
     }
 
     Y_UNIT_TEST(AlterOnGeneratedColumnRejected) {

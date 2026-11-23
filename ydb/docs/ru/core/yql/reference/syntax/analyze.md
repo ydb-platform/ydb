@@ -14,10 +14,7 @@ ANALYZE <path_to_table> [ (<column_name> [, ...]) ]
 * `column_name` — сбор статистики столбцов только для указанных столбцов таблицы.
 
 Текущий набор статистики описан в [{#T}](../../../concepts/query_execution/optimizer.md#statistics).
-<<<<<<< HEAD
 
 ## Фоновая операция
 
 SQL операция `ANALYZE` выполняется синхронно и ожидает завершения. При этом создаётся фоновая операция для наблюдаемости. Используйте команду [operation list](../../../reference/ydb-cli/operation-list.md) для отслеживания прогресса фоновых операций `ANALYZE`.
-=======
->>>>>>> c61806a77ea (Docs: Ru version of ANALYZE (#41792))

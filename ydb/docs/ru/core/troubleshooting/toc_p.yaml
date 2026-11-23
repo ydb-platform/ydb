@@ -13,4 +13,11 @@ items:
   items:
     - name: Перегруженный шард
       href: examples/schemas/overloaded-shard-simple-case.md
+<<<<<<< HEAD
 
+=======
+    - name: Перегруженный шард и недостаточно ресурсов CPU
+      href: examples/schemas/overloaded-shard-insufficient-cpu.md
+- name: Расхождение времени между клиентскими хостами и кластером
+  href: client-clock-skew.md
+>>>>>>> e2a95b55c53 ([DOCORG-19503] Интегрировать в документацию информацию (#55378))

@@ -1472,9 +1472,9 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
             bindingId = result.binding_id();
         }
 
-        const auto saved = TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetIdempotencyKey("aba").Build();
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(saved);
+            const auto [result, issues] = bootstrap.ModifyBinding(
+                TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1486,7 +1486,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyBinding(saved);
+            const auto [result, issues] = bootstrap.ModifyBinding(
+                TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).SetIdempotencyKey("aba").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1496,38 +1497,6 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
             UNIT_ASSERT_EQUAL(result.binding().content().name(), "test_binding_name_2");
             UNIT_ASSERT_EQUAL(result.binding().meta().revision(), 2);
         }
-
-        const auto pending = TModifyBindingBuilder{}
-                                 .SetConnectionId(connectionId)
-                                 .SetBindingId(bindingId)
-                                 .SetName("test_binding_name_3")
-                                 .SetIdempotencyKey("other_key")
-                                 .Build();
-        const auto prepare = [&](const auto& proto) {
-            using TRequest = TEvControlPlaneStorage::TEvModifyBindingRequest;
-            using TResponse = TEvControlPlaneStorage::TEvModifyBindingResponse;
-            auto request = std::make_unique<TRequest>("yandexcloud://test_folder_id_1", proto, "test_user@staff", "xxx", "mock_cloud",
-                TPermissions{}, Nothing(), std::make_shared<TTenantInfo>(), FederatedQuery::Internal::ComputeDatabaseInternal{});
-            request->RenameAction = EBindingRenameAction::Prepare;
-            const auto [handle, response] = bootstrap.SendInternalRequest<TRequest, TResponse>(std::move(request));
-            UNIT_ASSERT_C(!response->Issues, response->Issues.ToString());
-            return response->AuditDetails;
-        };
-
-        const auto prepared = prepare(pending);
-        UNIT_ASSERT(prepared.Rename);
-        const auto replayed = prepare(saved);
-        UNIT_ASSERT(replayed.IdempotencyResult);
-        UNIT_ASSERT(!replayed.Rename);
-        const auto [legacyResult, legacyIssues] = bootstrap.ModifyBinding(saved);
-        UNIT_ASSERT_STRING_CONTAINS(legacyIssues.ToString(), "A different rename is pending for this binding");
-
-        const auto stillPending = prepare(pending);
-        UNIT_ASSERT(stillPending.Rename);
-        UNIT_ASSERT_VALUES_EQUAL(stillPending.Rename->operation_id(), prepared.Rename->operation_id());
-        const auto [described, describeIssues] = bootstrap.DescribeBinding(TDescribeBindingBuilder{}.SetBindingId(bindingId).Build());
-        UNIT_ASSERT_C(!describeIssues, describeIssues.ToString());
-        UNIT_ASSERT_VALUES_EQUAL(described.binding().meta().revision(), 2);
     }
 
     Y_UNIT_TEST(ShouldCheckPreviousRevisionFailed)

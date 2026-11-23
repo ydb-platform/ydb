@@ -242,7 +242,7 @@ bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlob
     }
     if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
         const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(info, Id.Hash());
-        return checker && checker->CheckQuorumForLayout(layout);
+        return checker && checker->CheckWriteQuorumForLayout(layout);
     }
     return info.GetQuorumChecker().GetBlobState(layout, {&info.GetTopology()}) == TBlobStorageGroupInfo::EBS_FULL;
 }

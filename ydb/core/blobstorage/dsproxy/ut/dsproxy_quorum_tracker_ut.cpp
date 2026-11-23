@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
 
     Y_UNIT_TEST(RecoveryRealmCannotReplaceNormalRealmInEnsuredPair) {
         const TBlobStorageGroupInfo info = MakeMirror3dcInfo({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
-        for (const auto failures : {std::array{1u, 1u, 1u}, std::array{2u, 0u, 2u}}) {
+        for (const auto failures : {std::array{1u, 1u, 1u}, std::array{1u, 0u, 2u}}) {
             TGroupQuorumTracker tracker(&info);
             for (const auto& disk : info.GetVDisks()) {
                 const auto vd = info.GetVDiskId(disk.OrderNumber);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
     }
 
     Y_UNIT_TEST(EnsuredOneRequiresEveryNormalDomain) {
-        const auto info = MakeMirror3dcInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
+        const auto info = MakeMirror3dcInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
         TGroupQuorumTracker tracker(&info);
         for (ui32 disk = 4; disk < 12; ++disk) {
             UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(disk), NKikimrProto::ERROR),
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
     }
 
     Y_UNIT_TEST(EnsuredTwoAllowsOneMissingNormalDomain) {
-        const auto info = MakeMirror3dcInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
+        const auto info = MakeMirror3dcInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
         TGroupQuorumTracker tracker(&info);
         for (ui32 disk = 0; disk < 3; ++disk) {
             UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(disk), NKikimrProto::OK),
@@ -107,14 +107,25 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
         UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(2), NKikimrProto::ERROR), NKikimrProto::ERROR);
     }
 
-    Y_UNIT_TEST(EnsuredTwoRealmsRequiresIntersection) {
-        for (const auto state : {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2}) {
-            const auto info = MakeMirror3dcInfo({state, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
+    Y_UNIT_TEST(MetadataWriteQuorumFitsInItsRecipients) {
+        using TState = NKikimrBlobStorage::TGroupState;
+        for (auto state : {TState::DC_FAILURE, TState::DC_FAILURE_INV1, TState::DC_FAILURE_INV2, TState::DC_SOLO_RECOVERY_INV2}) {
+            auto roles = *GetMirror3dcRealmStates(state);
+            const auto info = MakeMirror3dcInfo({state, roles});
             TGroupQuorumTracker tracker(&info);
-            const ui32 required = state == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1 ? 4 : 3;
-            for (ui32 disk = 0; disk < required; ++disk) {
-                UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(disk), NKikimrProto::OK),
-                    disk + 1 == required ? NKikimrProto::OK : NKikimrProto::UNKNOWN);
+            for (const auto& disk : info.GetVDisks()) {
+                auto vd = info.GetVDiskId(disk.OrderNumber);
+                if (!info.IsWriteTargetRealm(vd.FailRealm)) {
+                    tracker.ExcludeDisk(vd);
+                }
+            }
+            ui32 needed = state == TState::DC_FAILURE_INV2 || state == TState::DC_SOLO_RECOVERY_INV2 ? 3 : 4;
+            for (ui32 disk = 0; disk < needed; ++disk) {
+                UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(disk), NKikimrProto::OK), NKikimrProto::UNKNOWN);
+            }
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(4 + domain), NKikimrProto::OK),
+                    domain == 2 ? NKikimrProto::OK : NKikimrProto::UNKNOWN);
             }
         }
     }
@@ -130,7 +141,7 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
     }
 
     Y_UNIT_TEST(CooldownRechecksNormalRealmQuorum) {
-        const auto info = MakeMirror3dcInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
+        const auto info = MakeMirror3dcInfo({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}});
         TGroupQuorumTracker tracker(&info);
         const auto now = TInstant::Seconds(1);
         std::vector<TVDiskID> queryStatus;

@@ -35,7 +35,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
         }
-        if (record.HasApproximateFreeSpaceShare()) {
+        if (Info->IsWriteTargetRealm(vdisk.FailRealm) && record.HasApproximateFreeSpaceShare()) {
             const float value = record.GetApproximateFreeSpaceShare();
             ApproximateFreeSpaceShare = Min(ApproximateFreeSpaceShare.value_or(value), value);
         }

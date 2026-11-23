@@ -916,9 +916,11 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
 
     for (TLogWrite *logCommit : commits) {
         TStringStream errorReason;
-        NKikimrProto::EReplyStatus status = ValidateRequest(logCommit, errorReason);
+        NKikimrProto::EReplyStatus status = ValidateRequest(logCommit);
         if (status == NKikimrProto::OK) {
             status = BeforeLoggingCommitRecord(*logCommit, errorReason);
+        } else {
+            PrintValidationError(logCommit, errorReason);
         }
         if (status != NKikimrProto::OK) {
             PrepareLogError(logCommit, errorReason, status);
@@ -932,8 +934,7 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
         Y_VERIFY_DEBUG_S(logWrite, PCtx->PDiskLogPrefix);
         Mon.LogQueueTime.Increment(logWrite->LifeDurationMs(now));
         logOperationSizeBytes += logWrite->Data.size();
-        TStringStream errorReason;
-        NKikimrProto::EReplyStatus status = ValidateRequest(logWrite, errorReason);
+        NKikimrProto::EReplyStatus status = ValidateRequest(logWrite);
         if (status == NKikimrProto::OK) {
             logWrite->Span.Event("PDisk.BeforeBlockDevice");
             LogWrite(*logWrite, logChunksToCommit);
@@ -942,6 +943,8 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
                 traceId = std::move(logWriteTraceId);
             }
         } else {
+            TStringStream errorReason;
+            PrintValidationError(logWrite, errorReason);
             PrepareLogError(logWrite, errorReason, status);
         }
     }

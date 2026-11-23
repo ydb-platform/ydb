@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/statistics
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard

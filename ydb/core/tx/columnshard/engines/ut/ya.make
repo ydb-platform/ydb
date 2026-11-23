@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/test/libs/table
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/predicate
     yql/essentials/sql/pg_dummy
@@ -58,6 +59,8 @@ SRCS(
     ut_bloom_ngram_size.cpp
     ut_loaded_key_ranges.cpp
     ut_cleanup_tables.cpp
+    ut_index_key_order.cpp
+    ut_index_portions_by_last_key.cpp
     ut_insert_write_id.cpp
     helper.cpp
 )

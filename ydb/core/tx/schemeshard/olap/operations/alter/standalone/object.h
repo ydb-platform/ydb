@@ -33,22 +33,22 @@ public:
     }
 
     const NKikimrSchemeOp::TColumnTableSchema& GetTableSchemaProto() const {
-        AFL_VERIFY(GetTableInfo());
+        YDB_LOG_VERIFY(GetTableInfo());
         return GetTableInfo()->Description.GetSchema();
     }
 
     const TColumnTableInfo& GetTableInfoVerified() const {
-        AFL_VERIFY(GetTableInfo());
+        YDB_LOG_VERIFY(GetTableInfo());
         return *GetTableInfo();
     }
 
     const NKikimrSchemeOp::TColumnDataLifeCycle& GetTableTTLProto() const {
-        AFL_VERIFY(GetTableInfo());
+        YDB_LOG_VERIFY(GetTableInfo());
         return GetTableInfo()->Description.GetTtlSettings();
     }
 
     const TOlapSchema& GetTableSchemaVerified() const {
-        AFL_VERIFY(!!TableSchema);
+        YDB_LOG_VERIFY(!!TableSchema);
         return *TableSchema;
     }
 
@@ -57,7 +57,7 @@ public:
     }
 
     const TOlapMultiColumnStatisticsDescription& GetTableMultiColumnStatisticsVerified() const {
-        AFL_VERIFY(!!TableMultiColumnStatistics);
+        YDB_LOG_VERIFY(!!TableMultiColumnStatistics);
         return *TableMultiColumnStatistics;
     }
 

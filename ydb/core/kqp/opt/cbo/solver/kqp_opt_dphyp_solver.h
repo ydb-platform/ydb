@@ -1052,8 +1052,10 @@ template <typename TNodeSet>  std::array<std::shared_ptr<IBaseOptimizerNode>, 2>
     auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
     trees[0] = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
 
-    auto reversedStats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
-    trees[1] = MakeJoinInternal(std::move(reversedStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+    if (edge.IsCommutative) {
+        auto reversedStats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false, maybeBytesHint);
+        trees[1] = MakeJoinInternal(std::move(reversedStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+    }
 
     return trees;
 }
@@ -1113,7 +1115,9 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
         for (const auto& rightNode: *rightNodes) {
             if (csgCmpEdge->JoinKind == EJoinKind::Cross) {
                 for (auto&& tree: PickCrossJoinTrees(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeBytesHint)) {
-                    AddNodeToDpTableEntries(std::move(tree), this->DpTable_[joined]);
+                    if (tree) {
+                        AddNodeToDpTableEntries(std::move(tree), this->DpTable_[joined]);
+                    }
                 }
                 continue;
             }

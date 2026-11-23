@@ -62,6 +62,33 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         CheckScriptResults(scriptExecutionOperation, readyOp, db);
     }
 
+    Y_UNIT_TEST(DdlExecuteScript) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting})
+            .SetEnableScriptExecutionOperations(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        const TString sql = R"sql(
+            CREATE TABLE TestDdlExecuteScript (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS,
+            scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
+
+        auto readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_C(readyOp.Status().IsSuccess(), readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ExecuteScriptOnlyCommentsRejected) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

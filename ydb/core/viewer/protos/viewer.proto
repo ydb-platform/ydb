@@ -12,6 +12,7 @@ import "ydb/core/protos/kqp.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/public/api/protos/ydb_bridge_common.proto";
 import "ydb/core/protos/sys_view.proto";
+import "ydb/core/protos/subdomains.proto";
 
 package NKikimrViewer;
 option java_package = "ru.yandex.kikimr.proto";
@@ -462,6 +463,11 @@ message TTenant {
     // Omitted when the database's storage mode is unavailable or mixed.
     optional bool BridgeMode = 56;
     optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 57;
+    // Copied as is from the SchemeShard description of the database (with storage=true), when it has them.
+    // DomainState contains only the flags that are true; DiskQuotaExceeded means that writes are blocked.
+    // DiskSpaceQuotaUsage is absent when the SchemeShard is too old to report it.
+    optional NKikimrSubDomains.TDomainState DomainState = 58;
+    optional NKikimrSubDomains.TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 59;
 }
 
 message TTenants {

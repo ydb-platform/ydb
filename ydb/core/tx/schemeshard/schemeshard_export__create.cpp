@@ -158,6 +158,9 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
+        if (domainPath.IsResolved() && Self->IsDatabaseFreezeBlocking(domainPath.Base()->PathId)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for exports");
+        }
         {
             TPath::TChecker checks = domainPath.Check();
             checks
@@ -982,6 +985,10 @@ private:
     void Cancel(TExportInfo& exportInfo, ui32 itemIdx, TStringBuf marker, NIceDb::TNiceDb& db) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items.at(itemIdx);
+
+        if (exportInfo.Issue.empty()) {
+            exportInfo.Issue = item.Issue;
+        }
 
         YDB_LOG_NOTICE(TStringBuilder() << "TExport::TTxProgress: " << marker << ", cancelling",
             {"info", exportInfo.ToString()},

@@ -154,7 +154,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
             TVector<arrow::Datum> nulls;
             for(auto* type:userNullTypes) {
                 auto strname = type->GetKindAsStr();
-                MKQL_ENSURE(type->IsOptional(), Sprintf("expected every type of right side to be optional when join type is Left, got type №%i: %s  ", nulls.size()+1, strname.data()));
+                MKQL_ENSURE(type->IsOptional() || type->IsNull(), Sprintf("expected every type of right side to be optional or null when join type is Left, got type №%i: %s  ", nulls.size()+1, strname.data()));
                 int blockSize = NMiniKQL::CalcBlockLen(NMiniKQL::CalcMaxBlockItemSize(type));
                 auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, arrowPool, blockSize, nullptr);
                 builder->Add(NYql::NUdf::TBlockItem{});

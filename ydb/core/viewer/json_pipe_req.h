@@ -104,7 +104,7 @@ protected:
             Response = std::move(response);
         }
 
-        bool Set(std::shared_ptr<T>&& response) {
+        bool Set(std::shared_ptr<T>&& response, bool updateCache = true) {
             constexpr bool hasErrorCheck = requires(const T& r) {TViewerPipeClient::IsSuccess(r);};
             constexpr bool hasUpdateCache = requires(std::shared_ptr<T>&& r) {TEvViewer::TEvUpdateSharedCacheTabletResponse(r);};
             if constexpr (hasErrorCheck) {
@@ -116,7 +116,9 @@ protected:
                 Span.EndOk();
             }
             if constexpr (hasUpdateCache) {
-                TActivationContext::Send(MakeViewerID(TActivationContext::ActorSystem()->NodeId), std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(response));
+                if (updateCache) {
+                    TActivationContext::Send(MakeViewerID(TActivationContext::ActorSystem()->NodeId), std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(response));
+                }
             }
             if (IsDone()) {
                 return false;
@@ -125,8 +127,8 @@ protected:
             return true;
         }
 
-        bool Set(TAutoPtr<TEventHandle<T>>&& response) {
-            return Set(std::shared_ptr<T>(response->Release().Release()));
+        bool Set(TAutoPtr<TEventHandle<T>>&& response, bool updateCache = true) {
+            return Set(std::shared_ptr<T>(response->Release().Release()), updateCache);
         }
 
         bool Error(const TString& error) {
@@ -311,15 +313,16 @@ protected:
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false);
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force = false);
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId);
-    [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId);
+    [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVDiskInfo(
+        ui32 nodeId, ui32 pdiskId, bool includeDDiskPoolNames = false);
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse> RequestBSControllerGroups();
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse> RequestBSControllerPools();
-    [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVSlots();
+    [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVSlots(bool includeDDiskPoolNames);
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDisks();
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> RequestBSControllerStorageStats();
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse> MakeCachedRequestBSControllerGroups();
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse> MakeCachedRequestBSControllerPools();
-    [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> MakeCachedRequestBSControllerVSlots();
+    [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> MakeCachedRequestBSControllerVSlots(bool includeDDiskPoolNames = false);
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> MakeCachedRequestBSControllerPDisks();
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> MakeCachedRequestBSControllerStorageStats();
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false);

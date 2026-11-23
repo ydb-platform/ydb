@@ -149,7 +149,7 @@ TRuntimeNode::TList TDqProgramBuilder::MakeRowArgs(TRuntimeNode input, bool forc
     TRuntimeNode::TList args;
     args.reserve(columns.size());
     for (TType* column : columns) {
-        args.push_back(Arg(forceOptional && !column->IsOptional() ? NewOptionalType(column) : column));
+        args.push_back(Arg(forceOptional && !column->IsOptional() && !column->IsNull() ? NewOptionalType(column) : column));
     }
     return args;
 }

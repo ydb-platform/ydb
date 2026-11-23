@@ -519,6 +519,10 @@ namespace NSchemeShardUT_Private {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrExport::TEvGetExportResponse TestGetExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrExport::TListExportsResponse TestListExports(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& dbName,
+            ui64 pageSize = 10, const TString& pageToken = {}, const TString& kind = "export/s3");
+    NKikimrExport::TListExportsResponse TestListExports(TTestActorRuntime& runtime, const TString& dbName,
+            ui64 pageSize = 10, const TString& pageToken = {}, const TString& kind = "export/s3");
     TEvExport::TEvCancelExportRequest* CancelExportRequest(ui64 txId, const TString& dbName, ui64 exportId);
     NKikimrExport::TEvCancelExportResponse TestCancelExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 exportId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
@@ -547,6 +551,10 @@ namespace NSchemeShardUT_Private {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrImport::TEvGetImportResponse TestGetImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrImport::TListImportsResponse TestListImports(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& dbName,
+            ui64 pageSize = 10, const TString& pageToken = {}, const TString& kind = "import/s3");
+    NKikimrImport::TListImportsResponse TestListImports(TTestActorRuntime& runtime, const TString& dbName,
+            ui64 pageSize = 10, const TString& pageToken = {}, const TString& kind = "import/s3");
     TEvImport::TEvCancelImportRequest* CancelImportRequest(ui64 txId, const TString& dbName, ui64 importId);
     NKikimrImport::TEvCancelImportResponse TestCancelImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);

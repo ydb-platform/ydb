@@ -40,7 +40,7 @@
 
 namespace grpc_core {
 
-class XdsRouting {
+class XdsRouting final {
  public:
   class VirtualHostListIterator {
    public:

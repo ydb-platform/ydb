@@ -351,7 +351,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
     });
 
     readSettings.EventHandlers_.StartPartitionSessionHandler(
-            [impl=Impl]
+            [impl=Impl, maxOffset=settings.MaxOffset]
             (NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
@@ -360,10 +360,10 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                 impl->Modify([&](std::unordered_map<TString, std::set<size_t>>& s) { s[TString{topic}].insert(partitionId); });
                 if (offset) {
                     Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " from offset " << offset.value() << Endl << Flush;
-                    ev.Confirm(offset.value(), std::optional<ui64>());
+                    ev.Confirm(offset.value(), std::optional<ui64>(), maxOffset);
                 } else {
                     Cerr << ">>>>> " << impl->Name << " Start reading partition " << partitionId << " without offset" << Endl << Flush;
-                    ev.Confirm();
+                    ev.Confirm(std::nullopt, std::nullopt, maxOffset);
                 }
     });
 

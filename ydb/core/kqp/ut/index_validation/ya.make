@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/tx/datashard/ut_common
     ydb/library/json_index
     yql/essentials/sql/pg_dummy
+    yql/essentials/types/binary_json
 )
 
 YQL_LAST_ABI_VERSION()

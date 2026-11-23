@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 namespace NKikimr::NKqp {
 
@@ -147,6 +148,39 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
         fixture.Corrupt("/Root/Docs/idx/indexImplTable", NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
             {"Tag", "Id", "Data"}, {TCell::Make(tag), TCell::Make(id), TCell()});
         fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 1, "VALUE_MISMATCH");
+    }
+
+    Y_UNIT_TEST_TWIN(JsonCoverMismatch, Unique) {
+        TFixture fixture;
+        fixture.Exec(TStringBuilder() << R"(
+            CREATE TABLE Docs (
+                Id Uint64 NOT NULL, Tag Uint64, Payload Json, Document JsonDocument,
+                PRIMARY KEY (Id),
+                INDEX idx GLOBAL )" << (Unique ? "UNIQUE " : "") << R"(ON (Tag) COVER (Payload, Document)
+            ) WITH (PARTITION_AT_KEYS = (100));
+        )");
+        fixture.Exec(R"(
+            UPSERT INTO Docs (Id, Tag, Payload, Document) VALUES
+                (1, 10, Json('{"v":1}'), JsonDocument('{"v":1}')),
+                (2, 20, Json('{"v":2}'), JsonDocument('{"v":2}')),
+                (101, 30, NULL, NULL);
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shards("/Root/Docs").size(), 2);
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 0);
+
+        constexpr TStringBuf impl = "/Root/Docs/idx/indexImplTable";
+        constexpr TStringBuf different = R"({"v":3})";
+        constexpr auto upsert = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT;
+        fixture.Corrupt(TString(impl), upsert, {"Tag", "Id", "Payload"},
+            {TCell::Make(ui64{10}), TCell::Make(ui64{1}), TCell(different.data(), different.size())});
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 1, "VALUE_MISMATCH");
+
+        const auto binary = NBinaryJson::SerializeToBinaryJson(different);
+        UNIT_ASSERT(std::holds_alternative<NBinaryJson::TBinaryJson>(binary));
+        const auto& document = std::get<NBinaryJson::TBinaryJson>(binary);
+        fixture.Corrupt(TString(impl), upsert, {"Tag", "Id", "Document"},
+            {TCell::Make(ui64{20}), TCell::Make(ui64{2}), TCell(document.Data(), document.Size())});
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 2, "VALUE_MISMATCH");
     }
 
     Y_UNIT_TEST(SampleDoesNotLimitCounts) {

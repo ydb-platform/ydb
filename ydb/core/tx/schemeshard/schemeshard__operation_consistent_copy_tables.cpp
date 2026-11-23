@@ -143,7 +143,7 @@ bool CreateConsistentCopyTables(
     TOperationId nextId,
     const TTxTransaction& tx,
     TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result, bool allowPgForBackup)
+    TVector<ISubOperation::TPtr>& result, bool fromBackupCollection)
 {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
@@ -172,6 +172,7 @@ bool CreateConsistentCopyTables(
     const auto allForBackup = AllOf(op.GetCopyTableDescriptions(), [](const auto& item) {
         return item.GetIsBackup();
     });
+    const bool allowPgForBackup = fromBackupCollection || (allForBackup && context.IsSelfProposed && tx.GetInternal());
 
     const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
     const auto limit = allForBackup
@@ -463,8 +464,7 @@ void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationC
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;
 
-    CreateConsistentCopyTables(nextId, tx, context, result,
-        /*allowPgForBackup*/ context.IsSelfProposed && tx.GetInternal());
+    CreateConsistentCopyTables(nextId, tx, context, result);
 
     return result;
 }

@@ -12,6 +12,7 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -2304,6 +2305,14 @@ value {
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
+        const auto updatePgCompatibility = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                auto& appData = runtime.GetAppData(node);
+                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+                flags.SetDisablePgCompatibility(disabled);
+                appData.UpdateRuntimeFlags(flags);
+            }
+        };
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -2321,7 +2330,7 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
+        updatePgCompatibility(true);
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2349,18 +2358,28 @@ value {
         )", GenerateTableDescription(desc).data(), port),
             {{NKikimrScheme::StatusPreconditionFailed, "PostgreSQL compatibility is disabled for column 'value'"}});
 
-        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(false);
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "Backup1"
-                destination_path: "/MyRoot/Restored"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
+        const auto importTable = [&](const char* path) {
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_prefix: "Backup1"
+                    destination_path: "%s"
+                  }
+                }
+            )", port, path));
+            env.TestWaitNotification(runtime, txId);
+        };
+
+        importTable("/MyRoot/Rejected");
+        const auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry().GetIssues();
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(issues),
+            "PostgreSQL compatibility is disabled for column 'value'");
+
+        updatePgCompatibility(false);
+        importTable("/MyRoot/Restored");
         TestGetImport(runtime, txId, "/MyRoot");
 
         if (!EnableDataShardDirectPartImport) {
@@ -2381,22 +2400,12 @@ value {
                 for (const auto& tx : ev->Get()->Record.GetTransaction()) {
                     if (tx.GetOperationType() == ESchemeOpRestore && tx.GetRestore().GetTableName() == "Replica") {
                         UNIT_ASSERT(tx.GetInternal());
-                        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
+                        updatePgCompatibility(true);
                     }
                 }
             });
 
-            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                ImportFromS3Settings {
-                  endpoint: "localhost:%d"
-                  scheme: HTTP
-                  items {
-                    source_prefix: "Backup1"
-                    destination_path: "/MyRoot/Replica"
-                  }
-                }
-            )", port));
-            env.TestWaitNotification(runtime, txId);
+            importTable("/MyRoot/Replica");
             TestGetImport(runtime, txId, "/MyRoot");
             UNIT_ASSERT(runtime.GetAppData().FeatureFlags.GetDisablePgCompatibility());
             UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Replica").GetPathDescription()

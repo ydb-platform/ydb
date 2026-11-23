@@ -733,8 +733,13 @@ public:
         }
 
         if (TxType == TTxState::TxRestore && !restoreImportingReplica && path->IsTable() && AppData()->FeatureFlags.GetDisablePgCompatibility()) {
-            const auto& table = context.SS->Tables.at(path->PathId);
-            for (const auto& [_, column] : table->Columns) {
+            const auto* table = context.SS->Tables.FindPtr(path->PathId);
+            if (!table) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    TStringBuilder() << "Table metadata is missing for path: " << path.PathString());
+                return result;
+            }
+            for (const auto& [_, column] : (*table)->Columns) {
                 if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,
                         TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");

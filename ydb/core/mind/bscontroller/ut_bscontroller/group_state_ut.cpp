@@ -137,6 +137,23 @@ public:
 }
 
 Y_UNIT_TEST_SUITE(BsControllerGroupState) {
+    Y_UNIT_TEST(RaiseTargetInvariant) {
+        using S = NKikimrBlobStorage::TGroupState;
+        for (bool solo : {false, true}) {
+            TGroupStateFixture fixture;
+            TFailRealmStates realms{TFailRealm::INCLUDED, solo ? TFailRealm::EXCLUDED : TFailRealm::INCLUDED,
+                TFailRealm::EXCLUDED};
+            const auto state = solo ? S::DC_SOLO_INV1 : S::DC_FAILURE_INV1;
+            fixture.Update(1, state, realms);
+            fixture.AssertNoProposal();
+            fixture.Info.TargetInvariant = ETargetInvariant::Inv2;
+            fixture.Update(1, state, realms);
+            const auto next = fixture.GetProposal();
+            UNIT_ASSERT(next.State == (solo ? S::DC_SOLO_INV2_PENDING : S::DC_FAILURE_INV2_PENDING));
+            UNIT_ASSERT(next.Realms == realms);
+        }
+    }
+
     Y_UNIT_TEST(ConfigQuorumIntersectsEveryPreviousWrite) {
         using TInfo = TBlobStorageGroupInfo;
         auto top = std::make_shared<TInfo::TTopology>(TBlobStorageGroupType(TBlobStorageGroupType::ErasureMirror3dc), 3, 3, 1, true);

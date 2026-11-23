@@ -1,3 +1,5 @@
+* Added draft storage client methods `TakeDownDataCenter()` and `RejoinDataCenter()` for updating a data center's target availability.
+
 * Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
 
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.

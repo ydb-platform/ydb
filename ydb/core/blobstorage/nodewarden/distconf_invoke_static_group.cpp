@@ -33,11 +33,17 @@ namespace NKikimr::NStorage {
         }
     }
 
+    static constexpr auto StaticTargetInvariant = NGroupSyncer::ETargetInvariant::Inv2;
+
     static std::optional<TMirror3dcGroupConfiguration> NextStaticRepairState(const NKikimrBlobStorage::TGroupInfo& group) {
         if (!IsOrdinaryMirror3dcGroup(group) || group.RingsSize() != 3) {
             return std::nullopt;
         }
-        return RecoveringComplete(ReadMirror3dcConfiguration(group));
+        const auto current = ReadMirror3dcConfiguration(group);
+        if (auto next = NGroupSyncer::NextPolicyTransition(current, std::nullopt, StaticTargetInvariant)) {
+            return next;
+        }
+        return RecoveringComplete(current);
     }
 
     void TInvokeRequestHandlerActor::CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const {
@@ -67,6 +73,7 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         const TMirror3dcGroupState& state = info->GetMirror3dcState();
         NGroupSyncer::TGroupReplicationInfo result;
+        result.TargetInvariant = StaticTargetInvariant;
         result.Generation = info->GroupGeneration;
         result.Topology = info->PickTopology();
         result.GroupState = state.State;
@@ -138,11 +145,37 @@ namespace NKikimr::NStorage {
         return changed;
     }
 
-    void TInvokeRequestHandlerActor::ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command) {
+    static NKikimrBlobStorage::TDataCenterStates MakeUpdatedDataCenterStates(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TChangeDataCenterState& change) {
+        const TString& name = change.GetName();
+        Y_ENSURE(!name.empty(), "Missing data center name");
+        Y_ENSURE(change.HasTakeDown(), "Missing data center operation");
+        Y_ENSURE(!change.GetDryRun() || change.GetTakeDown(), "Dry run is only supported for data center takedown");
+        bool known = std::ranges::any_of(config.GetAllNodes(), [&](const auto& node) {
+            return node.GetLocation().GetDataCenter() == name;
+        });
+        Y_ENSURE(known, "Unknown data center: " << name);
+        std::expected<TDataCenterStates, TString> states = ParseDataCenterStates(config.GetDataCenterStates());
+        Y_ENSURE(states, states.error());
+        if (change.GetTakeDown()) {
+            (*states)[name] = NKikimrBlobStorage::TDataCenterState::EXCLUDED;
+        } else {
+            states->erase(name);
+        }
+        return SerializeDataCenterStates(*states);
+    }
+
+    void TInvokeRequestHandlerActor::ApplyDataCenterStates(const TQuery& command) {
         RunCommonChecks();
         auto config = *Self->StorageConfig;
         try {
-            if (!ApplyStaticDataCenterStates(&config, command)) {
+            NKikimrBlobStorage::TDataCenterStates desired = command.HasChangeDataCenterState()
+                ? MakeUpdatedDataCenterStates(config, command.GetChangeDataCenterState()) : command.GetApplyDataCenterStates();
+            bool changed = ApplyStaticDataCenterStates(&config, desired);
+            if (command.GetChangeDataCenterState().GetDryRun()) {
+                return Finish(TResult::OK, std::nullopt);
+            }
+            if (!changed) {
                 return StartDataCenterReconciliation();
             }
         } catch (const yexception& error) {

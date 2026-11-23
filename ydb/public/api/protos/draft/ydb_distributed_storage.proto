@@ -517,6 +517,49 @@ message ReassignVDiskResult {
     VSlotId target_slot_id = 3;
 }
 
+message SetPoolRedundancyRequest {
+    enum Redundancy {
+        REDUNDANCY_UNSPECIFIED = 0;
+        REDUNDANCY_1_PLUS_1 = 1;
+        REDUNDANCY_2_PLUS_2 = 2;
+    }
+    Ydb.Operations.OperationParams operation_params = 1;
+    string storage_pool_name = 2;
+    Redundancy asynchronous_redundancy = 3;
+    oneof generation_check {
+        uint32 storage_pool_generation = 4;
+        bool allow_any_storage_pool_generation = 5;
+    }
+}
+
+message SetPoolRedundancyResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SetPoolRedundancyResult {}
+
+message ChangeDataCenterStateRequest {
+    enum Action {
+        ACTION_UNSPECIFIED = 0;
+        TAKEDOWN = 1;
+        REJOIN = 2;
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Data center name from the cluster configuration.
+    string datacenter_name = 2 [(required) = true];
+    Action action = 3;
+    // Validate a takedown without changing the storage configuration.
+    bool dry_run = 4;
+}
+
+message ChangeDataCenterStateResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+// A successful mutation acknowledges the new policy. Individual groups converge asynchronously.
+message ChangeDataCenterStateResult {}
+
 // Returns a consistent snapshot of the cluster storage state and configuration:
 // storage pools, groups, VDisks, PDisks, nodes, bare drive inventory and
 // cluster-wide storage settings. The request selects sections to include; an

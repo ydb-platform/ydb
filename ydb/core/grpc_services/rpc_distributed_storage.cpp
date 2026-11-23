@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage_tablet_types.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
@@ -23,6 +24,10 @@ using TEvStreamStorageStateRequest = TGrpcRequestNoOperationCall<Ydb::Distribute
                                                                  Ydb::DistributedStorage::StorageStateResponse>;
 using TEvReassignVDiskRequest = TGrpcRequestOperationCall<Ydb::DistributedStorage::ReassignVDiskRequest,
                                                           Ydb::DistributedStorage::ReassignVDiskResponse>;
+using TEvSetPoolRedundancy = TGrpcRequestOperationCall<Ydb::DistributedStorage::SetPoolRedundancyRequest,
+                                                       Ydb::DistributedStorage::SetPoolRedundancyResponse>;
+using TEvChangeDataCenterState = TGrpcRequestOperationCall<Ydb::DistributedStorage::ChangeDataCenterStateRequest,
+                                                          Ydb::DistributedStorage::ChangeDataCenterStateResponse>;
 
 namespace {
 
@@ -1225,6 +1230,168 @@ private:
     TActorId BSCPipeClient;
 };
 
+class TSetPoolRedundancyActor : public TRpcOperationRequestActor<TSetPoolRedundancyActor, TEvSetPoolRedundancy> {
+    using TBase = TRpcOperationRequestActor<TSetPoolRedundancyActor, TEvSetPoolRedundancy>;
+    using TRequest = Ydb::DistributedStorage::SetPoolRedundancyRequest;
+    using TIssue = NKikimrIssues::TIssuesIds;
+    TActorId Pipe;
+
+public:
+    using TBase::TBase;
+
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        if (!IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, "Changing pool redundancy requires administrator privileges", TIssue::ACCESS_DENIED);
+        }
+        const auto& request = *GetProtoRequest();
+        if (request.storage_pool_name().empty() || (!request.has_storage_pool_generation() && !request.allow_any_storage_pool_generation())) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Pool name and generation check are required", TIssue::DEFAULT_ERROR);
+        }
+        const auto target = request.asynchronous_redundancy();
+        if (target != TRequest::REDUNDANCY_1_PLUS_1 && target != TRequest::REDUNDANCY_2_PLUS_2) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported asynchronous redundancy", TIssue::DEFAULT_ERROR);
+        }
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto& config = *ev->Record.MutableRequest();
+        SetUserSid(Request_->GetInternalToken().Get(), config);
+        auto* cmd = config.AddCommand()->MutableSetPoolRedundancy();
+        cmd->SetPoolName(request.storage_pool_name());
+        cmd->SetTargetInvariant(target == TRequest::REDUNDANCY_2_PLUS_2 ? 2 : 1);
+        if (request.has_storage_pool_generation()) {
+            cmd->SetExpectedGeneration(request.storage_pool_generation());
+        }
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 3u};
+        Pipe = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(), pipeConfig));
+        Become(&TThis::StateFunc);
+        NTabletPipe::SendData(SelfId(), Pipe, ev.release());
+    }
+
+    void PassAway() override {
+        if (Pipe) {
+            NTabletPipe::CloseClient(SelfId(), Pipe);
+        }
+        TBase::PassAway();
+    }
+
+private:
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            cFunc(TEvTabletPipe::EvClientDestroyed, Disconnected);
+            default: return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void Disconnected() {
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Storage controller unavailable", TIssue::SHARD_NOT_AVAILABLE);
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Disconnected();
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
+        if (const auto error = ValidateBscMutationResponse(ev->Get()->Record.GetResponse(), false, 1)) {
+            return Reply(error->Status, error->Message, TIssue::DEFAULT_ERROR);
+        }
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::DistributedStorage::SetPoolRedundancyResult{}, ActorContext());
+    }
+};
+
+class TChangeDataCenterStateActor : public TRpcOperationRequestActor<TChangeDataCenterStateActor, TEvChangeDataCenterState> {
+    using TBase = TRpcOperationRequestActor<TChangeDataCenterStateActor, TEvChangeDataCenterState>;
+    using TRequest = Ydb::DistributedStorage::ChangeDataCenterStateRequest;
+    using TIssue = NKikimrIssues::TIssuesIds;
+public:
+    using TBase::TBase;
+
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        if (!IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, "Changing data center state requires administrator privileges", TIssue::ACCESS_DENIED);
+        }
+        const auto& request = *GetProtoRequest();
+        if (request.datacenter_name().empty()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "datacenter_name is required", TIssue::DEFAULT_ERROR);
+        }
+        if (request.action() != TRequest::TAKEDOWN && request.action() != TRequest::REJOIN) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "action must be TAKEDOWN or REJOIN", TIssue::DEFAULT_ERROR);
+        }
+        if (request.dry_run() && request.action() != TRequest::TAKEDOWN) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "dry_run is supported only for TAKEDOWN", TIssue::DEFAULT_ERROR);
+        }
+        Become(&TThis::StateFunc);
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false), IEventHandle::FlagTrackDelivery);
+    }
+
+private:
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvNodeWardenStorageConfig, Handle);
+            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+            case TEvents::TSystem::Undelivered:
+                return Reply(Ydb::StatusIds::UNAVAILABLE, "Could not reach the storage configuration manager", TIssue::SHARD_NOT_AVAILABLE);
+            default:
+                return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+        if (!ev->Get()->SelfManagementEnabled) {
+            return Reply(Ydb::StatusIds::UNSUPPORTED, "Changing data center state requires Distconf V2 self-management mode", TIssue::DEFAULT_ERROR);
+        }
+        const auto& request = *GetProtoRequest();
+        auto invoke = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* change = invoke->Record.MutableChangeDataCenterState();
+        change->SetName(request.datacenter_name());
+        change->SetTakeDown(request.action() == TRequest::TAKEDOWN);
+        change->SetDryRun(request.dry_run());
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), invoke.release(), IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const auto& record = ev->Get()->Record;
+        switch (record.GetStatus()) {
+            case TResult::OK:
+                break;
+            case TResult::NO_QUORUM:
+                return Reply(Ydb::StatusIds::UNAVAILABLE, record.GetErrorReason(), TIssue::SHARD_NOT_AVAILABLE);
+            case TResult::RACE:
+            case TResult::GENERATION_MISMATCH:
+                return Reply(Ydb::StatusIds::ABORTED, record.GetErrorReason(), TIssue::DEFAULT_ERROR);
+            case TResult::ERROR:
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, record.GetErrorReason(), TIssue::DEFAULT_ERROR);
+            default:
+                return Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetErrorReason(), TIssue::DEFAULT_ERROR);
+        }
+
+        const auto& request = *GetProtoRequest();
+        if (!request.dry_run()) {
+            if (!record.HasAppliedDataCenterStates()) {
+                return Reply(Ydb::StatusIds::INTERNAL_ERROR, "Distconf did not acknowledge the data center policy", TIssue::DEFAULT_ERROR);
+            }
+            auto states = ParseDataCenterStates(record.GetAppliedDataCenterStates());
+            if (!states) {
+                return Reply(Ydb::StatusIds::INTERNAL_ERROR, states.error(), TIssue::DEFAULT_ERROR);
+            }
+            using TState = NKikimrBlobStorage::TDataCenterState;
+            auto it = states->find(request.datacenter_name());
+            auto applied = it == states->end() ? TState::INCLUDED : it->second;
+            auto expected = request.action() == TRequest::TAKEDOWN ? TState::EXCLUDED : TState::INCLUDED;
+            if (applied != expected) {
+                return Reply(Ydb::StatusIds::INTERNAL_ERROR, "Acknowledged data center policy differs from the requested state", TIssue::DEFAULT_ERROR);
+            }
+        }
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::DistributedStorage::ChangeDataCenterStateResult{}, ActorContext());
+    }
+};
+
 void DoStreamStorageState(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     auto* request = dynamic_cast<TEvStreamStorageStateRequest*>(p.release());
     Y_ABORT_UNLESS(request, "Wrong request type for StreamStorageState");
@@ -1233,6 +1400,14 @@ void DoStreamStorageState(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityPro
 
 void DoReassignVDisk(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TReassignVDiskRequestActor(p.release()));
+}
+
+void DoSetPoolRedundancy(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TSetPoolRedundancyActor(p.release()));
+}
+
+void DoChangeDataCenterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TChangeDataCenterStateActor(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

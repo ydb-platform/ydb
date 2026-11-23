@@ -516,6 +516,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TSetPoolRedundancy& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineGroupState& cmd, TStatus& status);
 
             template<typename TCallback>

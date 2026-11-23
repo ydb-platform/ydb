@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Консоль кластера · YDB</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #fff; --subtle: #f8f9fb; --side: #fafafa; --text: #26282b; --muted: #626973;
+      --line: #e1e4e8; --blue: #315fc6; --selected: #e8efff; --accent: #406ddc; --btn-text: white;
+      --ok: #187452; --green: #269670; --warn: #976019; --amber: #d29432; --bad: #b23d44; --red: #d05b60;
+      --code: #19222d; --code-text: #e6edf7;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      scrollbar-color: #adb5c0 var(--bg);
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #222326; --subtle: #2a2c31; --side: #292a2e; --text: #e6e8ed; --muted: #b0b5c0;
+      --line: #42454d; --blue: #aac1ff; --selected: #303e5f; --accent: #426ccd;
+      --ok: #83d1ac; --green: #4db792; --warn: #e6bd77; --amber: #d6a449; --bad: #f49ba2; --red: #df767f;
+      --code: #181a1f; --code-text: #e6edf7;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    [hidden] { display: none !important; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    button, input, select { font: inherit; }
+    button, .button, input, select { min-height: 34px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--bg); }
+    button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; font-weight: 500; text-decoration: none; }
+    button:hover:enabled, .button:hover { background: var(--subtle); border-color: var(--muted); }
+    .primary { color: var(--btn-text); background: var(--accent); border-color: var(--accent); }
+    button.primary:hover:enabled, .button.primary:hover { background: #315bc0; border-color: #315bc0; }
+    .danger { color: var(--bad); }
+    :disabled { opacity: .52; cursor: default; }
+    :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+    input { min-width: 0; caret-color: var(--blue); }
+    input::placeholder { color: var(--muted); }
+    ::selection { background: #cad9ff; color: #182640; }
+    .icon { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .defs { display: none; }
+    header { height: 56px; padding: 0 20px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 3; }
+    .brand { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 22px; font-weight: 650; text-decoration: none; letter-spacing: -.035em; }
+    .brand svg { width: 31px; height: 31px; }
+    .product { padding-left: 15px; border-left: 1px solid var(--line); }
+    .spacer { flex: 1; }
+    .theme { min-width: 34px; padding: 5px; }
+    aside { width: 216px; position: fixed; inset: 56px auto 0 0; border-right: 1px solid var(--line); background: var(--side); display: flex; flex-direction: column; }
+    nav { padding: 20px 8px; display: grid; gap: 4px; }
+    nav a { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 8px 12px; border-radius: 6px; color: var(--text); text-decoration: none; }
+    nav a:hover { background: var(--line); }
+    nav a[aria-current] { background: var(--selected); color: var(--blue); font-weight: 600; }
+    aside footer { padding: 16px 20px; margin-top: auto; border-top: 1px solid var(--line); }
+    .muted, dt { color: var(--muted); }
+    small, .meta, dt { font-size: 12px; }
+    code, pre, .cmd, .number, dd { font: 12px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    aside dl { margin: 0; } dd { margin: 2px 0 10px; overflow-wrap: anywhere; }
+    main { margin-left: 216px; max-width: 1532px; padding: 25px 28px 60px; }
+    section { min-width: 0; scroll-margin-top: 75px; }
+    .mobile-cluster { display: none; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 25px; line-height: 32px; letter-spacing: -.025em; }
+    h2 { font-size: 20px; line-height: 28px; letter-spacing: -.02em; }
+    h3 { font-size: 14px; }
+    .line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .section-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 13px; }
+    .count { padding: 1px 7px; background: var(--subtle); border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 14px 0 10px; }
+    .tools input { flex: 0 1 320px; max-width: 100%; }
+    .note { color: var(--muted); }
+    .error { color: var(--bad); }
+    .banner { padding: 10px 14px; background: var(--subtle); border: 1px solid var(--line); border-radius: 6px; margin: 0 0 18px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+    th, td { padding: 11px 14px; white-space: nowrap; }
+    th { background: var(--subtle); color: var(--muted); font-weight: 500; font-size: 12px; }
+    td { border-top: 1px solid var(--line); } tbody tr:hover { background: var(--subtle); }
+    .health { display: inline-flex; align-items: center; gap: 6px; }
+    .health::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .good { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .unknown { color: var(--muted); }
+    .realms, .strip { display: flex; align-items: center; gap: 3px; }
+    .realms { gap: 14px; } .realm-name { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .policy { margin-top: 3px; font-size: 11px; }
+    .disk { width: 11px; height: 19px; border-radius: 2px; background: var(--muted); display: inline-block; }
+    .disk.good { background: var(--green); } .disk.warn { background: var(--amber); } .disk.bad { background: var(--red); }
+    .disk-help { margin-left: auto; font-size: 12px; color: var(--muted); }
+    .work { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .work-state { font-weight: 550; }
+    .work-copy { flex: 1; min-width: min(210px,100%); }
+    .work-copy p { font-size: 13px; } #work-error { margin-top: 8px; }
+    details { margin-top: 12px; } summary { cursor: pointer; width: fit-content; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; max-height: 200px; overflow: auto; padding: 12px; border-radius: 5px; background: var(--subtle); }
+    .examples { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+    .examples button { font: 12px ui-monospace, Menlo, monospace; }
+    .shell { padding: 12px; background: var(--code); color: var(--code-text); border-radius: 7px; }
+    .shell form { display: flex; align-items: center; gap: 9px; } .prompt { color: #89acff; font: 16px monospace; }
+    .shell input { flex: 1; padding: 4px; border: 0; background: transparent; color: var(--code-text); font: 13px ui-monospace, Menlo, monospace; caret-color: #9bb9ff; }
+    .shell input::placeholder { color: #a9b5ca; }
+    .shell input:focus-visible { outline-color: #9bb9ff; }
+    .shell ol { min-height: 95px; list-style: none; margin: 8px 0 0; padding: 0; max-height: 240px; overflow: auto; }
+    .shell li { border-top: 1px solid #4c5560; padding: 9px 0 1px; }
+    .shell li + li { margin-top: 6px; }
+    .shell time { color: #aebccc; font: 11px ui-monospace, Menlo, monospace; margin-right: 8px; }
+    .shell output, .exit-code { font: 13px/1.5 ui-monospace, Menlo, monospace; } .exit-code { color: #aebccc; display: block; }
+    .shell output { display: block; white-space: pre-wrap; overflow-wrap: anywhere; color: #c6ddd6; font-size: 13px; }
+    .shell output.error { color: #ffa6aa; }
+    .cmd { overflow-wrap: anywhere; }
+    dialog { max-width: min(420px,calc(100% - 32px)); color: var(--text); background: var(--bg); padding: 22px; border: 1px solid var(--line); border-radius: 9px; }
+    dialog::backdrop { background: #0008; } dialog p { margin: 10px 0 18px; overflow-wrap: anywhere; }
+    @media (max-width: 850px) {
+      header { position: static; } aside { position: static; width: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      nav { display: flex; gap: 2px; padding: 5px 10px; overflow-x: auto; } nav a { white-space: nowrap; min-height: 34px; }
+      aside footer { display: none; } main { margin-left: 0; padding: 20px 16px 36px; } section { scroll-margin-top: 10px; }
+      .mobile-cluster { display: block; margin: 0 0 12px; overflow-wrap: anywhere; }
+    }
+    @media (max-width: 550px) {
+      header { padding: 0 12px; gap: 10px; } .product { font-size: 13px; padding-left: 10px; } .mon-label { display: none; }
+      nav { font-size: 13px; } nav a { gap: 5px; padding: 6px 8px; } nav .icon { width: 15px; }
+      .disk-help { margin: 0; width: 100%; } .tools input { flex: 1; } .shell { padding: 10px; }
+      .realms { gap: 10px; } th, td { padding: 8px; } .work { gap: 8px; }
+      table, tbody, tr { display: block; } thead { display: none; }
+      tbody tr { display: grid; grid-template-columns: 1fr 1fr; padding: 10px; gap: 8px 12px; }
+      tbody tr + tr { border-top: 1px solid var(--line); }
+      td { border: 0; padding: 0; white-space: normal; } td::before { display: block; content: attr(data-label); color: var(--muted); font: 11px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      td:last-child { grid-column: 1 / -1; } .realms { flex-wrap: wrap; gap: 17px; margin-top: 4px; }
+    }
+    .terminal { margin-top:20px; padding:18px; background:#101923; color:#e1e9f2; }
+    .terminal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .terminal-head small { color:#adc0d0; }
+    .terminal-label { margin-top:20px; padding-bottom:9px; border-bottom:1px solid #455363; }
+    .terminal ol { min-height:210px; max-height:52vh; }
+    #storage-dialog, #hosts-dialog, #config-dialog { width:min(1080px,calc(100% - 32px)); max-width:none; padding:24px; box-sizing:border-box; }
+    #storage-dialog h3 { margin:14px 0 18px; }
+    #solo-cards, #dc-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr)); gap:12px; }
+    .dc-card { display:grid; justify-items:center; align-content:center; gap:7px; min-height:94px; }
+    .dc-card.included { border-color:var(--ok); background:color-mix(in srgb,var(--ok) 14%,var(--bg)); }
+    .dc-card.excluded { border-color:var(--bad); background:color-mix(in srgb,var(--bad) 14%,var(--bg)); }
+    .dc-card[aria-pressed=true] { outline:2px solid var(--blue); outline-offset:2px; }
+    #host-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr)); gap:12px; }
+    .host-dc { --tone:var(--amber); padding:10px; border:2px solid color-mix(in srgb,var(--tone) 65%,var(--line)); border-radius:12px; background:color-mix(in srgb,var(--tone) 9%,var(--bg)); }
+    .host-dc.online, .host-node.online { --tone:var(--green); }
+    .host-dc.offline, .host-node.offline { --tone:var(--red); }
+    .host-header, .host-node { width:100%; display:grid; place-content:center; gap:6px; text-align:center; }
+    .host-header { min-height:72px; border:0; background:transparent; }
+    .host-nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .host-node { --tone:var(--amber); min-height:72px; border-color:color-mix(in srgb,var(--tone) 65%,var(--line)); background:color-mix(in srgb,var(--tone) 12%,var(--bg)); }
+    .host-header small, .host-node small { color:var(--muted); }
+    #dc-actions { margin-top:18px; }
+    .work-metrics { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
+    .work-metrics div { background:var(--subtle); border:1px solid var(--line); border-radius:7px; padding:12px 18px; }
+    .work-metrics dd { font-size:16px; margin-top:4px; }
+    #work-log { max-height:50vh; }
+  </style>
+</head>
+<body>
+  <svg class="defs" aria-hidden="true"><defs>
+    <symbol id="i-grid" viewBox="0 0 20 20"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 8h16M8 8v9"/></symbol>
+    <symbol id="i-load" viewBox="0 0 20 20"><path d="M2 11h4l2-7 4 12 2-7 2 2h2"/></symbol>
+    <symbol id="i-cli" viewBox="0 0 20 20"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="m5 7 3 3-3 3m5 0h4"/></symbol>
+    <symbol id="i-out" viewBox="0 0 20 20"><path d="M11 3h6v6m0-6-9 9m1-8H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-5"/></symbol>
+    <symbol id="i-theme" viewBox="0 0 20 20"><path d="M16.8 12A7 7 0 0 1 8 3.2 7 7 0 1 0 16.8 12Z"/></symbol>
+  </defs></svg>
+  <header>
+    <a href="#storage" class="brand" aria-label="YDB — группы хранения">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#5282ff"/><g stroke="#fff" stroke-width="1.5" fill="none"><path d="m10 12 6 9 6-9M10 12h12"/></g><g fill="#fff"><rect x="7" y="8" width="6" height="6" rx="2"/><rect x="19" y="8" width="6" height="6" rx="2"/><rect x="13" y="18" width="6" height="6" rx="2"/></g></svg>YDB
+    </a>
+    <span class="product">Консоль кластера</span><span class="spacer"></span>
+    <a id="monitoring" class="button" hidden target="_blank" rel="noopener noreferrer" aria-label="YDB UI"><span class="mon-label">YDB UI</span><svg class="icon" aria-hidden="true"><use href="#i-out"/></svg></a>
+    <button type="button" class="theme" id="theme" aria-label="Сменить тему"><svg class="icon" aria-hidden="true"><use href="#i-theme"/></svg></button>
+  </header>
+  <aside>
+    <nav aria-label="Разделы консоли">
+      <a href="#storage" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>Группы</a>
+      <a href="#workload"><svg class="icon" aria-hidden="true"><use href="#i-load"/></svg>TPC-C</a>
+      <a href="#console"><svg class="icon" aria-hidden="true"><use href="#i-cli"/></svg>Консоль админа</a>
+    </nav>
+    <footer><dl><dt>Endpoint</dt><dd id="endpoint">—</dd><dt>База данных</dt><dd id="database">—</dd></dl></footer>
+  </aside>
+  <main>
+    <div class="banner" id="banner" role="alert" hidden></div>
+    <p class="mobile-cluster meta muted" id="mobile-location"></p>
+    <section id="storage" aria-labelledby="storage-title">
+      <div class="section-title"><h1 id="storage-title">Группы хранения</h1><span class="count" id="count" hidden></span></div>
+      <div class="tools"><input type="search" id="filter" aria-label="Найти группу или пул" placeholder="Найти группу или пул">
+        <span id="snapshot" class="disk-help">Загрузка групп…</span></div>
+      <div class="table-wrap" id="group-wrap" hidden>
+        <table><thead><tr><th scope="col">Группа</th><th scope="col">Пул</th><th scope="col">Поколение</th><th scope="col">Схема</th><th scope="col">Состояние группы</th><th scope="col">Здоровье</th><th scope="col">VDisk / политика DC</th></tr></thead><tbody id="groups"></tbody></table>
+      </div>
+      <p id="group-status" class="note" role="status"></p>
+    </section>
+    <section hidden id="workload" aria-labelledby="work-title">
+      <div class="section-title"><h1 id="work-title">Нагрузка TPC-C</h1></div>
+      <dl class="work-metrics"><div><dt>База нагрузки</dt><dd id="work-db">—</dd></div><div><dt>Endpoint нагрузки</dt><dd id="work-endpoint">—</dd></div><div><dt>Склады</dt><dd id="work-warehouses">—</dd></div><div><dt>tpmC</dt><dd id="tpmc">—</dd></div></dl>
+      <div class="work"><div class="work-copy"><div id="phase" class="work-state" role="status">Загрузка состояния…</div><p id="work-message" class="muted"></p></div>
+        <button type="button" class="primary" id="start" disabled>Запустить TPC-C</button>
+        <button type="button" id="stop" disabled>Остановить</button>
+      </div>
+      <p id="work-error" role="alert" class="error"></p>
+      <details id="logs" hidden><summary>Вывод YDB CLI</summary><pre id="work-log"></pre></details>
+    </section>
+    <section hidden id="console" aria-labelledby="console-title">
+      <div class="section-title"><h1 id="console-title">Консоль админа</h1></div>
+      <button id="open-storage" class="primary" type="button" disabled>Администрирование стораджа</button>
+      <button id="open-hosts" type="button" disabled>Управление хостами</button>
+      <button id="open-placement" type="button" disabled>Размещение StateStorage и Board</button>
+      <button id="open-config" type="button" disabled>Ручное изменение конфига</button>
+      <div class="shell terminal">
+        <div class="terminal-head"><h2>Терминал</h2><button id="clear-terminal" type="button" disabled>Очистить терминал</button></div>
+        <div class="terminal-label">Все операции</div>
+        <button id="older-commands" hidden>Предыдущие команды</button>
+        <output id="command-error" role="alert"></output>
+        <ol id="history" aria-label="Результаты команд" aria-live="polite"></ol>
+        <span class="prompt" aria-hidden="true">$</span>
+      </div>
+    </section>
+  </main>
+  <dialog id="storage-dialog" aria-labelledby="storage-admin-title">
+    <div class="terminal-head"><h2 id="storage-admin-title">Администрирование стораджа</h2><button id="close-storage" aria-label="Закрыть">×</button></div>
+    <section id="policy-panel"><div id="dc-cards"></div>
+    <label id="free-label" hidden>Имя датацентра <input id="free-target"></label>
+    <div class="line" id="dc-actions" hidden>
+      <strong id="selected-name"></strong>
+      <button id="example-check">Проверить исключение</button><button id="example-down" class="danger">Исключить DC</button><button id="example-up">Вернуть DC</button>
+    </div></section>
+  </dialog>
+  <dialog id="placement-dialog" aria-labelledby="placement-title">
+    <div class="terminal-head"><h2 id="placement-title">Размещение StateStorage и Board</h2><button id="close-placement" aria-label="Закрыть">×</button></div>
+    <p id="placement-current" role="status"></p>
+    <fieldset><legend>Целевые датацентры</legend><div id="placement-choices" class="line"></div></fieldset>
+    <button id="apply-placement" class="primary" disabled>Применить через YDB CLI</button>
+  </dialog>
+  <dialog id="config-dialog" aria-labelledby="config-title">
+    <div class="terminal-head"><h2 id="config-title">Ручное изменение конфига</h2><button id="close-config" aria-label="Закрыть">×</button></div>
+    <h3>Статическая группа · Solo DC</h3>
+    <p id="solo-status" role="status"></p><div id="solo-cards"></div>
+    <h3>StateStorage и обе Board</h3>
+    <p id="replica-target" role="status"></p>
+    <button id="apply-replicas" disabled>Разместить в работающих DC</button>
+  </dialog>
+  <dialog id="hosts-dialog" aria-labelledby="host-title">
+    <div class="terminal-head"><h2 id="host-title">Управление хостами</h2><button id="close-hosts" aria-label="Закрыть">×</button></div>
+    <p id="host-status" role="status"></p><div id="host-grid"></div>
+  </dialog>
+  <dialog id="confirmation" aria-labelledby="confirm-title" aria-describedby="confirm-text"><h2 id="confirm-title">Исключить датацентр?</h2>
+    <p id="confirm-text"></p><div class="line"><button type="button" id="cancel" autofocus>Отмена</button><button type="button" id="confirm" class="danger">Исключить</button></div>
+  </dialog>
+  <script>
+    'use strict';
+    const $ = id => document.getElementById(id);
+    let config, storage, workload, pending;
+    let commandBusy = false, hostBusy = false, workBusy = false, workVersion = 0;
+    const phases = {idle: 'Остановлена', preparing: 'Подготовка данных', running: 'Выполняется', stopping: 'Завершение', stopped: 'Остановлена', finished: 'Завершена', failed: 'Ошибка'};
+    function element(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text != null) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+    function show(id, text) { $(id).textContent = text; }
+    async function api(path, body) {
+      const options = {headers: {}};
+      if (body !== undefined) {
+        options.method = 'POST';
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(body);
+      }
+      const r = await fetch('/api/' + path, options);
+      const data = await r.json();
+      if (!r.ok && !(['action','host'].includes(path) && Number.isInteger(data.exitCode))) throw new Error(data.error || 'HTTP ' + r.status);
+      return data;
+    }
+    function updateControls() {
+      const canCommand = Boolean(config && !commandBusy);
+      for (const id of ['open-storage','free-target','example-check','example-down','example-up']) $(id).disabled = !canCommand;
+      $('open-hosts').disabled = !config;
+      $('open-placement').disabled = !canCommand || hostBusy;
+      $('open-config').disabled = !config;
+      const phase = workload?.phase;
+      $('start').disabled = !config || workBusy || !['idle','stopped','finished','failed'].includes(phase);
+      $('stop').disabled = !config || workBusy || !['preparing','running'].includes(phase);
+    }
+    function setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      $('theme').title = $('theme').ariaLabel = theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
+      $('theme').setAttribute('aria-pressed', String(theme === 'dark'));
+    }
+    setTheme(localStorage.getItem('dc-console-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    $('theme').onclick = () => {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      setTheme(next); localStorage.setItem('dc-console-theme', next);
+    };
+    function activeSection() {
+      const links = [...document.querySelectorAll('nav a')];
+      const id = links.some(a => a.hash === location.hash) ? location.hash : '#storage';
+      for (const a of links) {
+        $(a.hash.slice(1)).hidden = a.hash !== id;
+        if (a.hash === id) a.setAttribute('aria-current', 'page');
+        else a.removeAttribute('aria-current');
+      }
+    }
+    window.addEventListener('hashchange', () => {
+      activeSection(); window.scrollTo(0, 0);
+    });
+    function healthClass(value) {
+      value = String(value || '').toUpperCase();
+      if (['OK','GREEN','FULL','NORMAL'].includes(value)) return 'good';
+      if (['YELLOW','ORANGE','PARTIAL','WARNING','INIT_PENDING'].includes(value)) return 'warn';
+      if (['RED','ERROR','DISINTEGRATED','FAILED'].includes(value)) return 'bad';
+      return 'unknown';
+    }
+    function renderGroups() {
+      if (!storage) return;
+      const groups = storage.groups;
+      const filter = $('filter').value.toLowerCase().trim();
+      const visible = groups.filter(g => [g.id,g.pool].some(v => String(v).toLowerCase().includes(filter)));
+      $('group-wrap').hidden = !visible.length;
+      $('count').hidden = false; show('count', groups.length);
+      show('group-status', !groups.length ? 'Групп хранения нет.' : !visible.length ? 'Совпадений нет.' : '');
+      const rows = visible.map(g => {
+        const row = element('tr');
+        for (const [v,cls] of [[g.id,'number'],[g.pool],[g.generation,'number'],[g.erasure],[g.state]]) row.append(element('td', v ?? '—', cls));
+        const state = element('td');
+        state.append(element('span', g.overall || 'Неизвестно', 'health ' + healthClass(g.overall)));
+        row.append(state);
+        const td = element('td'), realms = element('div', null, 'realms');
+        for (const realm of g.realms) {
+          const group = element('div');
+          group.append(element('div', realm.name, 'realm-name'));
+          const strip = element('div', null, 'strip');
+          for (const disk of realm.disks) {
+            const color = disk.replicated === false && healthClass(disk.state) === 'good' ? 'warn' : healthClass(disk.state);
+            const title = 'Узел ' + (disk.node ?? '—') + ' · домен ' + (disk.domain ?? '—') + ' · ' + (disk.state || 'статус неизвестен') +
+              (disk.replicated == null ? '' : disk.replicated ? ' · репликация завершена' : ' · идёт репликация');
+            const bar = element('span', null, 'disk ' + color);
+            bar.title = title; bar.setAttribute('aria-label', title); bar.setAttribute('role', 'img');
+            strip.append(bar);
+          }
+          const policy = {INCLUDED: 'Включён', EXCLUDED: 'Исключён'}[realm.policy] || '—';
+          group.append(strip, element('div', policy, 'policy ' + (realm.policy === 'EXCLUDED' ? 'warn' : 'muted')));
+          realms.append(group);
+        }
+        td.append(realms); row.append(td);
+        const headers = document.querySelectorAll('#group-wrap th');
+        [...row.cells].forEach((cell, i) => { cell.dataset.label = headers[i].textContent; });
+        return row;
+      });
+      $('groups').replaceChildren(...rows);
+    }
+    $('filter').oninput = renderGroups;
+    function safeMonitoring(url) {
+      if (!url) return;
+      const target = new URL(url, location.href);
+      if (target.protocol === 'http:' || target.protocol === 'https:') {
+        $('monitoring').href = target.href; $('monitoring').hidden = false;
+      }
+    }
+    async function pollStorage() {
+      if (!config) return;
+      try {
+        storage = await api('storage');
+        safeMonitoring(storage.monitoringUrl);
+        renderGroups();
+        if ($('storage-dialog').open) renderCards();
+        show('snapshot', 'Обновлено ' + new Date().toLocaleTimeString('ru-RU'));
+      } catch (err) {
+        show('snapshot', 'Обновить группы не удалось');
+        show('group-status', err.message);
+      }
+    }
+    function renderWork(value) {
+      workload = value; show('work-warehouses', value.warehouses);
+      show('phase', phases[value.phase] || value.phase);
+      $('phase').className = 'work-state ' + (value.phase === 'running' ? 'good' : value.phase === 'failed' ? 'bad' : '');
+      const started = value.startedAt ? 'Старт в ' + new Date(value.startedAt * 1000).toLocaleTimeString('ru-RU') : '';
+      show('work-message', [value.message, started].filter(Boolean).join(' · '));
+      const logs = value.log || [];
+      const latest = logs.slice().reverse().find(line => /tpmC:\s*[0-9]/.test(line));
+      show('tpmc', latest?.match(/tpmC:\s*([0-9.]+)/)?.[1] || '—');
+      const log = $('work-log'), follow = log.scrollHeight - log.clientHeight - log.scrollTop < 4;
+      $('logs').hidden = !logs.length; show('work-log', logs.join('\n'));
+      if (follow) log.scrollTop = log.scrollHeight;
+      updateControls();
+    }
+    async function pollWork() {
+      if (!config || workBusy) return;
+      const version = workVersion;
+      try {
+        const result = await api('workload');
+        if (version === workVersion) { renderWork(result); show('work-error', ''); }
+      } catch (err) {
+        if (version === workVersion) { workload = null; show('phase','Состояние неизвестно'); show('work-error', err.message); updateControls(); }
+      }
+    }
+    async function changeWork(action) {
+      if (workBusy) return;
+      ++workVersion; workBusy = true; updateControls(); show('work-error', '');
+      try { renderWork(await api('workload/' + action, {})); }
+      catch (err) { show('work-error', err.message); }
+      finally { workBusy = false; updateControls(); }
+    }
+    $('start').onclick = () => changeWork('start');
+    $('stop').onclick = () => changeWork('stop');
+    let selected = '';
+    function renderCards() {
+      const policies = new Map();
+      for (const group of storage?.groups || []) {
+        for (const realm of group.realms) policies.set(realm.name, realm.policy);
+      }
+      for (const card of $('dc-cards').children) {
+        const policy = policies.get(card.value);
+        card.className = 'dc-card ' + (policy || '').toLowerCase();
+        card.lastChild.textContent = ({INCLUDED:'I · Введён', EXCLUDED:'X · Исключён'})[policy] || 'Состояние неизвестно';
+        card.setAttribute('aria-pressed', String(card.value === selected));
+      }
+      $('dc-actions').hidden = !selected;
+      show('selected-name', selected);
+    }
+    $('open-storage').onclick = () => {
+      selected = ''; $('free-target').value = '';
+      $('free-label').hidden = Boolean(config.datacenters.length);
+      $('dc-cards').replaceChildren(...config.datacenters.map(dc => {
+        const card = element('button');
+        card.value = dc; card.append(element('strong', dc), element('small'));
+        card.onclick = () => { selected = dc; renderCards(); };
+        return card;
+      }));
+      renderCards(); $('storage-dialog').showModal();
+    };
+    $('free-target').oninput = () => { selected = $('free-target').value.trim(); renderCards(); };
+    $('close-storage').onclick = () => $('storage-dialog').close();
+    $('close-placement').onclick = () => $('placement-dialog').close();
+    $('open-placement').onclick = async () => {
+      const choices = $('placement-choices'), apply = $('apply-placement');
+      choices.replaceChildren();
+      apply.disabled = true;
+      show('placement-current', 'Запрашиваем размещение…');
+      $('placement-dialog').showModal();
+      try {
+        const {services} = await api('placement');
+        const summaries = Object.entries(services).map(([name, groups]) =>
+          name.replace(/Config$/, '') + ' · ' + groups.map(g => g.dcs.join(', ') + (g.writeOnly ? ' (только запись)' : '')).join(' → '));
+        show('placement-current', summaries.join(' | '));
+        const current = services.StateStorageConfig[0].dcs;
+        const selected = () => [...choices.querySelectorAll(':checked')].map(c => c.value);
+        for (const dc of config.datacenters) {
+          const label = element('label'), input = element('input');
+          input.type = 'checkbox'; input.value = dc; input.checked = current.includes(dc);
+          input.onchange = () => { apply.disabled = !selected().length; };
+          label.append(input, document.createTextNode(' ' + dc));
+          choices.append(label);
+        }
+        apply.disabled = !selected().length;
+        apply.onclick = () => {
+          const datacenters = selected();
+          $('placement-dialog').close();
+          confirmAction({action:'placement', datacenters}, 'Изменить размещение через YDB CLI?',
+            'StateStorage, StateStorageBoard и SchemeBoard перейдут на ' + datacenters.join(', ') + '. Ноды продолжат работать.', 'Применить');
+        };
+      } catch (err) { show('placement-current', err.message); }
+    };
+    $('open-config').onclick = () => {
+      $('config-dialog').showModal();
+      pollHosts();
+    };
+    $('close-config').onclick = () => $('config-dialog').close();
+    async function pollHosts() {
+      const solo = $('config-dialog').open;
+      if (!solo && !$('hosts-dialog').open) return;
+      try {
+        const {hosts, staticRecovery, pendingDC, pendingOperation} = await api('hosts');
+        if (solo) {
+          show('solo-status', staticRecovery ? 'Выберите работающий DC. Ноды двух остальных DC должны быть остановлены.' : 'На этом сервере восстановление не настроено.');
+          $('solo-cards').replaceChildren(...config.datacenters.map(dc => {
+            const nodes = hosts.filter(h => h.dc === dc);
+            const others = hosts.filter(h => h.dc !== dc);
+            const online = nodes.filter(h => h.state === 'active').length;
+            const button = element('button', null, 'dc-card');
+            button.append(element('strong', dc), element('small', pendingDC === dc ? 'Продолжить запись' : online + '/' + nodes.length + ' нод в сети'));
+            button.disabled = !staticRecovery || commandBusy || hostBusy || nodes.length !== 3 || others.length !== 6 ||
+              !others.every(h => ['inactive','failed'].includes(h.state)) || (pendingDC ? pendingDC !== dc || pendingOperation?.mode !== 'group' : online !== nodes.length);
+            button.onclick = () => {
+              $('config-dialog').close();
+              confirmAction({action:'static-recovery', datacenter:dc}, 'Подменить конфиг на Solo DC для ' + dc + '?',
+                'Ноды ' + dc + ' будут остановлены. Сервер прочитает метаданные, сохранит diff и запишет новый конфиг на три PDisk. Оба остальных DC получат EXCLUDED. Группа 0 перейдёт в Solo DC с текущим подтверждённым уровнем INV1 или INV2. После проверки эти ноды запустятся.', 'Записать конфиг');
+            };
+            return button;
+          }));
+          const active = config.datacenters.filter(dc => hosts.some(h => h.dc === dc && h.state === 'active'));
+          const stable = config.datacenters.every(dc => {
+            const nodes = hosts.filter(h => h.dc === dc);
+            return nodes.length === 3 && nodes.every(h => ['active','inactive','failed'].includes(h.state));
+          });
+          const resume = pendingOperation?.mode === 'state-storage';
+          const target = resume ? pendingOperation.datacenters : active;
+          show('replica-target', resume ? 'Продолжить запись для ' + target.join(', ') :
+            !stable ? 'Дождитесь завершения запуска или остановки нод.' :
+            active.length ? 'Размещение: ' + active.join(', ') + ' · ' + active.length * 3 + ' реплик на сервис' : 'Нет работающих DC.');
+          const apply = $('apply-replicas');
+          apply.disabled = !staticRecovery || hostBusy || commandBusy || (pendingDC ? !resume : !stable || !active.length);
+          apply.onclick = () => {
+            $('config-dialog').close();
+            confirmAction({action:'state-storage', datacenters:target}, 'Изменить размещение StateStorage?',
+              'Ноды ' + target.join(', ') + ' будут остановлены для записи метаданных StateStorage, StateStorageBoard и SchemeBoard. После проверки запустятся ранее работавшие ноды.', 'Записать конфиг');
+          };
+          return;
+        }
+        const cards = [];
+        for (const dc of config.datacenters) {
+          const nodes = hosts.filter(h => h.dc === dc);
+          if (!nodes.length) continue;
+          const active = nodes.filter(h => h.state === 'active').length;
+          const stable = nodes.every(h => ['active','inactive','failed'].includes(h.state));
+          const card = element('div', null, 'host-dc ' + (active === nodes.length ? 'online' : stable && !active ? 'offline' : ''));
+          const header = element('button', null, 'host-header');
+          const label = active ? 'Отключить DC' : 'Включить DC';
+          header.disabled = hostBusy || pendingDC || !stable;
+          header.append(element('strong', dc), element('small', active + '/' + nodes.length + ' в сети · ' + (stable ? label : 'Смена состояния')));
+          header.onclick = () => {
+            $('hosts-dialog').close();
+            const params = {action:active ? 'stop' : 'start', datacenter:dc};
+            if (active) confirmAction(params, 'Отключить ' + dc + '?', 'Остановить все ноды ' + dc + ' (' + nodes.length + ')?', 'Отключить DC');
+            else execute(params);
+          };
+          const grid = element('div', null, 'host-nodes');
+          card.append(header, grid);
+          for (const h of nodes) {
+            const online = h.state === 'active';
+            const offline = ['inactive','failed'].includes(h.state);
+            const button = element('button', null, 'host-node ' + (online ? 'online' : offline ? 'offline' : ''));
+            button.disabled = hostBusy || pendingDC || !(online || offline);
+            button.title = (online ? 'Остановить ' : 'Запустить ') + h.unit;
+            button.setAttribute('aria-label', button.title);
+            button.append(element('strong', 'Нода ' + h.node), element('small', online ? 'В сети' : offline ? 'Остановлена' : h.state || 'Нет данных'));
+            button.onclick = () => {
+              $('hosts-dialog').close();
+              const params = {unit:h.unit, action:online ? 'stop' : 'start'};
+              if (online) confirmAction(params, 'Остановить хост?', 'Остановить ' + h.unit + ' в ' + dc + '?', 'Остановить');
+              else execute(params);
+            };
+            grid.append(button);
+          }
+          cards.push(card);
+        }
+        $('host-grid').replaceChildren(...cards);
+        show('host-status', cards.length ? '' : 'На сервере не найдены сервисы нод.');
+      } catch (err) { if (solo) { $('apply-replicas').disabled = true; show('replica-target', ''); } $(solo ? 'solo-cards' : 'host-grid').replaceChildren(); show(solo ? 'solo-status' : 'host-status', err.message); }
+    }
+    $('open-hosts').onclick = () => {
+      $('host-grid').replaceChildren(); show('host-status', 'Загрузка…');
+      $('hosts-dialog').showModal(); pollHosts();
+    };
+    $('close-hosts').onclick = () => $('hosts-dialog').close();
+    function confirmAction(params, title, message, label) {
+      pending = params;
+      show('confirm-title', title); show('confirm-text', message); show('confirm', label);
+      $('confirmation').showModal();
+    }
+    function runAction(action, dryRun = false) {
+      if (!selected || !config || commandBusy) return;
+      const params = {action, datacenter:selected, dryRun};
+      $('storage-dialog').close();
+      if (action === 'takedown' && !dryRun) {
+        confirmAction(params, 'Исключить датацентр?', 'Исключить «' + selected + '» из целевой конфигурации кластера ' + config.endpoint + '?', 'Исключить');
+      } else execute(params);
+    }
+    $('example-check').onclick = () => runAction('takedown', true);
+    $('example-down').onclick = () => runAction('takedown');
+    $('example-up').onclick = () => runAction('rejoin');
+    const historyRows = new Map();
+    let historyVersion = 0;
+    let clearedThrough = Number(sessionStorage.getItem('terminal-cleared-through')) || 0;
+    let latestCommand = 0;
+    $('clear-terminal').onclick = () => {
+      clearedThrough = Math.max(clearedThrough, latestCommand);
+      sessionStorage.setItem('terminal-cleared-through', String(clearedThrough));
+      for (const li of [...$('history').children]) {
+        if (li.dataset.active === 'true') continue;
+        historyRows.delete(Number(li.dataset.id));
+        li.remove();
+      }
+      $('older-commands').hidden = true;
+      show('command-error', '');
+      ++historyVersion;
+    };
+    async function refreshHistory(older = false) {
+      const version = ++historyVersion;
+      const first = $('history').firstElementChild;
+      const path = older && first ? 'commands?before=' + first.dataset.id : 'commands';
+      try {
+        const page = await api(path);
+        if (version !== historyVersion) return;
+        for (const row of page.commands) {
+          latestCommand = Math.max(latestCommand, row.id);
+          const active = ['running','cancelling'].includes(row.state);
+          if (row.id <= clearedThrough && !active) {
+            $('command-' + row.id)?.remove();
+            historyRows.delete(row.id);
+            continue;
+          }
+          const key = JSON.stringify(row);
+          if (historyRows.get(row.id) === key) continue;
+          historyRows.set(row.id, key);
+          const li = element('li');
+          li.dataset.id = row.id;
+          li.dataset.active = String(active);
+          li.id = 'command-' + row.id;
+          li.append(element('time', new Date(row.started * 1000).toLocaleString('ru-RU')),
+                    element('span', row.command, 'cmd'));
+          const output = element('output', active ? [row.output, row.state === 'running' ? 'Выполняется…' : 'Отмена…'].filter(Boolean).join('\n') : row.output);
+          if (!active && row.state !== 'done') output.className = 'error';
+          li.append(output);
+          if (active) {
+            const stop = element('button', 'Отменить');
+            stop.disabled = row.state === 'cancelling';
+            stop.onclick = async () => {
+              stop.disabled = true;
+              try { await api('commands/cancel', {id:row.id}); }
+              catch (err) { show('command-error', err.message); }
+              finally { await refreshHistory(); }
+            };
+            li.append(stop);
+          } else {
+            li.append(element('span', row.state === 'rejected' ? 'Отклонена до запуска' : row.state === 'interrupted' ? 'Прервана' : row.state === 'cancelled' ? 'Отменена' : '[exit ' + row.exitCode + ']', 'exit-code'));
+          }
+          const existing = $(li.id);
+          if (existing) existing.replaceWith(li);
+          else if (older && first) $('history').insertBefore(li, first);
+          else $('history').append(li);
+        }
+        if (older || !first || Number($('history').firstElementChild?.dataset.id) === page.commands[0]?.id)
+          $('older-commands').hidden = !page.older || !(page.commands[0]?.id > clearedThrough + 1);
+        if (!page.commands.length || page.commands[0].id <= clearedThrough + 1) $('older-commands').hidden = true;
+        $('clear-terminal').disabled = false;
+      } catch (err) { show('command-error', err.message); }
+    }
+    $('older-commands').onclick = () => refreshHistory(true);
+    async function execute(params) {
+      const hostAction = ['start','stop'].includes(params.action);
+      const recovery = ['static-recovery','state-storage'].includes(params.action);
+      if (hostAction || recovery) hostBusy = true;
+      if (!hostAction) commandBusy = true;
+      updateControls();
+      show('command-error', '');
+      try {
+        if (['state-storage','placement'].includes(params.action)) await api(params.action, {datacenters:params.datacenters});
+        else if (recovery) await api('static-recovery', {datacenter:params.datacenter});
+        else await api(hostAction ? 'host' : 'action', params);
+      } catch (err) { show('command-error', err.message); }
+      finally {
+        if (hostAction || recovery) hostBusy = false;
+        if (!hostAction) commandBusy = false;
+        updateControls(); await refreshHistory();
+      }
+    }
+    $('cancel').onclick = () => $('confirmation').close();
+    $('confirmation').onclose = () => { if (!$('confirmation').open) pending = null; };
+    $('confirm').onclick = () => {
+      const params = pending;
+      $('confirmation').close();
+      execute(params);
+    };
+    async function init() {
+      activeSection();
+      try {
+        config = await api('config');
+        show('work-db', config.workloadDatabase); show('work-endpoint', config.workloadEndpoint);
+        show('endpoint', config.endpoint); show('database', config.database || '—');
+        show('mobile-location', [config.endpoint, config.database].filter(Boolean).join(' · '));
+        safeMonitoring(config.monitoringUrl);
+        updateControls();
+        async function cycle() {
+          await Promise.all([pollStorage(),pollWork(),pollHosts()]);
+          setTimeout(cycle, 4000);
+        }
+        async function pollCommands() {
+          await refreshHistory();
+          setTimeout(pollCommands, 1500);
+        }
+        pollCommands();
+        cycle();
+      } catch (err) {
+        show('banner', err.message); $('banner').hidden = false;
+      }
+    }
+    init();
+  </script>
+</body>
+</html>

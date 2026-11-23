@@ -679,6 +679,9 @@ namespace NKikimr::NBsController {
             if (state.StoragePools.Changed()) {
                 MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
                 for (const auto& [previous, current] : Diff(&StoragePools, &state.StoragePools.Get())) {
+                    if (!current) {
+                        state.Callbacks.push_back([this, id = previous->first] { PoolsTargetingInv2.erase(id); });
+                    }
                     TStoragePoolInfo::UpdatePDiskFilters(txc.DB,
                         previous ? &previous->second.PDiskFilters : nullptr,
                         current ? &current->second.PDiskFilters : nullptr);

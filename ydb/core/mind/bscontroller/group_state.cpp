@@ -18,6 +18,21 @@ std::optional<NGroupSyncer::TExcludedRealms> TBlobStorageController::GetTargetEx
     return excluded;
 }
 
+void TBlobStorageController::SetPoolTargetInvariant(const TBoxStoragePoolId& id, NGroupSyncer::ETargetInvariant invariant) {
+    if (GetTargetInvariant(id) == invariant) {
+        return;
+    }
+    if (invariant == NGroupSyncer::ETargetInvariant::Inv2) {
+        PoolsTargetingInv2.insert(id);
+    } else {
+        PoolsTargetingInv2.erase(id);
+    }
+    for (auto it = StoragePoolGroups.lower_bound({id, Min<TGroupId>()});
+            it != StoragePoolGroups.end() && it->first == id; ++it) {
+        UpdateGroupStateActor(it->second);
+    }
+}
+
 void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
     if (!GroupStateActorId) {
         return;
@@ -30,6 +45,7 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
             && !StoragePools.at(group->StoragePoolId).BridgeMode) {
         message->Info.emplace();
         message->Info->Generation = group->Generation;
+        message->Info->TargetInvariant = GetTargetInvariant(group->StoragePoolId);
         message->Info->Topology = group->Topology;
         message->Info->States = group->FailRealmStates.value_or(NGroupSyncer::TFailRealmStates{});
         message->Info->GroupState = group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL);

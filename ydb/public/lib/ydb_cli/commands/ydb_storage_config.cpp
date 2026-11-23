@@ -1,6 +1,7 @@
 #include "ydb_storage_config.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_distributed_storage.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -11,6 +12,110 @@
 using namespace NKikimr;
 
 namespace NYdb::NConsoleClient::NStorageConfig {
+
+namespace {
+
+class TSetPoolRedundancyCommand : public TYdbCommand {
+public:
+    TSetPoolRedundancyCommand()
+        : TYdbCommand("set-redundancy", {"set-redandancy"}, "Set the target redundancy for a mirror-3-dc storage pool")
+    {}
+
+    void Config(TConfig& config) override {
+        TYdbCommand::Config(config);
+        config.AllowEmptyDatabase = true;
+        config.SetFreeArgsNum(0);
+        config.Opts->AddLongOption("storage-pool-name", "Name of the storage pool")
+            .Required().RequiredArgument("NAME").StoreResult(&Name);
+        config.Opts->AddLongOption("storage-pool-generation", "Expected sum of group generations")
+            .RequiredArgument("N").Handler([this](const TString& value) { Generation = FromString<ui32>(value); });
+        config.Opts->AddLongOption("allow-any-storage-pool-generation", "Apply regardless of the pool generation").StoreTrue(&AllowAny);
+        config.Opts->MutuallyExclusive("storage-pool-generation", "allow-any-storage-pool-generation");
+        config.Opts->AddLongOption("asynchronous-redundancy", "Target layout after repair: Redundancy1plus1 (INV1) or Redundancy2plus2 (INV2)")
+            .RequiredArgument("LAYOUT").DefaultValue("Redundancy1plus1").StoreResult(&Asynchronous);
+        config.Opts->AddLongOption("synchronous-redundancy", "Write layout (currently fixed at Redundancy2plus2)")
+            .RequiredArgument("LAYOUT").DefaultValue("Redundancy2plus2").StoreResult(&Synchronous);
+    }
+
+    void Parse(TConfig& config) override {
+        TYdbCommand::Parse(config);
+        if (Name.empty()) {
+            throw TMisuseException() << "--storage-pool-name must not be empty";
+        }
+        if (!AllowAny && !Generation) {
+            throw TMisuseException() << "Specify --storage-pool-generation or --allow-any-storage-pool-generation";
+        }
+        if (Synchronous != "Redundancy2plus2") {
+            throw TMisuseException() << "--synchronous-redundancy supports only Redundancy2plus2";
+        }
+        if (Asynchronous != "Redundancy1plus1" && Asynchronous != "Redundancy2plus2") {
+            throw TMisuseException() << "--asynchronous-redundancy must be Redundancy1plus1 or Redundancy2plus2";
+        }
+    }
+
+    int Run(TConfig& config) override {
+        using ETarget = NDistributedStorage::EPoolRedundancy;
+        const auto target = Asynchronous == "Redundancy2plus2" ? ETarget::TwoPlusTwo : ETarget::OnePlusOne;
+        auto driver = CreateDriver(config);
+        NDistributedStorage::TDistributedStorageClient client(driver);
+        NStatusHelpers::ThrowOnError(client.SetPoolRedundancy(Name, target, Generation).GetValueSync());
+        return EXIT_SUCCESS;
+    }
+
+private:
+    TString Name;
+    TString Asynchronous;
+    TString Synchronous;
+    std::optional<ui32> Generation;
+    bool AllowAny = false;
+};
+
+enum class EDataCenterCommand { TakeDown, Rejoin };
+
+class TDataCenterCommand : public TYdbCommand {
+public:
+    explicit TDataCenterCommand(EDataCenterCommand command)
+        : TYdbCommand(command == EDataCenterCommand::TakeDown ? "takedown" : "rejoin", {},
+            command == EDataCenterCommand::TakeDown ? "Exclude a data center from storage" : "Return a data center to storage")
+        , Command(command)
+    {}
+
+    void Config(TConfig& config) override {
+        TYdbCommand::Config(config);
+        config.AllowEmptyDatabase = true;
+        config.SetFreeArgsNum(0);
+        config.Opts->AddLongOption("datacenter-name", "Name of the data center")
+            .Required().RequiredArgument("NAME").StoreResult(&DataCenterName);
+        if (Command == EDataCenterCommand::TakeDown) {
+            config.Opts->AddLongOption("dry-run", "Validate the data center policy change without applying it")
+                .StoreTrue(&DryRun);
+        }
+    }
+
+    void Parse(TConfig& config) override {
+        TYdbCommand::Parse(config);
+        if (DataCenterName.empty()) {
+            throw TMisuseException() << "--datacenter-name must not be empty";
+        }
+    }
+
+    int Run(TConfig& config) override {
+        auto driver = CreateDriver(config);
+        NDistributedStorage::TDistributedStorageClient client(driver);
+        auto result = Command == EDataCenterCommand::TakeDown
+            ? client.TakeDownDataCenter(DataCenterName, DryRun)
+            : client.RejoinDataCenter(DataCenterName);
+        NStatusHelpers::ThrowOnError(result.GetValueSync());
+        return EXIT_SUCCESS;
+    }
+
+private:
+    EDataCenterCommand Command;
+    TString DataCenterName;
+    bool DryRun = false;
+};
+
+} // namespace
 
 TString WrapYaml(const TString& yaml) {
     auto doc = NFyaml::TDocument::Parse(yaml);
@@ -23,11 +128,18 @@ TString WrapYaml(const TString& yaml) {
 }
 
 TCommandStorageConfig::TCommandStorageConfig(std::optional<bool> overrideOnlyExplicitProfile)
-    : TClientCommandTree("storage", {}, "Storage config")
+    : TClientCommandTree("storage", {}, "Distributed storage administration")
     , OverrideOnlyExplicitProfile(overrideOnlyExplicitProfile)
 {
     AddCommand(std::make_unique<TCommandStorageConfigFetch>());
     AddCommand(std::make_unique<TCommandStorageConfigReplace>());
+    auto pool = std::make_unique<TClientCommandTree>("pool", std::initializer_list<TString>{}, "Manage storage pools");
+    pool->AddCommand(std::make_unique<TSetPoolRedundancyCommand>());
+    AddDangerousCommand(std::move(pool));
+    auto dataCenter = std::make_unique<TClientCommandTree>("datacenter", std::initializer_list<TString>{}, "Manage data center availability");
+    dataCenter->AddCommand(std::make_unique<TDataCenterCommand>(EDataCenterCommand::TakeDown));
+    dataCenter->AddCommand(std::make_unique<TDataCenterCommand>(EDataCenterCommand::Rejoin));
+    AddDangerousCommand(std::move(dataCenter));
 }
 
 void TCommandStorageConfig::PropagateFlags(const TCommandFlags& flags) {

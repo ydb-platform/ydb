@@ -1,9 +1,13 @@
 #include <ydb/services/distributed_storage/grpc_service.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/formats/factory.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/service_distributed_storage.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/grpc/draft/ydb_distributed_storage_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -16,10 +20,28 @@
 #include <util/string/builder.h>
 #include <util/generic/vector.h>
 
+#include <chrono>
 #include <utility>
 
 namespace NKikimr::NGRpcService {
 namespace {
+
+class TStartChangeDataCenterState : public TActorBootstrapped<TStartChangeDataCenterState>, public IFacilityProvider {
+    std::unique_ptr<IRequestOpCtx> Request;
+
+public:
+    explicit TStartChangeDataCenterState(std::unique_ptr<IRequestOpCtx> request)
+        : Request(std::move(request))
+    {}
+
+    void Bootstrap() {
+        DoChangeDataCenterState(std::move(Request), *this);
+        PassAway();
+    }
+
+    ui64 GetChannelBufferSize() const override { return 0; }
+    TActorId RegisterActor(IActor* actor) const override { return Register(actor); }
+};
 
 class TDistributedStorageTestServer {
 public:
@@ -201,6 +223,22 @@ TResult ExtractMutationResult(const TResponse& response) {
     TResult result;
     UNIT_ASSERT_C(response.operation().result().UnpackTo(&result), response.operation().DebugString());
     return result;
+}
+
+Ydb::DistributedStorage::ChangeDataCenterStateResponse ChangeDataCenterState(const std::shared_ptr<grpc::Channel>& channel,
+        Ydb::DistributedStorage::ChangeDataCenterStateRequest::Action action, const TString& name, bool dryRun = false) {
+    auto stub = Ydb::DistributedStorage::V1::DistributedStorageService::NewStub(channel);
+    Ydb::DistributedStorage::ChangeDataCenterStateRequest request;
+    request.set_action(action);
+    request.set_datacenter_name(name);
+    request.set_dry_run(dryRun);
+
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(15));
+    Ydb::DistributedStorage::ChangeDataCenterStateResponse response;
+    grpc::Status status = stub->ChangeDataCenterState(&context, request, &response);
+    UNIT_ASSERT_C(status.ok(), status.error_message());
+    return response;
 }
 
 bool SameVDiskPosition(const Ydb::DistributedStorage::VDiskId& lhs, const Ydb::DistributedStorage::VDiskId& rhs) {
@@ -456,6 +494,68 @@ Y_UNIT_TEST_SUITE(DistributedStorageGRpcService) {
         reassignRequest.mutable_target_pdisk_id()->set_node_id(1);
         const auto invalidTargetResponse = ReassignVDisk(server.GetChannel(), reassignRequest);
         UNIT_ASSERT_VALUES_EQUAL_C(invalidTargetResponse.operation().status(), Ydb::StatusIds::BAD_REQUEST, invalidTargetResponse.operation().DebugString());
+
+        using TRequest = Ydb::DistributedStorage::ChangeDataCenterStateRequest;
+        UNIT_ASSERT_VALUES_EQUAL(ChangeDataCenterState(server.GetChannel(), TRequest::ACTION_UNSPECIFIED, "dc1").operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(ChangeDataCenterState(server.GetChannel(), TRequest::TAKEDOWN, "").operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(ChangeDataCenterState(server.GetChannel(), TRequest::REJOIN, "dc1", true).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(ChangeDataCenterStateChecksDistconfAcknowledgement) {
+        using TRequest = Ydb::DistributedStorage::ChangeDataCenterStateRequest;
+        using TRpc = TGrpcRequestOperationCall<TRequest, Ydb::DistributedStorage::ChangeDataCenterStateResponse>;
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        TActorId nodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(0)), nodeWarden);
+        TResult reply;
+        auto run = [&](TRequest::Action action, bool dryRun = false) {
+            TRequest request;
+            request.set_action(action);
+            request.set_datacenter_name("dc1");
+            request.set_dry_run(dryRun);
+            NRpcService::SetRequestSyncOperationMode(request);
+            auto promise = NThreading::NewPromise<TRpc::TResponse>();
+            using TCallback = NRpcService::TPromiseWrapper<TRpc::TResponse>;
+            auto ctx = std::make_unique<NRpcService::TLocalRpcCtx<TRpc, TCallback>>(
+                std::move(request), TCallback(promise), "", Nothing(), Nothing(), false);
+            runtime.Register(new TStartChangeDataCenterState(std::move(ctx)));
+
+            const TDuration timeout = TDuration::Seconds(5);
+            auto query = runtime.GrabEdgeEventIf<TEvNodeWardenQueryStorageConfig>(nodeWarden,
+                [](const auto& ev) { return !ev->Get()->Subscribe; }, timeout);
+            UNIT_ASSERT_C(query, "RPC did not query NodeWarden for the storage configuration");
+            runtime.Send(new IEventHandle(query->Sender, nodeWarden, new TEvNodeWardenStorageConfig(nullptr, true, nullptr)));
+            auto invoke = runtime.GrabEdgeEvent<NStorage::TEvNodeConfigInvokeOnRoot>(nodeWarden, timeout);
+            UNIT_ASSERT_C(invoke && invoke->Get()->Record.HasChangeDataCenterState(), "RPC did not forward the DC change");
+            const auto& command = invoke->Get()->Record.GetChangeDataCenterState();
+            UNIT_ASSERT_VALUES_EQUAL(command.GetName(), "dc1");
+            UNIT_ASSERT_VALUES_EQUAL(command.GetTakeDown(), action == TRequest::TAKEDOWN);
+            UNIT_ASSERT_VALUES_EQUAL(command.GetDryRun(), dryRun);
+            auto result = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+            result->Record = reply;
+            runtime.Send(new IEventHandle(invoke->Sender, nodeWarden, result.release(), 0, invoke->Cookie));
+            return runtime.WaitFuture(promise.GetFuture(), timeout);
+        };
+
+        reply.SetStatus(TResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(run(TRequest::TAKEDOWN).operation().status(), Ydb::StatusIds::INTERNAL_ERROR);
+        ExtractMutationResult<Ydb::DistributedStorage::ChangeDataCenterStateResult>(run(TRequest::TAKEDOWN, true));
+        reply.MutableAppliedDataCenterStates(); // unlisted DCs are included
+        UNIT_ASSERT_VALUES_EQUAL(run(TRequest::TAKEDOWN).operation().status(), Ydb::StatusIds::INTERNAL_ERROR);
+        ExtractMutationResult<Ydb::DistributedStorage::ChangeDataCenterStateResult>(run(TRequest::REJOIN));
+        auto* dc = reply.MutableAppliedDataCenterStates()->AddDataCenter();
+        dc->SetName("dc1");
+        dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        ExtractMutationResult<Ydb::DistributedStorage::ChangeDataCenterStateResult>(run(TRequest::TAKEDOWN));
+        UNIT_ASSERT_VALUES_EQUAL(run(TRequest::REJOIN).operation().status(), Ydb::StatusIds::INTERNAL_ERROR);
+
+        reply.SetStatus(TResult::NO_QUORUM);
+        reply.SetErrorReason("Lost quorum");
+        auto failure = run(TRequest::TAKEDOWN);
+        UNIT_ASSERT_VALUES_EQUAL(failure.operation().status(), Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(failure.operation().issues(0).message(), "Lost quorum");
     }
 
     Y_UNIT_TEST(RejectUnsupportedStaticDryRun) {
@@ -511,6 +611,8 @@ Y_UNIT_TEST_SUITE(DistributedStorageGRpcService) {
         reassignRequest.mutable_vdisk_id()->set_group_generation(1);
         const auto reassignResponse = ReassignVDisk(server.GetChannel(), reassignRequest);
         UNIT_ASSERT_VALUES_EQUAL_C(reassignResponse.operation().status(), Ydb::StatusIds::UNAUTHORIZED, reassignResponse.operation().DebugString());
+        using TRequest = Ydb::DistributedStorage::ChangeDataCenterStateRequest;
+        UNIT_ASSERT_VALUES_EQUAL(ChangeDataCenterState(server.GetChannel(), TRequest::TAKEDOWN, "dc1").operation().status(), Ydb::StatusIds::UNAUTHORIZED);
     }
 }
 

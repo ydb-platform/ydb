@@ -31,12 +31,35 @@ inline std::optional<TMirror3dcGroupConfiguration> NextDataCenterTransition(
     return std::nullopt;
 }
 
+enum class ETargetInvariant { Inv1, Inv2 };
+
+inline std::optional<TMirror3dcGroupConfiguration> NextPolicyTransition(
+        const TMirror3dcGroupConfiguration& current, const std::optional<TExcludedRealms>& excluded,
+        ETargetInvariant invariant) {
+    if (excluded) {
+        if (auto next = NextDataCenterTransition(current, *excluded)) {
+            return next;
+        }
+    }
+    if (invariant == ETargetInvariant::Inv2) {
+        using S = NKikimrBlobStorage::TGroupState;
+        if (current.State == S::DC_FAILURE_INV1) {
+            return MakeMirror3dcGroupConfiguration(S::DC_FAILURE_INV2_PENDING, current.Realms);
+        }
+        if (current.State == S::DC_SOLO_INV1) {
+            return MakeMirror3dcGroupConfiguration(S::DC_SOLO_INV2_PENDING, current.Realms);
+        }
+    }
+    return std::nullopt;
+}
+
 struct TGroupReplicationInfo {
     ui32 Generation = 0;
     std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
     TFailRealmStates States;
     std::optional<EMirror3dcGroupState> GroupState;
     std::optional<TExcludedRealms> TargetExcluded;
+    ETargetInvariant TargetInvariant = ETargetInvariant::Inv1;
     struct TVDisk {
         TVDiskID Id;
         TActorId ActorId;

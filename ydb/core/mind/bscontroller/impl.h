@@ -2103,6 +2103,13 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
+    std::set<TBoxStoragePoolId> PoolsTargetingInv2;
+    void SetPoolTargetInvariant(const TBoxStoragePoolId& id, NGroupSyncer::ETargetInvariant invariant);
+    NGroupSyncer::ETargetInvariant GetTargetInvariant(const TBoxStoragePoolId& poolId) const {
+        return PoolsTargetingInv2.contains(poolId)
+            ? NGroupSyncer::ETargetInvariant::Inv2
+            : NGroupSyncer::ETargetInvariant::Inv1;
+    }
     std::optional<NGroupSyncer::TExcludedRealms> GetTargetExcludedRealms(const TGroupInfo& group) const;
     void UpdateGroupStateActor(TGroupId groupId);
 

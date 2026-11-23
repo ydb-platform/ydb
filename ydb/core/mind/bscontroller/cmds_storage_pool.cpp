@@ -1281,6 +1281,40 @@ namespace NKikimr::NBsController {
         DataCenterStates.Unshare() = std::move(*states);
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetPoolRedundancy& cmd, TStatus&) {
+        if (cmd.GetTargetInvariant() != 1 && cmd.GetTargetInvariant() != 2) {
+            throw TExError() << "target invariant must be 1 or 2";
+        }
+        std::optional<TBoxStoragePoolId> poolId;
+        for (const auto& [id, pool] : StoragePools.Get()) {
+            if (pool.Name == cmd.GetPoolName()) {
+                if (poolId) {
+                    throw TExError() << "ambiguous storage pool name";
+                }
+                poolId = id;
+            }
+        }
+        if (!poolId || cmd.GetPoolName().empty()) {
+            throw TExError() << "storage pool not found";
+        }
+        const auto& pool = StoragePools.Get().at(*poolId);
+        if (pool.ErasureSpecies != TErasureType::ErasureMirror3dc || pool.BridgeMode) {
+            throw TExError() << "expected a mirror-3-dc storage pool";
+        }
+        if (cmd.HasExpectedGeneration()) {
+            ui64 generation = 0;
+            const auto& index = StoragePoolGroups.Get();
+            for (auto it = index.lower_bound({*poolId, Min<TGroupId>()}); it != index.end() && it->first == *poolId; ++it) {
+                generation += Groups.Find(it->second)->Generation;
+            }
+            if (generation != cmd.GetExpectedGeneration()) {
+                throw TExError() << "expected pool generation " << cmd.GetExpectedGeneration() << ", current " << generation;
+            }
+        }
+        const auto target = cmd.GetTargetInvariant() == 2 ? NGroupSyncer::ETargetInvariant::Inv2 : NGroupSyncer::ETargetInvariant::Inv1;
+        Callbacks.push_back([controller = &Self, id = *poolId, target] { controller->SetPoolTargetInvariant(id, target); });
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineGroupState& cmd,
             TStatus& /*status*/) {
         using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
@@ -1361,14 +1395,14 @@ namespace NKikimr::NBsController {
             TMirror3dcGroupConfiguration current{
                 group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
             if (parameters.FromGroupStateActor && previous != current) {
-                std::optional<TMirror3dcGroupConfiguration> next;
+                std::optional<NGroupSyncer::TExcludedRealms> target;
                 if (Self.HasDataCenterPolicy) {
-                    auto target = Self.GetTargetExcludedRealms(*group);
+                    target = Self.GetTargetExcludedRealms(*group);
                     if (!target) {
                         return std::unexpected<TString>("Missing host location for group state transition");
                     }
-                    next = NGroupSyncer::NextDataCenterTransition(previous, *target);
                 }
+                auto next = NGroupSyncer::NextPolicyTransition(previous, target, Self.GetTargetInvariant(group->StoragePoolId));
                 if (!next) {
                     next = RecoveringComplete(previous);
                 }

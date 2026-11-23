@@ -804,6 +804,38 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
             "\r\n" << content));
     };
 
+    if (params.Get("page") == "set-redandancy") {
+        const TString& name = params.Get("pool");
+        if (name.empty()) {
+            return sendResponse("400 Bad Request", "text/plain", "expected a storage pool name");
+        }
+        std::optional<TBoxStoragePoolId> poolId;
+        for (const auto& [id, pool] : StoragePools) {
+            if (pool.Name == name) {
+                if (poolId) {
+                    return sendResponse("409 Conflict", "text/plain", "ambiguous storage pool name");
+                }
+                poolId = id;
+            }
+        }
+        if (!poolId) {
+            return sendResponse("404 Not Found", "text/plain", "storage pool not found");
+        }
+        const auto& pool = StoragePools.at(*poolId);
+        if (pool.ErasureSpecies != TErasureType::ErasureMirror3dc || pool.BridgeMode) {
+            return sendResponse("400 Bad Request", "text/plain", "expected a mirror-3-dc storage pool");
+        }
+        const TString& target = params.Get("invariant");
+        if (target == "INV2") {
+            SetPoolTargetInvariant(*poolId, NGroupSyncer::ETargetInvariant::Inv2);
+        } else if (target == "INV1") {
+            SetPoolTargetInvariant(*poolId, NGroupSyncer::ETargetInvariant::Inv1);
+        } else {
+            return sendResponse("400 Bad Request", "text/plain", "expected invariant INV1 or INV2");
+        }
+        return sendResponse("200 OK", "text/plain", target);
+    }
+
     if (params.count("exec")) {
         auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto *record = request->Record.MutableRequest();

@@ -50,18 +50,9 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
             }
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> cfc693434de (LOGBROKER-10828 Better)
         // Ordinary SDK settings do not expose the system _write_mode attribute.
         if (sourceTabletConfig.HasWriteMode()) {
             targetConfig.MutablePQTabletConfig()->SetWriteMode(sourceTabletConfig.GetWriteMode());
-=======
-        // Ordinary SDK settings do not expose the system _metrics_disabled attribute.
-        if (sourceTabletConfig.HasMetricsDisabled()) {
-            targetConfig.MutablePQTabletConfig()->SetMetricsDisabled(sourceTabletConfig.GetMetricsDisabled());
->>>>>>> dcacbe28dc9 (LOGBROKER-10828 Fix)
         }
         auto result = ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, localCluster);
         if (!result) {

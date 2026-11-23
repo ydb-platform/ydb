@@ -176,6 +176,7 @@ private:
 };
 
 int PrintReport(const IBackupStorage& storage, const TVector<TString>& paths, const TValidateSettings& settings) {
+    ResetValidateIoRetries();
     size_t issues = 0;
     size_t warnings = 0;
     size_t checked = 0;
@@ -193,6 +194,11 @@ int PrintReport(const IBackupStorage& storage, const TVector<TString>& paths, co
         if (settings.FailFast && issues != 0) {
             break;
         }
+    }
+    if (const ui64 retries = ValidateIoRetryCount()) {
+        // The first retry already printed its own warning. This line is the total.
+        Cerr << "warning: " << retries << (retries == 1 ? " read retry" : " read retries") << Endl;
+        warnings += 2;
     }
     if (issues != 0) {
         Cerr << "Backup validation failed: " << issues << " issue(s), checked " << checked << " object(s)";

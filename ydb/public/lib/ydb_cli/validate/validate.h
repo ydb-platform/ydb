@@ -85,14 +85,22 @@ struct TValidateSettings {
     std::function<void(TStringBuf)> Progress;
 };
 
-// Called from RetryValidateIo. No-op unless a validation with Progress is running on this thread.
+// Called from RetryValidateIo. Counts the retry and, on the first one in this
+// process until ResetValidateIoRetries, logs the error as a warning.
 void NoteValidateIoRetry(ui32 attempt, const std::exception& ex);
+
+// Clears the retry counter and the one-time warning. A command does this once, before reading.
+void ResetValidateIoRetries();
+
+// How many read attempts were retried since the last reset.
+ui64 ValidateIoRetryCount();
 
 // hardware_concurrency() - 1 when that is positive, otherwise 1.
 ui64 DefaultValidateThreads();
 
-// Delay before the retry that follows `failedAttempt` failed tries (1-based).
-// 100ms, 200ms, 400ms, ... capped at 2s. Jitter is added by RetryValidateIo.
+// Base delay before the retry that follows `failedAttempt` failed tries (1-based).
+// 2s, 4s, 8s, ... until the next step would pass 1 minute, then 1 minute.
+// RetryValidateIo adds a random extra in [0, base].
 TDuration ValidateRetryBackoff(ui32 failedAttempt);
 
 // Retries `fn` after an exception. `retries` is the number of attempts (1 means no retry).
@@ -108,10 +116,9 @@ auto RetryValidateIo(ui32 retries, TFn&& fn, TSleep&& sleep) -> decltype(fn()) {
             }
             NoteValidateIoRetry(attempt, ex);
             const TDuration backoff = ValidateRetryBackoff(attempt);
-            ui64 jitterMs = 0;
-            if (backoff.MilliSeconds() > 0) {
-                jitterMs = RandomNumber<ui64>(backoff.MilliSeconds() / 2 + 1);
-            }
+            const ui64 jitterMs = backoff.MilliSeconds() == 0
+                ? 0
+                : RandomNumber<ui64>(backoff.MilliSeconds() + 1);
             sleep(backoff + TDuration::MilliSeconds(jitterMs));
         }
     }

@@ -354,6 +354,10 @@ public:
         Write(2, TStringBuilder() << "file: " << text);
     }
 
+    void Warning(const TString& text) const {
+        Write(0, TStringBuilder() << "warning: " << text);
+    }
+
     void Trace(const TString& text) const {
         Write(3, TStringBuilder() << "trace: " << text);
     }
@@ -1712,18 +1716,31 @@ ui64 DefaultValidateThreads() {
     return processors > 1 ? static_cast<ui64>(processors) - 1 : 1;
 }
 
+namespace {
+
+std::atomic<ui64> IoRetryCount{0};
+std::atomic<bool> IoRetryWarned{false};
+
+constexpr ui64 RetryBackoffStartMs = 2000;
+constexpr ui64 RetryBackoffCapMs = 60000;
+
+}
+
 TDuration ValidateRetryBackoff(ui32 failedAttempt) {
     if (failedAttempt == 0) {
         return TDuration::Zero();
     }
-    ui64 ms = 100;
+    ui64 ms = RetryBackoffStartMs;
     for (ui32 i = 1; i < failedAttempt; ++i) {
-        if (ms >= 2000) {
-            return TDuration::MilliSeconds(2000);
+        if (ms >= RetryBackoffCapMs) {
+            return TDuration::MilliSeconds(RetryBackoffCapMs);
         }
         ms *= 2;
     }
-    return TDuration::MilliSeconds(std::min<ui64>(ms, 2000));
+    if (ms > RetryBackoffCapMs) {
+        ms = RetryBackoffCapMs;
+    }
+    return TDuration::MilliSeconds(ms);
 }
 
 TVector<TString> ParseExpectedObjects(TStringBuf text) {
@@ -1751,9 +1768,24 @@ TString MakeChecksumSidecar(TStringBuf data, const TString& fileName) {
     return Sha256Hex(data) + " " + fileName + "\n";
 }
 
+void ResetValidateIoRetries() {
+    IoRetryCount.store(0);
+    IoRetryWarned.store(false);
+}
+
+ui64 ValidateIoRetryCount() {
+    return IoRetryCount.load();
+}
+
 void NoteValidateIoRetry(ui32 attempt, const std::exception& ex) {
+    IoRetryCount.fetch_add(1);
+    bool already = false;
+    const bool first = IoRetryWarned.compare_exchange_strong(already, true);
     if (TlValidateLog == nullptr) {
         return;
+    }
+    if (first) {
+        TlValidateLog->Warning(TStringBuilder() << "read error, retries enabled: " << ex.what());
     }
     TlValidateLog->Trace(TStringBuilder() << "retry " << attempt << ": " << ex.what());
 }

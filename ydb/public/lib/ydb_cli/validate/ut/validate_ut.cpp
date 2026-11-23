@@ -1112,26 +1112,33 @@ Y_UNIT_TEST(MetadataChecksumAlwaysRequiresFullBackupSidecars) {
 }
 
 Y_UNIT_TEST(RetryValidateIoRetriesThenSucceeds) {
-    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(1).MilliSeconds(), 100);
-    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(2).MilliSeconds(), 200);
-    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(5).MilliSeconds(), 1600);
-    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(6).MilliSeconds(), 2000);
-    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(10).MilliSeconds(), 2000);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(1), TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(2), TDuration::Seconds(4));
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(5), TDuration::Seconds(32));
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(6), TDuration::Minutes(1));
+    UNIT_ASSERT_VALUES_EQUAL(ValidateRetryBackoff(9), TDuration::Minutes(1));
+
+    ResetValidateIoRetries();
 
     ui32 calls = 0;
-    ui32 sleeps = 0;
+    TVector<TDuration> delays;
     const bool ok = RetryValidateIo(3, [&] {
         ++calls;
         if (calls < 3) {
             ythrow yexception() << "transient";
         }
         return true;
-    }, [&](TDuration) {
-        ++sleeps;
+    }, [&](TDuration delay) {
+        delays.push_back(delay);
     });
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL(calls, 3);
-    UNIT_ASSERT_VALUES_EQUAL(sleeps, 2);
+    UNIT_ASSERT_VALUES_EQUAL(delays.size(), 2);
+    UNIT_ASSERT(delays[0] >= TDuration::Seconds(2));
+    UNIT_ASSERT(delays[0] <= TDuration::Seconds(4));
+    UNIT_ASSERT(delays[1] >= TDuration::Seconds(4));
+    UNIT_ASSERT(delays[1] <= TDuration::Seconds(8));
+    UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 2);
 
     ui32 failedCalls = 0;
     bool thrown = false;
@@ -1147,6 +1154,9 @@ Y_UNIT_TEST(RetryValidateIoRetriesThenSucceeds) {
     }
     UNIT_ASSERT(thrown);
     UNIT_ASSERT_VALUES_EQUAL(failedCalls, 2);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 3);
+    ResetValidateIoRetries();
+    UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 0);
 }
 
 TVector<TString> ProgressOf(
@@ -1176,6 +1186,47 @@ bool ContainsLine(const TVector<TString>& lines, TStringBuf part) {
         }
     }
     return false;
+}
+
+Y_UNIT_TEST(ReadRetryWarnsOnce) {
+    class TFlakyStorage : public TMemoryStorage {
+    public:
+        mutable ui32 FailsLeft = 2;
+
+        void ReadChunks(
+            const TString& key,
+            const std::function<void()>& beginAttempt,
+            const std::function<void(TStringBuf)>& onChunk) const override
+        {
+            RetryValidateIo(5, [&] {
+                beginAttempt();
+                if (key.Contains("data_") && !key.EndsWith(".sha256") && FailsLeft > 0) {
+                    --FailsLeft;
+                    ythrow yexception() << "timeout";
+                }
+                const TString data = Read(key);
+                if (data) {
+                    onChunk(data);
+                }
+            });
+        }
+    };
+
+    ResetValidateIoRetries();
+    TFlakyStorage storage;
+    AddTable(storage, "t", 2, "row\n", true);
+    const TVector<TString> lines = ProgressOf(storage, "t", 3);
+    ui32 notices = 0;
+    for (const TString& line : lines) {
+        if (line.Contains("retries enabled")) {
+            ++notices;
+            UNIT_ASSERT(line.Contains("timeout"));
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(notices, 1);
+    UNIT_ASSERT_VALUES_EQUAL(ValidateIoRetryCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(storage.FailsLeft, 0);
+    ResetValidateIoRetries();
 }
 
 size_t LineIndex(const TVector<TString>& lines, TStringBuf exact) {

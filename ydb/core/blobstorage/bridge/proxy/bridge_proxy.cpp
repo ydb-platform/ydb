@@ -68,7 +68,6 @@ namespace NKikimr {
                 result = std::make_unique<TGet>(queries, queryIndices.size(), original.Deadline, original.GetHandleClass,
                     original.MustRestoreFirst, original.IsIndexOnly, original.ForceBlockTabletData, original.IsInternal,
                     original.IsVerboseNoDataEnabled, original.CollectDebugInfo, original.ReportDetailedPartMap);
-                result->DataKind = original.DataKind;
                 result->TabletId = original.TabletId;
                 result->AcquireBlockedGeneration = original.AcquireBlockedGeneration;
                 result->PhantomCheck = original.PhantomCheck;
@@ -1331,12 +1330,7 @@ namespace NKikimr {
             // decide which piles get the request with the group state and the cluster state we have now
             const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
-<<<<<<< HEAD
-=======
             std::vector<TBridgePileId> deferredGetPiles;
-            std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> backgroundWrites;
-            std::vector<TGroupId> garbageHeldBack; // the parts of HOT_STANDBY piles not getting garbage collection
->>>>>>> 935e9b3d247 (Bridge proxy: add local-pile-first TEvGet optimization (#60062))
             bool hasTrustedPile = false;
 
             TBridgePileId initialGetPileId;
@@ -1464,23 +1458,19 @@ namespace NKikimr {
         std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile, const TEvent& ev,
                 TBridgePileId bridgePileId) {
             std::unique_ptr<TEvent> res;
+            const auto stage = pile.GetStage();
 
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
-                if (!NBridge::GroupPartTakesPuts(pile.GetStage())) {
+                if (!NBridge::GroupPartTakesPuts(stage)) {
                     return nullptr; // the rule is shared with BS_CONTROLLER counting the space of the group
                 }
             }
-<<<<<<< HEAD
-
-            switch (pile.GetStage()) {
-=======
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
                 if (!GroupPartTakesGets(stage)) {
                     return nullptr;
                 }
                 return MakeGetSubrequest(ev);
             } else switch (stage) {
->>>>>>> 935e9b3d247 (Bridge proxy: add local-pile-first TEvGet optimization (#60062))
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
                         if (!ev.Keep) {

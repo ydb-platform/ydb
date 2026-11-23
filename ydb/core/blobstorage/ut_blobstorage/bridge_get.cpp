@@ -258,13 +258,12 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
 
         constexpr ui32 shift = 2;
         constexpr ui32 size = 4;
-        constexpr auto dataKind = NKikimrBlobStorage::TDataKind::SYSTEM;
         std::vector<TEvBlobStorage::TEvGet::TQuery> fallbackQueries;
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->HasEvent() &&
                     ev->Recipient == MakeBlobStorageProxyID(pileGroups[1])) {
                 const auto *msg = ev->Get<TEvBlobStorage::TEvGet>();
-                UNIT_ASSERT_EQUAL(msg->DataKind, dataKind);
+                UNIT_ASSERT(msg->DoNotReportIndexRestoreGetMissingBlobs);
                 for (ui32 i = 0; i < msg->QuerySize; ++i) {
                     fallbackQueries.push_back(msg->Queries[i]);
                 }
@@ -278,7 +277,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
             queries[0].Set(ids[0]);
             queries[1].Set(ids[1], shift, size);
             auto get = std::make_unique<TEvBlobStorage::TEvGet>(queries, 2, TInstant::Max(), NKikimrBlobStorage::FastRead);
-            get->DataKind = dataKind;
+            get->DoNotReportIndexRestoreGetMissingBlobs = true;
             SendToBSProxy(edge, groupId, get.release());
         });
         const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);

@@ -25,6 +25,7 @@ enum class ELateRemoteTaskStart {
     ComputeState,
     StartResponse,
     LegacyInternalError,
+    CompleteInternalError,
     NotStarted,
     Undelivered,
 };
@@ -150,6 +151,7 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
                 notStarted->SetRequestId(requestId);
             }
             record.ClearStartedTasks();
+            record.ClearTaskStartOutcomeComplete();
 
             startResponses.Stop().Unblock();
             TDispatchOptions options;
@@ -161,14 +163,20 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
             remoteHellos.Stop().Unblock();
             break;
         }
+        case ELateRemoteTaskStart::CompleteInternalError:
         case ELateRemoteTaskStart::NotStarted: {
             auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
             reply->Record.SetTxId(start.GetTxId());
+            const bool internalError = outcome == ELateRemoteTaskStart::CompleteInternalError;
+            if (internalError) {
+                reply->Record.SetTaskStartOutcomeComplete(true);
+            }
             for (const auto& task : start.GetTasks()) {
                 auto* notStarted = reply->Record.AddNotStartedTasks();
                 notStarted->SetTaskId(task.GetId());
                 notStarted->SetRequestId(heldRequest->Cookie);
-                notStarted->SetReason(NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN);
+                notStarted->SetReason(internalError ? NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR
+                    : NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN);
             }
             runtime.Send(new IEventHandle(executer, heldRequest->Recipient, reply.Release(), 0, heldRequest->Cookie),
                 remoteNodeIndex, true);
@@ -208,6 +216,10 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
     Y_UNIT_TEST(LateRemoteTaskLegacyInternalErrorDuringShutdown) {
         TestLateRemoteTaskStart(2, ELateRemoteTaskStart::LegacyInternalError);
+    }
+
+    Y_UNIT_TEST(LateRemoteTaskCompleteInternalErrorDuringShutdown) {
+        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::CompleteInternalError);
     }
 
     Y_UNIT_TEST(LateRemoteTaskNotStartedDuringShutdown) {

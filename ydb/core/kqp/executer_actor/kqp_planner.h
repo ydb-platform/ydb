@@ -96,6 +96,9 @@ public:
     TProgressStat::TEntry CalculateConsumptionUpdate();
     void ShiftConsumption();
     void Submit();
+    void BeginShutdown() {
+        ShuttingDown = true;
+    }
     ui32 GetCurrentRetryDelay(ui32 requestId);
     void Unsubscribe();
 
@@ -170,6 +173,7 @@ private:
     const bool EnableWatermarks;
     IKqpStreamingQueryController* const StreamingQuery;
     bool ReadyStateSent = false;
+    bool ShuttingDown = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
     THashMap<ui32, TActorId> ResultChannels;

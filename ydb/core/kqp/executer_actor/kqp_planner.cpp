@@ -1038,7 +1038,7 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
 }
 
 void TKqpPlanner::SendReadyState() {
-    if (ReadyStateSent) {
+    if (ReadyStateSent || ShuttingDown) {
         return;
     }
 

@@ -1069,6 +1069,7 @@ private:
 
     void Shutdown() override {
         if (Planner) {
+            Planner->BeginShutdown();
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
                 YDB_LOG_INFO("Shutdown immediately - nothing to wait",
                     {"marker", "KQPDATA"},
@@ -1158,7 +1159,7 @@ private:
         for (const auto& task : record.GetNotStartedTasks()) {
             // Older nodes can report every task as not started after a partial creation failure.
             if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR
-                && record.StartedTasksSize() == 0) {
+                && record.StartedTasksSize() == 0 && !record.GetTaskStartOutcomeComplete()) {
                 continue;
             }
             Planner->TaskNotStarted(task.GetTaskId());

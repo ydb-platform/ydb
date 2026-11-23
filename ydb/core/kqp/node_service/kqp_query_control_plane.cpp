@@ -686,6 +686,7 @@ public:
 
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
+        reply->Record.SetTaskStartOutcomeComplete(true);
 
         NComputeActor::TComputeStagesWithScan computesByStage;
 

@@ -1459,12 +1459,38 @@ index 0000000000000000000000000000000000000000..e175e7ded8c906a1aeab340a9f928232
 +    string cluster_name = 1;
 +    repeated LocalityLbEndpoints endpoints = 2;
 +}
+diff --git a/src/AuthService.php b/src/AuthService.php
+index 40964713da3a74efc682ecf472a590ca86515183..0518db18494f7b9392983f146f56a3f34bc49ebd 100644
+--- a/src/AuthService.php
++++ b/src/AuthService.php
+@@ -28,7 +28,7 @@ class AuthService{
+     {
+         $this->ydb = $ydb;
+         $this->logger = $logger;
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+         $this->credentials = $ydb->iam();
+         $this->meta = [
+             'x-ydb-database' => [$ydb->database()],
+diff --git a/src/Discovery.php b/src/Discovery.php
+index 34c6cee3b3695364d191a45ba6c4aa0fe8c5b628..8714649fa75de7c8d06a0e341ce6032f59d7ba4d 100644
+--- a/src/Discovery.php
++++ b/src/Discovery.php
+@@ -43,7 +43,7 @@ class Discovery
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
 diff --git a/src/Internal/Eds.php b/src/Internal/Eds.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..c8ddfaec8e7a24bd6ce5983e1dc0a033cd3f3270
+index 0000000000000000000000000000000000000000..79fbb5e17699025f1c7f4fed2a3bb5f24f065690
 --- /dev/null
 +++ b/src/Internal/Eds.php
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,340 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Internal;
@@ -1727,8 +1753,14 @@ index 0000000000000000000000000000000000000000..c8ddfaec8e7a24bd6ce5983e1dc0a033
 +        $attempts = 0;
 +        do {
 +            if (!$this->curl) {
-+                if ($this->unary && $this->snapshot !== null && microtime(true) < $this->legacyUntil) {
-+                    return $this->snapshot;
++                if ($this->unary && $this->snapshot !== null) {
++                    if (microtime(true) < $this->legacyUntil) {
++                        return $this->snapshot;
++                    }
++                    // A rolling upgrade can add EDS while this driver is using unary discovery.
++                    $this->unary = false;
++                    $this->snapshot = null;
++                    ++$this->epoch;
 +                }
 +                $this->start();
 +            }
@@ -1799,8 +1831,60 @@ index 0000000000000000000000000000000000000000..c8ddfaec8e7a24bd6ce5983e1dc0a033
 +        }
 +    }
 +}
+diff --git a/src/Operations.php b/src/Operations.php
+index dcd243bc5dd6f32a1dc4b30abf62a41d2f67d5c7..9929a0fb07f4137c437f2cdcec0703a1b398bce1 100644
+--- a/src/Operations.php
++++ b/src/Operations.php
+@@ -38,7 +38,7 @@ class Operations
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+diff --git a/src/Scheme.php b/src/Scheme.php
+index df0f2a78e1981c4ac47d2fc342da794e7d4d87fb..8b880289ee5d8a915aee8607fd1ab6ea94aaa6f2 100644
+--- a/src/Scheme.php
++++ b/src/Scheme.php
+@@ -41,7 +41,7 @@ class Scheme
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+diff --git a/src/Scripting.php b/src/Scripting.php
+index 850b4fccae9b79d1bc205a14f97255ec8e314744..e25e8a21e0807a814626ed9cba4feb7d3cabb5ce 100644
+--- a/src/Scripting.php
++++ b/src/Scripting.php
+@@ -38,7 +38,7 @@ class Scripting
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
+diff --git a/src/Table.php b/src/Table.php
+index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..42788061a9fb703e51ebadade736452196c8c6f9 100644
+--- a/src/Table.php
++++ b/src/Table.php
+@@ -75,7 +75,7 @@ class  Table
+     {
+         $this->ydb = $ydb;
+ 
+-        $this->client = new ServiceClient($ydb->endpoint(), $ydb->grpcOpts());
++        $this->client = $ydb->serviceClient(ServiceClient::class);
+ 
+         $this->meta = $ydb->meta();
+ 
 diff --git a/src/Traits/RequestTrait.php b/src/Traits/RequestTrait.php
-index 500b3c3e6d3c9938eced88caeac997ba00376db8..b9f788602f0d2ec1f5bfa06d9dcb8368e0350450 100644
+index 500b3c3e6d3c9938eced88caeac997ba00376db8..acb86710091cbd907dcc36d721382f9b573689fb 100644
 --- a/src/Traits/RequestTrait.php
 +++ b/src/Traits/RequestTrait.php
 @@ -49,6 +49,7 @@ trait RequestTrait
@@ -1811,6 +1895,15 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..b9f788602f0d2ec1f5bfa06d9dcb8368
  
  
  
+@@ -204,7 +205,7 @@ trait RequestTrait
+             if ($this->ydb->needDiscovery() && count($this->ydb->cluster()->all()) > 0){
+                 $endpoint = $this->ydb->cluster()->all()[array_rand($this->ydb->cluster()->all())]->endpoint();
+             }
+-            $this->client = new $this->client($endpoint, $this->ydb->grpcOpts());
++            $this->client = $this->ydb->serviceClient(get_class($this->client), $endpoint);
+             if (isset(self::$grpcExceptions[$status->code])) {
+                 throw new self::$grpcExceptions[$status->code]($message);
+             } else {
 @@ -327,6 +328,15 @@ trait RequestTrait
          if (!$this->ydb->needDiscovery()) {
              return;
@@ -1819,7 +1912,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..b9f788602f0d2ec1f5bfa06d9dcb8368
 +        if ($epoch !== null) {
 +            if ($this->edsEpoch !== $epoch) {
 +                $class = get_class($this->client);
-+                $this->client = new $class($this->ydb->endpoint(), $this->ydb->grpcOpts());
++                $this->client = $this->ydb->serviceClient($class);
 +                $this->edsEpoch = $epoch;
 +            }
 +            return;
@@ -1828,10 +1921,10 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..b9f788602f0d2ec1f5bfa06d9dcb8368
          $interval = $this->ydb->discoveryInterval();
  
 diff --git a/src/Ydb.php b/src/Ydb.php
-index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..3e58883f406617ba7aaac21d1b81a30e5c56402e 100644
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f09271bc8243 100644
 --- a/src/Ydb.php
 +++ b/src/Ydb.php
-@@ -115,6 +115,10 @@ class Ydb
+@@ -115,6 +115,11 @@ class Ydb
       * @var \YdbPlatform\Ydb\Internal\Discovery
       */
      protected $internalDiscovery;
@@ -1839,10 +1932,11 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..3e58883f406617ba7aaac21d1b81a30e
 +    private $edsEpoch = 0;
 +    private $edsSnapshot;
 +    private $edsTimeoutMs;
++    private $edsDataChannel;
  
      /**
       * @param array $config
-@@ -165,7 +169,13 @@ class Ydb
+@@ -165,7 +170,13 @@ class Ydb
                  $this->discoveryInterval = $config['discoveryInterval'];
              }
  
@@ -1857,7 +1951,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..3e58883f406617ba7aaac21d1b81a30e
          }
  
          $this->logger()->info('YDB: Initialized');
-@@ -233,7 +243,34 @@ class Ydb
+@@ -233,7 +244,61 @@ class Ydb
       */
      public function discover()
      {
@@ -1879,17 +1973,44 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..3e58883f406617ba7aaac21d1b81a30e
 +                throw new \RuntimeException('Current EDS assignment has no endpoints');
 +            }
 +        } catch (\Throwable $error) {
++            $this->closeEdsChannel();
 +            $this->edsSnapshot = null;
 +            $this->cluster()->sync([]);
 +            throw $error;
 +        }
 +        $state = [$this->eds->epoch(), $snapshot];
 +        if ($state !== $this->edsSnapshot) {
++            $this->closeEdsChannel();
 +            $this->edsSnapshot = $state;
 +            $this->applyDiscoveryResult($snapshot);
 +            ++$this->edsEpoch;
 +        }
 +        return $this->edsEpoch;
++    }
++
++    /** @internal Share the current route's data transport between service stubs. */
++    public function serviceClient(string $class, ?string $legacyEndpoint = null)
++    {
++        $opts = $this->grpcOpts();
++        if (!$this->eds) {
++            return new $class($legacyEndpoint ?? $this->endpoint, $opts);
++        }
++        if ($this->edsSnapshot === null) {
++            throw new \RuntimeException('No current EDS assignment');
++        }
++        if (!$this->edsDataChannel) {
++            $opts['force_new'] = true;
++            $this->edsDataChannel = \Grpc\BaseStub::getDefaultChannel($this->endpoint, $opts);
++        }
++        return new $class($this->endpoint, $opts, $this->edsDataChannel);
++    }
++
++    private function closeEdsChannel()
++    {
++        if ($this->edsDataChannel) {
++            $this->edsDataChannel->close();
++            $this->edsDataChannel = null;
++        }
      }
  
      /**

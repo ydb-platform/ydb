@@ -76,6 +76,7 @@ feature_flags:
 | `enable_online_add_unique_index` | [Building a unique secondary index](../../concepts/query_execution/secondary_indexes.md#index-add) on an existing table without blocking writes during the build |
 | `enable_access_to_index_impl_tables` | Ability to [specify the number of replicas](../../yql/reference/syntax/alter_table/indexes.md) for a secondary index |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for change feeds (changefeed) in backup and restore operations |
+| `enable_column_statistics` | [Column statistics](../../yql/reference/syntax/analyze.md) collection with `ANALYZE` for the [cost-based optimizer](../../concepts/query_execution/optimizer.md#statistics) |
 | `enable_view_export` | Support for views (`VIEW`) in backup and restore operations |
 | `enable_export_auto_dropping` | Auto-deletion of temporary directories and tables when exporting to S3 |
 | `enable_followers_stats` | System views with information about [history of overloaded partitions](../../dev/system-views.md#top-overload-partitions) |

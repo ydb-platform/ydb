@@ -121,7 +121,10 @@ def observe(cluster, client, pids, excluded, static, dynamic, previous=None, tim
             ):
                 return groups
         if restarted or time.monotonic() >= deadline:
-            raise AssertionError(f"Expected excluded DCs {excluded}, static state {static}, dynamic state {dynamic}. Last observation: {observed}")
+            raise AssertionError(
+                f"Expected excluded DCs {excluded}, static state {static}, dynamic state {dynamic}. "
+                f"Last observation: {observed}"
+            )
         time.sleep(1)
 
 

@@ -4564,7 +4564,7 @@ selector_config: []
             auto request = MakeDataCenterChange(name, takeDown, dryRun);
             fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
             auto result = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+            UNIT_ASSERT(result->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
         };
         checkRejected("unknown-dc", true, false);
         checkRejected("unknown-dc", true, true);
@@ -4662,8 +4662,7 @@ selector_config: []
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().GetDataCenter(0).GetName(), "dc-1");
-        UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().GetDataCenter(0).GetState(),
-            NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        UNIT_ASSERT(response->GetAppliedDataCenterStates().GetDataCenter(0).GetState() == NKikimrBlobStorage::TDataCenterState::INCLUDED);
 
         // A retried rejoin still waits for BSC, without proposing a second generation.
         ui64 generation = QueryKeeper(runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration();
@@ -4674,7 +4673,7 @@ selector_config: []
         UNIT_ASSERT(!response);
         acknowledge(true);
         UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
-        UNIT_ASSERT_VALUES_EQUAL(response->GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+        UNIT_ASSERT(response->GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().SerializeAsString(), snapshot.SerializeAsString());
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), generation);

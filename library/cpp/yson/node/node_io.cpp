@@ -113,16 +113,18 @@ TNode NodeFromYsonString(const TStringBuf input, ::NYson::EYsonType type)
 
 TString NodeToYsonString(const TNode& node, NYson::EYsonFormat format)
 {
-    TStringStream stream;
-    NodeToYsonStream(node, &stream, format);
-    return stream.Str();
+    TString result;
+    TStringOutput output(result);
+    NodeToYsonStream(node, &output, format);
+    return result;
 }
 
 TString NodeToCanonicalYsonString(const TNode& node, NYson::EYsonFormat format)
 {
-    TStringStream stream;
-    NodeToCanonicalYsonStream(node, &stream, format);
-    return stream.Str();
+    TString result;
+    TStringOutput output(result);
+    NodeToCanonicalYsonStream(node, &output, format);
+    return result;
 }
 
 TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type)

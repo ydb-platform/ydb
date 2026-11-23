@@ -91,8 +91,8 @@ Y_UNIT_TEST(NotNullTypeDump) {
     NYdb::NDump::TClient client(driver);
     UNIT_ASSERT_VALUES_EQUAL(client.Dump("/", (GetOutputPath() / "outside").GetPath(),
         NYdb::NDump::TDumpSettings().Database(GetYdbDatabase())).GetStatus(), NYdb::EStatus::INTERNAL_ERROR);
-    RunYdb({"yql", "-s", Sprintf("UPSERT INTO `%s` (k, v, ov) VALUES (1u, 'value', NULL);", tableName)}, {});
-    const auto expected = RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM `%s`;", tableName)}, {});
+    RunYdb({"yql", "-s", Sprintf("UPSERT INTO %s (k, v, ov) VALUES (1u, 'value', NULL);", tableName)}, {});
+    const auto expected = RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM %s;", tableName)}, {});
     for (const bool absolute : {false, true}) {
         const TString name = absolute ? "DumpAbsolute" : "DumpRelative";
         const auto tableDumpPath = GetOutputPath() / name;
@@ -109,7 +109,7 @@ Y_UNIT_TEST(NotNullTypeDump) {
             NYdb::NDump::TRestoreSettings().Replace(true).VerifyExistence(true));
         UNIT_ASSERT_C(replaceResult.IsSuccess(), replaceResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(
-            RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM `%s/%s/%s`;",
+            RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM \\`%s/%s/%s\\`;",
                 GetYdbDatabase().c_str(), destination.c_str(), name.c_str())}, {}),
             expected);
     }

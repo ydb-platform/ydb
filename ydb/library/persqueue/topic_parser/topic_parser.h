@@ -34,13 +34,13 @@ TString MakeConsumerPath(const TString& consumer);
     }
 
 
-#define CHECK_VALID_AND_RETURN(result)    \
-    if (!Valid) {                         \
-        return TString();                 \
-    } else {                              \
-        YDB_LOG_ENSURE(!result.empty(),
-            {"originalTopic", OriginalTopic}); \
-        return result;                    \
+#define CHECK_VALID_AND_RETURN(result)          \
+    if (!Valid) {                               \
+        return TString();                       \
+    } else {                                    \
+        YDB_LOG_ENSURE(!result.empty(),         \
+            {"originalTopic", OriginalTopic});  \
+        return result;                          \
     }
 
 class TTopicNameConverter;

@@ -1400,7 +1400,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
             settings.EvaluateResultValue = mkqlTxBody.GetEvaluateResultValue();
             if (FlatMKQLRequest->LlvmRuntime) {
                 YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Using LLVM runtime to execute",
-                    {"transaction", TxId});
+                    {"txId", TxId});
                 settings.LlvmRuntime = true;
             }
             if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, TxId)) {

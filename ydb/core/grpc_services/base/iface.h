@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/fwd.h>
+#include <util/generic/hash.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <memory>
@@ -27,7 +28,7 @@ struct  TRlPath;
 
 namespace NGRpcService {
 
-using TAuditLogParts = TVector<std::pair<TString, TString>>;
+using TAuditLogParts = THashMap<TString, TString>;
 using TAuditLogHook = std::function<void (ui32 status, const TAuditLogParts&)>;
 
 class IRequestCtxBaseMtSafe {

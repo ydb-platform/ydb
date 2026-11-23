@@ -7,12 +7,13 @@
 #include <ydb/library/actors/http/http_proxy.h>
 
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 
 namespace NMonitoring::NAudit {
 
 TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request);
 
-using TAuditParts = TVector<std::pair<TString, TString>>;
+using TAuditParts = THashMap<TString, TString>;
 
 enum ERequestStatus {
     Success,

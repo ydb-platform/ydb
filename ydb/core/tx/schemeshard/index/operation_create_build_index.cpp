@@ -217,24 +217,24 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     TVector<ISubOperation::TPtr> result;
 
     if (isRebuild) {
-        // For rebuild: set existing index to WriteOnly. Impl table drop and recreation
+        // For rebuild: set existing index to NotReady. Impl table drop and recreation
         // is handled in the build state machine after Initiating completes.
-        {
-            auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
-            *outTx.MutableLockGuard() = tx.GetLockGuard();
-            outTx.SetInternal(tx.GetInternal());
-            auto alterIndex = outTx.MutableAlterTableIndex();
-            alterIndex->SetName(index.LeafName());
-            alterIndex->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
-            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-                *alterIndex->MutableHnswIndexDescription() = indexDesc.GetHnswIndexDescription();
-            }
-            // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
-            *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
-            *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();
-
-            result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
+        auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        *outTx.MutableLockGuard() = tx.GetLockGuard();
+        outTx.SetInternal(tx.GetInternal());
+        auto alterIndex = outTx.MutableAlterTableIndex();
+        alterIndex->SetName(index.LeafName());
+        alterIndex->SetState(GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            ? NKikimrSchemeOp::EIndexStateNotReady
+            : NKikimrSchemeOp::EIndexStateWriteOnly);
+        if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            *alterIndex->MutableHnswIndexDescription() = indexDesc.GetHnswIndexDescription();
         }
+        // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
+        *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
+        *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     } else {
         // For new build: create the index in NotReady state until the data is built and
         // the main table snapshot for the delta scan is taken. Vector indexes are

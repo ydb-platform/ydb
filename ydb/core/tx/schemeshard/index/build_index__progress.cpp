@@ -3629,7 +3629,7 @@ public:
                         buildInfo.SubState = TIndexBuildInfo::ESubState::None;
                         Self->PersistBuildIndexApplyTx(db, buildInfo);
                         Self->PersistBuildIndexState(db, buildInfo);
-                    } else {
+                    } else if (Self->EnableConsistentVectorIndexBuild) {
                         // All levels are built: take a main table snapshot and switch
                         // the index to WriteOnly.
                         nextState = TIndexBuildInfo::EState::PrepareVectorIndex;

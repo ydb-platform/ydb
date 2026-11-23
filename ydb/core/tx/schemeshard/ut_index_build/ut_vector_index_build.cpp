@@ -60,6 +60,9 @@ namespace {
             }),
             MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
                 return MakeCpuMeteringDeterministic(ev);
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvDeltaKMeansResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
             })
         );
     }
@@ -83,6 +86,10 @@ namespace {
                 return false;
             }),
             MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvDeltaKMeansResponse>>(runtime, [&](const auto& ev) {
                 ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
                 return false;
             })
@@ -418,9 +425,10 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(rows, 64u);
     }
 
-    Y_UNIT_TEST(CreateAndDrop) {
+    Y_UNIT_TEST_TWIN(CreateAndDrop, Consistent) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(Consistent);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -456,7 +464,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(7)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(Consistent ? 7 : 6)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
             {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
@@ -475,12 +483,13 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(9)});
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(Consistent ? 9 : 8)});
     }
 
     Y_UNIT_TEST(DeltaScanAppliesWritesDuringBuild) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -539,6 +548,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST(PrefixedDeltaScanAppliesWritesDuringBuild) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1191,6 +1201,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST(VectorIndexAutodetect) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1256,6 +1267,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST(PrefixedVectorIndexAutodetect) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1451,6 +1463,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST_FLAG(SimpleDuplicates, Overlap) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1528,6 +1541,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST(PrefixedDuplicates) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1737,9 +1751,10 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(Metering_CommonDB) {
+    Y_UNIT_TEST_TWIN(Metering_CommonDB, Consistent) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(Consistent);
         ui64 txId = 100;
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1837,7 +1852,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
                 NLs::PathExist,
                 NLs::IndexesCount(1),
-                NLs::PathVersionEqual(6)});
+                NLs::PathVersionEqual(Consistent ? 7 : 6)});
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table/index1", true, true, true), {
                 NLs::PathExist,
                 NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
@@ -1849,6 +1864,9 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST_FLAG(Metering_ServerLessDB, smallScanBuffer) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        // Metering without actual updates doesn't depend on whether the build is consistent or not,
+        // however the final PathVersion check differs by 1
+        const bool consistent = runtime.GetAppData().FeatureFlags.GetEnableConsistentVectorIndexBuild();
         ui64 txId = 100;
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2033,7 +2051,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"), {
                 NLs::PathExist,
                 NLs::IndexesCount(1),
-                NLs::PathVersionEqual(6)});
+                NLs::PathVersionEqual(consistent ? 7 : 6)});
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
                 NLs::PathExist,
                 NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
@@ -2988,6 +3006,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST_FLAG(BuildTableWithEmptyShard, AlwaysSetSystemOwner) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableConsistentVectorIndexBuild(true);
         ui64 txId = 100;
 
         runtime.GetAppData().AlwaysSetSystemOwner = AlwaysSetSystemOwner;

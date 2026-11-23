@@ -462,6 +462,7 @@ public:
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
+    bool EnableConsistentVectorIndexBuild = false;
     bool EnableHnswIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableCompactFulltextIndex = false;

@@ -351,15 +351,14 @@ TVector<TString> FindConsumingTopSortColumns(const IOperator* op, TExprContext& 
             return {};
         }
 
+        // A read in the key order or in the reverse one can return the rows of the sort.
+        if (!GetKeyReadDirection(sort->GetSortElements())) {
+            return {};
+        }
         TVector<TString> sortColumns;
         const auto& sortElements = sort->GetSortElements().Items();
         sortColumns.reserve(sortElements.size());
-
-        const bool ascending = sortElements.empty() ? true : sortElements.front().second.Ascending;
         for (const auto& [id, order] : sortElements) {
-            if (order.Ascending != ascending || order.NullsFirst != ascending) {
-                return {};
-            }
             sortColumns.push_back(TString(ctx.GetIndexAsString(Substitute(id, copies))));
         }
         return sortColumns;

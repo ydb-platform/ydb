@@ -5,7 +5,6 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/events/topic_sqs_action_metrics.h>
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/actor.h>

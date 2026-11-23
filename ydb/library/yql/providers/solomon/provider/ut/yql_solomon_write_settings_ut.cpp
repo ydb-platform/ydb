@@ -1,4 +1,5 @@
 #include <ydb/library/yql/providers/solomon/common/constants.h>
+#include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider_impl.h>
 
@@ -100,17 +101,22 @@ Y_UNIT_TEST_SUITE(TSolomonWriteSettingsTest) {
         UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxPointsPerRequest(), 7);
     }
 
-    Y_UNIT_TEST(WritePragmasCanBeReset) {
+    Y_UNIT_TEST(WritePragmasCannotBeReset) {
         TWriteSettingsFixture fixture;
         fixture.Set("WriteMaxRequestsInflight", "1");
         fixture.Set("WriteMaxPointsPerRequest", "2");
-        UNIT_ASSERT_VALUES_EQUAL(fixture.SinkSettings().GetMaxPointsPerRequest(), 2);
-        TString error;
-        UNIT_ASSERT_C(fixture.Set("WriteMaxRequestsInflight", Nothing(), error), error);
-        UNIT_ASSERT_C(fixture.Set("WriteMaxPointsPerRequest", Nothing(), error), error);
-        const auto settings = fixture.SinkSettings();
-        UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxRequestsInflight(), NSo::NConstants::DefaultWriteMaxRequestsInflight);
-        UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxPointsPerRequest(), NSo::NConstants::DefaultWriteMaxPointsPerRequest);
+        const auto initialSettings = fixture.SinkSettings();
+        UNIT_ASSERT_VALUES_EQUAL(initialSettings.GetMaxRequestsInflight(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(initialSettings.GetMaxPointsPerRequest(), 2);
+        for (const TString& name : { TString("WriteMaxRequestsInflight"), TString("WriteMaxPointsPerRequest") }) {
+            TString error;
+            UNIT_ASSERT(!fixture.Set(name, Nothing(), error));
+            UNIT_ASSERT_STRING_CONTAINS(error, name);
+            UNIT_ASSERT_STRING_CONTAINS(error, "cannot be reset to default");
+            const auto settings = fixture.SinkSettings();
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxRequestsInflight(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetMaxPointsPerRequest(), 2);
+        }
     }
 
     Y_UNIT_TEST(InvalidWritePragmasAreRejected) {
@@ -146,8 +152,8 @@ Y_UNIT_TEST_SUITE(TSolomonWriteSettingsTest) {
         rows->SetTypeAnn(fixture.Ctx.MakeType<TListExprType>(fixture.RowType(3)));
         auto dataSink = fixture.Ctx.NewCallable(pos, "DataSink", { fixture.Ctx.NewAtom(pos, "solomon"), fixture.Ctx.NewAtom(pos, "test") });
         dataSink->SetTypeAnn(fixture.Ctx.MakeType<TUnitExprType>());
-        auto write =
-            fixture.Ctx.NewCallable(pos, "SoWriteToShard", { world, dataSink, fixture.Ctx.NewAtom(pos, "project/cluster/service"), rows });
+        auto write = fixture.Ctx.NewCallable(
+            pos, NNodes::TSoWriteToShard::CallableName(), { world, dataSink, fixture.Ctx.NewAtom(pos, "project/cluster/service"), rows });
         TExprNode::TPtr output;
         auto transformer = CreateSolomonDataSinkTypeAnnotationTransformer(fixture.State);
         const auto status = transformer->Transform(write, output, fixture.Ctx);

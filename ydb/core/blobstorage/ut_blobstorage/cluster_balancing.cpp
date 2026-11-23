@@ -258,6 +258,59 @@ struct TTestEnv {
 
 Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
+    Y_UNIT_TEST(UnsupportedFiltersDoNotBroadenBalancingTargets) {
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2);
+        enum class EFilterMode { UnknownProperty, UnknownLocation, InvalidProperty, KnownAlternative };
+        EFilterMode mode = EFilterMode::UnknownProperty;
+        ui32 rewrittenPools = 0;
+        ui32 reassigns = 0;
+
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                auto* response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                for (auto& status : *response->MutableStatus()) {
+                    for (auto& pool : *status.MutableStoragePool()) {
+                        UNIT_ASSERT_VALUES_EQUAL(pool.PDiskFilterSize(), 1);
+                        const auto known = pool.GetPDiskFilter(0);
+                        auto* property = pool.MutablePDiskFilter(0)->AddProperty();
+                        if (mode == EFilterMode::UnknownLocation) {
+                            property->MutableLocation()->mutable_unknown_fields()->AddVarint(100, 7);
+                        } else if (mode != EFilterMode::InvalidProperty) {
+                            property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
+                        }
+                        if (mode == EFilterMode::KnownAlternative) {
+                            *pool.AddPDiskFilter() = known;
+                        }
+                        ++rewrittenPools;
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                for (const auto& cmd : ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest().GetCommand()) {
+                    if (cmd.HasReassignGroupDisk()) {
+                        ++reassigns;
+                        env.SendReassignNotViable(*ev);
+                        return false; // Keep the same imbalance throughout the test.
+                    }
+                }
+            }
+            return true;
+        };
+
+        env->AlterBox(1, 2); // New empty disks would normally be balancing targets.
+        for (const auto unsupported : {EFilterMode::UnknownProperty, EFilterMode::UnknownLocation,
+                EFilterMode::InvalidProperty}) {
+            mode = unsupported;
+            rewrittenPools = 0;
+            env->Sim(TDuration::Seconds(5));
+            UNIT_ASSERT_C(rewrittenPools >= 3, rewrittenPools);
+            UNIT_ASSERT_VALUES_EQUAL(reassigns, 0);
+        }
+
+        mode = EFilterMode::KnownAlternative;
+        UNIT_ASSERT_C(env.WaitFor([&] { return reassigns > 0; }, 10),
+            "A known OR branch must remain usable alongside an unsupported filter");
+    }
+
     Y_UNIT_TEST(PDiskLocationFilterExcludesUnreachableBalancingTargets) {
         TTestEnv env(4, TBlobStorageGroupType::ErasureNone, 1, 2);
         const auto initial = env->FetchBaseConfig();

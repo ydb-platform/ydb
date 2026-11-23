@@ -1,4 +1,6 @@
 #pragma once
+
+#include "step_details.h"
 #include "sub_columns.h"
 
 #include <ydb/core/kqp/common/events/scan_stats.h>
@@ -441,7 +443,7 @@ struct TStepStatisticsCounters {
 struct TStepCounters {
     TString Name;
     TStepStatisticsCounters Statistics;
-    std::variant<std::monostate> Details;
+    TStepDetails Details;
 };
 
 class TConcreteScanCounters: public TScanCounters {
@@ -460,12 +462,18 @@ public:
         }
     };
 
-    std::vector<TStepHandle> RegisterSteps(const std::vector<TString>& names) const;
+    std::vector<TStepHandle> RegisterSteps(const std::vector<TStepDescription>& descriptions) const;
     void RecordStepExecution(TStepHandle handle, TDuration activeTime, std::optional<ui64> inputRows = {},
         std::optional<ui64> outputRows = {}, std::optional<ui64> inputBytes = {}, std::optional<ui64> outputBytes = {}) const;
     void AddStepWait(TStepHandle handle, TDuration waitTime) const;
     void AddStepReadBytes(TStepHandle handle, ui64 readBytes) const;
     std::vector<TStepCounters> GetStepStats() const;
+
+    template <class TDetails, class TCallback>
+    void UpdateStepDetails(TStepHandle handle, TCallback&& callback) const {
+        auto lock = FetchingStepCounters->WriteGuard();
+        callback(std::get<TDetails>(handle.Position->Details));
+    }
 public:
     struct TPerStepAtomicCounters {
         std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds =

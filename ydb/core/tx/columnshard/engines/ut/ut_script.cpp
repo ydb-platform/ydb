@@ -62,6 +62,15 @@ Y_UNIT_TEST_SUITE(TestScript) {
             UNIT_ASSERT_VALUES_EQUAL(stats[i].Name, step->GetName());
             UNIT_ASSERT(step->GetStepStatsHandle());
         }
+        const auto& fetchedColumns = std::get<NKikimr::NColumnShard::TFetchColumnsStepDetails>(stats[6].Details).Columns;
+        UNIT_ASSERT_VALUES_EQUAL(fetchedColumns.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fetchedColumns[0].Id, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchedColumns[1].Id, 2);
+
+        const auto& assembledColumns = std::get<NKikimr::NColumnShard::TAssembleStepDetails>(stats[7].Details).Columns;
+        const std::vector<NKikimr::NColumnShard::TStepColumn> expectedColumns = { { 1, "c1" }, { 2, "c2" } };
+        UNIT_ASSERT(assembledColumns == expectedColumns);
+
         const auto handle = script->GetStep(8)->GetStepStatsHandle();
         counters.RecordStepExecution(*handle, TDuration::MicroSeconds(1), 10, 5, std::nullopt, std::nullopt);
         const auto updated = counters.GetStepStats();
@@ -70,11 +79,78 @@ Y_UNIT_TEST_SUITE(TestScript) {
         UNIT_ASSERT_VALUES_EQUAL(updated[8].Statistics.OutputRows.Sum, 5);
     }
 
+    Y_UNIT_TEST(StepDetailsMergeAcrossScripts) {
+        using namespace NKikimr::NColumnShard;
+        const TConcreteScanCounters counters(TScanCounters("TestScript"), nullptr);
+        counters.RegisterSteps({ { "step", TAssembleStepDetails{ .Columns = { { 1, "c1" }, { 2, "c2" } } } } });
+        const auto before = counters.GetStepStats();
+        counters.RegisterSteps({ { "step", TAssembleStepDetails{ .Columns = { { 2, "c2" }, { 3, "c3" } } } } });
+
+        const auto stats = counters.GetStepStats();
+        UNIT_ASSERT_VALUES_EQUAL(before.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TAssembleStepDetails>(before.front().Details).Columns.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.front().Name, "step");
+        const std::vector<TStepColumn> assembledColumns = { { 1, "c1" }, { 2, "c2" }, { 3, "c3" } };
+        UNIT_ASSERT(std::get<TAssembleStepDetails>(stats.front().Details).Columns == assembledColumns);
+    }
+
+    Y_UNIT_TEST(StepDetailsMergeResultBounds) {
+        using namespace NKikimr::NColumnShard;
+        const TConcreteScanCounters counters(TScanCounters("TestScript"), nullptr);
+        counters.RegisterSteps({ { "result", TBuildResultStepDetails{} } });
+        counters.RegisterSteps({ { "result", TBuildResultStepDetails{ .PageBounds = TBuildResultStepDetails::TPageBounds{ 1, 1, 5, 5 } } } });
+        counters.RegisterSteps({ { "result", TBuildResultStepDetails{ .PageBounds = TBuildResultStepDetails::TPageBounds{ 3, 3, 2, 2 } } } });
+        counters.RegisterSteps({ { "result", TBuildResultStepDetails{} } });
+
+        const auto stats = counters.GetStepStats();
+        UNIT_ASSERT_VALUES_EQUAL(stats.size(), 1);
+        const auto& bounds = std::get<TBuildResultStepDetails>(stats.front().Details).PageBounds;
+        UNIT_ASSERT(bounds);
+        UNIT_ASSERT_VALUES_EQUAL(bounds->MinStartIndex, 1);
+        UNIT_ASSERT_VALUES_EQUAL(bounds->MaxStartIndex, 3);
+        UNIT_ASSERT_VALUES_EQUAL(bounds->MinRecordsCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(bounds->MaxRecordsCount, 5);
+    }
+
+    Y_UNIT_TEST(StepDetailsConcurrentUpdates) {
+        using namespace NKikimr::NColumnShard;
+        const TConcreteScanCounters counters(TScanCounters("TestScript"), nullptr);
+        const auto handles = counters.RegisterSteps({ { "reserve", TReserveMemoryStepDetails{} } });
+        const auto unmeasured = counters.GetStepStats();
+        const auto recordBytes = [&](ui64 bytes) {
+            counters.UpdateStepDetails<TReserveMemoryStepDetails>(handles.front(), [bytes](TReserveMemoryStepDetails& details) {
+                details.RequestedBytes = details.RequestedBytes.value_or(0) + bytes;
+            });
+        };
+        recordBytes(0);
+        const auto measuredZero = counters.GetStepStats();
+
+        constexpr ui64 Iterations = 100;
+        const auto recordRequests = [&](ui64 bytes) {
+            for (ui64 i = 0; i < Iterations; ++i) {
+                recordBytes(bytes);
+            }
+        };
+        std::thread worker(recordRequests, 3);
+        recordRequests(2);
+        worker.join();
+
+        const auto stats = counters.GetStepStats();
+        UNIT_ASSERT(!std::get<TReserveMemoryStepDetails>(unmeasured.front().Details).RequestedBytes);
+        const auto zero = std::get<TReserveMemoryStepDetails>(measuredZero.front().Details).RequestedBytes;
+        UNIT_ASSERT(zero);
+        UNIT_ASSERT_VALUES_EQUAL(*zero, 0);
+        const auto total = std::get<TReserveMemoryStepDetails>(stats.front().Details).RequestedBytes;
+        UNIT_ASSERT(total);
+        UNIT_ASSERT_VALUES_EQUAL(*total, 5 * Iterations);
+    }
+
     Y_UNIT_TEST(StepStatisticsAggregateAcrossCopies) {
         const NKikimr::NColumnShard::TConcreteScanCounters counters(NKikimr::NColumnShard::TScanCounters("TestScript"), nullptr);
         const auto copy = counters;
-        const auto first = counters.RegisterSteps({ "DELETION", "DELETION" });
-        const auto second = copy.RegisterSteps({ "DELETION", "DELETION" });
+        const auto first = counters.RegisterSteps({ { "DELETION" }, { "DELETION" } });
+        const auto second = copy.RegisterSteps({ { "DELETION" }, { "DELETION" } });
         UNIT_ASSERT_VALUES_EQUAL(first.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(second.size(), 2);
 
@@ -120,9 +196,9 @@ Y_UNIT_TEST_SUITE(TestScript) {
     Y_UNIT_TEST(StepStatisticsPreserveOrderAndOldHandles) {
         const NKikimr::NColumnShard::TConcreteScanCounters counters(NKikimr::NColumnShard::TScanCounters("TestScript"), nullptr);
         UNIT_ASSERT(counters.RegisterSteps({}).empty());
-        const auto first = counters.RegisterSteps({ "DELETION", "SNAPSHOT" });
+        const auto first = counters.RegisterSteps({ { "DELETION" }, { "SNAPSHOT" } });
         UNIT_ASSERT_VALUES_EQUAL(first.size(), 2);
-        const auto reverse = counters.RegisterSteps({ "SNAPSHOT", "DELETION" });
+        const auto reverse = counters.RegisterSteps({ { "SNAPSHOT" }, { "DELETION" } });
         UNIT_ASSERT_VALUES_EQUAL(reverse.size(), 2);
         counters.AddStepReadBytes(first[0], 1);
         counters.AddStepReadBytes(first[1], 2);
@@ -145,7 +221,7 @@ Y_UNIT_TEST_SUITE(TestScript) {
         UNIT_ASSERT_VALUES_EQUAL(firstOrder, (std::vector<TString>{ "DELETION", "SNAPSHOT" }));
         UNIT_ASSERT_VALUES_EQUAL(reverseOrder, (std::vector<TString>{ "SNAPSHOT", "DELETION" }));
 
-        const auto subsequence = counters.RegisterSteps({ "SNAPSHOT", "DELETION" });
+        const auto subsequence = counters.RegisterSteps({ { "SNAPSHOT" }, { "DELETION" } });
         UNIT_ASSERT_VALUES_EQUAL(subsequence.size(), 2);
         counters.AddStepReadBytes(subsequence[1], 16);
         const auto after = counters.GetStepStats();
@@ -164,7 +240,7 @@ Y_UNIT_TEST_SUITE(TestScript) {
         const auto record = [&](const auto& scanCounters, bool& consistent) {
             start.arrive_and_wait();
             for (size_t i = 0; i < iterations; ++i) {
-                const auto handles = scanCounters.RegisterSteps({ "DELETION" });
+        const auto handles = scanCounters.RegisterSteps({ { "DELETION" } });
                 if (handles.size() != 1) {
                     consistent = false;
                     return;

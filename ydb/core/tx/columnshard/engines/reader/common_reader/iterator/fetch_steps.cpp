@@ -124,6 +124,24 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
     source.GetContext()->GetCommonContext()->AbortWithError("cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
 }
 
+NColumnShard::TStepDetails TAllocateMemoryStep::BuildStatisticsDetails(const TSpecialReadContext*) const {
+    NColumnShard::TReserveMemoryStepDetails::TStage stage{static_cast<ui32>(StageIndex), {}};
+    for (const auto& pack : Packs) {
+        switch (pack.GetMemType()) {
+            case EMemType::Blob:
+                stage.MemoryTypes.emplace_back("Blob");
+                break;
+            case EMemType::Raw:
+                stage.MemoryTypes.emplace_back("Raw");
+                break;
+            case EMemType::RawSequential:
+                stage.MemoryTypes.emplace_back("RawSequential");
+                break;
+        }
+    }
+    return NColumnShard::TReserveMemoryStepDetails{.Stages = {std::move(stage)}};
+}
+
 void TAllocateMemoryStep::ReportTracing(
     IDataSource& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 size) const {
     LWTRACK(MemoryAllocation, source.GetDataSourceOrbit(), source.GetRawPathId(), source.GetTabletId(), source.GetTxId(), source.GetSourceId(),
@@ -147,6 +165,12 @@ TConclusion<TExecutionResult> TAllocateMemoryStep::DoExecuteInplace(IDataSource&
         size += sizeLocal;
     }
     ReportTracing(source, step, TMonotonic::Now() - start, size);
+    if (const auto& handle = GetStepStatsHandle()) {
+        source.GetContext()->GetCommonContext()->GetCounters().UpdateStepDetails<NColumnShard::TReserveMemoryStepDetails>(
+            *handle, [size](auto& details) {
+                details.RequestedBytes = details.RequestedBytes.value_or(0) + size;
+            });
+    }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("smalloc"));
     return TExecutionResult::Pending(std::make_shared<TFetchingStepAllocation::TStartJob>(size, step, StageIndex, true));
 }

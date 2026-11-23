@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/counters/step_details.h>
+
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include "columns_set.h"
 #include "script_counters.h"
@@ -23,7 +25,17 @@ public:
     virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) = 0;
 };
 
+std::vector<NColumnShard::TStepColumn> ResolveStatisticsColumns(const std::set<ui32>& ids, const TSpecialReadContext* context);
+NColumnShard::TStepDetails BuildPKFilterStatistics(const TSpecialReadContext* context);
+NColumnShard::TStepDetails BuildShardingFilterStatistics(const TSpecialReadContext* context);
+
 class IFetchingStep: public TNonCopyable {
+public:
+    virtual NColumnShard::TStepDetails BuildStatisticsDetails(const TSpecialReadContext*) const {
+        return {};
+    }
+
+private:
     friend class TFetchingScript;
 
     YDB_READONLY_DEF(std::optional<NColumnShard::TConcreteScanCounters::TStepHandle>, StepStatsHandle);
@@ -84,7 +96,7 @@ private:
 
 public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps,
-        const NColumnShard::TConcreteScanCounters* counters = nullptr);
+        const NColumnShard::TConcreteScanCounters* counters = nullptr, const TSpecialReadContext* context = nullptr);
 
     void AddStepDuration(const ui32 index, const TDuration dLocal, const TDuration dGlobal) {
         AtomicSet(FinishInstant, TMonotonic::Now().MicroSeconds());
@@ -188,6 +200,7 @@ class TFetchingScriptBuilder {
 private:
     std::shared_ptr<TColumnsSetIds> GuaranteeNotOptional;
     ISnapshotSchema::TPtr FullSchema;
+    const TSpecialReadContext* StatisticsContext = nullptr;
 
     YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
@@ -217,7 +230,7 @@ public:
     TFetchingScriptBuilder(const TSpecialReadContext& context);
 
     std::shared_ptr<TFetchingScript> Build(const NColumnShard::TConcreteScanCounters* counters = nullptr)&& {
-        return std::make_shared<TFetchingScript>(BranchName, std::move(Steps), counters ? counters : Counters);
+        return std::make_shared<TFetchingScript>(BranchName, std::move(Steps), counters ? counters : Counters, StatisticsContext);
     }
 
     void AddStep(const std::shared_ptr<IFetchingStep>& step) {

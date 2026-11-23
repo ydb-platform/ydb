@@ -23,6 +23,15 @@ TConclusion<TExecutionResult> TPredicateFilter::DoExecuteInplace(NCommon::IDataS
     return TExecutionResult::Done();
 }
 
+NColumnShard::TStepDetails TSnapshotFilter::BuildStatisticsDetails(const NCommon::TSpecialReadContext* context) const {
+    NColumnShard::TSnapshotFilterStepDetails details;
+    if (context) {
+        const auto& snapshot = context->GetReadMetadata()->GetRequestSnapshot();
+        details.Snapshots.push_back({snapshot.GetPlanStep(), snapshot.GetTxId()});
+    }
+    return details;
+}
+
 TConclusion<TExecutionResult> TSnapshotFilter::DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = MakeSnapshotFilter(source.GetStageData().GetTable().ToTable({}, source.GetContext()->GetCommonContext()->GetResolver()),
         source.GetContext()->GetReadMetadata()->GetRequestSnapshot());

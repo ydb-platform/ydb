@@ -1,5 +1,7 @@
 #include "script.h"
 
+#include <util/string/escape.h>
+
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
@@ -20,22 +22,103 @@ TString TFetchingScript::DebugString() const {
 }
 
 TFetchingScript::TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps,
-    const NColumnShard::TConcreteScanCounters* counters)
+    const NColumnShard::TConcreteScanCounters* counters, const TSpecialReadContext* context)
     : BranchName(branchName)
     , Steps(std::move(steps))
 {
     if (counters) {
-        std::vector<TString> names;
-        names.reserve(Steps.size());
+        std::vector<NColumnShard::TStepDescription> descriptions;
+        descriptions.reserve(Steps.size());
         for (const auto& step : Steps) {
-            names.push_back(step->GetName());
+            descriptions.push_back({step->GetName(), step->BuildStatisticsDetails(context)});
         }
-        const auto handles = counters->RegisterSteps(names);
+        const auto handles = counters->RegisterSteps(descriptions);
         for (size_t i = 0; i < Steps.size(); ++i) {
             Y_ABORT_UNLESS(!Steps[i]->StepStatsHandle);
             Steps[i]->StepStatsHandle = handles[i];
         }
     }
+}
+
+std::vector<NColumnShard::TStepColumn> ResolveStatisticsColumns(const std::set<ui32>& ids, const TSpecialReadContext* context) {
+    const auto resolver = context ? context->GetCommonContext()->GetResolver() : nullptr;
+    std::vector<NColumnShard::TStepColumn> columns;
+    columns.reserve(ids.size());
+    for (const auto id : ids) {
+        columns.push_back({id, resolver ? resolver->GetColumnName(id, false) : TString()});
+    }
+    return columns;
+}
+
+namespace {
+
+TString FormatPKBound(const TPredicateContainer& bound, char comparison) {
+    if (bound.IsAll()) {
+        return {};
+    }
+    const auto columns = bound.GetColumnNames();
+    const auto& position = bound.GetSortableBatchPosition();
+    TStringBuilder values;
+    for (ui32 i = 0; i < columns.size(); ++i) {
+        if (i != 0) {
+            values << ", ";
+        }
+        const auto scalar = position.GetScalar(i);
+        if (!scalar->is_valid) {
+            values << "NULL";
+            continue;
+        }
+        const TString value(scalar->ToString());
+        switch (scalar->type->id()) {
+            case arrow::Type::STRING:
+            case arrow::Type::BINARY:
+            case arrow::Type::LARGE_STRING:
+            case arrow::Type::LARGE_BINARY:
+            case arrow::Type::FIXED_SIZE_BINARY:
+                values << '"' << EscapeC(value) << '"';
+                break;
+            default:
+                values << value;
+                break;
+        }
+    }
+    return TStringBuilder() << "KEY(" << JoinSeq(", ", columns) << ") "
+                            << comparison << (bound.IsInclude() ? "=" : "") << " (" << values << ')';
+}
+
+}
+
+NColumnShard::TStepDetails BuildPKFilterStatistics(const TSpecialReadContext* context) {
+    NColumnShard::TPKFilterDetails details;
+    if (context) {
+        const auto& metadata = *context->GetReadMetadata();
+        const auto& ranges = metadata.GetPKRangesFilter();
+        if (ranges.IsEmpty()) {
+            details.Predicates.emplace_back("All keys");
+            return details;
+        }
+        details.Columns = ResolveStatisticsColumns(ranges.GetColumnIds(metadata.GetResultSchema()->GetIndexInfo()), context);
+        for (const auto& range : ranges) {
+            const auto lower = FormatPKBound(range.GetPredicateFrom(), '>');
+            const auto upper = FormatPKBound(range.GetPredicateTo(), '<');
+            if (lower && upper) {
+                details.Predicates.push_back(lower + " AND " + upper);
+            } else if (lower || upper) {
+                details.Predicates.push_back(lower ? lower : upper);
+            } else {
+                details.Predicates.emplace_back("All keys");
+            }
+        }
+    }
+    return details;
+}
+
+NColumnShard::TStepDetails BuildShardingFilterStatistics(const TSpecialReadContext* context) {
+    NColumnShard::TShardingFilterStepDetails details;
+    if (context) {
+        details.Columns = ResolveStatisticsColumns(context->GetShardingColumns()->GetColumnIds(), context);
+    }
+    return details;
 }
 
 TString TFetchingScript::ProfileDebugString() const {
@@ -106,6 +189,7 @@ TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& contex
     if (HasAppData() && AppData()->FeatureFlags.GetEnableColumnShardStats()
         && context.GetReadMetadata()->GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
         Counters = &context.GetCommonContext()->GetCounters();
+        StatisticsContext = &context;
     }
 }
 

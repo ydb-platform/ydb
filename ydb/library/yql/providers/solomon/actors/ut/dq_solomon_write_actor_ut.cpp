@@ -124,6 +124,7 @@ struct TBatchingFixture {
     NActors::TActorId SinkId;
     NSo::NProto::ESolomonClusterType ClusterType;
     ui32 Sensors;
+    const ui64 MaxRequestsInflight;
     ui64 NextRow = 0;
     ui64 ValueOffset = 0;
     bool SameLabels = false;
@@ -135,10 +136,11 @@ struct TBatchingFixture {
     // Destroy the runtime before the callbacks and captured requests it borrows.
     NActors::TTestActorRuntimeBase Runtime;
 
-    explicit TBatchingFixture(
-        NSo::NProto::ESolomonClusterType clusterType = NSo::NProto::CT_SOLOMON, ui32 sensors = 1, i64 freeSpace = DqSolomonDefaultFreeSpace)
+    explicit TBatchingFixture(NSo::NProto::ESolomonClusterType clusterType = NSo::NProto::CT_SOLOMON, ui32 sensors = 1,
+        i64 freeSpace = DqSolomonDefaultFreeSpace, TMaybe<ui64> maxRequestsInflight = Nothing(), TMaybe<ui64> maxPointsPerRequest = Nothing())
         : ClusterType(clusterType)
         , Sensors(sensors)
+        , MaxRequestsInflight(maxRequestsInflight.GetOrElse(NSo::NConstants::DefaultWriteMaxRequestsInflight))
     {
         Runtime.Initialize();
         ComputeId = Runtime.Register(new TFakeActor(std::make_shared<TAsyncInputPromises>(), std::make_shared<TAsyncOutputPromises>()));
@@ -159,6 +161,12 @@ struct TBatchingFixture {
             settings.SetCluster("cluster");
             settings.SetService("service");
             settings.SetClusterType(ClusterType);
+            if (maxRequestsInflight) {
+                settings.SetMaxRequestsInflight(*maxRequestsInflight);
+            }
+            if (maxPointsPerRequest) {
+                settings.SetMaxPointsPerRequest(*maxPointsPerRequest);
+            }
             auto& scheme = *settings.MutableScheme();
             scheme.MutableTimestamp()->SetIndex(0);
             scheme.MutableTimestamp()->SetDataTypeId(NUdf::TDataType<NUdf::TTimestamp>::Id);
@@ -335,11 +343,11 @@ struct TBatchingFixture {
     }
 
     void FillSlots() {
-        for (ui32 i = 0; i < 3; ++i) {
+        for (ui64 i = 0; i < MaxRequestsInflight; ++i) {
             Write(1);
         }
-        UNIT_ASSERT_VALUES_EQUAL(Requests.size(), 3);
-        for (ui32 i = 0; i < 3; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(Requests.size(), MaxRequestsInflight);
+        for (ui64 i = 0; i < MaxRequestsInflight; ++i) {
             AssertRequest(i, i * Sensors, Sensors);
         }
     }
@@ -703,6 +711,93 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
             UNIT_ASSERT_VALUES_EQUAL(fixture.DestroyedRows, 1200);
         }
+    }
+
+    Y_UNIT_TEST(ConfiguredInflightLimitIsRespected) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            for (const ui64 inflight : { 1ULL, 2ULL, 5ULL }) {
+                TBatchingFixture fixture(clusterType, 1, DqSolomonDefaultFreeSpace, inflight, 5);
+                fixture.FillSlots();
+                fixture.Write(4);
+                fixture.Write(4);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), inflight);
+                fixture.Ack();
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), inflight);
+                fixture.AssertRequest(inflight - 1, inflight, 5);
+                fixture.Ack();
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), inflight);
+                fixture.AssertRequest(inflight - 1, inflight + 5, 3);
+                fixture.Drain();
+                UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ConfiguredPointLimitIsRespected) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            for (const ui64 points : { 1ULL, 1500ULL, 10000ULL }) {
+                TBatchingFixture fixture(clusterType, 1, DqSolomonDefaultFreeSpace, 1, points);
+                fixture.FillSlots();
+                fixture.Write(points + 1);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 1);
+                fixture.Ack();
+                fixture.AssertRequest(0, 1, points);
+                fixture.Ack();
+                fixture.AssertRequest(0, points + 1, 1);
+                fixture.Drain();
+                UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ConfiguredPointLimitCountsSensorsAndKeepsRowsWhole) {
+        for (const auto clusterType : { NSo::NProto::CT_SOLOMON, NSo::NProto::CT_MONIUM, NSo::NProto::CT_MONITORING }) {
+            TBatchingFixture fixture(clusterType, 3, DqSolomonDefaultFreeSpace, 2, 7);
+            fixture.FillSlots();
+            fixture.Write(3);
+            fixture.Write(3);
+            for (ui64 first : { 6ULL, 12ULL, 18ULL }) {
+                fixture.Ack();
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Requests.size(), 2);
+                fixture.AssertRequest(1, first, 6);
+            }
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+        }
+    }
+
+    Y_UNIT_TEST(ConfiguredLimitsPreserveCheckpointAndFinish) {
+        TBatchingFixture fixture(NSo::NProto::CT_SOLOMON, 1, DqSolomonDefaultFreeSpace, 1, 2);
+        fixture.FillSlots();
+        fixture.Write(3, CreateCheckpoint(1));
+        fixture.Write(3, Nothing(), true);
+        fixture.Ack();
+        fixture.AssertRequest(0, 1, 2);
+        fixture.Ack();
+        fixture.AssertRequest(0, 3, 1);
+        UNIT_ASSERT(fixture.Callbacks.Checkpoints.empty());
+        fixture.Ack();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Checkpoints[0], 1);
+        fixture.AssertRequest(0, 4, 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 0);
+        fixture.Ack();
+        fixture.AssertRequest(0, 6, 1);
+        fixture.Ack();
+        UNIT_ASSERT(fixture.Requests.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Finished, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.FreeSpace(), DqSolomonDefaultFreeSpace);
+    }
+
+    Y_UNIT_TEST(InvalidWriteLimitsAreRejected) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TBatchingFixture(NSo::NProto::CT_SOLOMON, 1, DqSolomonDefaultFreeSpace, 0), yexception, "WriteMaxRequestsInflight");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TBatchingFixture(NSo::NProto::CT_SOLOMON, 1, DqSolomonDefaultFreeSpace, 1, 0), yexception, "WriteMaxPointsPerRequest");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TBatchingFixture(NSo::NProto::CT_SOLOMON, 1, DqSolomonDefaultFreeSpace, 1, 10001), yexception, "WriteMaxPointsPerRequest");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TBatchingFixture(NSo::NProto::CT_SOLOMON, 3, DqSolomonDefaultFreeSpace, 1, 2), yexception, "number of sensors");
     }
 
     Y_UNIT_TEST(QueuedWritesAreMergedSolomon) {

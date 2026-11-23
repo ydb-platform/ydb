@@ -46,10 +46,7 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-constexpr ui64 MaxMetricsPerRequest = 1000;   // Max allowed count is 10000
-const ui64 MaxRequestsInflight = 3;
-
-static_assert(NSo::NConstants::MaxSensorsPerRow <= MaxMetricsPerRequest);
+static_assert(NSo::NConstants::MaxSensorsPerRow <= NSo::NConstants::DefaultWriteMaxPointsPerRequest);
 
 const auto RetryPolicy =
     NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy([](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp) {
@@ -99,6 +96,10 @@ public:
         , TxId(txId)
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", Solomon sink. ")
         , WriteParams(std::move(writeParams))
+        , MaxRequestsInflight(WriteParams.Shard.HasMaxRequestsInflight() ? WriteParams.Shard.GetMaxRequestsInflight()
+                                                                         : NSo::NConstants::DefaultWriteMaxRequestsInflight)
+        , MaxPointsPerRequest(WriteParams.Shard.HasMaxPointsPerRequest() ? WriteParams.Shard.GetMaxPointsPerRequest()
+                                                                         : NSo::NConstants::DefaultWriteMaxPointsPerRequest)
         , Url(GetUrl())
         , Callbacks(callbacks)
         , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters, enableCountersPerTask)
@@ -109,6 +110,11 @@ public:
         , CredentialsProvider(credentialsProvider)
     {
         YQL_ENSURE(Alloc, "Solomon sink requires a MiniKQL allocator");
+        YQL_ENSURE(MaxRequestsInflight > 0, "solomon.WriteMaxRequestsInflight must be positive");
+        YQL_ENSURE(MaxPointsPerRequest > 0 && MaxPointsPerRequest <= NSo::NConstants::MaxWritePointsPerRequest,
+            "solomon.WriteMaxPointsPerRequest must be between 1 and " << NSo::NConstants::MaxWritePointsPerRequest);
+        YQL_ENSURE(MaxPointsPerRequest >= static_cast<ui64>(WriteParams.Shard.GetScheme().SensorsSize()),
+            "solomon.WriteMaxPointsPerRequest must be at least the number of sensors in a row");
         SINK_LOG_D("Init");
         EgressStats.Level = statsLevel;
     }
@@ -151,7 +157,7 @@ public:
             EgressStats.Rows += batch.RowCount();
             auto* pending = SendingBuffer.empty() ? nullptr : std::get_if<TPendingBatch>(&SendingBuffer.back());
             const auto sensorsPerRow = WriteParams.Shard.GetScheme().SensorsSize();
-            if (pending && (pending->Rows.RowCount() + batch.RowCount()) * sensorsPerRow <= MaxMetricsPerRequest) {
+            if (pending && (pending->Rows.RowCount() + batch.RowCount()) * sensorsPerRow <= MaxPointsPerRequest) {
                 // Compact small inputs instead of retaining a separate MiniKQL page per SendData call.
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
                     pending->Rows.emplace_back(std::move(value));
@@ -357,7 +363,7 @@ private:
         const auto sensorsPerRow = WriteParams.Shard.GetScheme().SensorsSize();
         YQL_ENSURE(sensorsPerRow > 0 && sensorsPerRow <= NSo::NConstants::MaxSensorsPerRow, "Invalid Solomon sensor count");
         while (!SendingBuffer.empty() && std::holds_alternative<TPendingBatch>(SendingBuffer.front()) &&
-               result.MetricsCount + sensorsPerRow <= MaxMetricsPerRequest) {
+               result.MetricsCount + sensorsPerRow <= MaxPointsPerRequest) {
             auto& pending = std::get<TPendingBatch>(SendingBuffer.front());
             auto value = std::move(*pending.Rows.Head());
             result.MetricsCount += UserMetricsEncoder.Append(value);
@@ -597,6 +603,8 @@ private:
     const TTxId TxId;
     const TString LogPrefix;
     const TDqSolomonWriteParams WriteParams;
+    const ui64 MaxRequestsInflight;
+    const ui64 MaxPointsPerRequest;
     const TString Url;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
     TDqSolomonWriteActorMetrics Metrics;

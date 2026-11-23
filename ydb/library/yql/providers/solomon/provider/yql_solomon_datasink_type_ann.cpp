@@ -135,7 +135,7 @@ private:
         return TStatus::Ok;
     }
 
-    static TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
+    TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
         if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
             return TStatus::Error;
         }
@@ -168,7 +168,7 @@ private:
         return TStatus::Ok;
     }
 
-    static bool ValidateWriteTypeAnnotation(TPositionHandle position, const TTypeAnnotationNode* inputItemType, TExprContext& ctx) {
+    bool ValidateWriteTypeAnnotation(TPositionHandle position, const TTypeAnnotationNode* inputItemType, TExprContext& ctx) {
         if (!EnsureStructType(position, *inputItemType, ctx)) {
             return false;
         }
@@ -238,6 +238,15 @@ private:
         if (sensorMembers > NSo::NConstants::MaxSensorsPerRow) {
             ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Max sensors count is " << NSo::NConstants::MaxSensorsPerRow
                                                                             << " but " << sensorMembers << " were provided"));
+            return false;
+        }
+
+        const ui64 maxPointsPerRequest =
+            State_->Configuration->WriteMaxPointsPerRequest.Get().GetOrElse(NSo::NConstants::DefaultWriteMaxPointsPerRequest);
+        if (sensorMembers > maxPointsPerRequest) {
+            ctx.AddError(TIssue(ctx.GetPosition(position),
+                TStringBuilder() << "solomon.WriteMaxPointsPerRequest must be at least the number of sensors in a row (" << sensorMembers
+                                 << "), got " << maxPointsPerRequest));
             return false;
         }
 

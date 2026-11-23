@@ -21,7 +21,6 @@
 {% if backend_name == "YDB" %}
 
 * [ANALYZE](analyze.md)
-* [CHECK TABLE INDEX](check-table-index.md)
 * [CHECKSUM TABLE](checksum-table.md)
 * [KILL SESSION](kill-session.md)
 

@@ -256,7 +256,7 @@ struct TCallMeta {
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
     std::vector<std::pair<std::string, std::string>> Aux;
     std::variant<std::monostate, NYdb::TDeadline, NYdb::TDeadline::Duration> Timeout; // timeout as duration from now or time point in future
-    std::shared_ptr<TEndpointAdmission> EndpointAdmission;
+    std::shared_ptr<TEndpointAdmission> EndpointAdmission = nullptr;
 };
 
 class TGRpcRequestProcessorCommon {

@@ -617,7 +617,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         UNIT_ASSERT(annotate("Optional<pgint4>") == NYql::IGraphTransformer::TStatus::Error);
         const auto& issues = ctx.IssueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(issues.back().GetCode(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED);
+        UNIT_ASSERT_VALUES_EQUAL(issues.back().GetCode(), static_cast<NYql::TIssueCode>(NYql::TIssuesIds::KIKIMR_UNSUPPORTED));
     }
 
     Y_UNIT_TEST(DisablePgCompatibilityAllowsNativeProjection) {

@@ -190,14 +190,15 @@ size_t Base64Decode(void* dst, const char* b, const char* e) {
 
 size_t Base64DecodeUneven(void* dst, const std::string_view s) {
     const size_t tailSize = s.length() % 4;
+    const char* end = s.data() + s.size();
     if (tailSize == 0) {
-        return Base64Decode(dst, s.begin(), s.end());
+        return Base64Decode(dst, s.data(), end);
     }
 
     // divide s into even part and tail and decode in two step, to avoid memory allocation
     char tail[4] = {'=', '=', '=', '='};
-    memcpy(tail, s.end() - tailSize, tailSize);
-    size_t decodedEven = s.length() > 4 ? Base64Decode(dst, s.begin(), s.end() - tailSize) : 0;
+    memcpy(tail, end - tailSize, tailSize);
+    size_t decodedEven = s.length() > 4 ? Base64Decode(dst, s.data(), end - tailSize) : 0;
     // there should not be tail of size 1 it's incorrect for 8-bit bytes
     size_t decodedTail = tailSize != 1 ? Base64Decode(static_cast<char*>(dst) + decodedEven, tail, tail + 4) : 0;
     return decodedEven + decodedTail;

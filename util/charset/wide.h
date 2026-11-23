@@ -694,18 +694,18 @@ inline TStringType CopyTo(const TChar* s, size_t n) {
 }
 
 inline TString WideToASCII(const TWtringBuf w) {
-    Y_ASSERT(IsStringASCII(w.data(), w.data() + w.size()));
-    return CopyTo<TString>(w.data(), w.size());
+    Y_ASSERT(IsStringASCII(w.begin(), w.end()));
+    return CopyTo<TString>(w.begin(), w.end());
 }
 
 inline TUtf16String ASCIIToWide(const TStringBuf s) {
-    Y_ASSERT(IsStringASCII(s.data(), s.data() + s.size()));
-    return CopyTo<TUtf16String>(s.data(), s.size());
+    Y_ASSERT(IsStringASCII(s.begin(), s.end()));
+    return CopyTo<TUtf16String>(s.begin(), s.end());
 }
 
 inline TUtf32String ASCIIToUTF32(const TStringBuf s) {
-    Y_ASSERT(IsStringASCII(s.data(), s.data() + s.size()));
-    return CopyTo<TUtf32String>(s.data(), s.size());
+    Y_ASSERT(IsStringASCII(s.begin(), s.end()));
+    return CopyTo<TUtf32String>(s.begin(), s.end());
 }
 
 //! returns @c true if string contains whitespace characters only
@@ -928,7 +928,7 @@ inline size_t CountWideChars(const wchar16* b, const wchar16* e) {
 }
 
 inline size_t CountWideChars(const TWtringBuf str) {
-    return CountWideChars(str.data(), str.data() + str.size());
+    return CountWideChars(str.begin(), str.end());
 }
 
 //! checks whether the range is valid UTF-16 sequence
@@ -944,5 +944,5 @@ inline bool IsValidUTF16(const wchar16* b, const wchar16* e) {
 }
 
 inline bool IsValidUTF16(const TWtringBuf str) {
-    return IsValidUTF16(str.data(), str.data() + str.size());
+    return IsValidUTF16(str.begin(), str.end());
 }

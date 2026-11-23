@@ -20,7 +20,7 @@ class TestDataCenterAdmin(unittest.TestCase):
     def setUp(self):
         directory = TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        journal_env = patch.dict("os.environ", DC_ADMIN_JOURNAL=str(Path(directory.name) / "commands.db"))
+        journal_env = patch.dict("os.environ", DC_ADMIN_JOURNAL=":memory:")
         journal_env.start()
         self.addCleanup(journal_env.stop)
         self.cli = Path(directory.name) / "ydb"
@@ -193,6 +193,22 @@ class TestDataCenterAdmin(unittest.TestCase):
                     + ["--datacenter-name=zone-a"]
                     + (["--dry-run"] if dry_run else []),
                 )
+
+    def test_journal_keeps_completed_commands_across_restart(self):
+        path = self.cli.parent / "commands.db"
+        before = server.Journal(path)
+        try:
+            with before.operation("ydb test") as (_, row):
+                row["output"] = "done"
+        finally:
+            before.db.close()
+
+        after = server.Journal(path)
+        try:
+            (command,) = after.history(2**63 - 1)["commands"]
+            self.assertEqual((command["command"], command["state"], command["output"]), ("ydb test", "done", "done"))
+        finally:
+            after.db.close()
 
     def test_accepts_free_name_without_database(self):
         self.start_server(database="", datacenters=())

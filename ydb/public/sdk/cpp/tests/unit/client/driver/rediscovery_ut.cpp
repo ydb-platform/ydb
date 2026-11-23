@@ -8,7 +8,11 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
+
 #include <atomic>
+#include <fstream>
+#include <sstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -30,6 +34,31 @@ namespace {
         builder.RegisterService(&service);
         return builder.BuildAndStart();
     }
+
+#if defined(_linux_)
+    bool HasEstablishedConnection(ui16 port) {
+        for (const auto* path : {"/proc/net/tcp", "/proc/net/tcp6"}) {
+            std::ifstream table(path);
+            for (std::string line; std::getline(table, line);) {
+                std::istringstream columns(line);
+                std::string index, local, remote, state;
+                if (columns >> index >> local >> remote >> state && state == "01"
+                    && std::stoul(remote.substr(remote.find(':') + 1), nullptr, 16) == port) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool WaitUntilDisconnected(ui16 port) {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(3);
+        while (HasEstablishedConnection(port) && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        return !HasEstablishedConnection(port);
+    }
+#endif
 
     class TTableService: public Ydb::Table::V1::TableService::Service {
     public:
@@ -265,6 +294,56 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT(reopened.GetFuture().Wait(TDuration::Seconds(3)));
     }
 
+#if defined(_linux_)
+    Y_UNIT_TEST(OrdinarySelectionCannotReclaimRetiredSharedChannel) {
+        using TService = Ydb::Table::V1::TableService;
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        const auto address = Address(port);
+        TTableService service;
+        auto server = StartServer(port, service);
+        NYdbGrpc::TGRpcClientLow client;
+        NYdbGrpc::TChannelPool channels({}, TDuration::Max());
+        NYdbGrpc::TGRpcClientConfig config(address);
+        auto ordinary = std::make_shared<int>(), watched = std::make_shared<int>();
+        TEndpointElectorSafe elector;
+        elector.SetNewState({TEndpointRecord(address, 0)});
+        auto select = [&](const std::shared_ptr<int>& owner, std::function<bool()> current = {}) {
+            std::unique_ptr<NYdbGrpc::TServiceConnection<TService>> connection;
+            channels.GetStubsHolderLocked(address, config, [&](auto& holder) {
+                holder.AddOwner(owner);
+                connection = client.CreateGRpcServiceConnection<TService>(holder);
+            }, std::move(current));
+            return connection;
+        };
+        auto release = [&](const auto& owner) {
+            channels.DeleteChannel(address, [&](auto& holder) { return holder.ReleaseOwner(owner.get()); });
+        };
+        select(ordinary);
+        auto live = select(watched);
+        auto completed = NThreading::NewPromise<int>();
+        live->DoAdvancedRequest<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>({},
+            [completed](const auto&, NYdbGrpc::TGrpcStatus&& status, auto&&) mutable {
+                completed.SetValue(status.GRpcStatusCode);
+            }, &TService::Stub::AsyncBulkUpsert);
+        UNIT_ASSERT_VALUES_EQUAL(completed.GetFuture().GetValueSync(), int(grpc::StatusCode::OK));
+        live.reset();
+        UNIT_ASSERT(HasEstablishedConnection(port));
+
+        // Interleave an ordinary refresh between its endpoint selection and channel acquisition.
+        const auto selected = elector.GetEndpoint({}, false);
+        UNIT_ASSERT_VALUES_EQUAL(selected.Endpoint, address);
+        elector.SetNewState({});
+        release(ordinary);
+        const bool reacquired = bool(select(ordinary, [&] {
+            return bool(elector.GetEndpoint(TEndpointKey(selected.Endpoint, 0), true));
+        }));
+        release(watched);
+        UNIT_ASSERT_C(WaitUntilDisconnected(port), "The late ordinary selection retained the old data socket");
+        UNIT_ASSERT(!reacquired);
+    }
+#endif
+
     Y_UNIT_TEST(LongPollCutsInFlightRequestsAndReusesBootstrap) {
         TPortManager ports;
         const auto sourcePort = ports.GetPort(), targetPort = ports.GetPort(), bootstrapPort = ports.GetPort();
@@ -316,12 +395,12 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         auto otherBootstrap = StartServer(otherPort, otherDiscovery);
         auto boot = StartServer(bootstrapPort, discovery);
         TDriver driver(TDriverConfig().SetEndpoint(Address(bootstrapPort)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::LongPoll)
-            .SetUsePerChannelTcpConnection(true));
+            .SetUsePerChannelTcpConnection(true).SetSocketIdleTimeout(TDuration::Max()));
         NTable::TTableClient client(driver);
-        NTable::TTableClient other(driver, NTable::TClientSettings().Database("/Other")
+        std::optional<NTable::TTableClient> other(std::in_place, driver, NTable::TClientSettings().Database("/Other")
             .DiscoveryEndpoint(Address(otherPort)).DiscoveryMode(EDiscoveryMode::Sync));
         auto otherPeer = [&] {
-            auto status = other.BulkUpsert("/Other/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync();
+            auto status = other->BulkUpsert("/Other/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
             const auto& headers = status.GetResponseMetadata();
             UNIT_ASSERT(headers.contains("test-peer"));
@@ -345,7 +424,15 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         const auto peerAfter = otherPeer();
         UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 3);
         UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
+#if defined(_linux_)
+        UNIT_ASSERT(HasEstablishedConnection(sourcePort));
+        other.reset();
+        const auto closedAfterLastOwner = WaitUntilDisconnected(sourcePort);
+#endif
         driver.Stop(true);
         UNIT_ASSERT_VALUES_EQUAL(peerAfter, peerBefore);
+#if defined(_linux_)
+        UNIT_ASSERT_C(closedAfterLastOwner, "The retired source remained connected after its final owner was destroyed");
+#endif
     }
 }

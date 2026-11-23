@@ -221,6 +221,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     Notify_.notify_all();
                 }
                 delete p;
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+                // Destroying this state may release the final owner or bootstrap pin.
+                DiscoveryClient_->CollectRetiredChannels();
+#endif
             };
 
             auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr

@@ -218,19 +218,27 @@ TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, co
 void TChannelPool::GetStubsHolderLocked(
     const std::string& channelId,
     const TGRpcClientConfig& config,
-    std::function<void(TStubsHolder&)> cb)
+    std::function<void(TStubsHolder&)> cb,
+    std::function<bool()> stillCurrent)
 {
     {
         std::shared_lock readGuard(RWMutex_);
         const auto it = Pool_.find(channelId);
         if (it != Pool_.end()) {
             if (!it->second.IsChannelBroken() && !(Now() > it->second.GetLastUseTime() + UpdateReUseTime_)) {
-                return cb(it->second);
+                if (!stillCurrent || stillCurrent()) {
+                    cb(it->second);
+                }
+                return;
             }
         }
     }
     {
         std::unique_lock writeGuard(RWMutex_);
+        // Revalidate after taking the exclusive lock, including the cache-miss path.
+        if (stillCurrent && !stillCurrent()) {
+            return;
+        }
         {
             auto it = Pool_.find(channelId);
             if (it != Pool_.end()) {
@@ -257,10 +265,27 @@ void TChannelPool::GetStubsHolderLocked(
 void TChannelPool::DeleteChannel(const std::string& channelId, std::function<bool(TStubsHolder&)> canRemove) {
     std::unique_lock writeLock(RWMutex_);
     auto poolIt = Pool_.find(channelId);
-    if (poolIt != Pool_.end() && (!canRemove || canRemove(poolIt->second)) && !poolIt->second.IsPinned()) {
-        EraseFromQueueByTime(poolIt->second.GetLastUseTime(), channelId);
-        Pool_.erase(poolIt);
+    if (poolIt != Pool_.end()) {
+        if ((!canRemove || canRemove(poolIt->second)) && !poolIt->second.IsPinned()) {
+            EraseFromQueueByTime(poolIt->second.GetLastUseTime(), channelId);
+            Pool_.erase(poolIt);
+        } else {
+            poolIt->second.DeferredRetirement_ = true;
+        }
     }
+}
+
+void TChannelPool::CollectRetiredChannels() {
+    std::unique_lock guard(RWMutex_);
+    std::erase_if(Pool_, [&](const auto& entry) {
+        const auto& [address, holder] = entry;
+        if (!holder.DeferredRetirement_ || holder.IsPinned() ||
+            std::ranges::any_of(holder.Owners_, [](const auto& owner) { return !owner.second.expired(); })) {
+            return false;
+        }
+        EraseFromQueueByTime(holder.GetLastUseTime(), address);
+        return true;
+    });
 }
 
 void TChannelPool::DeleteExpiredStubsHolders() {

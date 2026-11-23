@@ -619,6 +619,8 @@ public:
         LastUsed_ = time;
     }
 private:
+    friend class TChannelPool;
+    bool DeferredRetirement_ = false;
     std::unordered_map<const void*, std::weak_ptr<void>> Owners_;
     std::shared_ptr<void> Pin_;
     TInstant LastUsed_ = Now();
@@ -632,8 +634,10 @@ public:
     TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6), bool tcpNoDelay = true);
     //Allows to CreateStub from TStubsHolder under lock
     //The callback will be called just during GetStubsHolderLocked call
-    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb);
+    void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb,
+                              std::function<bool()> stillCurrent = {});
     void DeleteChannel(const std::string& channelId, std::function<bool(TStubsHolder&)> canRemove = {});
+    void CollectRetiredChannels();
     void DeleteExpiredStubsHolders();
 private:
     std::shared_mutex RWMutex_;

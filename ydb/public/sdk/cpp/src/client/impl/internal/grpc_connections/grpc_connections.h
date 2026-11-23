@@ -132,6 +132,7 @@ public:
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
         TEndpointKey selected;
+        std::function<bool()> stillCurrent;
         auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         const auto& sslCredentials = dbState->SslCredentials;
         clientConfig.SslCredentials = {.pem_root_certs = TStringType{sslCredentials.CaCert}, .pem_private_key = TStringType{sslCredentials.PrivateKey}, .pem_cert_chain = TStringType{sslCredentials.Cert}};
@@ -165,6 +166,11 @@ public:
                     return {nullptr, TEndpointKey()};
                 }
                 selected.Admission = std::move(endpoint.Admission);
+                if (!selected.Admission) {
+                    stillCurrent = [&] {
+                        return bool(dbState->EndpointPool.GetEndpoint(TEndpointKey(clientConfig.Locator, 0), true));
+                    };
+                }
                 clientConfig.Locator = endpoint.Endpoint;
                 clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
                 if (GRpcKeepAliveTimeout_ > TDeadline::Duration::zero()) {
@@ -191,7 +197,7 @@ public:
                 dbState->BootstrapPin = holder.Pin();
             }
             conn = GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder);
-        });
+        }, std::move(stillCurrent));
 #else
         conn = std::move(GRpcClientLow_.CreateGRpcServiceConnection<TService>(clientConfig));
 #endif
@@ -778,6 +784,9 @@ public:
     TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    void CollectRetiredChannels() override {
+        ChannelPool_.CollectRetiredChannels();
+    }
     void DeleteChannels(const std::vector<std::string>& endpoints, const TEndpointPool& owner) override {
         for (const auto& endpoint : endpoints) {
             ChannelPool_.DeleteChannel(endpoint, [&](auto& holder) { return holder.ReleaseOwner(&owner); });

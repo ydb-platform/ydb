@@ -94,6 +94,7 @@ namespace NKikimr::NStorage {
         // Configuration update
 
         void UpdateConfig(TQuery::TUpdateConfig *request);
+        void CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const;
         void DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -255,6 +256,7 @@ namespace NKikimr::NStorage {
         void StartDataCenterReconciliation();
         void SendDataCenterSnapshot();
         void ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command);
+        void PromoteStaticGroup(const TPromoteStaticGroup& op);
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
         void StartRecoveryProposition(TProcessCollectConfigsResult& result);

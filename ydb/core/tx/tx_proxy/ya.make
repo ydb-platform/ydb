@@ -37,6 +37,7 @@ PEERDIR(
     ydb/core/formats
     ydb/core/grpc_services/local_rpc
     ydb/core/io_formats/arrow/scheme
+    ydb/core/kqp/common/simple
     ydb/core/kqp/predictor
     ydb/core/protos
     ydb/core/scheme

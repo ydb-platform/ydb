@@ -323,7 +323,8 @@ struct THash<NYT::NChunkClient::TChunkIdWithIndexes>
     size_t operator()(const NYT::NChunkClient::TChunkIdWithIndexes& value) const;
 };
 
-template<>
+//! A hasher for TChunkIdWithIndexAndState.
+template <>
 struct THash<NYT::NChunkClient::TChunkIdWithIndexAndState>
 {
     size_t operator()(const NYT::NChunkClient::TChunkIdWithIndexAndState& value) const;

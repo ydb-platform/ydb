@@ -85,6 +85,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(1, Names({TYtMapReduce::CallableName(), TYtReduce::CallableName()}), HNDL(MultiReduceFieldsSubset));
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(WeakFields));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(BypassMerge));
+    if (State_->Configuration->BypassIdentityMapWithSysColumns.Get().GetOrElse(DEFAULT_BYPASS_IDENTITY_MAP_WITH_SYS_COLUMNS)) {
+        AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName(), TYtReduce::CallableName(), TYtEquiJoin::CallableName()}), HNDL(BypassIdentityMapWithSysColumns));
+    }
     AddHandler(1, &TYtPublish::Match, HNDL(BypassMergeBeforePublish));
     AddHandler(1, &TYtPublish::Match, HNDL(BypassPersistBeforePublish));
     AddHandler(1, &TCoRight::Match, HNDL(ReadWithSettings));

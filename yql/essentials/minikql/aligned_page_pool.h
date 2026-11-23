@@ -24,11 +24,13 @@
 namespace NKikimr {
 
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
-// By default the default allocator is not used unless PROFILE_MEMORY_ALLOCATIONS is defined.
-// Call this method once at the start of the process - to enable usage of default allocator.
 void UseDefaultAllocator();
+bool IsDefaultAllocatorUsed();
+#else
+consteval bool IsDefaultAllocatorUsed() {
+    return false;
+}
 #endif
-void UseDefaultArrowAllocator();
 
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
@@ -223,15 +225,6 @@ public:
         IsMemoryYellowZoneReached_ = isEnabled;
         IsMemoryYellowZoneForcefullyChanged_ = true;
     }
-
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-    static bool IsDefaultAllocatorUsed();
-#else
-    static consteval bool IsDefaultAllocatorUsed() {
-        return false;
-    }
-#endif
-    static bool IsDefaultArrowAllocatorUsed();
 
 protected:
     void* Alloc(size_t size);

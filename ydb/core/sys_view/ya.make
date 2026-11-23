@@ -7,7 +7,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/kqp/runtime
+    ydb/core/kqp/common/events
+    ydb/core/kqp/runtime/common
     ydb/core/sys_view/auth
     ydb/core/sys_view/common
     ydb/core/sys_view/compile_cache

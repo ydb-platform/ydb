@@ -9,6 +9,26 @@
 
 namespace NKikimr::NKqp {
 
+// Live-object counters of the column shard read path. Both are released asynchronously: the scan actor drops
+// the data sources and the memory scope guard after the last result has been sent, and the grouped memory
+// limiter actor removes the scope when it handles the resulting event. A client may therefore see the query
+// result while the counters are still non-zero.
+struct TBackgroundProcessesState {
+    ui64 ProcessScopeCount = 0;
+    ui64 DataSourceCount = 0;
+    // How long WaitBackgroundProcesses polled before returning, zero if the counters were clean at the first check.
+    TDuration Waited;
+
+    bool IsClean() const {
+        return ProcessScopeCount == 0 && DataSourceCount == 0;
+    }
+
+    static TBackgroundProcessesState Current();
+};
+
+// Polls the counters until both are zero or the timeout expires and returns the last observed state.
+TBackgroundProcessesState WaitBackgroundProcesses(const TDuration timeout);
+
 class TWaitBackgroundProcessesCommand: public ICommand {
 private:
     ui32 TimeoutSeconds = 30;

@@ -1,15 +1,84 @@
 # -*- coding: utf-8 -*-
 
-import os
+import json
 import logging
+import os
+import shutil
 import tempfile
 import uuid
 
-from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase, ydb_bin
 
 import yatest
 
 logger = logging.getLogger(__name__)
+
+
+def test_shell_completion_for_topic_commands(tmp_path):
+    bash_completion = tmp_path / "ydb.bash"
+    bash = yatest.common.execute([ydb_bin(), "config", "completion", "bash"])
+    bash_completion.write_bytes(bash.std_out)
+
+    # Supply the bash-completion helpers' inputs for simple, unquoted words.
+    # Routing and candidate selection are performed by the generated script.
+    complete_command = r"""
+        source "$1" || exit
+        shift
+        complete -p ydb >/dev/null || exit
+        COMP_WORDS=("$@")
+        COMP_CWORD=$(($# - 1))
+        _get_comp_words_by_ref() {
+            words=("${COMP_WORDS[@]}")
+            cword=$COMP_CWORD
+            cur=${words[cword]}
+            prev=${words[cword-1]}
+        }
+        __ltrim_colon_completions() { :; }
+        _ydb
+        printf '%s\n' "${COMPREPLY[@]}"
+    """
+    for words, expected in [
+        (["topic", "co"], {"consumer"}),
+        (["topic", "read", "--format", "json-"], {"json-array", "json-stream-concat"}),
+        (["topic", "create", "--retention-period", "24h", "--retention-"], {"--retention-storage-mb"}),
+    ]:
+        result = yatest.common.execute(
+            ["bash", "--noprofile", "--norc", "-c", complete_command, "completion", str(bash_completion), "ydb", *words],
+            env=dict(os.environ, BASH_ENV=""),
+        )
+        assert set(result.std_out.decode("utf-8").split()) == expected, words
+
+    zsh = yatest.common.execute([ydb_bin(), "config", "completion", "zsh"])
+    script = zsh.std_out.decode("utf-8")
+    assert script.startswith("#compdef ydb\n")
+    assert "'consumer':" in script
+    assert "'json-array':" in script
+    assert "'json-stream-concat':" in script
+    if zsh_binary := shutil.which("zsh"):
+        zsh_completion = tmp_path / "_ydb"
+        zsh_completion.write_bytes(zsh.std_out)
+        yatest.common.execute([zsh_binary, "-f", "-n", str(zsh_completion)])
+
+
+class TestConnectionDiagnostics(BaseCliTestWithDatabase):
+    def test_check_query_path_and_record_latency(self):
+        result = self.execute_ydb_cli_command([
+            "debug", "ping", "--kind", "Select1", "--count", "2", "--interval", "0",
+        ])
+        assert "Total: 2, failed: 0" in result.stdout, result.stdout
+
+        # Record a baseline for a live endpoint without expecting machine-specific timings.
+        result = self.execute_ydb_cli_command([
+            "debug", "latency", "--kind", "Select1", "--interval", "3",
+            "--min-inflight", "1", "--max-inflight", "1", "--percentile", "50", "--percentile", "99",
+            "--format", "JSON",
+        ])
+        report = json.loads(result.stdout)
+        sample, = report["RawResults"][0]["Select1"]
+        assert sample["Inflight"] == 1
+        assert 0 <= sample["p50"] <= sample["p99"]
+        assert report["Throughputs"] == {"Select1": sample["Throughput"]}
+        assert sample["Throughput"] > 0
 
 
 class TestProfileWithInvalidCaFile:

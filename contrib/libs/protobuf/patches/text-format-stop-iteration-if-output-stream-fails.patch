@@ -7,7 +7,7 @@
 -  bool failed() const { return failed_; }
 +  bool failed() const override { return failed_; }
  
-   void PrintMaybeWithMarker(MarkerToken, y_absl::string_view text) override {
+   void PrintMaybeWithMarker(MarkerToken, absl::string_view text) override {
      Print(text.data(), text.size());
 @@ -2251,7 +2251,7 @@ void TextFormat::Printer::Print(const Message& message,
  

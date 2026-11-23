@@ -274,6 +274,9 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
         }
     };
 
+    auto& properties = Properties.emplace();
+    auto& access = properties.TableAccess;
+    bool foundQueryWrite = false;
     for (const auto& phyTx: phyQuery.GetTransactions()) {
         TKqpPhyTxHolder::TConstPtr txHolder = std::make_shared<const TKqpPhyTxHolder>(
             Proto, &phyTx, Alloc, TableConstInfoById);
@@ -290,7 +293,28 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 
         for (const auto& stage: phyTx.GetStages()) {
 
+            // A read source takes precedence over all table ops in its stage.
+            bool unexpectedReadOpInStage = false;
             for (const auto& tableOp: stage.GetTableOps()) {
+                switch (tableOp.GetTypeCase()) {
+                    case NKqpProto::TKqpPhyTableOperation::kReadRange:
+                    case NKqpProto::TKqpPhyTableOperation::kReadRanges:
+                        if (!unexpectedReadOpInStage) {
+                            access.HasOltpRead = true;
+                        }
+                        break;
+                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                        access.HasOlapRead = true;
+                        break;
+                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
+                        properties.UnexpectedWriteOp |= !foundQueryWrite;
+                        [[fallthrough]];
+                    default:
+                        unexpectedReadOpInStage |= !access.HasOltpRead;
+                        break;
+                }
+
                 if (tableOp.HasReadRange()) {
                     addRange(tableOp.GetTable(), tableOp.GetReadRange().GetKeyRange(), queryParams);
                 } else {
@@ -310,6 +334,7 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 
             for (const auto& source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    access.HasOltpRead = true;
                     const auto& read = source.GetReadRangesSource();
                     if (read.HasKeyRange()) {
                         addRange(read.GetTable(), read.GetKeyRange(), queryParams);
@@ -319,11 +344,29 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                 }
 
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    access.HasOltpRead = true;
                     addUnbounded(source.GetFullTextSource().GetTable().GetPath());
                 }
             }
 
-            auto fillFromSettings = [&](const NKikimrKqp::TKqpTableSinkSettings& settings) {
+            properties.UnexpectedReadOp |= unexpectedReadOpInStage && !access.HasOltpRead;
+
+            bool foundStageWrite = false;
+            auto fillFromSettings = [&](const NKikimrKqp::TKqpTableSinkSettings& settings, EBatchMode batchMode) {
+                // OLAP considers the first table sink/transform of each stage.
+                // OLTP considers only the first one across the entire query.
+                if (!foundStageWrite) {
+                    access.HasOlapWrite |= settings.GetIsOlap();
+                    foundStageWrite = true;
+                    if (!foundQueryWrite) {
+                        access.HasOltpWrite = !settings.GetIsOlap();
+                        foundQueryWrite = true;
+                    }
+                }
+                if (properties.BatchMode == EBatchMode::None && settings.GetIsBatch()) {
+                    properties.BatchMode = batchMode;
+                }
+
                 addUnbounded(settings.GetTable().GetPath());
                 for (const auto& indexSettings : settings.GetIndexes()) {
                     addUnbounded(indexSettings.GetTable().GetPath());
@@ -340,14 +383,14 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    fillFromSettings(settings);
+                    fillFromSettings(settings, EBatchMode::Sink);
                 }
             }
             for (const auto& transform : stage.GetOutputTransforms()) {
                 if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    fillFromSettings(settings);
+                    fillFromSettings(settings, EBatchMode::InvalidTransform);
                 }
             }
         }
@@ -361,6 +404,19 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
             table.KeyRanges = std::move(reads.KeyRanges);
         }
     }
+}
+
+const TQueryTableAccess& TPreparedQueryHolder::GetTableAccess() const {
+    YQL_ENSURE(Properties, "Incomplete prepared query");
+    YDB_LOG_ENSURE(!Properties->UnexpectedWriteOp);
+    YQL_ENSURE(!Properties->UnexpectedReadOp, "unexpected type");
+    return Properties->TableAccess;
+}
+
+bool TPreparedQueryHolder::IsBatchQuery() const {
+    YQL_ENSURE(Properties, "Incomplete prepared query");
+    YDB_LOG_ENSURE(Properties->BatchMode != EBatchMode::InvalidTransform);
+    return Properties->BatchMode == EBatchMode::Sink;
 }
 
 TIntrusivePtr<TTableConstInfo>& TPreparedQueryHolder::GetInfo(const TTableId& tableId) {

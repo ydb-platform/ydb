@@ -132,6 +132,7 @@ private:
     std::unordered_map<std::string, TEndpointRecord> KnownEndpoints_;
     std::unordered_map<ui64, TKnownEndpoint> KnownEndpointsByNodeId_;
     std::int32_t BestK_ = -1;
+    size_t PessimizedEndpointCount_ = 0;
     std::atomic_int PessimizationRatio_ = 0;
     NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> EndpointCountGauge_;
     NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> PessimizationRatioGauge_;

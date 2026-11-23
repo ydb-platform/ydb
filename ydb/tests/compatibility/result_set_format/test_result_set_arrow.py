@@ -265,6 +265,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         schema_inclusion_mode=None,
         arrow_format_settings=None,
         concurrent_result_sets=False,
+        idempotent=False,
     ):
         may_throw = (
             arrow_format_settings is not None
@@ -277,6 +278,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             try:
                 return pool.execute_with_retries(
                     query,
+                    retry_settings=ydb.RetrySettings(idempotent=idempotent),
                     result_set_format=ydb.QueryResultSetFormat.ARROW,
                     schema_inclusion_mode=schema_inclusion_mode,
                     arrow_format_settings=arrow_format_settings,
@@ -327,7 +329,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             if not batch_rows:
                 continue
             query = f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
-            self._try_execute(query)
+            self._try_execute(query, idempotent=True)
 
     def _read_table(
         self,

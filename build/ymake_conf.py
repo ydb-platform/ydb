@@ -1780,7 +1780,8 @@ class GnuCompiler(Compiler):
                     self.optimize = '-Os'
 
                 # Generate sections with address significance tables for ICF linker pass
-                if self.tc.is_clang and self.tc.version_at_least(7):
+                # Cadence's Xtensa assembler does not support address significance directives.
+                if self.tc.is_clang and self.tc.version_at_least(7) and not self.target.is_xtensa:
                     self.c_foptions.extend(['-faddrsig'])
             else:
                 self.optimize = '-O3'

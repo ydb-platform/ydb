@@ -19,6 +19,7 @@ SRCS(
     commitreq.cpp
     upload_columns.cpp
     upload_rows_counters.cpp
+    upload_memory_reservation.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp
     erase_rows.cpp

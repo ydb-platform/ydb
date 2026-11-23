@@ -576,8 +576,18 @@ Y_UNIT_TEST(IndexBuildBrokerCapacityRefreshWaitsForAcknowledgement) {
     quota.RestrictBrokerLimit(1, quota.GetBrokerLimitGeneration());
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(64_MB), 1);
-    acks.Stop().Unblock();
+    acks.Unblock(1);
     fixture.Runtime.WaitFor("broker capacity confirmed", [&] { return quota.GetActiveByteLimit(64_MB) == capacity; });
+
+    fixture.Runtime.GetAppData().DataShardConfig.SetBuildIndexPendingBytesLimit(32_MB);
+    fixture.Tick();
+    fixture.Runtime.WaitFor("broker capacity increase acknowledgement held", [&] { return !acks.empty(); });
+    UNIT_ASSERT(quota.IsBrokerConfigurationPending());
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetActiveByteLimit(32_MB), capacity);
+    acks.Stop().Unblock();
+    fixture.Runtime.WaitFor("broker capacity increase confirmed", [&] {
+        return quota.GetActiveByteLimit(32_MB) == capacity + 32_MB;
+    });
 }
 
 Y_UNIT_TEST(IndexBuildBudgetOnSmallNodes) {

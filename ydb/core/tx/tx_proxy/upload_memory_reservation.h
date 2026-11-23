@@ -6,6 +6,10 @@
 #include <memory>
 #include <utility>
 
+namespace NKikimr::NSchemeCache {
+struct TSchemeCacheNavigate;
+}
+
 namespace NKikimr::NTxProxy {
 
 class TUploadMemoryReservation {
@@ -44,6 +48,8 @@ public:
     std::shared_ptr<void> RetainRoutingMemory(ui64 bytes) const {
         return Retain ? Retain(bytes) : nullptr;
     }
+
+    void AccountNavigateRequest(NSchemeCache::TSchemeCacheNavigate& request) const;
 
 private:
     struct TRequestReservation {

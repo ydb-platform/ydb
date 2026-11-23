@@ -1869,6 +1869,23 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return AbandonedSchemeShardsIds;
         }
 
+        static ui64 NavigateColumnMemory(const THashMap<ui32, TSysTables::TTableColumnInfo>& columns) {
+            ui64 bytes = columns.bucket_count() * sizeof(void*);
+            for (const auto& [_, column] : columns) {
+                bytes += sizeof(THashMap<ui32, TSysTables::TTableColumnInfo>::value_type) + 2 * sizeof(void*)
+                    + column.Name.capacity() + column.PTypeMod.capacity() + column.DefaultFromSequence.capacity()
+                    + column.DefaultFromLiteral.SpaceUsedLong() - sizeof(column.DefaultFromLiteral);
+                if (column.DefaultExpression) {
+                    bytes += column.DefaultExpression->ExprText.capacity()
+                        + column.DefaultExpression->Dependencies.size() * sizeof(TString);
+                    for (const auto& dependency : column.DefaultExpression->Dependencies) {
+                        bytes += dependency.capacity();
+                    }
+                }
+            }
+            return bytes;
+        }
+
         void FillSystemViewEntry(TNavigateContext* context, TNavigate::TEntry& entry,
             NSysView::ISystemViewResolver::ESource source) const
         {
@@ -1914,6 +1931,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     entry.Kind =TNavigate::KindColumnTable;
                 }
 
+                if (auto& retain = context->Request->RetainSchemaMemory) {
+                    context->Request->SchemaMemory.push_back(retain(NavigateColumnMemory(schema->Columns)));
+                }
                 entry.Columns = std::move(schema->Columns);
 
                 if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1995,6 +2015,29 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             if (!entry.ShowPrivatePath && IsPrivatePath) {
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
+
+            if (auto& retain = context->Request->RetainSchemaMemory) {
+                ui64 bytes = NavigateColumnMemory(Columns) + Attributes.bucket_count() * sizeof(void*);
+                for (const auto& [name, value] : Attributes) {
+                    bytes += sizeof(decltype(Attributes)::value_type) + 2 * sizeof(void*) + name.capacity() + value.capacity();
+                }
+                for (const auto* names : {&NotNullColumns, &SetNotNullInProgressColumns}) {
+                    bytes += names->bucket_count() * sizeof(void*);
+                    for (const auto& name : *names) {
+                        bytes += sizeof(name) + 2 * sizeof(void*) + name.capacity();
+                    }
+                }
+                const auto protoBytes = [](const auto& messages) {
+                    ui64 total = 0;
+                    for (const auto& message : messages) {
+                        total += message.SpaceUsedLong();
+                    }
+                    return total;
+                };
+                bytes += protoBytes(Indexes) + protoBytes(MultiColumnStatistics)
+                    + protoBytes(CdcStreams) + protoBytes(Sequences);
+                context->Request->SchemaMemory.push_back(retain(bytes));
             }
 
             // common

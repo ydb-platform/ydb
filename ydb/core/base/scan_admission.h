@@ -163,10 +163,8 @@ public:
     void SetTotalLimit(ui64 bytes, ui64 activeLimit = Max<ui64>(), bool configurationPending = false) {
         with_lock(State->Lock) {
             State->TotalLimit = bytes;
-            if (State->ActiveLimit != activeLimit) {
-                State->BrokerLimit = Max<ui64>();
-                ++State->BrokerLimitGeneration;
-            }
+            // A local budget change does not establish new broker capacity.
+            // Keep the effective broker cap until the configuration is acknowledged.
             State->ActiveLimit = activeLimit;
             State->BrokerConfigurationPending |= configurationPending;
         }

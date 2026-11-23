@@ -220,13 +220,15 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
         TVector<TString> originals{path};
         if (secondaryPass) {
             auto mapped = SecondaryToOriginal.find(path);
-            YDB_LOG_ENSURE(mapped != SecondaryToOriginal.end())("path", path);
+            YDB_LOG_ENSURE(mapped != SecondaryToOriginal.end(),
+                {"path", path});
             originals = mapped->second;
         }
 
         for (const auto& original : originals) {
             auto it = Topics.find(original);
-            YDB_LOG_ENSURE(it != Topics.end())("path", original);
+            YDB_LOG_ENSURE(it != Topics.end(),
+                {"path", original});
 
             if (topicInfo.Status == NPQ::NDescriber::EStatus::Success) {
                 if (!ProcessTopicSchemeCacheResponse(topicInfo, it, ctx)) {

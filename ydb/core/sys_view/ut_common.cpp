@@ -160,6 +160,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     Settings->SetEnableDbCounters(settings.EnableSVP);
     Settings->SetEnableForceFollowers(settings.EnableForceFollowers);
     Settings->SetEnableTablePgTypes(true);
+    if (settings.EnablePgCompatibility) {
+        Settings->SetDisablePgCompatibility(false);
+    }
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;

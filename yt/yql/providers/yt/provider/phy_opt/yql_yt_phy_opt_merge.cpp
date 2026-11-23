@@ -25,16 +25,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                 ? TYtReduce::idx_Reducer
                 : TYtMap::idx_Mapper;
 
-        bool usesTableIndex = false;
-        VisitExpr(op.Ref().ChildPtr(lambdaIdx), [&usesTableIndex](const TExprNode::TPtr& n) {
-            if (TYtTableIndex::Match(n.Get())) {
-                usesTableIndex = true;
-            } else if (TYtOutput::Match(n.Get())) {
-                return false;
-            }
-            return !usesTableIndex;
-        });
-        if (usesTableIndex) {
+        if (HasYtTableIndex(*op.Ref().Child(lambdaIdx))) {
             return node;
         }
     }
@@ -205,6 +196,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     settings.insert(settings.end(), innerTakeSkip.begin(), innerTakeSkip.end());
                     updatedSettings = ctx.NewList(section.Settings().Pos(), std::move(settings));
                 }
+
                 hasPathUpdates = true;
                 updatedPaths.pop_back();
                 TMaybeNode<TExprBase> columns;

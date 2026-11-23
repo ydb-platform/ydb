@@ -1,0 +1,15 @@
+(
+# XXX: Explicitly enable PeepHoleBlock and PeepHoleFinalBlock steps.
+(let world (Configure! world (DataSource 'config) 'BlockEngine 'force))
+(let sink (DataSink 'result))
+(let row (lambda '(x) (AsStruct '('x x))))
+(let left (TableSource (AsList (Apply row (Int32 '3)) (Apply row (Int32 '1)))))
+(let right (TableSource (AsList (Apply row (Int32 '2)) (Apply row (Int32 '1)))))
+
+(let ordered (OrderedExtend left right))
+(let world (Write! world sink (Key) ordered '('('type))))
+(let unordered (Extend left right))
+(let sorted (Sort unordered (Bool 'true) (lambda '(r) (Member r 'x))))
+(let world (Write! world sink (Key) sorted '('('type))))
+(return (Commit! world sink))
+)

@@ -249,7 +249,7 @@ public:
 
         const bool isInSubquery = areInlineScalarReadsRequired ? false : IsSubquery();
 
-        TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, isInSubquery, ctx.Scoped));
+        TNodePtr inputTables(BuildInputTables(Pos_, tableList, isInSubquery, ctx.Scoped));
         if (!inputTables->Init(ctx, Source_.Get())) {
             return false;
         }
@@ -675,8 +675,7 @@ public:
     }
 
     bool AddFilter(TContext& ctx, TNodePtr filter) final {
-        Y_UNUSED(filter);
-        ctx.Error() << "Filter is not allowed for multiple sources";
+        ctx.Error(filter->GetPos()) << "Filter is not allowed for multiple sources";
         return false;
     }
 
@@ -1045,11 +1044,11 @@ public:
         return true;
     }
 
-    bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints) override {
+    bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints, const TMap<TString, TPosition>& hintPositions) override {
         Y_UNUSED(ctx);
         TTableHints merged = contextHints;
         MergeHints(merged, hints);
-        TableOptions_ = BuildInputOptions(pos, merged);
+        TableOptions_ = BuildInputOptions(pos, merged, hintPositions);
         return true;
     }
 
@@ -1137,11 +1136,12 @@ public:
         return true;
     }
 
-    bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints) override {
+    bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints, const TMap<TString, TPosition>& hintPositions) override {
         Y_UNUSED(ctx);
         HintsPos_ = pos;
         Hints_ = hints;
         ContextHints_ = contextHints;
+        HintPositions_ = hintPositions;
         return true;
     }
 
@@ -1191,7 +1191,7 @@ public:
         }
 
         if (HintsPos_) {
-            if (!source->SetTableHints(ctx, *HintsPos_, Hints_, ContextHints_)) {
+            if (!source->SetTableHints(ctx, *HintsPos_, Hints_, ContextHints_, HintPositions_)) {
                 return false;
             }
         }
@@ -1254,6 +1254,7 @@ private:
     TMaybe<TPosition> HintsPos_;
     TTableHints Hints_;
     TTableHints ContextHints_;
+    TMap<TString, TPosition> HintPositions_;
 };
 
 TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label) {

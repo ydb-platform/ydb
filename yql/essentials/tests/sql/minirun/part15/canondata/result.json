@@ -211,9 +211,9 @@
     ],
     "test.test[blocks-frompg-default.txt-Peephole]": [
         {
-            "checksum": "4a1252cc2d002cd96493909944981d71",
+            "checksum": "f36de1fcbddad5b221e3df40bf1b33cd",
             "size": 531,
-            "uri": "https://{canondata_backend}/1773845/6a5d3e4a85f0a03999d9593c4e1f14f34324cef4/resource.tar.gz#test.test_blocks-frompg-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1923547/6d22e755f16b6e1d62c3a815d85c50f5314192a8/resource.tar.gz#test.test_blocks-frompg-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-frompg-default.txt-Results]": [
@@ -232,9 +232,9 @@
     ],
     "test.test[blocks-ifpresent_nested-default.txt-Peephole]": [
         {
-            "checksum": "f638dab7cc30faed6bbdad1b7073d0f7",
+            "checksum": "fdad48c6187f56d0db74c95a9e9124c1",
             "size": 1218,
-            "uri": "https://{canondata_backend}/1773845/6a5d3e4a85f0a03999d9593c4e1f14f34324cef4/resource.tar.gz#test.test_blocks-ifpresent_nested-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1923547/6d22e755f16b6e1d62c3a815d85c50f5314192a8/resource.tar.gz#test.test_blocks-ifpresent_nested-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-ifpresent_nested-default.txt-Results]": [
@@ -253,9 +253,9 @@
     ],
     "test.test[blocks-ifpresent_two_args-default.txt-Peephole]": [
         {
-            "checksum": "ae6ceb0730332a85348f1e75e7694e8c",
+            "checksum": "65a45f76593cabf1d2a484439102e2e5",
             "size": 1251,
-            "uri": "https://{canondata_backend}/1773845/6a5d3e4a85f0a03999d9593c4e1f14f34324cef4/resource.tar.gz#test.test_blocks-ifpresent_two_args-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1923547/6d22e755f16b6e1d62c3a815d85c50f5314192a8/resource.tar.gz#test.test_blocks-ifpresent_two_args-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-ifpresent_two_args-default.txt-Results]": [
@@ -274,9 +274,9 @@
     ],
     "test.test[blocks-or_opt-default.txt-Peephole]": [
         {
-            "checksum": "f1c6a6d6b417fffbea3ed53396c10326",
+            "checksum": "ecbc263ac861d480c71b07d68d54013f",
             "size": 879,
-            "uri": "https://{canondata_backend}/1773845/6a5d3e4a85f0a03999d9593c4e1f14f34324cef4/resource.tar.gz#test.test_blocks-or_opt-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1923547/6d22e755f16b6e1d62c3a815d85c50f5314192a8/resource.tar.gz#test.test_blocks-or_opt-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-or_opt-default.txt-Results]": [
@@ -295,9 +295,9 @@
     ],
     "test.test[blocks-variant_item_struct_double_optional-default.txt-Peephole]": [
         {
-            "checksum": "a40b5a9d4491f3bddaf50e8e867d293f",
+            "checksum": "b269b6c06e50678c14474a066c39e9e3",
             "size": 898,
-            "uri": "https://{canondata_backend}/1773845/6a5d3e4a85f0a03999d9593c4e1f14f34324cef4/resource.tar.gz#test.test_blocks-variant_item_struct_double_optional-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1923547/6d22e755f16b6e1d62c3a815d85c50f5314192a8/resource.tar.gz#test.test_blocks-variant_item_struct_double_optional-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-variant_item_struct_double_optional-default.txt-Results]": [
@@ -316,9 +316,9 @@
     ],
     "test.test[blocks-variant_item_struct_optional-default.txt-Peephole]": [
         {
-            "checksum": "b37e9c2fd12bd6e6eeaf588db65e2842",
+            "checksum": "7a2ed90d631fa466f0fe2a0b2a31fc78",
             "size": 729,
-            "uri": "https://{canondata_backend}/1773845/6a5d3e4a85f0a03999d9593c4e1f14f34324cef4/resource.tar.gz#test.test_blocks-variant_item_struct_optional-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1923547/6d22e755f16b6e1d62c3a815d85c50f5314192a8/resource.tar.gz#test.test_blocks-variant_item_struct_optional-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-variant_item_struct_optional-default.txt-Results]": [

@@ -629,25 +629,25 @@ Y_UNIT_TEST(InsertNoCluster) {
 Y_UNIT_TEST(InsertValuesNoLabels) {
     NYql::TAstParseResult res = SqlToYql("insert into plato.Output values (1)");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: INSERT INTO ... VALUES requires specification of table columns\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:26: Error: INSERT INTO ... VALUES requires specification of table columns\n");
 }
 
 Y_UNIT_TEST(UpsertValuesNoLabelsKikimr) {
     NYql::TAstParseResult res = SqlToYql("upsert into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: UPSERT INTO ... VALUES requires specification of table columns\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:26: Error: UPSERT INTO ... VALUES requires specification of table columns\n");
 }
 
 Y_UNIT_TEST(ReplaceValuesNoLabelsKikimr) {
     NYql::TAstParseResult res = SqlToYql("replace into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:20: Error: REPLACE INTO ... VALUES requires specification of table columns\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: REPLACE INTO ... VALUES requires specification of table columns\n");
 }
 
 Y_UNIT_TEST(InsertValuesInvalidLabels) {
     NYql::TAstParseResult res = SqlToYql("insert into plato.Output (foo) values (1, 2)");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: VALUES have 2 columns, INSERT INTO expects: 1\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:32: Error: VALUES have 2 columns, INSERT INTO expects: 1\n");
 }
 
 Y_UNIT_TEST(BuiltinFileOpNoArgs) {
@@ -659,7 +659,7 @@ Y_UNIT_TEST(BuiltinFileOpNoArgs) {
 Y_UNIT_TEST(ProcessWithHaving) {
     NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet!\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:44: Error: PROCESS does not allow HAVING yet!\n");
 }
 
 Y_UNIT_TEST(ReduceNoBy) {
@@ -919,13 +919,13 @@ Y_UNIT_TEST(InsertIntoWithTruncateKikimr) {
 Y_UNIT_TEST(InsertIntoWithWrongArgumentCount) {
     NYql::TAstParseResult res = SqlToYql("insert into plato.Output with truncate (key, value, subkey) values (5, '1', '2', '3');");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:53: Error: VALUES have 4 columns, INSERT INTO ... WITH TRUNCATE expects: 3\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:61: Error: VALUES have 4 columns, INSERT INTO ... WITH TRUNCATE expects: 3\n");
 }
 
 Y_UNIT_TEST(UpsertWithWrongArgumentCount) {
     NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName));
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:39: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:47: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n");
 }
 
 Y_UNIT_TEST(GroupingSetByExprWithoutAlias) {
@@ -1365,7 +1365,7 @@ Y_UNIT_TEST(RequireLabelInFlattenByWithDot) {
     NYql::TAstParseResult res = SqlToYql("select * from plato.Input flatten by x.y");
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res),
-                        "<main>:1:40: Error: Unnamed expression after FLATTEN BY is not allowed\n");
+                        "<main>:1:38: Error: Unnamed expression after FLATTEN BY is not allowed\n");
 }
 
 Y_UNIT_TEST(WarnUnnamedColumns) {
@@ -1381,7 +1381,7 @@ Y_UNIT_TEST(WarnSourceColumnMismatch) {
     NYql::TAstParseResult res = SqlToYql(
         "insert into plato.Output (key, subkey, new_value, one_more_value) select key as Key, subkey, value, \"x\" from plato.Input;");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:51: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:67: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n");
 }
 
 Y_UNIT_TEST(YtCaseInsensitive) {
@@ -2097,7 +2097,7 @@ Y_UNIT_TEST(ErrorInLibraryWithTopLevelNamedSubquery) {
                                "export $foo;\n";
     auto res = SqlToYqlWithMode(withTopLevelSubq, NSQLTranslation::ESqlMode::LIBRARY);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: Named subquery can not be used as a top level statement in libraries\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:10: Error: Named subquery can not be used as a top level statement in libraries\n");
 }
 
 Y_UNIT_TEST(SessionStartAndSessionStateShouldSurviveSessionWindowArgsError) {
@@ -2121,7 +2121,7 @@ Y_UNIT_TEST(ScalarContextUsage1) {
             $a = (select 1 as x, 2 as y);
             select 1 + $a;
         )";
-    ExpectFailWithError(query, "<main>:2:39: Error: Source used in expression should contain one concrete column\n"
+    ExpectFailWithError(query, "<main>:2:19: Error: Source used in expression should contain one concrete column\n"
                                "<main>:3:24: Error: Source is used here\n");
 }
 
@@ -2131,7 +2131,7 @@ Y_UNIT_TEST(ScalarContextUsage2) {
             $a = (select 1 as x, 2 as y);
             select * from concat($a);
         )";
-    ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+    ExpectFailWithError(query, "<main>:3:19: Error: Source used in expression should contain one concrete column\n"
                                "<main>:4:34: Error: Source is used here\n");
 }
 
@@ -2141,7 +2141,7 @@ Y_UNIT_TEST(ScalarContextUsage3) {
             $a = (select 1 as x, 2 as y);
             select * from range($a);
         )";
-    ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+    ExpectFailWithError(query, "<main>:3:19: Error: Source used in expression should contain one concrete column\n"
                                "<main>:4:33: Error: Source is used here\n");
 }
 
@@ -2151,7 +2151,7 @@ Y_UNIT_TEST(ScalarContextUsage4) {
             $a = (select 1 as x, 2 as y);
             insert into $a select 1;
         )";
-    ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
+    ExpectFailWithError(query, "<main>:3:19: Error: Source used in expression should contain one concrete column\n"
                                "<main>:4:25: Error: Source is used here\n");
 }
 Y_UNIT_TEST(TablesFunctionDisallowedByDefault) {
@@ -2174,3 +2174,60 @@ Y_UNIT_TEST(IncorrectCorrQuery) {
 }
 
 } // Y_UNIT_TEST_SUITE(Crashes)
+
+Y_UNIT_TEST_SUITE(ExplicitValuesWindowPositions) {
+
+Y_UNIT_TEST(MismatchedValuesRow) {
+    ExpectFailWithError(
+        "VALUES\n"
+        "  (1, 2),\n"
+        "  (\n"
+        "    3);",
+        "<main>:3:3: Error: All VALUES items should have same size: expecting 2, got 1\n");
+}
+
+Y_UNIT_TEST(MismatchedInsertValuesRow) {
+    ExpectFailWithError(
+        "INSERT INTO plato.Output (a, b)\n"
+        "VALUES (1, 2),\n"
+        "  (\n"
+        "    3);",
+        "<main>:3:3: Error: All VALUES items should have same size: expecting 2, got 1\n");
+}
+
+Y_UNIT_TEST(InsertValuesWithoutColumns) {
+    ExpectFailWithError(
+        "INSERT INTO plato.Output\n"
+        "  VALUES\n"
+        "    (1);",
+        "<main>:2:3: Error: INSERT INTO ... VALUES requires specification of table columns\n");
+}
+
+Y_UNIT_TEST(InsertValuesColumnCount) {
+    ExpectFailWithError(
+        "INSERT INTO plato.Output (a)\n"
+        "  VALUES\n"
+        "    (1, 2);",
+        "<main>:2:3: Error: VALUES have 2 columns, INSERT INTO expects: 1\n");
+}
+
+Y_UNIT_TEST(UnsupportedAsValues) {
+    ExpectFailWithError(
+        "USE plato;\n"
+        "CREATE TABLE t (a, PRIMARY KEY(a)) AS\n"
+        "  VALUES\n"
+        "    (1),\n"
+        "    (2);",
+        "<main>:3:3: Error: AS VALUES statement is not supported for CreateTableAs.\n");
+}
+
+Y_UNIT_TEST(DuplicateWindowName) {
+    ExpectFailWithError(
+        "SELECT SUM(x) OVER w FROM plato.Input\n"
+        "WINDOW w AS (ORDER BY key),\n"
+        "  w\n"
+        "    AS (ORDER BY subkey);",
+        "<main>:3:3: Error: Unable to declare window with same name: w\n");
+}
+
+} // Y_UNIT_TEST_SUITE(ExplicitValuesWindowPositions)

@@ -11,6 +11,7 @@ PEERDIR(
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/utils
     yt/yql/providers/yt/lib/qlfilter
+    yt/yt/library/query/base
 )
 
 YQL_LAST_ABI_VERSION()

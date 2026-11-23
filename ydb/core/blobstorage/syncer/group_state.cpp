@@ -69,6 +69,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     std::set<ui32> RepairGroups;
     TVector<ui32> ActiveGroups;
     ui32 Cursor = 0;
+    std::optional<ui32> LastStartedRepairGroup;
     ui64 NextCookie = 0;
 
     void EraseQueries(ui32 groupId) {
@@ -228,12 +229,18 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void RunRepairs() {
-        for (ui32 groupId : RepairGroups) {
+        auto it = LastStartedRepairGroup ? RepairGroups.upper_bound(*LastStartedRepairGroup) : RepairGroups.begin();
+        for (size_t remaining = RepairGroups.size(); remaining; --remaining) {
+            if (it == RepairGroups.end()) {
+                it = RepairGroups.begin();
+            }
+            const ui32 groupId = *it++;
             TGroup& group = Groups.at(groupId);
             if (group.Stage == EStage::Propose) {
                 ProposeState(groupId, &group);
             } else if (!group.RepairCookie && !group.ProposalCookie && RunningRepairs.size() < MaxRunningRepairs) {
                 StartRepair(groupId, &group);
+                LastStartedRepairGroup = groupId;
             }
         }
     }

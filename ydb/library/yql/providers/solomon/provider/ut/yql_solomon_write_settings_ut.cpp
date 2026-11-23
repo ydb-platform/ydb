@@ -115,8 +115,8 @@ Y_UNIT_TEST_SUITE(TSolomonWriteSettingsTest) {
 
     Y_UNIT_TEST(InvalidWritePragmasAreRejected) {
         TWriteSettingsFixture fixture;
-        for (const TString name : { TString("WriteMaxRequestsInflight"), TString("WriteMaxPointsPerRequest") }) {
-            for (const TString value : { TString("0"), TString("-1"), TString("invalid") }) {
+        for (const TString& name : { TString("WriteMaxRequestsInflight"), TString("WriteMaxPointsPerRequest") }) {
+            for (const TString& value : { TString("0"), TString("-1"), TString("invalid") }) {
                 TString error;
                 UNIT_ASSERT(!fixture.Set(name, MakeMaybe(value), error));
                 UNIT_ASSERT_STRING_CONTAINS(error, name);

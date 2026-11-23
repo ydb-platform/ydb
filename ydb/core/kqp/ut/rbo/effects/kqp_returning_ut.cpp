@@ -131,43 +131,51 @@ Y_UNIT_TEST(ReturningTwice) {
 Y_UNIT_TEST_QUAD(SequencedWritePreparation, PhysicalStagePeephole, CompileTimeDefaults) {
     auto appConfig = ReturningAppConfig();
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
+    appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
     appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
     appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(CompileTimeDefaults);
     TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
-    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
     auto created = session.ExecuteSchemeQuery(R"(
         CREATE TABLE PreparedRows (
             id Serial,
             tag String,
             payload Int32 DEFAULT 7,
-            g Int32 GENERATED ALWAYS AS (id * 10 + COALESCE(payload, 0)) STORED,
+            bonus Uint64 DEFAULT RandomNumber(1) * 0ul + 8ul,
+            g Int32 GENERATED ALWAYS AS (
+                id * 10 + COALESCE(payload, 0) + COALESCE(CAST(bonus AS Int32), 0)
+            ) STORED,
             PRIMARY KEY (id)
         );
     )").GetValueSync();
     UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
     EnableNewRbo(kikimr);
+    UNIT_ASSERT(session.Close().GetValueSync().IsSuccess());
+    session = client.CreateSession().GetValueSync().GetSession();
 
-    // Both the sequence and literal default must be available to g. The
-    // returned values must be the same values that reach the write sink.
+    // The sequence and both defaults must be available when computing g.
+    // RETURNING must observe the same values as the write sink.
     const TString insert = R"(
-        INSERT INTO PreparedRows (tag) VALUES ("a"), ("b") RETURNING id, payload, g;
+        INSERT INTO PreparedRows (tag) VALUES ("a"), ("b") RETURNING id, payload, bonus, g;
     )";
     auto explained = session.ExplainDataQuery(insert).GetValueSync();
     UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString());
     UNIT_ASSERT_STRING_CONTAINS(explained.GetPlan(), "\"Sequencer\"");
     auto inserted = session.ExecuteDataQuery(insert, TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
-    CompareYson("[[1;[7];[17]];[2;[7];[27]]]", FormatResultSetYson(inserted.GetResultSet(0)));
+    CompareYson("[[1;[7];[8u];[25]];[2;[7];[8u];[35]]]", FormatResultSetYson(inserted.GetResultSet(0)));
 
     auto replaced = session.ExecuteDataQuery(R"(
-        REPLACE INTO PreparedRows (tag) VALUES ("c");
+        REPLACE INTO PreparedRows (tag) VALUES ("c") RETURNING id, payload, bonus, g;
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(replaced.IsSuccess(), replaced.GetIssues().ToString());
+    CompareYson("[[3;[7];[8u];[45]]]", FormatResultSetYson(replaced.GetResultSet(0)));
     auto stored = session.ExecuteDataQuery(R"(
-        SELECT id, payload, g FROM PreparedRows ORDER BY id;
+        SELECT id, payload, bonus, g FROM PreparedRows ORDER BY id;
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());
-    CompareYson("[[1;[7];[17]];[2;[7];[27]];[3;[7];[37]]]", FormatResultSetYson(stored.GetResultSet(0)));
+    CompareYson("[[1;[7];[8u];[25]];[2;[7];[8u];[35]];[3;[7];[8u];[45]]]", FormatResultSetYson(stored.GetResultSet(0)));
 }
 
 Y_UNIT_TEST(ReplaceSerial) {

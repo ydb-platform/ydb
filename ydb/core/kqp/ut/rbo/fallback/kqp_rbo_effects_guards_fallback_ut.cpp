@@ -57,6 +57,38 @@ Y_UNIT_TEST_SUITE(KqpRboEffectsGuardsFallback) {
         CompareYson("[[1;[5];105];[2;[7];207]]", FormatResultSetYson(stored.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST_TWIN(PartialUpsertWithExpressionDefault, Fallback) {
+        auto config = GuardConfig(Fallback);
+        config.MutableFeatureFlags()->SetEnableDefaultFromExpression(true);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        auto schema = client.ExecuteQuery(R"(
+            CREATE TABLE D (
+                k Int32 NOT NULL,
+                payload Int32,
+                v Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (k)
+            );
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+        auto seed = client.ExecuteQuery("INSERT INTO D (k, payload, v) VALUES (1, 0, 7ul);", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+
+        // The lookup for omitted defaults passes the input row and its key as a tuple.
+        auto result = client.ExecuteQuery("UPSERT INTO D (k, payload) VALUES (1, 5), (2, 6);", TTxControl::NoTx()).GetValueSync();
+        const auto issues = result.GetIssues().ToString();
+        UNIT_ASSERT_STRING_CONTAINS(issues, "New RBO cannot import a table-effect Map whose body is not AsStruct");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), Fallback, issues);
+        if constexpr (Fallback) {
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Compilation with the new RBO failed");
+        }
+
+        auto stored = client.ExecuteQuery("SELECT k, payload, v FROM D ORDER BY k;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());
+        CompareYson(Fallback ? "[[1;[5];[7u]];[2;[6];[42u]]]" : "[[1;[0];[7u]]]",
+            FormatResultSetYson(stored.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(SingleReturningWithoutStreamIndex) {
         TKikimrRunner kikimr(TKikimrSettings(GuardConfig(true, false)).SetWithSampleTables(false));
         CreateTables(kikimr);

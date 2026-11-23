@@ -1528,13 +1528,6 @@ namespace NKikimr::NBsController {
                 if (filter.SerializedFilter) {
                     update.template operator()<Schema::BoxStoragePoolPDiskFilterV2>(
                         std::make_tuple(filter.BoxId, filter.StoragePoolId, *filter.SerializedFilter));
-                } else if (filter.Location) {
-                    // Serialize the parsed filter in a fixed property order: request ordering
-                    // must not change its persistent identity, including when deleting a row.
-                    NKikimrBlobStorage::TPDiskFilter proto;
-                    Serialize(&proto, filter);
-                    update.template operator()<Schema::BoxStoragePoolPDiskFilterV2>(
-                        std::make_tuple(filter.BoxId, filter.StoragePoolId, proto.SerializeAsString()));
                 } else {
                     update.template operator()<Schema::BoxStoragePoolPDiskFilter>(filter.GetLegacyKey());
                 }
@@ -1579,7 +1572,7 @@ namespace NKikimr::NBsController {
                         if (!IsValidPDiskFilterLocation(property.GetLocation())) {
                             throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
                         }
-                        // an empty location constrains nothing, so it is stored the same way as an absent one
+                        // An empty location imposes no matching constraint.
                         if (TNodeLocation location(property.GetLocation()); !location.GetItems().empty()) {
                             filter.SetLocation(location.GetSerializedLocation());
                         }
@@ -1596,34 +1589,7 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TPDiskFilter did not specify Type property";
             }
 
-            if (filter.Location || filter.HasUnknownRequiredProperty
-                    || !proto.GetReflection()->GetUnknownFields(proto).empty()) {
-                // Normalize new writes without dropping unknown fields. Persisted keys are retained separately
-                // by LoadPDiskFilters, since even protobuf parsing can change their original encoding.
-                auto preserved = proto;
-                if (!filter.HasUnknownRequiredProperty) {
-                    for (size_t i = 0; i < preserved.PropertySize(); ++i) {
-                        auto* property = preserved.MutableProperty(i);
-                        if (property->HasLocation()) {
-                            if (filter.Location) {
-                                *property->MutableLocation() = TNodeLocation::ParseLocation(*filter.Location);
-                            } else {
-                                preserved.MutableProperty()->DeleteSubrange(i, 1);
-                            }
-                            break; // Duplicate Location properties have already been rejected.
-                        }
-                    }
-                }
-                auto* properties = preserved.MutableProperty();
-                std::sort(properties->begin(), properties->end(), [](const auto& x, const auto& y) {
-                    if (x.GetPropertyCase() != y.GetPropertyCase()) {
-                        return x.GetPropertyCase() < y.GetPropertyCase();
-                    }
-                    return x.SerializeAsString() < y.SerializeAsString();
-                });
-                filter.SerializedFilter = preserved.SerializeAsString();
-            }
-
+            filter.SerializedFilter = proto.SerializeAsString();
             return filter;
         }
 

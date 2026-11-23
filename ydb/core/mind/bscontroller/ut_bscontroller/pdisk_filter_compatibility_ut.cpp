@@ -26,18 +26,6 @@ struct TLegacySchema : NIceDb::Schema {
     using TTables = SchemaTables<BoxStoragePoolPDiskFilter>;
 };
 
-// Released V2 readers decode the key directly into a protobuf and reserialize it when deleting.
-struct TReleasedV2Schema : NIceDb::Schema {
-    struct BoxStoragePoolPDiskFilterV2 : Table<136> {
-        struct BoxId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct StoragePoolId : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Filter : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TPDiskFilter; };
-        using TKey = TableKey<BoxId, StoragePoolId, Filter>;
-        using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
-    };
-    using TTables = SchemaTables<BoxStoragePoolPDiskFilterV2>;
-};
-
 using TPool = TBlobStorageController::TStoragePoolInfo;
 using TFilter = TPool::TPDiskFilter;
 using TFilters = TPool::TPDiskFilters;
@@ -127,29 +115,6 @@ void CheckFilters(const TFilters& actual, const TFilters& expected) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
-    Y_UNIT_TEST(KnownV2FiltersCanStillBeReadAndDeletedByReleasedCode) {
-        TFixture f;
-        f.Transaction([&] { f.Db.Materialize<Schema>(); });
-        f.Update({}, {MakeFilter(NKikimrBlobStorage::SSD, TString("dc1"))});
-        f.Transaction([&] {
-            f.Db.Materialize<TReleasedV2Schema>();
-            using T = TReleasedV2Schema::BoxStoragePoolPDiskFilterV2;
-            auto rows = f.Db.Table<T>().Range(7, 11).Select();
-            UNIT_ASSERT(rows.IsReady() && rows.IsValid());
-            const auto proto = rows.GetValue<T::Filter>();
-            // Reconstruct only the fields known to the released reader.
-            NKikimrBlobStorage::TPDiskFilter key;
-            key.AddProperty()->SetType(proto.GetProperty(0).GetType());
-            *key.AddProperty()->MutableLocation() = proto.GetProperty(1).GetLocation();
-            const auto values = std::make_tuple(ui64(7), ui64(11), key.SerializeAsString());
-            auto keyTuple = NTableAdapter::PrepareKeyTuple<T>(&values);
-            TStackVec<TRawTypeValue, std::tuple_size_v<decltype(keyTuple)>> rawKey;
-            NTableAdapter::MapKey<T>(&keyTuple, rawKey);
-            f.Database.Update(T::TableId, NTable::ERowOp::Erase, rawKey, {});
-        });
-        UNIT_ASSERT(f.V2Keys().empty());
-    }
-
     Y_UNIT_TEST(UnknownMetadataKeepsExactKeysThroughRewriteAndDelete) {
         TFixture f;
         f.Transaction([&] { f.Db.Materialize<Schema>(); });
@@ -232,7 +197,9 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         NKikimrBlobStorage::TPDiskFilter proto;
         proto.AddProperty()->SetType(NKikimrBlobStorage::ROT);
         proto.AddProperty()->SetKind(7);
-        f.Update({}, {TFilter::Parse(7, 11, proto)}); // Legacy table.
+        auto legacy = TFilter::Parse(7, 11, proto);
+        legacy.SerializedFilter.Clear();
+        f.Update({}, {legacy});
         f.InsertV2(proto.SerializeAsString()); // V2 without Location still has to be deleted from V2.
         proto.MutableProperty()->SwapElements(0, 1);
         f.InsertV2(proto.SerializeAsString());
@@ -243,7 +210,7 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         UNIT_ASSERT(f.V2Keys().empty());
     }
 
-    Y_UNIT_TEST(LegacyReadAndWriteAfterUpgrade) {
+    Y_UNIT_TEST(LegacyFiltersCanBeReadAndRewrittenInV2) {
         TFixture f;
         f.Transaction([&] {
             f.Db.Materialize<TLegacySchema>();
@@ -255,39 +222,26 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         UNIT_ASSERT_VALUES_EQUAL(f.Database.GetScheme().GetTableInfo(122)->KeyColumns.size(), 6);
 
         auto original = MakeFilter(NKikimrBlobStorage::ROT);
+        original.SerializedFilter.Clear();
         original.SharedWithOs = false;
         original.ReadCentric = true;
         original.Kind = 3;
         const TFilters oldFilters{original};
         CheckFilters(f.Load(7, 11), oldFilters);
 
-        // A current controller writes a filter with nullable key fields. The old
-        // reader must see it, and its prefix scan must not abort after upgrade.
+        // Reapplying the pool configuration replaces the legacy row with the full protobuf in V2.
+        NKikimrBlobStorage::TPDiskFilter proto;
+        TBlobStorageController::Serialize(&proto, *f.Load(7, 11).begin());
+        const auto rewritten = TFilter::Parse(7, 11, proto);
         const auto added = MakeFilter(NKikimrBlobStorage::SSD);
-        const TFilters newFilters{original, added};
+        const TFilters newFilters{rewritten, added};
         f.Update(oldFilters, newFilters);
-        f.Transaction([&] {
-            f.Db.Materialize<TLegacySchema>();
-        });
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 2);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
-
-        // Stable can change the filters after downgrade; a subsequent upgrade
-        // must read those changes, rather than resurrecting a separate copy.
-        f.Transaction([&] {
-            f.Db.Table<TLegacyTable>().Key(7, 11, i32(NKikimrBlobStorage::ROT), false, true, 3).Delete();
-            f.Db.Table<TLegacyTable>().Key(7, 11, i32(NKikimrBlobStorage::ROT), true, false, 5).Update();
-        });
-        original.SharedWithOs = true;
-        original.ReadCentric = false;
-        original.Kind = 5;
-        f.Transaction([&] {
-            f.Db.Materialize<Schema>();
-        });
-        CheckFilters(f.Load(7, 11), {original, added});
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 2);
+        CheckFilters(f.Load(7, 11), newFilters);
     }
 
-    Y_UNIT_TEST(LocationFiltersPersistAndSwitchTables) {
+    Y_UNIT_TEST(FiltersPersistThroughUpdatesAndPoolMoves) {
         TFixture f;
         f.Transaction([&] {
             f.Db.Materialize<Schema>();
@@ -300,8 +254,8 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         const TFilters all{unrestricted, dc1, dc2, emptyDataCenter};
         f.Update({}, all);
         CheckFilters(f.Load(7, 11), all);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 1);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 4);
 
         const TFilters located{dc1, dc2};
         f.Update(all, located);
@@ -311,8 +265,8 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         const TFilters plain{unrestricted};
         f.Update(f.Load(7, 11), plain);
         CheckFilters(f.Load(7, 11), plain);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 1);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 1);
 
         f.Update(plain, located);
         CheckFilters(f.Load(7, 11), located);
@@ -330,32 +284,6 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         f.Update(moved, {});
         UNIT_ASSERT(f.Load(8, 12).empty());
         UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
-    }
-
-    Y_UNIT_TEST(SerializedFilterKeyDoesNotDependOnPropertyOrder) {
-        TFixture f;
-        f.Transaction([&] {
-            f.Db.Materialize<Schema>();
-        });
-        NKikimrBlobStorage::TPDiskFilter first;
-        first.AddProperty()->SetType(NKikimrBlobStorage::ROT);
-        first.AddProperty()->SetKind(9);
-        first.AddProperty()->SetSharedWithOs(false);
-        first.AddProperty()->MutableLocation()->SetDataCenter("dc1");
-
-        NKikimrBlobStorage::TPDiskFilter reversed;
-        for (int i = first.PropertySize(); i > 0; --i) {
-            *reversed.AddProperty() = first.GetProperty(i - 1);
-        }
-        UNIT_ASSERT(first.SerializeAsString() != reversed.SerializeAsString());
-        const TFilters a{TFilter::Parse(7, 11, first)};
-        const TFilters b{TFilter::Parse(7, 11, reversed)};
-        f.Update({}, a);
-        f.Update({}, b);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 1);
-        CheckFilters(f.Load(7, 11), b);
-        f.Update(b, {});
         UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
     }
 }

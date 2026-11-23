@@ -1644,7 +1644,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         auto matches = [&](const NActorsInterconnect::TNodeLocation& location) {
             return TFilter::Parse(1, 1, proto).MatchPDisk(category, false, {}, TNodeLocation(location));
         };
-        // An empty location imposes no constraint and is stored the same way as an absent one.
+        // An empty location imposes no matching constraint.
         UNIT_ASSERT(!TFilter::Parse(1, 1, proto).Location);
         UNIT_ASSERT(matches({}));
         for (const char* name : {"DataCenter", "Module", "Rack", "Unit", "BridgePileName"}) {
@@ -1883,8 +1883,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         checkPlacement(1, "1", 2);
         checkPlacement(2, "2", 1);
 
-        // Exercise persistence through configuration commits when filters move
-        // between the legacy and location tables, including mixed filter sets.
+        // Exercise persistence through configuration commits with and without location constraints.
         const auto plainPool = readPool(3);
         pool = plainPool;
         location(pool.MutablePDiskFilter(0))->SetDataCenter("1");

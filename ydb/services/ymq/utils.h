@@ -4,4 +4,5 @@
 
 namespace NKikimr::NYmq {
     std::pair<TString, TString> CloudIdAndResourceIdFromQueueUrl(const TString& queueUrl);
+    TString GetAuditRemoteAddress(TString peer);
 }

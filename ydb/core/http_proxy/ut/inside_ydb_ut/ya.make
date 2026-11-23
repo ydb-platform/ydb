@@ -20,6 +20,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
     ydb/services/ydb
+    ydb/services/ymq
 )
 
 SRCS(

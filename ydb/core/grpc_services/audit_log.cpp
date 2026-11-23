@@ -8,175 +8,695 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
-namespace NKikimr {
-namespace NGRpcService {
-
-//NOTE: EmptyValue couldn't be an empty string as AUDIT_PART() skips parts with an empty values
-static const TString EmptyValue = "{none}";
+namespace NKikimr::NGRpcService {
 
 namespace {
 
 using TLogClassConfig = TAuditMode::TLogClassConfig;
 
-struct TConnectionFields {
-    const IRequestProxyCtx* Context;
-    const TString& Database;
-    const TString& UserSID;
-    const TString& SanitizedToken;
+// AUDIT_PART skips empty values. A supplied but empty operation field must
+// therefore be distinguished from a field that was never supplied.
+const TString EmptyValue = "{none}";
+
+struct TGrpcAuditContext {
+    TString Component;
+    TString Status;
+    TString DetailedStatus;
+
+    // Keep repeated values from the append-only request audit context.
+    TVector<TString> RemoteAddress;
+    TVector<TString> Subject;
+    TVector<TString> SanitizedToken;
+    TVector<TString> Database;
+    TVector<TString> Operation;
+    TVector<TString> GrpcMethod;
+    TVector<TString> StartTime;
+    TVector<TString> EndTime;
+    TVector<TString> CloudId;
+    TVector<TString> FolderId;
+    TVector<TString> ResourceId;
+    TVector<TString> Reason;
+    TVector<TString> QueryText;
+    TVector<TString> PreparedQueryId;
+    TVector<TString> TxId;
+    TVector<TString> BeginTx;
+    TVector<TString> CommitTx;
+    TVector<TString> Table;
+    TVector<TString> RowCount;
+    TVector<TString> TabletId;
+    TVector<TString> ProgramText;
+    TVector<TString> SchemaChanges;
+    TVector<TString> StoragePool;
+    TVector<TString> Group;
+    TVector<TString> HiveId;
+    TVector<TString> HiveGeneration;
+    TVector<TString> ReassignId;
+    TVector<TString> Request;
 };
 
-void AddConnectionParts(TAuditLogParts& auditParts, const TConnectionFields& fields) {
-    AUDIT_PART("component", "grpc-conn")
-    AUDIT_PART("remote_address", NKikimr::NAddressClassifier::ExtractAddress(fields.Context->GetPeerName()))
-    AUDIT_PART("subject", fields.UserSID)
-    AUDIT_PART("sanitized_token", (!fields.SanitizedToken.empty() ? fields.SanitizedToken : EmptyValue))
-    AUDIT_PART("database", fields.Database)
-    AUDIT_PART("operation", fields.Context->GetRequestName())
+TVector<TString> GetOperationField(const TAuditLogParts& parts, TStringBuf name) {
+    TVector<TString> values;
+    for (const auto& [partName, value] : parts) {
+        if (partName == name) {
+            values.push_back(value.empty() ? EmptyValue : value);
+        }
+    }
+    return values;
 }
 
-void AddOperationParts(TAuditLogParts& auditParts, std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_PART("component", "grpc-proxy")
-
-    // All supplied parts are required; preserve missing values explicitly.
-    for (const auto& [name, value] : parts) {
-        AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
-    }
+TGrpcAuditContext MakeOperationContext(std::optional<ui32> status, const TAuditLogParts& parts) {
+    TGrpcAuditContext context;
+    context.Component = "grpc-proxy";
     if (status) {
-        AUDIT_PART("status", (*status == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR"))
-        AUDIT_PART("detailed_status", (Ydb::StatusIds::StatusCode_IsValid(*status)
+        context.Status = *status == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR";
+        context.DetailedStatus = Ydb::StatusIds::StatusCode_IsValid(*status)
             ? TString(Ydb::StatusIds::StatusCode_Name(*status))
-            : ToString(*status)))
+            : ToString(*status);
     } else {
-        AUDIT_PART("status", "IN-PROCESS")
+        context.Status = "IN-PROCESS";
     }
+    context.RemoteAddress = GetOperationField(parts, "remote_address");
+    context.Subject = GetOperationField(parts, "subject");
+    context.SanitizedToken = GetOperationField(parts, "sanitized_token");
+    context.Database = GetOperationField(parts, "database");
+    context.Operation = GetOperationField(parts, "operation");
+    context.GrpcMethod = GetOperationField(parts, "grpc_method");
+    context.StartTime = GetOperationField(parts, "start_time");
+    context.EndTime = GetOperationField(parts, "end_time");
+    context.CloudId = GetOperationField(parts, "cloud_id");
+    context.FolderId = GetOperationField(parts, "folder_id");
+    context.ResourceId = GetOperationField(parts, "resource_id");
+    context.Reason = GetOperationField(parts, "reason");
+    context.QueryText = GetOperationField(parts, "query_text");
+    context.PreparedQueryId = GetOperationField(parts, "prepared_query_id");
+    context.TxId = GetOperationField(parts, "tx_id");
+    context.BeginTx = GetOperationField(parts, "begin_tx");
+    context.CommitTx = GetOperationField(parts, "commit_tx");
+    context.Table = GetOperationField(parts, "table");
+    context.RowCount = GetOperationField(parts, "row_count");
+    context.TabletId = GetOperationField(parts, "tablet_id");
+    context.ProgramText = GetOperationField(parts, "program_text");
+    context.SchemaChanges = GetOperationField(parts, "schema_changes");
+    context.StoragePool = GetOperationField(parts, "storage_pool");
+    context.Group = GetOperationField(parts, "group");
+    context.HiveId = GetOperationField(parts, "hive_id");
+    context.HiveGeneration = GetOperationField(parts, "hive_generation");
+    context.ReassignId = GetOperationField(parts, "reassign_id");
+    context.Request = GetOperationField(parts, "request");
+    return context;
 }
 
-void AuditConnClusterAdmin(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
+TGrpcAuditContext MakeConnectionContext(const IRequestProxyCtx* request,
+        const TString& database, const TString& userSID, const TString& sanitizedToken) {
+    TGrpcAuditContext context;
+    context.Component = "grpc-conn";
+    context.RemoteAddress.push_back(NAddressClassifier::ExtractAddress(request->GetPeerName()));
+    context.Subject.push_back(userSID);
+    context.SanitizedToken.push_back(sanitizedToken.empty() ? EmptyValue : sanitizedToken);
+    context.Database.push_back(database);
+    context.Operation.push_back(request->GetRequestName());
+    return context;
 }
 
-void AuditClusterAdmin(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
+void AuditClusterAdmin(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        for (const auto& value : context.TabletId) {
+            AUDIT_PART("tablet_id", value)
+        }
+        for (const auto& value : context.ProgramText) {
+            AUDIT_PART("program_text", value)
+        }
+        for (const auto& value : context.SchemaChanges) {
+            AUDIT_PART("schema_changes", value)
+        }
+        for (const auto& value : context.StoragePool) {
+            AUDIT_PART("storage_pool", value)
+        }
+        for (const auto& value : context.Group) {
+            AUDIT_PART("group", value)
+        }
+        for (const auto& value : context.HiveId) {
+            AUDIT_PART("hive_id", value)
+        }
+        for (const auto& value : context.Request) {
+            AUDIT_PART("request", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditConnDatabaseAdmin(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
+void AuditDatabaseAdmin(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditDatabaseAdmin(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
+void AuditLogin(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditConnLogin(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
+void AuditNodeRegistration(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        for (const auto& value : context.Request) {
+            AUDIT_PART("request", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditLogin(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
+void AuditDdl(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditConnNodeRegistration(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
+void AuditDml(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        for (const auto& value : context.QueryText) {
+            AUDIT_PART("query_text", value)
+        }
+        for (const auto& value : context.PreparedQueryId) {
+            AUDIT_PART("prepared_query_id", value)
+        }
+        for (const auto& value : context.TxId) {
+            AUDIT_PART("tx_id", value)
+        }
+        for (const auto& value : context.BeginTx) {
+            AUDIT_PART("begin_tx", value)
+        }
+        for (const auto& value : context.CommitTx) {
+            AUDIT_PART("commit_tx", value)
+        }
+        for (const auto& value : context.Table) {
+            AUDIT_PART("table", value)
+        }
+        for (const auto& value : context.RowCount) {
+            AUDIT_PART("row_count", value)
+        }
+        for (const auto& value : context.Request) {
+            AUDIT_PART("request", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditNodeRegistration(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
+void AuditOperations(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        for (const auto& value : context.HiveId) {
+            AUDIT_PART("hive_id", value)
+        }
+        for (const auto& value : context.HiveGeneration) {
+            AUDIT_PART("hive_generation", value)
+        }
+        for (const auto& value : context.ReassignId) {
+            AUDIT_PART("reassign_id", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditConnDdl(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
+void AuditExportImport(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditDdl(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
+void AuditAcl(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditConnDml(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
+void AuditHeartbeat(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditDml(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
+void AuditDefault(const TGrpcAuditContext& context) {
+    AUDIT_LOG(
+        AUDIT_PART("component", context.Component)
+        for (const auto& value : context.RemoteAddress) {
+            AUDIT_PART("remote_address", value)
+        }
+        for (const auto& value : context.Subject) {
+            AUDIT_PART("subject", value)
+        }
+        for (const auto& value : context.SanitizedToken) {
+            AUDIT_PART("sanitized_token", value)
+        }
+        for (const auto& value : context.Database) {
+            AUDIT_PART("database", value)
+        }
+        for (const auto& value : context.Operation) {
+            AUDIT_PART("operation", value)
+        }
+        for (const auto& value : context.GrpcMethod) {
+            AUDIT_PART("grpc_method", value)
+        }
+        for (const auto& value : context.StartTime) {
+            AUDIT_PART("start_time", value)
+        }
+        for (const auto& value : context.EndTime) {
+            AUDIT_PART("end_time", value)
+        }
+        for (const auto& value : context.CloudId) {
+            AUDIT_PART("cloud_id", value)
+        }
+        for (const auto& value : context.FolderId) {
+            AUDIT_PART("folder_id", value)
+        }
+        for (const auto& value : context.ResourceId) {
+            AUDIT_PART("resource_id", value)
+        }
+        for (const auto& value : context.Reason) {
+            AUDIT_PART("reason", value)
+        }
+        AUDIT_PART("status", context.Status)
+        AUDIT_PART("detailed_status", context.DetailedStatus)
+    );
 }
 
-void AuditConnOperations(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
-}
+using TAuditWriter = void (*)(const TGrpcAuditContext&);
 
-void AuditOperations(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
-}
-
-void AuditConnExportImport(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
-}
-
-void AuditExportImport(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
-}
-
-void AuditConnAcl(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
-}
-
-void AuditAcl(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
-}
-
-void AuditConnHeartbeat(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
-}
-
-void AuditHeartbeat(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
-}
-
-void AuditConnDefault(const TConnectionFields& fields) {
-    AUDIT_LOG(AddConnectionParts(auditParts, fields););
-}
-
-void AuditDefault(std::optional<ui32> status, const TAuditLogParts& parts) {
-    AUDIT_LOG(AddOperationParts(auditParts, status, parts););
-}
-
-struct TAuditWriters {
-    void (*Connection)(const TConnectionFields&);
-    void (*Operation)(std::optional<ui32>, const TAuditLogParts&);
-};
-
-TAuditWriters GetAuditWriters(TLogClassConfig::ELogClass logClass) {
+TAuditWriter GetAuditWriter(TLogClassConfig::ELogClass logClass) {
     switch (logClass) {
     case TLogClassConfig::ClusterAdmin:
-        return {AuditConnClusterAdmin, AuditClusterAdmin};
+        return AuditClusterAdmin;
     case TLogClassConfig::DatabaseAdmin:
-        return {AuditConnDatabaseAdmin, AuditDatabaseAdmin};
+        return AuditDatabaseAdmin;
     case TLogClassConfig::Login:
-        return {AuditConnLogin, AuditLogin};
+        return AuditLogin;
     case TLogClassConfig::NodeRegistration:
-        return {AuditConnNodeRegistration, AuditNodeRegistration};
+        return AuditNodeRegistration;
     case TLogClassConfig::Ddl:
-        return {AuditConnDdl, AuditDdl};
+        return AuditDdl;
     case TLogClassConfig::Dml:
-        return {AuditConnDml, AuditDml};
+        return AuditDml;
     case TLogClassConfig::Operations:
-        return {AuditConnOperations, AuditOperations};
+        return AuditOperations;
     case TLogClassConfig::ExportImport:
-        return {AuditConnExportImport, AuditExportImport};
+        return AuditExportImport;
     case TLogClassConfig::Acl:
-        return {AuditConnAcl, AuditAcl};
+        return AuditAcl;
     case TLogClassConfig::AuditHeartbeat:
-        return {AuditConnHeartbeat, AuditHeartbeat};
+        return AuditHeartbeat;
     case TLogClassConfig::Default:
-        return {AuditConnDefault, AuditDefault};
+        return AuditDefault;
     }
-    return {AuditConnDefault, AuditDefault};
+    return AuditDefault;
 }
 
 } // namespace
 
-void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
-{
-    GetAuditWriters(ctx->GetAuditMode().LogClass).Connection({ctx, database, userSID, sanitizedToken});
+void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database,
+        const TString& userSID, const TString& sanitizedToken) {
+    if (NAudit::AUDIT_LOG_ENABLED.load()) {
+        const auto context = MakeConnectionContext(ctx, database, userSID, sanitizedToken);
+        GetAuditWriter(ctx->GetAuditMode().LogClass)(context);
+    }
 
     // and transitional, to be removed, output to the common log
     YDB_LOG_NOTICE("AUDIT: request",
@@ -186,9 +706,12 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
         {"subject", (userSID ? userSID : "no subject")});
 }
 
-void AuditLog(TLogClassConfig::ELogClass logClass, std::optional<ui32> status, const TAuditLogParts& parts)
-{
-    GetAuditWriters(logClass).Operation(status, parts);
+void AuditLog(TLogClassConfig::ELogClass logClass, std::optional<ui32> status,
+        const TAuditLogParts& parts) {
+    if (NAudit::AUDIT_LOG_ENABLED.load()) {
+        const auto context = MakeOperationContext(status, parts);
+        GetAuditWriter(logClass)(context);
+    }
 }
 
 void AuditLogConnectDbAccessDenied(
@@ -198,9 +721,9 @@ void AuditLogConnectDbAccessDenied(
     const TString& sanitizedToken,
     const TString& reason
 ) {
-    if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {
+    if (NAudit::AUDIT_LOG_ENABLED.load()) {
         AuditLog(ctx->GetAuditMode().LogClass, Ydb::StatusIds::UNAUTHORIZED, {
-            {"remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName())},
+            {"remote_address", NAddressClassifier::ExtractAddress(ctx->GetPeerName())},
             {"subject", userSID},
             {"sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue)},
             {"database", database},
@@ -210,5 +733,4 @@ void AuditLogConnectDbAccessDenied(
     }
 }
 
-}
-}
+} // namespace NKikimr::NGRpcService

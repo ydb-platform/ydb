@@ -378,4 +378,5 @@ message TFeatureFlags {
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
     optional bool ShareShardedMkqlProgram = 399 [default = false];
+    optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
 }

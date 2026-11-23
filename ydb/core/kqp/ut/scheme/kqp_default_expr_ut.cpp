@@ -839,20 +839,20 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         auto appConfig = DefaultExprAppConfig();
         appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
         TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        fixture.Exec(DefaultExprDDL(
-            "v pgint8 DEFAULT CAST(CAST(RandomNumber(1) * 0ul + 42ul AS Int32) AS pgint4)")
-            + "INSERT INTO TestTable (k) VALUES (1);");
-        UNIT_ASSERT(fixture.ColumnDesc("/Root/TestTable", "v").HasDefaultFromExpression());
+        const TString expression = TStringBuilder() << "ToPg(CAST(" << DefaultExpr << " AS Int32))";
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v pgint8 DEFAULT " << expression));
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.RestartSchemeShard("/Root/TestTable");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
-        fixture.Check("SELECT k, CAST(v AS Int64) FROM TestTable ORDER BY k;", "[[1;[42]];[2;[42]]]");
+        fixture.Check("SELECT k, FromPg(v) FROM TestTable ORDER BY k;", "[[1;[42]];[2;[42]]]");
     }
 
     Y_UNIT_TEST(PersistedPgDefaultUsesCurrentCompatibilityPolicy) {
         auto appConfig = DefaultExprAppConfig();
         appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
         TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        const TString expression = "COALESCE(FromPg(CAST(RandomNumber(1) * 0ul + 42ul AS pgint4)), 0)";
+        const TString expression = TStringBuilder() << "COALESCE(FromPg(ToPg(CAST(" << DefaultExpr << " AS Int32))), 0)";
         fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Int32 DEFAULT " << expression));
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");

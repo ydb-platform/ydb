@@ -6,7 +6,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
     ydb/public/api/protos

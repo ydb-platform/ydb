@@ -425,7 +425,6 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
     }
 
     Storage->FinishInitialization();
-    Storage->InitMetrics();
     CommitIfNeeded();
     UpdateLockedGroupsIdInChildPartitions(true);
 

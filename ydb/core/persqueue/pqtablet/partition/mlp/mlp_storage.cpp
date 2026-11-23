@@ -1706,6 +1706,7 @@ void TStorage::FinishInitialization() {
     const auto unlockedIndex = std::ranges::find_if(Messages.begin() + uncommittedIndex, Messages.end(), isUnlocked) - Messages.begin();
     FirstUncommittedOffset = FirstOffset + uncommittedIndex;
     FirstUnlockedOffset = FirstOffset + unlockedIndex;
+    InitMetrics();
 }
 
 void TStorage::UpdateFirstUncommittedOffset() {

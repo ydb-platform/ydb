@@ -467,7 +467,6 @@ Y_UNIT_TEST(AddBatchedMessageToEmptyStorage) {
         TStorage loaded(timeProvider, {.MinMessages = 1, .MaxMessages = 8});
         loaded.Initialize(snapshot);
         loaded.FinishInitialization();
-        loaded.InitMetrics();
         checkBatchState(loaded);
     }
 
@@ -479,7 +478,6 @@ Y_UNIT_TEST(AddBatchedMessageToEmptyStorage) {
         loaded.Initialize(emptySnapshot);
         loaded.ApplyWAL(wal);
         loaded.FinishInitialization();
-        loaded.InitMetrics();
         checkBatchState(loaded);
     }
 }
@@ -1556,7 +1554,6 @@ Y_UNIT_TEST(StorageSerialization) {
 
         storage.Initialize(snapshot);
         storage.FinishInitialization();
-        storage.InitMetrics();
         Cerr << "DUMP 2: " << storage.DebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -1646,7 +1643,6 @@ Y_UNIT_TEST(SnapshotRestoreStopsUncommittedOffsetOnDelayed) {
         TStorage storage(timeProvider, {});
         storage.Initialize(snapshot);
         storage.FinishInitialization();
-        storage.InitMetrics();
 
         // FinishInitialization once after the snapshot. Advancing FirstUncommittedOffset past the
         // delayed message makes Compact fail on FirstUncommittedOffset <= FirstUnlockedOffset.
@@ -1707,7 +1703,6 @@ Y_UNIT_TEST(WalUnlockMakesMessageReadableAgain) {
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
         storage.FinishInitialization();
-        storage.InitMetrics();
 
         // The snapshot cursor sits on the committed prefix. FinishInitialization after the WAL
         // must stop on offset 4, which the WAL returned to the queue.

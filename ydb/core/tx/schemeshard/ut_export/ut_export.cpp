@@ -59,8 +59,6 @@ namespace {
 
     namespace TEvKesus = NKikimr::NKesus::TEvKesus;
 
-<<<<<<< HEAD
-=======
     template <typename TRpc>
     typename TRpc::TResponse CallOperationRpc(TTestBasicRuntime& runtime,
             typename TRpc::TRequest request, const TString& userSID = {})
@@ -75,28 +73,6 @@ namespace {
         return future.GetValueSync();
     }
 
-    const char* ExportDataFormatSettings(EBackupTestDataFormat format) {
-        switch (format) {
-            case EBackupTestDataFormat::Csv:
-                return "ydb_dump {}";
-            case EBackupTestDataFormat::Parquet:
-                return "parquet {}";
-        }
-        Y_ABORT("Unexpected backup test data format");
-    }
-
-    TString ExportDataFileExtension(EBackupTestDataFormat format) {
-        return NKikimr::NDataShard::NBackupRestoreTraits::DataFileExtension(
-            ToDataFormat(format), ECompressionCodec::None);
-    }
-
-    // Both flags are inert for CSV, so every format-parametrized test sets them.
-    void EnableParquetFormats(TTestBasicRuntime& runtime) {
-        runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
-        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-    }
-
->>>>>>> 1c32bef3a04 (Export cancellation attribution (#58432))
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
         NKikimr::InitAwsAPI();
     }

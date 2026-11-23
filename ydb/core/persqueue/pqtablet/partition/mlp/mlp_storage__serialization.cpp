@@ -85,34 +85,6 @@ void EnsureAvailable(const char* data, const char* end, size_t size) {
     AFL_ENSURE(static_cast<size_t>(end - data) >= size)("available", std::distance(data, end))("required", size);
 }
 
-size_t GetVarintSize(ui8 firstByte) {
-    if (firstByte < 0x80) {
-        return 1;
-    }
-    if (firstByte < 0xC0) {
-        return 2;
-    }
-    if (firstByte < 0xE0) {
-        return 3;
-    }
-    if (firstByte < 0xF0) {
-        return 4;
-    }
-    if (firstByte < 0xF8) {
-        return 5;
-    }
-    if (firstByte < 0xFC) {
-        return 6;
-    }
-    if (firstByte < 0xFE) {
-        return 7;
-    }
-    if (firstByte < 0xFF) {
-        return 8;
-    }
-    return 9;
-}
-
 void VarintDeserialize(const char*& data, const char* end, i64& value) {
     EnsureAvailable(data, end, 1);
     EnsureAvailable(data, end, GetVarintSize(static_cast<ui8>(*data)));

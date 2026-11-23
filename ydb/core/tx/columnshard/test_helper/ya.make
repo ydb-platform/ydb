@@ -3,6 +3,7 @@ LIBRARY()
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/formats/arrow
+    ydb/core/kqp/common/events
     ydb/core/protos
     ydb/core/testlib
     ydb/core/tx/columnshard

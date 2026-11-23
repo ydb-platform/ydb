@@ -40,6 +40,12 @@ TlsCredentialsOptions::~TlsCredentialsOptions() {
   grpc_tls_credentials_options_destroy(c_credentials_options_);
 }
 
+TlsCredentialsOptions::TlsCredentialsOptions(
+    const TlsCredentialsOptions& other) {
+  c_credentials_options_ =
+      grpc_tls_credentials_options_copy(other.c_credentials_options_);
+}
+
 void TlsCredentialsOptions::set_certificate_provider(
     std::shared_ptr<CertificateProviderInterface> certificate_provider) {
   certificate_provider_ = certificate_provider;

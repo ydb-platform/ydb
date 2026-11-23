@@ -28,6 +28,15 @@ void TTreeElement::AccountSnapshotDuration(TDuration period) {
     });
 }
 
+ui64 TTreeElement::GetChildrenCpuGuarantee() const {
+    ui64 reserved = 0;
+    ForEachChild<TTreeElement>([&](const TTreeElement* child, size_t) {
+        const auto guarantee = child->GetCpuGuarantee();
+        reserved = guarantee > Infinity() - reserved ? Infinity() : reserved + guarantee;
+    });
+    return reserved;
+}
+
 void TTreeElement::UpdateBottomUp(ui64 totalCpuLimit, TDuration period) {
     CpuLimit = Min<ui64>(GetCpuLimit(), totalCpuLimit);
 
@@ -236,9 +245,9 @@ void TTreeElement::UpdateCpuTopDown() {
 ///////////////////////////////////////////////////////////////////////////////
 
 TQuery::TQuery(const TQueryId& id, const NDynamic::TQueryPtr& query)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, *query)
-    , TTreeElement(id, *query)
-    , NHdrf::TQuery<ETreeType::SNAPSHOT>(id, *query)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
+    , TTreeElement(id)
+    , NHdrf::TQuery<ETreeType::SNAPSHOT>(id)
     , Origin(query)
 {
 }
@@ -272,10 +281,11 @@ ui64 TQuery::CalculateRawCpuActualDemand(TDuration period) const {
 // TPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, attrs)
-    , TTreeElement(id, attrs)
-    , NHdrf::TPool<ETreeType::SNAPSHOT>(id, attrs)
+TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
+    , TTreeElement(id, pool ? static_cast<const TStaticAttributes&>(*pool) : TStaticAttributes{})
+    , NHdrf::TPool<ETreeType::SNAPSHOT>(id)
+    , StaticPool(pool)
 {
     Counters = counters;
 }
@@ -310,9 +320,9 @@ void TPool::AccountSnapshotDuration(TDuration period) {
 // TDefaultPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TDefaultPool::TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, attrs)
-    , TPool(id, counters, attrs)
+TDefaultPool::TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
+    , TPool(id, counters, pool)
 {
 }
 
@@ -320,9 +330,9 @@ TDefaultPool::TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>
 // TDatabase
 ///////////////////////////////////////////////////////////////////////////////
 
-TDatabase::TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs)
-    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, attrs)
-    , TPool(id, {}, attrs)
+TDatabase::TDatabase(const TDatabaseId& id, const NStatic::TPoolPtr& pool)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id)
+    , TPool(id, {}, pool)
 {
 }
 
@@ -330,9 +340,12 @@ TDatabase::TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs)
 // TRoot
 ///////////////////////////////////////////////////////////////////////////////
 
-TRoot::TRoot()
+TRoot::TRoot(const NStatic::TRootPtr& tree)
     : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>("(ROOT)")
-    , TPool("(ROOT)", {})
+    , TPool("(ROOT)", {}, tree)
+    , StaticTree(tree)
+    , TotalCpuLimit(tree->TotalCpuLimit)
+    , TotalMemoryLimit(tree->TotalMemoryLimit)
 {
 }
 

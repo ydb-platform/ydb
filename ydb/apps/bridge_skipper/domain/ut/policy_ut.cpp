@@ -765,11 +765,14 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
         input.Add("stage1", EPileState::NotSynchronized);
         input.Add("inactive", EPileState::Inactive);
         input.Add("disconnected", EPileState::Disconnected);
+        input.Add("standby", EPileState::HotStandby);
         input.Health.Participating.erase("stage1");
         input.Down("stage1");
         input.Down("inactive");
         input.Down("disconnected");
+        input.Down("standby");
         UNIT_ASSERT(input.DecideAt().Kind == EDecisionKind::Stable);
+        input.Health.Piles["standby"] = Verdict(EPileVerdict::Healthy);
         input.Down("a");
         input.Health.Piles["b"] = Verdict(EPileVerdict::Unknown);
         input.Health.Piles["c"] = Verdict(EPileVerdict::Unknown);
@@ -1154,7 +1157,8 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
 Y_UNIT_TEST_SUITE(TLifecyclePlanning) {
     Y_UNIT_TEST(PublicStateActionMatrixAndHealthGates) {
         for (const auto state : {EPileState::Synchronized, EPileState::Promoted, EPileState::NotSynchronized,
-                EPileState::Suspended, EPileState::Disconnected, EPileState::Inactive, static_cast<EPileState>(999)})
+                EPileState::Suspended, EPileState::Disconnected, EPileState::Inactive, EPileState::HotStandby,
+                static_cast<EPileState>(999)})
         {
             TPolicyCase c;
             c.Add("b", state);
@@ -1183,6 +1187,23 @@ Y_UNIT_TEST_SUITE(TLifecyclePlanning) {
         }
         selection.View = c.View;
         UNIT_ASSERT(!PlanLifecycle(EOperationKind::TakeOffline, "b", selection, c.Health, c.Confirmations, c.DecideAt(), {}, c.Endpoints).Plan);
+    }
+
+    Y_UNIT_TEST(HotStandbyDoesNotBlockSwitchoverOfAnotherPile) {
+        TPolicyCase c;
+        c.Add("standby", EPileState::HotStandby);
+        for (auto& reply : c.Health.Connectivity) {
+            reply.Report.Piles.erase("standby");
+        }
+        c.Endpoints = {c.Endpoint("a"), c.Endpoint("standby")};
+        TViewSelection selection;
+        selection.View = c.View;
+        const auto stable = c.DecideAt();
+        UNIT_ASSERT(stable.Kind == EDecisionKind::Stable);
+        const auto plan = PlanLifecycle(EOperationKind::Switchover, "b", selection, c.Health,
+            c.Confirmations, stable, {}, c.Endpoints);
+        AssertUpdate(plan, {{"b", EPileState::Promoted}});
+        UNIT_ASSERT_VALUES_EQUAL(plan.Plan->Endpoint, c.Endpoint("a").Endpoint);
     }
 
     Y_UNIT_TEST(TakeOfflineAllowsReplicatingPrimaryAndReplicatingTarget) {

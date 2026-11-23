@@ -6,7 +6,7 @@ import pytest
 import yaml
 import yatest
 
-from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase, ydb_bin
 
 
 @dataclass
@@ -249,3 +249,47 @@ def test_reenable_and_disable_do_not_require_layout_migration(tmp_path):
     disabled = run_toggle_self_management(tmp_path, config, "--disable")
     assert disabled.exit_code == 0, disabled.stderr
     assert output_config(disabled)["self_management_config"]["enabled"] is False
+
+
+class TestConfigRolloutPreview(BaseCliTestWithDatabase):
+    def test_review_tenant_overrides(self, tmp_path):
+        draft = tmp_path / "candidate.yaml"
+        draft.write_text(
+            """metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    default_level: 4
+allowed_labels:
+  tenant:
+    type: string
+selector_config:
+- description: enable detailed logging for the canary tenant
+  selector:
+    tenant: /Root/canary
+  config: !inherit
+    log_config:
+      default_level: 7
+""",
+            encoding="utf-8",
+        )
+        resolve = ["admin", "cluster", "config", "resolve", "--filename", str(draft)]
+
+        # Save all the distinct configurations for review before applying a change.
+        previews = tmp_path / "previews"
+        self.execute_ydb_cli_command(resolve + ["--all", "--output-directory", str(previews)])
+        documents = [yaml.safe_load(path.read_text()) for path in previews.glob("config_*.yaml")]
+        assert sorted(doc["config"]["log_config"]["default_level"] for doc in documents) == [4, 7]
+        canary = next(doc for doc in documents if doc["config"]["log_config"]["default_level"] == 7)
+        assert {"tenant": {"type": "COMMON", "value": "/Root/canary"}} in canary["label_sets"]
+
+        # Verify the target cluster's resolver agrees with the local preview.
+        canary_args = resolve + ["--label", "tenant=/Root/canary"]
+        local = yaml.safe_load(self.execute_ydb_cli_command(canary_args).stdout)
+        remote = yaml.safe_load(self.execute_ydb_cli_command(canary_args + ["--remote-resolve"]).stdout)
+        assert local == remote == {
+            "label_sets": [{"tenant": {"type": "COMMON", "value": "/Root/canary"}}],
+            "config": {"log_config": {"default_level": 7}},
+        }

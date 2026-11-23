@@ -86,6 +86,7 @@ public:
     bool EchoSelfCheckToken = false;
     std::atomic<bool> HangDiscovery{false};
     bool DedicatedStorage = false;
+    bool IncludeHotStandby = false;
     std::optional<ui16> IpEndpointPort;
 
     grpc::Status FetchConfig(grpc::ServerContext* context, const Ydb::Config::FetchConfigRequest* request,
@@ -171,6 +172,11 @@ public:
         auto* b = result.add_pile_states();
         b->set_pile_name("b");
         b->set_state(Ydb::Bridge::PileState::SYNCHRONIZED);
+        if (IncludeHotStandby) {
+            auto* standby = result.add_pile_states();
+            standby->set_pile_name("standby");
+            standby->set_state(Ydb::Bridge::PileState::HOT_STANDBY);
+        }
         if (request->include_pile_connectivity()) {
             auto* report = result.mutable_pile_connectivity();
             report->set_generation(42);
@@ -625,6 +631,28 @@ Y_UNIT_TEST_SUITE(TSkipperYdbClients) {
         UNIT_ASSERT_VALUES_EQUAL(result.View->Pending->Kind, "REMOVE");
         UNIT_ASSERT_VALUES_EQUAL(result.View->Pending->Error, "retry");
         UNIT_ASSERT(!result.Connectivity);
+    }
+
+    Y_UNIT_TEST(WireStateWithHotStandbyPreservesClusterView) {
+        TWireService service;
+        service.IncludeHotStandby = true;
+        TString endpoint;
+        auto server = StartWireServer(service, endpoint);
+        const auto config = ParseConfig("cluster_id: test\nendpoints: {a: ['" + endpoint + "']}\n");
+        auto clients = CreateYdbClients(config, TLoadedCredentials{});
+        const auto result = Await<TStateResult>([&](auto completed) {
+            clients->GetState({endpoint, "a", 1}, EYdbMethod::PlainState, std::move(completed));
+        });
+        clients->Stop();
+        UNIT_ASSERT_C(result.Rpc.Success, result.Rpc.Status);
+        UNIT_ASSERT_C(result.View, result.Error);
+        UNIT_ASSERT(result.Error.empty());
+        UNIT_ASSERT_VALUES_EQUAL(result.View->Generation, 42);
+        UNIT_ASSERT_VALUES_EQUAL(result.View->Piles.size(), 3);
+        UNIT_ASSERT(result.View->Piles.at("a") == EPileState::Primary);
+        UNIT_ASSERT(result.View->Piles.at("b") == EPileState::Synchronized);
+        UNIT_ASSERT(result.View->Piles.at("standby")
+            == static_cast<EPileState>(Ydb::Bridge::PileState::HOT_STANDBY));
     }
 
     Y_UNIT_TEST(DecodeRejectsDuplicatesUnknownEnumsAndInvalidViewsBeforeMaps) {

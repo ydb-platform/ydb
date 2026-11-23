@@ -48,6 +48,10 @@ public:
                 << "Index build with uid '" << uid << "' already exists");
         }
 
+        if (settings.is_rebuild() && !Self->EnableRebuildIndex) {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "REBUILD INDEX is disabled (EnableRebuildIndex)");
+        }
+
         const auto domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
             const auto checks = domainPath.Check();

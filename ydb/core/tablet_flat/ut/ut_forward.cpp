@@ -91,9 +91,21 @@ namespace {
             return dynamic_cast<NFwd::TBlobs&>(*Cache).Traced();
         }
 
-        TBlobsWrap& Get(ui32 page, bool has, bool grow, bool need)
+        void EndRow()
+        {
+            static_cast<NFwd::TBlobs&>(*Cache).ReleaseRowHistory();
+        }
+
+        NFwd::IPageLoadingLogic::TResult Get(ui32 page)
         {
             auto got = Cache->Get(this, TPageOffset::FromPageIndex(page), EPage::Opaque, AheadLo);
+            Grow = Grow || got.Grow;
+            return got;
+        }
+
+        TBlobsWrap& Get(ui32 page, bool has, bool grow, bool need)
+        {
+            auto got = Get(page);
 
             if (has != bool(got.Page) || grow != got.Grow || need != got.Need){
                 Log()
@@ -106,16 +118,19 @@ namespace {
                 UNIT_ASSERT(false);
             }
 
-            Grow = Grow || got.Grow;
-
             return *this;
         }
 
-        TBlobsWrap& Fill(ui32 least, ui32 most, std::initializer_list<ui16> tags)
+        void Forward()
         {
             if (std::exchange(Grow, false)) {
                 Cache->Forward(this, AheadHi);
             }
+        }
+
+        TBlobsWrap& Fill(ui32 least, ui32 most, std::initializer_list<ui16> tags)
+        {
+            Forward();
 
             TVector<NPageCollection::TLoadedPage> load;
 
@@ -597,6 +612,137 @@ Y_UNIT_TEST_SUITE(NFwd_TBlobs) {
             .To(14).Get(8, true, false, true).Fill(0, 1, { 2 })
             .To(16).Get(9, false, true, true).Fill(1, 2, { 2 })
             .To(17).Get(9, true, false, true).Fill(0, 1, { 2 });
+    }
+
+    Y_UNIT_TEST(SharedBlobsAcrossVersionFrames)
+    {
+        NPage::TFrameWriter writer(3);
+        writer.Put(10, 0, 10); // 0: shared materialized blob
+        writer.Put(10, 2, 30); // 1: shared by reference
+        writer.FlushRow();
+        writer.Put(10, 1, 11); // 2: another version of the same row
+        writer.FlushRow();
+        writer.Put(10, 1, 12); // 3: the changing column's next value
+        writer.Put(11, 2, 40); // 4: next logical row
+        const TIntrusiveConstPtr<NPage::TFrames> frames = new NPage::TFrames(writer.Make());
+        TBlobsWrap wrap(frames, 20, 0, 0);
+
+        // Enter through a historical frame, then read earlier shared references.
+        wrap.Get(2, false, false, true).Fill(1, 2, {1}).Get(2, true, false, true);
+        const TSharedData previousValue = *wrap.Get(2).Page;
+        wrap.Get(1, false, false, false).Get(1, false, false, false);
+        wrap.Get(0, false, false, true).Get(0, false, false, true).Fill(1, 2, {0});
+        const TSharedData shared = *wrap.Get(0).Page;
+        UNIT_ASSERT_VALUES_EQUAL(shared.size(), 10u);
+
+        wrap.Get(3, false, false, true).Fill(1, 2, {1}).Get(3, true, false, true);
+        UNIT_ASSERT(shared.IsShared());
+        UNIT_ASSERT(previousValue.IsShared());
+        wrap.Get(0, true, false, true).Get(2, true, false, true).Fill(0, 1, {});
+
+        // Moving to the next logical row releases every version together.
+        wrap.Get(4, false, false, false);
+        UNIT_ASSERT(shared.IsPrivate());
+        UNIT_ASSERT(previousValue.IsPrivate());
+        const auto trace = wrap.Trace();
+        UNIT_ASSERT_VALUES_EQUAL(trace.size(), 2u);
+        UNIT_ASSERT(trace[0] == TScreen::THole(1, 2));
+        UNIT_ASSERT(trace[1] == TScreen::THole(4, 5));
+    }
+
+    Y_UNIT_TEST(HistoricalSeekLoadsOnlyRequestedFrame)
+    {
+        constexpr ui32 versions = 32;
+        NPage::TFrameWriter writer(1);
+        for (ui32 version = 0; version < versions; ++version) {
+            writer.Put(10, 0, 4096);
+            writer.FlushRow();
+        }
+        const TIntrusiveConstPtr<NPage::TFrames> frames = new NPage::TFrames(writer.Make());
+        TBlobsWrap wrap(frames, Max<ui32>(), 0, 0);
+
+        // Retaining the row must not eagerly fetch all preceding versions.
+        wrap.Get(versions - 1, false, false, true).Fill(1, 2, {0});
+        wrap.Get(versions - 1, true, false, true);
+        wrap.Get(0, false, false, true).Fill(1, 2, {0});
+        wrap.Get(0, true, false, true).Get(versions - 1, true, false, true).Fill(0, 1, {});
+    }
+
+    Y_UNIT_TEST(RetainSparseVersionsUntilRowEnds)
+    {
+        constexpr ui16 columns = 32;
+        constexpr ui32 blobSize = 64 * 1024;
+        NPage::TFrameWriter writer(columns);
+        for (ui16 tag = 0; tag < columns; ++tag) {
+            writer.Put(10, tag, blobSize);
+            writer.FlushRow();
+        }
+        const TIntrusiveConstPtr<NPage::TFrames> frames = new NPage::TFrames(writer.Make());
+        TBlobsWrap wrap(frames, Max<ui32>(), 0, 0);
+
+        TVector<TSharedData> payloads;
+        for (ui16 tag = 0; tag < columns; ++tag) {
+            wrap.Get(tag, false, false, true).Fill(1, 2, {tag});
+            payloads.push_back(*wrap.Get(tag).Page);
+        }
+        for (ui16 tag = 0; tag < columns; ++tag) {
+            UNIT_ASSERT(payloads[tag].IsShared());
+            UNIT_ASSERT(wrap.Get(tag).Page);
+        }
+        wrap.Fill(0, 1, {});
+        wrap.EndRow();
+        for (const auto& payload : payloads) {
+            UNIT_ASSERT(payload.IsPrivate());
+        }
+    }
+
+    Y_UNIT_TEST(LatePrefetchFromEarlierFrameOfNextKey)
+    {
+        constexpr ui32 blobSize = 4096;
+        constexpr ui32 edge = 2 * blobSize;
+        NPage::TFrameWriter writer(2);
+        writer.Put(10, 0, edge);
+        writer.Put(11, 0, blobSize); // Prefetched while reading key 10.
+        writer.FlushRow();
+        writer.Put(11, 1, edge); // A later version frame of key 11.
+        const TIntrusiveConstPtr<NPage::TFrames> frames = new NPage::TFrames(writer.Make());
+        TBlobsWrap wrap(frames, edge, blobSize, 4 * blobSize);
+
+        UNIT_ASSERT(!wrap.Get(0).Need);
+        wrap.Forward();
+        wrap.EndRow();
+        wrap.EndRow(); // An idle reader must not retire the next key's prefetch.
+
+        // Enter key 11 through its later frame before the prefetch completes.
+        UNIT_ASSERT(!wrap.Get(2).Need);
+        wrap.Fill(1, 2, {0});
+        UNIT_ASSERT(wrap.Get(1).Page);
+        wrap.Fill(0, 1, {});
+    }
+
+    Y_UNIT_TEST(FillAfterRowRelease)
+    {
+        NPage::TFrameWriter writer(1);
+        for (ui32 row = 0; row < 3; ++row) {
+            writer.Put(row, 0, 4096);
+        }
+        const TIntrusiveConstPtr<NPage::TFrames> frames = new NPage::TFrames(writer.Make());
+        for (bool jumpBeforeFill : {false, true}) {
+            TBlobsWrap wrap(frames, Max<ui32>(), 0, 0);
+            UNIT_ASSERT(!wrap.Get(0).Page);
+            wrap.EndRow();
+            if (jumpBeforeFill) {
+                UNIT_ASSERT(!wrap.Get(2).Page);
+                wrap.Fill(2, 3, {0});
+            } else {
+                // Only retired pending descriptors remain when this load arrives.
+                wrap.Fill(1, 2, {0});
+                UNIT_ASSERT(!wrap.Get(2).Page);
+                wrap.Fill(1, 2, {0});
+            }
+            UNIT_ASSERT(wrap.Get(2).Page);
+            wrap.EndRow();
+        }
     }
 
     Y_UNIT_TEST(Trace)

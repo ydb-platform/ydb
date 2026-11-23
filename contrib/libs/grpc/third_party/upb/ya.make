@@ -2,7 +2,7 @@
 
 LIBRARY()
 
-VERSION(1.61.3)
+VERSION(1.63.2)
 
 LICENSE(BSD-3-Clause)
 
@@ -24,8 +24,6 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-SRCDIR(contrib/libs/grpc)
-
 IF (OS_LINUX OR OS_DARWIN)
     CFLAGS(
         -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
@@ -33,53 +31,56 @@ IF (OS_LINUX OR OS_DARWIN)
 ENDIF()
 
 SRCS(
-    src/core/ext/upb-gen/google/protobuf/descriptor.upb_minitable.c
-    third_party/upb/upb/base/status.c
-    third_party/upb/upb/hash/common.c
-    third_party/upb/upb/json/decode.c
-    third_party/upb/upb/json/encode.c
-    third_party/upb/upb/lex/atoi.c
-    third_party/upb/upb/lex/round_trip.c
-    third_party/upb/upb/lex/strtod.c
-    third_party/upb/upb/lex/unicode.c
-    third_party/upb/upb/mem/alloc.c
-    third_party/upb/upb/mem/arena.c
-    third_party/upb/upb/message/accessors.c
-    third_party/upb/upb/message/array.c
-    third_party/upb/upb/message/map.c
-    third_party/upb/upb/message/map_sorter.c
-    third_party/upb/upb/message/message.c
-    third_party/upb/upb/mini_descriptor/build_enum.c
-    third_party/upb/upb/mini_descriptor/decode.c
-    third_party/upb/upb/mini_descriptor/internal/base92.c
-    third_party/upb/upb/mini_descriptor/internal/encode.c
-    third_party/upb/upb/mini_descriptor/link.c
-    third_party/upb/upb/mini_table/extension_registry.c
-    third_party/upb/upb/mini_table/internal/message.c
-    third_party/upb/upb/mini_table/message.c
-    third_party/upb/upb/reflection/def_pool.c
-    third_party/upb/upb/reflection/def_type.c
-    third_party/upb/upb/reflection/desc_state.c
-    third_party/upb/upb/reflection/enum_def.c
-    third_party/upb/upb/reflection/enum_reserved_range.c
-    third_party/upb/upb/reflection/enum_value_def.c
-    third_party/upb/upb/reflection/extension_range.c
-    third_party/upb/upb/reflection/field_def.c
-    third_party/upb/upb/reflection/file_def.c
-    third_party/upb/upb/reflection/internal/def_builder.c
-    third_party/upb/upb/reflection/internal/strdup2.c
-    third_party/upb/upb/reflection/message.c
-    third_party/upb/upb/reflection/message_def.c
-    third_party/upb/upb/reflection/message_reserved_range.c
-    third_party/upb/upb/reflection/method_def.c
-    third_party/upb/upb/reflection/oneof_def.c
-    third_party/upb/upb/reflection/service_def.c
-    third_party/upb/upb/text/encode.c
-    third_party/upb/upb/wire/decode.c
-    third_party/upb/upb/wire/decode_fast.c
-    third_party/upb/upb/wire/encode.c
-    third_party/upb/upb/wire/eps_copy_input_stream.c
-    third_party/upb/upb/wire/reader.c
+    upb/base/status.c
+    upb/hash/common.c
+    upb/json/decode.c
+    upb/json/encode.c
+    upb/lex/atoi.c
+    upb/lex/round_trip.c
+    upb/lex/strtod.c
+    upb/lex/unicode.c
+    upb/mem/alloc.c
+    upb/mem/arena.c
+    upb/message/accessors.c
+    upb/message/array.c
+    upb/message/compat.c
+    upb/message/copy.c
+    upb/message/internal/extension.c
+    upb/message/internal/message.c
+    upb/message/map.c
+    upb/message/map_sorter.c
+    upb/message/message.c
+    upb/mini_descriptor/build_enum.c
+    upb/mini_descriptor/decode.c
+    upb/mini_descriptor/internal/base92.c
+    upb/mini_descriptor/internal/encode.c
+    upb/mini_descriptor/link.c
+    upb/mini_table/extension_registry.c
+    upb/mini_table/internal/message.c
+    upb/mini_table/message.c
+    upb/reflection/def_pool.c
+    upb/reflection/def_type.c
+    upb/reflection/desc_state.c
+    upb/reflection/enum_def.c
+    upb/reflection/enum_reserved_range.c
+    upb/reflection/enum_value_def.c
+    upb/reflection/extension_range.c
+    upb/reflection/field_def.c
+    upb/reflection/file_def.c
+    upb/reflection/internal/def_builder.c
+    upb/reflection/internal/strdup2.c
+    upb/reflection/message.c
+    upb/reflection/message_def.c
+    upb/reflection/message_reserved_range.c
+    upb/reflection/method_def.c
+    upb/reflection/oneof_def.c
+    upb/reflection/service_def.c
+    upb/text/encode.c
+    upb/wire/decode.c
+    upb/wire/encode.c
+    upb/wire/eps_copy_input_stream.c
+    upb/wire/internal/decode_fast.c
+    upb/wire/reader.c
 )
 
 END()

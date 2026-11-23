@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
 
 #include <ydb/core/protos/config.pb.h>
 
@@ -398,6 +399,12 @@ namespace NKikimr::NStorage {
         void StartStateStorageSelfHealRefresh();
         void CancelStateStorageSelfHealRefresh();
 
+        TActorId StaticGroupStateActor;
+        THashMap<ui32, ui32> StaticGroupRepairGenerations;
+        void RefreshStaticGroupRepairs();
+        void StopStaticGroupRepairs();
+        void Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr ev);
+
         // root node operation
         enum class ERootState {
             INITIAL,       // possible binding, no scepter, no operation in progress
@@ -768,10 +775,19 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig Config;
         };
 
+        struct TPromoteStaticGroup {
+            TActorId Sender;
+            ui64 Cookie;
+            ui32 GroupId;
+            ui32 Generation;
+            TMirror3dcGroupConfiguration Next;
+        };
+
         using TInvokeQuery = std::variant<
             TInvokeExternalOperation,
             TCollectConfigsAndPropose,
-            TProposeConfig
+            TProposeConfig,
+            TPromoteStaticGroup
         >;
 
         struct TInvokeOperation {

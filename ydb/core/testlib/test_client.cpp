@@ -613,6 +613,13 @@ namespace Tests {
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            const auto& featureFlags = appData.FeatureFlags;
+            auto schedulerAppConfig = *Settings->AppConfig;
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
+            appData.KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
+
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
@@ -1451,7 +1458,10 @@ namespace Tests {
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
         }
 
-        {
+        // Stopping a dynamic tenant leaves its KQP proxy alive. Reuse it on restart:
+        // a second proxy would start another scheduler actor on the same node's scheduler state.
+        const auto kqpProxyId = NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx));
+        if (!Runtime->GetLocalServiceId(kqpProxyId, nodeIdx)) {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
@@ -1553,13 +1563,6 @@ namespace Tests {
                 }
             }
 
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            const auto& featureFlags = Runtime->GetAppData(nodeIdx).FeatureFlags;
-            auto schedulerAppConfig = *Settings->AppConfig;
-            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
-            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
-            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
-
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
                 Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);
             }
@@ -1573,7 +1576,7 @@ namespace Tests {
                                                                   std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
+            Runtime->RegisterService(kqpProxyId, kqpProxyServiceId, nodeIdx);
         }
 
         {

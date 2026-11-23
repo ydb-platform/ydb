@@ -393,9 +393,9 @@
     ],
     "test.test[blocks-dynamic_variant_tuple_scalar_index-default.txt-Peephole]": [
         {
-            "checksum": "9a6f785baa1b44e3b04e37f784dbf761",
+            "checksum": "9e2c29dfbc19233d424a8f84da55aa89",
             "size": 705,
-            "uri": "https://{canondata_backend}/1925842/c018c9fb416a2364863071463f863ae82dace1e8/resource.tar.gz#test.test_blocks-dynamic_variant_tuple_scalar_index-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/995452/0b492d30285ee0ea24329d9108bec1d419023b33/resource.tar.gz#test.test_blocks-dynamic_variant_tuple_scalar_index-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-dynamic_variant_tuple_scalar_index-default.txt-Results]": [
@@ -414,9 +414,9 @@
     ],
     "test.test[blocks-if-default.txt-Peephole]": [
         {
-            "checksum": "9005d5ae0471cc5bd956bff3d9e0be92",
+            "checksum": "8002c6cba7d179f6033722cfce162ec3",
             "size": 717,
-            "uri": "https://{canondata_backend}/1925842/c018c9fb416a2364863071463f863ae82dace1e8/resource.tar.gz#test.test_blocks-if-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/995452/0b492d30285ee0ea24329d9108bec1d419023b33/resource.tar.gz#test.test_blocks-if-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-if-default.txt-Results]": [
@@ -435,9 +435,9 @@
     ],
     "test.test[blocks-variant_item_tuple-default.txt-Peephole]": [
         {
-            "checksum": "13d96e6fdc5acc50cce29fb454ffcffd",
+            "checksum": "0dd846b54fb9bf135c3c861c695507de",
             "size": 744,
-            "uri": "https://{canondata_backend}/1925842/c018c9fb416a2364863071463f863ae82dace1e8/resource.tar.gz#test.test_blocks-variant_item_tuple-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/995452/0b492d30285ee0ea24329d9108bec1d419023b33/resource.tar.gz#test.test_blocks-variant_item_tuple-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-variant_item_tuple-default.txt-Results]": [

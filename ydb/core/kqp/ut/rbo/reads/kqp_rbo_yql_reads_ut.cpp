@@ -1566,6 +1566,268 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    // As in the old optimizer, a limit over a row table read goes to the read stage, so that each task stops at it.
+    // An unsorted read takes a literal limit right over it as its own limit, and then reads one shard at a time.
+    Y_UNIT_TEST(RowReadTakesLimit) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Several shards, so that the read has several of them to read one at a time.
+        const auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, i64>>{{0, 9, 1}, {1, 1, 7}, {1, 2, 5}, {2, 1, 3}, {2, 2, 4}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").Int64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            // The row order is not defined, so only the number of rows is checked.
+            size_t Rows;
+            // The limit of the read, empty if the read has none: then the read stage takes the limit itself.
+            TString ReadLimit;
+        };
+
+        const std::vector<TCase> cases = {
+            {"select a, b from `/Root/t` limit 2", 2, "2"},
+            // The read also returns the rows that the offset skips.
+            {"select a, b from `/Root/t` limit 2 offset 1", 2, "3"},
+            {"select a, b, c * 10 as d from `/Root/t` limit 2", 2, "2"},
+            // Over a literal key range and over computed ones.
+            {"select a, b from `/Root/t` where a = 1 limit 1", 1, "1"},
+            {"select a, b from `/Root/t` where a in (0, 2) limit 1", 1, "1"},
+            // A filter drops rows after the read, so only the read stage takes the limit.
+            {"select a, b from `/Root/t` where c > 3 limit 2", 2, ""},
+            // The limit of a subquery, below an aggregate.
+            {"select count(*) from (select a from `/Root/t` limit 2)", 1, "2"},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString ast{*explain.GetStats()->GetAst()};
+            if (testCase.ReadLimit.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "ItemsLimit"), 0, query << ", ast: " << ast);
+                const TString plan{*explain.GetStats()->GetPlan()};
+                NJson::TJsonValue planJson;
+                UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+                const auto operators = GetReadStageOperators(planJson.GetMapSafe().at("Plan"), "/Root/t");
+                UNIT_ASSERT_C(std::find(operators.begin(), operators.end(), "Limit") != operators.end(),
+                    query << ": expected a limit in the read stage, plan: " << plan);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "ItemsLimit"), 1, query << ", ast: " << ast);
+                // The AST prints a literal with or without quotes.
+                UNIT_ASSERT_C(ast.Contains(TStringBuilder() << "(Uint64 '\"" << testCase.ReadLimit << "\")")
+                    || ast.Contains(TStringBuilder() << "(Uint64 '" << testCase.ReadLimit << ")"), query << ", ast: " << ast);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"Sequential\""), !testCase.ReadLimit.empty(), query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), testCase.Rows, query);
+        }
+
+        // A system view source ignores the limit of the read, so the read takes none.
+        const TString sysViewQuery = "PRAGMA YqlSelect = 'force'; select Host from `/Root/.sys/nodes` limit 1;";
+        auto sysViewExplain = querySession.ExecuteQuery(sysViewQuery, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(sysViewExplain.IsSuccess(), sysViewExplain.GetIssues().ToString());
+        const TString sysViewAst{*sysViewExplain.GetStats()->GetAst()};
+        UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(sysViewAst, "ItemsLimit"), 0, sysViewAst);
+        auto sysViewResult = querySession.ExecuteQuery(sysViewQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(sysViewResult.IsSuccess(), sysViewResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(sysViewResult.GetResultSet(0).RowsCount(), 1);
+    }
+
+    // Probe: prints the final AST of row table queries for the old and the new optimizer, to compare them.
+    Y_UNIT_TEST(RowTableAstOldVsNew) {
+        struct TProbe {
+            TString Query;
+            // Rows are compared only when the query defines them, a LIMIT without ORDER BY does not.
+            bool CompareRows = true;
+        };
+        const std::vector<TProbe> probes = {
+            // Filters and ranges.
+            {"select a, b from `/Root/t` where c > 3"},
+            {"select a, b from `/Root/t` where a = 1 and c > 5"},
+            {"select a, b from `/Root/t` where a in (0, 2) and c > 3"},
+            {"select a, b from `/Root/t` where a > 1"},
+            {"select a, b from `/Root/t` where a is not null"},
+            {"select a, b from `/Root/t` where b = 1"},
+            {"select c from `/Root/t` where a = 1 and b = 2"},
+            {"select a, b from `/Root/t` where a = 1 or a = 3"},
+            {"select c from `/Root/t` where (a = 1 and b = 2) or (a = 2 and b = 1)"},
+            {"select a, b from `/Root/t` where a between 1 and 2 and b < 2"},
+            {"select c from `/Root/t` where a = 1 and b in (1, 2)"},
+            {"select a, b from `/Root/t` where a + 0 = 1"},
+            {"select a, b from `/Root/t` where s like 'x%'"},
+            {"select a, b from `/Root/t` where a = 1 and b > 1 and c is null"},
+            // Sorts and limits.
+            {"select a, b from `/Root/t` order by a, b limit 2"},
+            {"select a, b from `/Root/t` order by a desc, b desc limit 2"},
+            {"select a, b from `/Root/t` where a = 1 order by b limit 1"},
+            {"select a, b from `/Root/t` where a = 1 order by b desc limit 1"},
+            {"select a, b, c from `/Root/t` order by c limit 2"},
+            {"select a, b from `/Root/t` limit 2", false},
+            {"select a, b from `/Root/t` where c > 3 limit 2", false},
+            {"select a, b from `/Root/t` order by a, b limit 2 offset 1"},
+            {"select a, b from `/Root/t` order by a, b"},
+            {"select a, b, c from `/Root/t` where a > 0 order by a, b limit 3"},
+            {"select a, b from `/Root/t` where a > 0 order by a desc, b desc limit 2"},
+            // Aggregates.
+            {"select count(*) from `/Root/t`"},
+            {"select a, count(*) from `/Root/t` group by a"},
+            {"select a, sum(c) from `/Root/t` where a > 0 group by a"},
+            {"select min(a), max(a) from `/Root/t`"},
+            {"select distinct a from `/Root/t`"},
+            {"select count(*) from `/Root/t` where a = 1"},
+            // Joins, lookups and subqueries.
+            {"select t.a, t.b, d.d from `/Root/t` as t join `/Root/dim` as d on t.c = d.a"},
+            {"select t.a, t.b, d.d from `/Root/dim` as d join `/Root/t` as t on t.a = d.a"},
+            {"select d.a, t.b from `/Root/dim` as d left join `/Root/t` as t on t.a = d.a"},
+            {"select t.c, d.d from `/Root/dim` as d join `/Root/t` as t on t.a = d.a where t.b = 1"},
+            {"select t.b, d.d from `/Root/dim` as d join `/Root/t` as t on t.a = d.a where t.c > 3"},
+            {"select t.c from `/Root/dim` as d join `/Root/t` as t on t.a = d.a and t.b = d.d"},
+            {"select t.a, t.b, d.d from `/Root/t` as t join `/Root/dim` as d on t.c = d.a where d.d > 100"},
+            {"select a, b from `/Root/t` where a in (select a from `/Root/dim`)"},
+            {"select t.a, t.b from `/Root/t` as t where exists (select 1 from `/Root/dim` as d where d.a = t.a)"},
+            {"select t.a, t.b from `/Root/t` as t where not exists (select 1 from `/Root/dim` as d where d.a = t.a)"},
+            {"select d.d, t.a, t.b from `/Root/dim` as d join `/Root/t` view idx_c as t on t.c = d.a"},
+            // Secondary indexes.
+            {"select a, b from `/Root/t` view idx_c where c = 4"},
+            {"select a, b from `/Root/t` where c = 4"},
+            {"select a, b, s from `/Root/t` view idx_c where c = 4"},
+            {"select c from `/Root/t` view idx_c where c > 3 order by c limit 1"},
+            {"select c from `/Root/t` view idx_s where s = 'x2'"},
+            // Unions and nested selects.
+            {"select a from `/Root/t` where a = 1 union all select a from `/Root/t` where a = 2"},
+            {"select a from (select a, b from `/Root/t` where a > 0) where b = 1"},
+            {"select a, b from `/Root/t` where a = (select max(a) from `/Root/dim`)"},
+            // Full reads.
+            {"select a, b, c, s from `/Root/t`"},
+            {"select a, d from `/Root/dim`"},
+        };
+
+        struct TOutcome {
+            TString Status;
+            TString Ast;
+            std::optional<TString> Rows;
+        };
+        std::vector<TOutcome> outcomes[2];
+        for (const bool newRbo : {false, true}) {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+            appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+            TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto schemeResult = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/t` (
+                    a Int64,
+                    b Int64,
+                    c Int64,
+                    s String,
+                    PRIMARY KEY (a, b)
+                ) WITH (PARTITION_AT_KEYS = (1, 2));
+
+                CREATE TABLE `/Root/dim` (
+                    a Int64,
+                    d Int64,
+                    PRIMARY KEY (a)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, b, c, s] : std::vector<std::tuple<std::optional<i64>, std::optional<i64>, std::optional<i64>, std::string>>{
+                    {std::nullopt, 1, 4, "x0"}, {0, std::nullopt, 9, "y"}, {0, 9, 1, "x1"}, {1, 1, 7, "x2"}, {1, 2, std::nullopt, "z"},
+                    {2, 1, 3, "x3"}, {2, 2, 4, "x4"}, {3, 1, 5, "w"}, {3, 2, 6, "x5"}}) {
+                rows.AddListItem().BeginStruct()
+                    .AddMember("a").OptionalInt64(a)
+                    .AddMember("b").OptionalInt64(b)
+                    .AddMember("c").OptionalInt64(c)
+                    .AddMember("s").OptionalString(s)
+                .EndStruct();
+            }
+            rows.EndList();
+            const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+            NYdb::TValueBuilder dimRows;
+            dimRows.BeginList();
+            for (const auto& [a, d] : std::vector<std::pair<std::optional<i64>, i64>>{{std::nullopt, 0}, {1, 100}, {2, 200}, {4, 400}, {7, 700}}) {
+                dimRows.AddListItem().BeginStruct().AddMember("a").OptionalInt64(a).AddMember("d").OptionalInt64(d).EndStruct();
+            }
+            dimRows.EndList();
+            const auto dimResult = db.BulkUpsert("/Root/dim", dimRows.Build()).GetValueSync();
+            UNIT_ASSERT_C(dimResult.IsSuccess(), dimResult.GetIssues().ToString());
+
+            // The indexes are built over the loaded rows.
+            for (const auto* index : {"ALTER TABLE `/Root/t` ADD INDEX idx_c GLOBAL ON (c)",
+                                      "ALTER TABLE `/Root/t` ADD INDEX idx_s GLOBAL ON (s) COVER (c)"}) {
+                schemeResult = session.ExecuteSchemeQuery(index).GetValueSync();
+                UNIT_ASSERT_C(schemeResult.IsSuccess(), index << ": " << schemeResult.GetIssues().ToString());
+            }
+
+            auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            for (const auto& probe : probes) {
+                auto result = querySession.ExecuteQuery(probe.Query + ";", NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
+                TOutcome outcome;
+                if (!result.IsSuccess()) {
+                    outcome.Status = "ERROR " + result.GetIssues().ToString();
+                } else {
+                    outcome.Status = "OK";
+                    if (result.GetStats() && result.GetStats()->GetAst()) {
+                        outcome.Ast = TString{*result.GetStats()->GetAst()};
+                    }
+                    if (!result.GetResultSets().empty()) {
+                        outcome.Rows = FormatResultSetYson(result.GetResultSet(0));
+                    }
+                }
+                outcomes[newRbo].push_back(std::move(outcome));
+            }
+        }
+
+        for (size_t i = 0; i < probes.size(); ++i) {
+            Cerr << "=== QUERY " << i << ": " << probes[i].Query << Endl;
+            for (const bool newRbo : {false, true}) {
+                const auto& outcome = outcomes[newRbo][i];
+                Cerr << "=== " << (newRbo ? "NEW" : "OLD") << " STATUS " << i << ": " << outcome.Status << Endl;
+                Cerr << "=== " << (newRbo ? "NEW" : "OLD") << " AST " << i << Endl << outcome.Ast << Endl;
+            }
+            Cerr << "=== END " << i << Endl;
+        }
+        for (size_t i = 0; i < probes.size(); ++i) {
+            const auto& oldRows = outcomes[0][i].Rows;
+            const auto& newRows = outcomes[1][i].Rows;
+            if (probes[i].CompareRows && oldRows && newRows) {
+                CompareYsonUnordered(*oldRows, *newRows, probes[i].Query);
+            }
+        }
+    }
+
 }
 
 } // namespace NKikimr::NKqp

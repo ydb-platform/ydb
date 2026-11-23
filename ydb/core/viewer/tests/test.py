@@ -2423,6 +2423,7 @@ class TestViewer(object):
             {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'true'},
             {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'false'},
             {'fields_required': 'VDisks,NodeId', 'include_ddisks': 'true'},
+            {'fields_required': 'DDisks,NodeId'},
             {'storage': 'true', 'include_ddisks': 'true', 'fields_required': 'NodeId'},
             {'fields_required': 'all', 'all_whiteboard_fields': 'true',
              'offload_merge': 'false', 'dump_original_node_batches': 'true'},
@@ -2448,14 +2449,13 @@ class TestViewer(object):
             fields_available = response.get('FieldsAvailable')
             assert fields_available, (extra, 'FieldsAvailable missing or empty', response)
             max_hidden_bit = max(strict_database_hidden_node_fields)
-            assert len(fields_available) > max_hidden_bit, (
-                extra, 'FieldsAvailable too short', len(fields_available), max_hidden_bit, fields_available)
+            fields_required = response['FieldsRequired']
+            assert len(fields_available) == len(fields_required) == max_hidden_bit + 1, (
+                extra, 'Expected legacy field masks', fields_available, fields_required)
             for field_bit in strict_database_hidden_node_fields:
                 assert fields_available[-(field_bit + 1)] == '0', (extra, fields_available, field_bit)
-                fields_required = response['FieldsRequired']
                 assert fields_required[-(field_bit + 1)] == '0', (extra, fields_required, field_bit)
             for node in response.get('Nodes', []):
-                # DDisks share the VDisks permission gate and have no separate field bit.
                 assert 'DDisks' not in node, (extra, node)
                 assert 'MaxClockSkewPeerId' not in node.get('SystemState', {}), (extra, node)
                 for json_key in strict_database_hidden_node_fields.values():

@@ -35,6 +35,7 @@
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/event_engine/memory_allocator.h>
 
+#include "src/core/lib/event_engine/forkable.h"
 #include "src/core/lib/event_engine/handle_containers.h"
 #include "src/core/lib/event_engine/posix.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
@@ -122,12 +123,23 @@ class PosixEnginePollerManager
   }
   void TriggerShutdown();
 
+  // Set when the poll loop stops on a Kick() while not shutting down, i.e.
+  // on the Kick() issued by the poller's PrepareFork(). The fork handler uses
+  // it to restart the loop after fork.
+  void SetPollLoopStopped() {
+    poll_loop_stopped_.store(true, std::memory_order_release);
+  }
+  bool ResetPollLoopStopped() {
+    return poll_loop_stopped_.exchange(false, std::memory_order_acq_rel);
+  }
+
   ~PosixEnginePollerManager() override;
 
  private:
   enum class PollerState { kExternal, kOk, kShuttingDown };
   std::shared_ptr<grpc_event_engine::experimental::PosixEventPoller> poller_;
   std::atomic<PollerState> poller_state_{PollerState::kOk};
+  std::atomic<bool> poll_loop_stopped_{false};
   std::shared_ptr<ThreadPool> executor_;
   bool trigger_shutdown_called_;
 };
@@ -171,7 +183,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
 
   ~PosixEventEngine() override;
 
-  std::unique_ptr<PosixEndpointWithFdSupport> CreatePosixEndpointFromFd(
+  std::unique_ptr<EventEngine::Endpoint> CreatePosixEndpointFromFd(
       int fd, const EndpointConfig& config,
       MemoryAllocator memory_allocator) override;
 
@@ -182,8 +194,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
       std::unique_ptr<MemoryAllocatorFactory> memory_allocator_factory)
       override;
 
-  y_absl::StatusOr<std::unique_ptr<PosixListenerWithFdSupport>>
-  CreatePosixListener(
+  y_absl::StatusOr<std::unique_ptr<EventEngine::Listener>> CreatePosixListener(
       PosixEventEngineWithFdSupport::PosixAcceptCallback on_accept,
       y_absl::AnyInvocable<void(y_absl::Status)> on_shutdown,
       const EndpointConfig& config,
@@ -258,6 +269,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   std::shared_ptr<TimerManager> timer_manager_;
 #ifdef GRPC_POSIX_SOCKET_TCP
   std::shared_ptr<PosixEnginePollerManager> poller_manager_;
+  // Restarts the poll loop in the parent process after fork.
+  std::shared_ptr<Forkable> poll_loop_fork_handler_;
 #endif  // GRPC_POSIX_SOCKET_TCP
 };
 

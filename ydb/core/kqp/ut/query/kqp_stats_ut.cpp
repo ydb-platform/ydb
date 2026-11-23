@@ -102,13 +102,13 @@ Y_UNIT_TEST_SUITE(KqpStats) {
 // A miss is reported once per query lookup, before the request is queued.
 // Recompile and SPLIT requests are not lookups.
 Y_UNIT_TEST(CompilationCacheHitMissCounters) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(true);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableCreateTableAs(true);
     config->SetEnableDataShardCreateTableAs(true);
     TKikimrRunner kikimr(settings);
     // The compile service is registered during the KQP proxy bootstrap; a session is the readiness barrier.
-    UNIT_ASSERT(kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess());
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     const auto counters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
     UNIT_ASSERT(counters);
@@ -163,10 +163,75 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     check(0, 1);
 
     // Recompile bypasses the cache and is neither a hit nor a miss.
-    runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, Nothing(), false,
-        TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
-    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
-    check(0, 0);
+    auto recompile = [&](const TMaybe<TKqpQueryId>& query, bool disablePgCompatibility) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, query, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context,
+            NLWTrace::TOrbit(), nullptr, false, nullptr, nullptr, false, false, disablePgCompatibility)));
+        auto response = receive();
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(result.Uid, uid);
+        UNIT_ASSERT(result.Query);
+        UNIT_ASSERT_VALUES_EQUAL(result.Query->DisablePgCompatibility, disablePgCompatibility);
+        check(0, 0);
+    };
+    recompile(Nothing(), true);
+    auto& appData = runtime.GetAppData();
+    NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const TString textUid = receive()->Get()->CompileResult->Uid;
+    UNIT_ASSERT_UNEQUAL(textUid, uid);
+    check(0, 1);
+
+    TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+        TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+    query->DisablePgCompatibility = true;
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    auto sendByUid = [&](const TString& cachedUid) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(token, "", cachedUid, Nothing(), true, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    {
+        const auto serviceActor = runtime.GetLocalServiceId(service);
+        const auto forceUncacheable = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
+            [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
+                const auto& result = ev->Get()->CompileResult;
+                if (ev->Recipient == serviceActor && result->Uid == uid) {
+                    std::const_pointer_cast<TKqpCompileResult>(result)->AllowCache = false;
+                }
+            });
+        recompile(query, false);
+    }
+    sendByUid(uid);
+    const auto oldModeHit = receive();
+    UNIT_ASSERT(oldModeHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(oldModeHit->Get()->CompileResult->Uid, uid);
+    check(1, 0);
+
+    recompile(query, false);
+
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const auto textHit = receive();
+    UNIT_ASSERT(textHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(textHit->Get()->CompileResult->Uid, textUid);
+    check(1, 0);
+
+    for (const auto& cachedUid : { uid, textUid }) {
+        sendByUid(cachedUid);
+        const auto uidHit = receive();
+        UNIT_ASSERT(uidHit->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(uidHit->Get()->CompileResult->Uid, cachedUid);
+        check(1, 0);
+    }
+
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    recompile(Nothing(), true);
 
     // NeedToSplit is an ordinary miss; the follow-up SPLIT request is not a lookup.
     // A NeedToSplit reply carries no success status, the session actor checks the flag first.

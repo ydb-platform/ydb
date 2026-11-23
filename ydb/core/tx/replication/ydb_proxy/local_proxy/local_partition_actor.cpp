@@ -74,6 +74,8 @@ void TBaseLocalTopicPartitionActor::Handle(TEvNavigateResult::TPtr& ev) {
     }
 
     if (entry.Kind == TNavigate::EKind::KindCdcStream) {
+        // The marker is on the feed; the describe of its streamImpl below does not carry it.
+        IsAsyncReplication = entry.Attributes.contains("__async_replication");
         return DoDescribe(TStringBuilder() << TopicPath << "/streamImpl");
     }
 

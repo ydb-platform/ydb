@@ -69,6 +69,7 @@ feature_flags:
 | `enable_json_index` | [JSON indexes](../../dev/json-indexes.md) to speed up search in JSON fields |
 | `enable_json_index_auto_select` | Automatic selection of [JSON indexes](../../dev/json-indexes.md) when executing queries |
 | `enable_fulltext_index` | [Full-text index](../../dev/fulltext-indexes.md) for full-text search |
+| `enable_fulltext_index_row_id` | [Full-text indexes](../../dev/fulltext-indexes.md#primary-key) on tables with a non-integer or composite primary key via `__ydb_row_id` |
 | `enable_local_bloom_filter_index` | [Local Bloom index](../../dev/bloom-skip-indexes.md#types) of type `bloom_filter` |
 | `enable_local_bloom_ngram_filter_index` | [Local Bloom index](../../dev/bloom-skip-indexes.md#types) of type `bloom_ngram_filter` |
 | `enable_local_min_max_index` | [Local min_max index](../../dev/min_max-skip-index.md) |

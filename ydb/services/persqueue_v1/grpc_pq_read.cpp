@@ -89,7 +89,7 @@ void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, cons
         std::unique_ptr<TEvCommitOffsetRequest> e;
         e.reset(dynamic_cast<TEvCommitOffsetRequest*>(ev->Release().Release()));
         AFL_ENSURE(e)("reason", "unexpected event type for commit offset")("local_cluster", LocalCluster);
-        ctx.Register(new TCommitOffsetActor(e.release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+        ctx.Register(new TCommitOffsetActor(e.release(), *TopicsHandler, NewSchemeCache, Counters));
     }
 }
 

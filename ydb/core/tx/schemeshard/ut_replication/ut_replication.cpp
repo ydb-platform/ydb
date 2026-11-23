@@ -1,5 +1,17 @@
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/ydb_convert/replication_description.h>
+#include <ydb/library/testlib/helpers.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 using namespace NSchemeShardUT_Private;
 
@@ -50,6 +62,196 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             NLs::PathExist,
             NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
         });
+    }
+
+    TString AvailabilityScheme(const TString& name, const TString& period) {
+        auto scheme = DefaultScheme(name);
+        scheme.insert(scheme.find("Config {") + TStringBuf("Config {").size(),
+            TStringBuilder() << " AvailabilityPeriod { " << period << " } ");
+        return scheme;
+    }
+
+    Y_UNIT_TEST(AvailabilityPeriodCreateAndReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        const TVector<TString> periods = {"", "Unlimited {}", "Duration { seconds: 10 nanos: 1 }", "Duration { nanos: 1 }"};
+        for (ui32 i = 0; i < periods.size(); ++i) {
+            const auto name = TStringBuilder() << "Replication" << i;
+            TestCreateReplication(runtime, ++txId, "/MyRoot",
+                i == 0 ? DefaultScheme(name) : AvailabilityScheme(name, periods[i]));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        const auto check = [&] {
+            for (ui32 i = 0; i < periods.size(); ++i) {
+                const auto desc = DescribePath(runtime, TStringBuilder() << "/MyRoot/Replication" << i);
+                const auto& path = desc.GetPathDescription();
+                const auto& period = path.GetReplicationDescription().GetConfig().GetAvailabilityPeriod();
+                UNIT_ASSERT_VALUES_EQUAL(period.HasUnlimited(), i < 2);
+                if (i >= 2) {
+                    UNIT_ASSERT(period.HasDuration());
+                    UNIT_ASSERT_VALUES_EQUAL(period.GetDuration().seconds(), i == 2 ? 10 : 0);
+                    UNIT_ASSERT_VALUES_EQUAL(period.GetDuration().nanos(), 1000000);
+                }
+                using namespace NKikimr::NReplication;
+                const auto edge = runtime.AllocateEdgeActor();
+                auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+                request->Record.MutablePathId()->SetOwnerId(path.GetSelf().GetSchemeshardId());
+                request->Record.MutablePathId()->SetLocalId(path.GetSelf().GetPathId());
+                runtime.SendToPipe(ExtractControllerId(path), edge, request.Release());
+                const auto result = runtime.GrabEdgeEvent<TEvController::TEvDescribeReplicationResult>(edge);
+                UNIT_ASSERT(result->Get()->Record.HasAvailabilityPeriod());
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetAvailabilityPeriod().SerializeAsString(), period.SerializeAsString());
+            }
+        };
+        check();
+        for (ui32 i = 0; i < periods.size(); ++i) {
+            const TString name = TStringBuilder() << "Replication" << i;
+            TestAlterReplication(runtime, ++txId, "/MyRoot",
+                Sprintf(R"(Name: "%s" State { Paused {} })", name.c_str()));
+            env.TestWaitNotification(runtime, txId);
+            TestAlterReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s"
+                Config { SrcConnectionParams { StaticCredentials { Password: "new-password" } } }
+            )", name.c_str()));
+            env.TestWaitNotification(runtime, txId);
+        }
+        check();
+        // Both tablets must reload the persisted, normalized policy.
+        TVector<ui64> controllers;
+        for (ui32 i = 0; i < periods.size(); ++i) {
+            controllers.push_back(ExtractControllerId(DescribePath(runtime,
+                TStringBuilder() << "/MyRoot/Replication" << i).GetPathDescription()));
+        }
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        for (const auto id : controllers) {
+            RebootTablet(runtime, id, runtime.AllocateEdgeActor());
+        }
+        check();
+    }
+
+    Y_UNIT_TEST_FLAG(AvailabilityPeriodLegacyControllerConfig, CustomDefault) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        if (CustomDefault) {
+            runtime.GetAppData().ReplicationConfig.SetConsumerAvailabilityPeriodSeconds(7201);
+        }
+        const auto seconds = runtime.GetAppData().ReplicationConfig.GetConsumerAvailabilityPeriodSeconds();
+        using namespace NKikimr::NReplication;
+        auto observer = runtime.AddObserver<TEvController::TEvCreateReplication>([](const auto& ev) {
+            ev->Get()->Record.MutableConfig()->ClearAvailabilityPeriod();
+        });
+        TestCreateReplication(runtime, 101, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, 101);
+        observer.Remove();
+        const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+        const auto& path = desc.GetPathDescription();
+        const auto controller = ExtractControllerId(path);
+        const auto check = [&] {
+            const auto edge = runtime.AllocateEdgeActor();
+            auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+            request->Record.MutablePathId()->SetOwnerId(path.GetSelf().GetSchemeshardId());
+            request->Record.MutablePathId()->SetLocalId(path.GetSelf().GetPathId());
+            runtime.SendToPipe(controller, edge, request.Release());
+            const auto result = runtime.GrabEdgeEvent<TEvController::TEvDescribeReplicationResult>(edge);
+            UNIT_ASSERT(result->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT(record.HasAvailabilityPeriod());
+            UNIT_ASSERT(record.GetAvailabilityPeriod().HasDuration());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetAvailabilityPeriod().GetDuration().seconds(), seconds);
+
+            Ydb::Replication::DescribeReplicationResult proto;
+            FillReplicationDescription(proto, record);
+            const NYdb::NReplication::TReplicationDescription description(proto);
+            UNIT_ASSERT(description.GetAvailabilityPeriodKind() ==
+                NYdb::NReplication::TReplicationDescription::EAvailabilityPeriodKind::Finite);
+            UNIT_ASSERT_VALUES_EQUAL(*description.GetAvailabilityPeriod(), TDuration::Seconds(seconds));
+            const auto query = NYdb::NDump::BuildCreateReplicationQuery("/MyRoot", "/MyRoot", "Replication", description);
+            UNIT_ASSERT_STRING_CONTAINS(query, TStringBuilder() << "AVAILABILITY_PERIOD = Interval('PT" << seconds << "S')");
+
+            const auto stored = ReadSystemTable(runtime, controller, "Replications", {"Id"}, {"Config"});
+            const auto& rows = stored.GetValue().GetStruct(0).GetOptional().GetStruct(0);
+            UNIT_ASSERT_VALUES_EQUAL(rows.ListSize(), 1);
+            NKikimrReplication::TReplicationConfig config;
+            UNIT_ASSERT(config.ParseFromString(rows.GetList(0).GetStruct(0).GetOptional().GetBytes()));
+            UNIT_ASSERT(!config.HasAvailabilityPeriod());
+        };
+        check();
+        RebootTablet(runtime, controller, runtime.AllocateEdgeActor());
+        check();
+    }
+
+    Y_UNIT_TEST(AvailabilityPeriodInvalidCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        for (const TString period : {"", "Duration {}", "Duration { seconds: -1 }", "Duration { nanos: -1 }",
+                "Duration { seconds: 1 nanos: -1 }", "Duration { nanos: 1000000000 }",
+                "Duration { seconds: 315576000000 nanos: 999999999 }", "Duration { seconds: 315576000001 }", "Duration { seconds: 9223372036854775807 }"})
+        {
+            TestCreateReplication(runtime, ++txId, "/MyRoot", AvailabilityScheme("Replication", period),
+                {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+        }
+        // Failed validation must not reserve the name or leave a partial object.
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AvailabilityPeriodSqlIntervalBoundary) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        const auto lastValid = TDuration::MilliSeconds((NYql::NUdf::MAX_TIMESTAMP - 1) / 1000);
+        const auto scheme = [&](const TString& name, TDuration value) {
+            return AvailabilityScheme(name, TStringBuilder() << "Duration { seconds: " << value.Seconds()
+                << " nanos: " << value.NanoSecondsOfSecond() << " }");
+        };
+
+        for (const auto value : {lastValid - TDuration::MicroSeconds(1), lastValid}) {
+            const TString name = TStringBuilder() << "Valid" << txId;
+            TestCreateReplication(runtime, ++txId, "/MyRoot", scheme(name, value));
+            env.TestWaitNotification(runtime, txId);
+            const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+            const auto& duration = desc.GetPathDescription().GetReplicationDescription()
+                .GetConfig().GetAvailabilityPeriod().GetDuration();
+            UNIT_ASSERT_VALUES_EQUAL(duration.seconds(), lastValid.Seconds());
+            UNIT_ASSERT_VALUES_EQUAL(duration.nanos(), lastValid.NanoSecondsOfSecond());
+        }
+
+        for (const auto value : {lastValid + TDuration::MicroSeconds(1),
+                TDuration::MicroSeconds(NYql::NUdf::MAX_TIMESTAMP), lastValid + TDuration::Days(1)})
+        {
+            TestCreateReplication(runtime, ++txId, "/MyRoot", scheme("Replication", value),
+                {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+        }
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AvailabilityPeriodCreateOnly) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            State { Paused {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config { AvailabilityPeriod { Duration { seconds: 10 } } }
+        )", {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+        const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+        UNIT_ASSERT(desc.GetPathDescription().GetReplicationDescription().GetConfig().GetAvailabilityPeriod().HasUnlimited());
     }
 
     Y_UNIT_TEST(CreateWithoutInitialScan) {
@@ -507,6 +709,100 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY, {{"__async_replica", "true"}});
     }
 
+    Y_UNIT_TEST_TWIN(OwnerCanChangeOnlyAfterReplicationDropCompletes, TableOwnership) {
+        using NKikimr::TPathId;
+        using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationTableOwnership(TableOwnership);
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Owner"));
+        env.TestWaitNotification(runtime, txId);
+        const TPathId owner1(TTestTxConfig::SchemeShard,
+            DescribePath(runtime, "/MyRoot/Owner").GetPathDescription().GetSelf().GetPathId());
+        const TPathId owner2(owner1.OwnerId, 1000000);
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription { Name: "Index" KeyColumnNames: ["value"] Type: EIndexTypeGlobal }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        auto config = [&] { return DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().GetReplicationConfig(); };
+        // No expected owner means attachment; an expected owner means conditional cleanup.
+        auto change = [&](const TPathId& owner, const TPathId& expected = {}, bool drop = false,
+                NKikimrScheme::EStatus status = NKikimrScheme::StatusAccepted, bool waitForCompletion = true) {
+            auto* request = InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+                Name: "Table"
+                ReplicationConfig { Mode: REPLICATION_MODE_READ_ONLY ConsistencyLevel: CONSISTENCY_LEVEL_ROW }
+            )"));
+            auto& tx = *request->Record.MutableTransaction(0);
+            if (owner) {
+                owner.ToProto(tx.MutableAlterTable()->MutableReplicationConfig()->MutableOwnerPathId());
+            }
+            if (expected) {
+                expected.ToProto(tx.MutableExpectedReplicationOwnerPathId());
+                tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(TConfig::REPLICATION_MODE_NONE);
+                tx.MutableAlterTable()->MutableReplicationConfig()->ClearConsistencyLevel();
+            }
+            if (drop) {
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+                tx.ClearAlterTable();
+                tx.MutableDrop()->SetName("Table");
+            }
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResults(runtime, txId, {status});
+            if (waitForCompletion && status == NKikimrScheme::StatusAccepted) {
+                env.TestWaitNotification(runtime, txId);
+            }
+        };
+        change(owner1);
+        change(owner1);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwnerPathId()), owner1);
+        change(owner2, {}, false, NKikimrScheme::StatusPreconditionFailed);
+        NActors::TBlockEvents<NKikimr::NReplication::TEvController::TEvDropReplication> drops(runtime);
+        TestDropReplication(runtime, ++txId, "/MyRoot", "Owner");
+        const auto dropping = txId;
+        runtime.WaitFor("controller drop request", [&] { return !drops.empty(); });
+        change(owner2, {}, false, NKikimrScheme::StatusPreconditionFailed);
+        drops.Stop().Unblock();
+        env.TestWaitNotification(runtime, dropping);
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwnerPathId()), owner1);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto takeover = txId + 1;
+        NActors::TBlockEvents<NKikimr::TEvDataShard::TEvProposeTransactionResult> block(runtime,
+            [&](const auto& ev) { return ev->Get()->Record.GetTxId() == takeover; });
+        change(owner2, {}, false, NKikimrScheme::StatusAccepted, false);
+        runtime.WaitFor("owner takeover in flight", [&] { return !block.empty(); });
+        change({}, owner2, false, NKikimrScheme::StatusMultipleModifications); // Fence after the in-flight check.
+        block.Stop().Unblock();
+        env.TestWaitNotification(runtime, takeover);
+        for (const bool drop : {false, true}) {
+            change({}, owner1, drop, NKikimrScheme::StatusSuccess);
+            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwnerPathId()), owner2);
+            UNIT_ASSERT_VALUES_EQUAL(config().GetMode(), TConfig::REPLICATION_MODE_READ_ONLY);
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {NLs::PathExist});
+        }
+        for (const bool legacy : {false, true}) {
+            if (legacy) {
+                change({});
+                change(owner2, {}, false, NKikimrScheme::StatusPreconditionFailed); // Never claim a legacy replica.
+            }
+            change({}, owner2);
+            UNIT_ASSERT(!config().HasOwnerPathId());
+            UNIT_ASSERT_VALUES_EQUAL(config().GetMode(), TConfig::REPLICATION_MODE_NONE);
+        }
+        change({}, owner2); // Idempotent cleanup also works without an owner.
+        // Drop both an owned table and an ownerless legacy replica.
+        change(TableOwnership ? owner2 : TPathId{});
+        change({}, owner2, true);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(CannotAddReplicationConfig) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -617,6 +913,68 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
             NLs::UserAttrsEqual({}),
         });
+    }
+
+    Y_UNIT_TEST_FLAG(DropReplicatedTableWithCdc, GlobalConsistency) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // A destination may already have a CDC stream before attachment.
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto consistency = GlobalConsistency
+            ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+            : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", Sprintf(R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_READ_ONLY
+              ConsistencyLevel: %s
+            }
+        )", NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel_Name(consistency).c_str()))));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+        });
+        for (const auto* path : {"/MyRoot/Table/Stream", "/MyRoot/Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, path), {NLs::PathExist});
+        }
+
+        // Standalone CDC removal on an active replica must remain forbidden.
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )", {{NKikimrScheme::StatusSchemeError, "path is an async replica table"}});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathExist});
+
+        // This is the internal table drop issued by replication CASCADE.
+        AsyncSend(runtime, TTestTxConfig::SchemeShard,
+            InternalTransaction(DropTableRequest(++txId, "/MyRoot", "Table")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto* path : {"/MyRoot/Table", "/MyRoot/Table/Stream", "/MyRoot/Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, path), {NLs::PathNotExist});
+        }
     }
 
     Y_UNIT_TEST(AlterReplicatedIndexTable) {
@@ -747,6 +1105,56 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
         env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(DescribeDuringDropAfterControllerShardDeletion) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
+            NLs::PathExist,
+            NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
+        });
+        // The controller shard is the only shard in the domain: the root
+        // schemeshard is fresh in this test and assigns local shard ids
+        // from 1, so the controller shard has local id 1. (In a tenant
+        // schemeshard this would never hold.)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::ShardsInsideDomain(1)});
+
+        // Hold the drop's proposal to the coordinator so the drop cannot
+        // commit. The controller tablet is deleted before the commit: the
+        // drop queues the Hive deletion fire-and-forget, and schemeshard
+        // erases the controller shard from ShardInfos upon processing
+        // Hive's confirmation while the replication is still describable.
+        // This is the race the original crash happened on.
+        TBlockEvents<TEvTxProxy::TEvProposeTransaction> dropPropose(runtime);
+
+        const auto dropTxId = ++txId;
+        TestDropReplication(runtime, dropTxId, "/MyRoot", "Replication");
+        runtime.WaitFor("drop propose", [&] { return !dropPropose.empty(); });
+
+        // TEvNotifyShardDeleted is sent by the transaction that erases the
+        // shard from ShardInfos.
+        env.TestWaitShardDeletion(runtime, {1});
+
+        // The drop's proposal is withheld, so the drop is not committed
+        // yet: this describe crashed the whole schemeshard before the
+        // tolerant ShardInfos lookup was introduced.
+        const auto described = DescribePath(runtime, "/MyRoot/Replication");
+        TestDescribeResult(described, {
+            NLs::PathExist,
+            NLs::CheckPathState(NKikimrSchemeOp::EPathStateDrop),
+        });
+        UNIT_ASSERT(!described.GetPathDescription().GetReplicationDescription().HasControllerId());
+
+        dropPropose.Stop().Unblock();
+        env.TestWaitNotification(runtime, dropTxId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
     }
 

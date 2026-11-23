@@ -20,6 +20,9 @@ SRCS(
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
     rpc_bridge.cpp
+    rpc_bridge_get_cluster_state.cpp
+    rpc_bridge_storage.cpp
+    rpc_bridge_mode.cpp
     rpc_cluster_state.cpp
     rpc_cms.cpp
     rpc_config.cpp
@@ -204,12 +207,17 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
-    ydb/core/kqp/common
-    ydb/core/kqp/opt
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/common/stats
+    ydb/core/kqp/executer_actor/shards_resolver
+    ydb/core/kqp/query_plan
+    ydb/core/kqp/script_executions/common
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/scheme/mkql
     ydb/core/security
     ydb/core/security/ldap_auth_provider
     ydb/core/security/sasl
@@ -225,10 +233,12 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/cloud_permissions
     ydb/library/mkql_proto
+    ydb/library/naming_conventions
     ydb/library/persqueue/topic_parser
     ydb/library/protobuf_printer
     ydb/library/services
     ydb/library/yaml_config
+    ydb/library/yaml_json
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq
@@ -276,4 +286,5 @@ RECURSE_FOR_TESTS(
     grpc_request_check_actor_ut
     grpc_request_tracing_ut
     ut
+    ut_read_rows_bench
 )

@@ -4,13 +4,15 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/transactions/operators/backup.h>
 #include <ydb/core/tx/columnshard/transactions/operators/restore.h>
@@ -139,12 +141,12 @@ std::optional<TPlanStep> ProposeSchemaTxOptional(TTestBasicRuntime& runtime, TAc
 
 void ProposeSchemaTxFail(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     const auto result = ProposeSchemaTxOptional(runtime, sender, txBody, txId);
-    AFL_VERIFY(!result);
+    YDB_LOG_VERIFY(!result);
 }
 
 TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     const auto result = ProposeSchemaTxOptional(runtime, sender, txBody, txId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 
@@ -252,7 +254,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     record.SetTxId(snap.GetPlanStep());
     record.SetScanId(scanId);
-    AFL_VERIFY(!pathIds.empty());
+    YDB_LOG_VERIFY(!pathIds.empty());
     record.SetLocalPathId(pathIds[0]);
     record.SetTablePath("/.sys/store_primary_index_portion_stats");
 
@@ -306,7 +308,9 @@ TPlanStep ProposeCommit(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
     const auto now = runtime.GetTimeProvider()->Now();
     return ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
-        AFL_VERIFY(res.GetTxId() == txId)("tx_id", txId)("res", res.GetTxId());
+        YDB_LOG_VERIFY(res.GetTxId() == txId,
+            {"txId", txId},
+            {"res", res.GetTxId()});
         UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
         UNIT_ASSERT_LE(now.MilliSeconds(), res.GetMinStep());
         UNIT_ASSERT_UNEQUAL(res.GetMaxStep(), std::numeric_limits<ui64>::max());
@@ -482,6 +486,17 @@ TSerializedTableRange MakeTestRange(
     return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), inclusiveFrom, TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
+NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk) {
+    NArrow::TArrowBatchBuilder batchBuilder;
+    const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(pk));
+    UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
+    std::vector<TString> mem;
+    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(pk);
+    std::vector<TCell> cells = MakeTestCells(types, value, mem);
+    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
+    return NArrow::TSimpleRow(batchBuilder.FlushBatch(false), 0);
+}
+
 THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
     if (specials.Tiers.empty()) {
         return {};
@@ -510,11 +525,12 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         if (!specials.NeedTestStatistics(pk)) {
             continue;
         }
-        if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
-            *schema->AddIndexes() =
-                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
-                                                         1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
-                    .SerializeToProto();
+        const auto arrowType = NArrow::GetArrowType(columns[i].GetType());
+        if (arrowType.ok() && arrow::is_primitive((*arrowType)->id())) {
+            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+                std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(1000 + i, "MIN_MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA",
+                    false, i + 1, NOlap::NIndexes::TReadDataExtractorContainer(std::make_shared<NOlap::NIndexes::TDefaultDataExtractor>())))
+                                        .SerializeToProto();
         }
     }
 
@@ -547,7 +563,8 @@ NKikimrMiniKQL::TResult LocalMiniKQL(TTestBasicRuntime& runtime, ui64 tabletId, 
 
     auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
     UNIT_ASSERT(event);
-    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK, event->Get()->Record.GetMiniKQLErrors());
+    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK,
+        TStringBuilder() << event->Get()->Record.GetMiniKQLErrors() << event->Get()->Record.GetCompileResults().ShortDebugString());
     return event->Get()->Record.GetExecutionEngineEvaluatedResponse();
 }
 
@@ -566,6 +583,48 @@ ui64 CountLocalDbTableRows(
     )", rangeSpec.c_str(), fieldsSpec.c_str(), tableName.c_str());
     const auto result = LocalMiniKQL(runtime, tabletId, query);
     return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+namespace {
+
+std::set<std::pair<ui64, ui64>> ReadPathAndPortionIds(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const std::vector<TString>& keyColumns) {
+    TStringBuilder range;
+    for (const auto& column : keyColumns) {
+        range << "'('" << column << " (Null) (Void)) ";
+    }
+    const TString query = Sprintf(R"(
+        (
+            (let range '(%s))
+            (let fields '('PathId 'PortionId))
+            (return (AsList
+                (SetResult 'Result (SelectRange '%s range fields '()))
+            ))
+        )
+    )", range.c_str(), tableName.c_str());
+    const NKikimrMiniKQL::TResult response = LocalMiniKQL(runtime, tabletId, query);
+    const auto result = NClient::TValue::Create(response)[0];
+    UNIT_ASSERT(!bool(result["Truncated"]));
+    const auto rows = result["List"];
+    std::set<std::pair<ui64, ui64>> ids;
+    for (ui32 i = 0; i < rows.Size(); ++i) {
+        ids.emplace(ui64(rows[i]["PathId"]), ui64(rows[i]["PortionId"]));
+    }
+    return ids;
+}
+
+}   // namespace
+
+ui64 AssertIndexMatchesPortions(TTestBasicRuntime& runtime, ui64 tabletId, const std::vector<NArrow::NTest::TTestColumn>& pk) {
+    std::vector<TString> indexKeyColumns = { "PathId" };
+    for (const auto& column : pk) {
+        indexKeyColumns.emplace_back("LastKey_" + column.GetName());
+    }
+    indexKeyColumns.emplace_back("PortionId");
+    const auto portions = ReadPathAndPortionIds(runtime, tabletId, "IndexPortions", { "PathId", "PortionId" });
+    const auto index = ReadPathAndPortionIds(runtime, tabletId, "IndexPortionsByLastKey", indexKeyColumns);
+    UNIT_ASSERT_EQUAL_C(portions, index, "portions: " << portions.size() << ", index: " << index.size());
+    return portions.size();
 }
 
 void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec) {
@@ -592,6 +651,28 @@ void UpdateLocalDbTableRow(
         )
     )", keySpec.c_str(), valuesSpec.c_str(), tableName.c_str());
     Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
+std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> ReadSchemaPresetVersions(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('Id (Null) (Void))
+                '('SinceStep (Null) (Void))
+                '('SinceTxId (Null) (Void))
+            ))
+            (let fields '('InfoProto))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'SchemaPresetVersionInfo range fields '()))
+            ))
+        )
+    )");
+    const auto rows = NClient::TValue::Create(result)[0]["List"];
+    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> versions(rows.Size());
+    for (ui32 i = 0; i < rows.Size(); ++i) {
+        UNIT_ASSERT(versions[i].ParseFromString(TString(rows[i]["InfoProto"])));
+    }
+    return versions;
 }
 
 ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
@@ -648,15 +729,15 @@ NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& 
         auto& type = ydbSchema[i].GetType();
 
         columns[id] = NTable::TColumn(name, id, type, "");
-        AFL_VERIFY(columnIdByName.emplace(name, id).second);
+        YDB_LOG_VERIFY(columnIdByName.emplace(name, id).second);
     }
 
     std::vector<ui32> pkIds;
     ui32 idx = 0;
     for (const auto& c : key) {
         auto it = columnIdByName.FindPtr(c.GetName());
-        AFL_VERIFY(it);
-        AFL_VERIFY(*it < columns.size());
+        YDB_LOG_VERIFY(it);
+        YDB_LOG_VERIFY(*it < columns.size());
         columns[*it].KeyOrder = idx++;
         pkIds.push_back(*it);
     }

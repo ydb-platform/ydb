@@ -1,5 +1,4 @@
 --sanitizer ignore memory
-/* syntax version 1 */
 $x = AsList(1,2,3);
 
 $s1 = @@

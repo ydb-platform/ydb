@@ -1,0 +1,10 @@
+{
+  "by_platform": {
+    "linux-x86_64": {
+      "uri": "sbr:12046217589"
+    },
+    "linux-aarch64": {
+      "uri": "sbr:12046214773"
+    }
+  }
+}

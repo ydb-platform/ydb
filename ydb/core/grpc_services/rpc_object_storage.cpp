@@ -11,7 +11,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <util/system/unaligned_mem.h>
 
@@ -217,9 +217,17 @@ private:
     }
 
     bool BuildSchema(const NActors::TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
         auto& entry = ResolveNamesResult->ResultSet.front();
+        const bool disablePgCompatibility = AppData(ctx)->FeatureFlags.GetDisablePgCompatibility();
+        const auto rejectPg = [&](const TString& message) {
+            TString error;
+            if (!CheckAccess(entry.SecurityObject.Get(), error)) {
+                ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, error, ctx);
+            } else {
+                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, message, ctx);
+            }
+            return false;
+        };
 
         TVector<ui32> keyColumnIds;
         THashMap<TString, ui32> columnByName;
@@ -227,6 +235,9 @@ private:
             columnByName[ci.second.Name] = ci.second.Id;
             i32 keyOrder = ci.second.KeyOrder;
             if (keyOrder != -1) {
+                if (disablePgCompatibility && ci.second.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    return rejectPg(TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << ci.second.Name << "'");
+                }
                 Y_VERIFY(keyOrder >= 0);
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
                 KeyColumnTypes[keyOrder] = ci.second.PType;
@@ -240,6 +251,10 @@ private:
         TString errStr;
         TVector<TCell> prefixCells;
         TMemoryPool prefixMemoryOwner(256);
+        if (disablePgCompatibility && TupleContainsPgType(Request->Getkey_prefix().Gettype())) {
+            return rejectPg("PostgreSQL compatibility is disabled for KeyPrefix types");
+        }
+
         TConstArrayRef<TConversionTypeInfo> prefixTypes(KeyColumnTypeInfos.data(), KeyColumnTypeInfos.size() - 1); // -1 for path column
         bool prefixParsedOk = CellsFromTuple(&Request->Getkey_prefix().Gettype(), Request->Getkey_prefix().Getvalue(),
                 prefixTypes, true, false, prefixCells, errStr, prefixMemoryOwner);
@@ -266,6 +281,10 @@ private:
 
         TVector<TCell> suffixCells;
         TMemoryPool suffixMemoryOwner(256);
+        if (disablePgCompatibility && TupleContainsPgType(Request->Getstart_after_key_suffix().Gettype())) {
+            return rejectPg("PostgreSQL compatibility is disabled for StartAfterKeySuffix types");
+        }
+
         TConstArrayRef<TConversionTypeInfo> suffixTypes(KeyColumnTypeInfos.data() + pathColPos, KeyColumnTypeInfos.size() - pathColPos); // starts at path column
         bool suffixParsedOk = CellsFromTuple(&Request->Getstart_after_key_suffix().Gettype(), Request->Getstart_after_key_suffix().Getvalue(),
                                  suffixTypes, true, false, suffixCells, errStr, suffixMemoryOwner);
@@ -302,7 +321,11 @@ private:
                                Sprintf("Unknown column '%s'", name.data()), ctx);
                 return false;
             }
-            ContentsColumns.push_back(entry.Columns[columnByName[name]]);
+            const auto& column = entry.Columns[columnByName[name]];
+            if (disablePgCompatibility && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                return rejectPg(TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");
+            }
+            ContentsColumns.push_back(column);
         }
 
         if (Request->has_matching_filter()) {
@@ -347,6 +370,9 @@ private:
 
                 const auto& columnInfo = entry.Columns[colIdIt->second];
                 const auto& type = columnInfo.PType;
+                if (disablePgCompatibility && type.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    return rejectPg(TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << columnInfo.Name << "'");
+                }
 
                 types.emplace_back(type, columnInfo.PTypeMod, columnInfo.IsNotNullColumn);
 
@@ -383,6 +409,10 @@ private:
             TMemoryPool owner(256);
 
             TString err;
+
+            if (disablePgCompatibility && TupleContainsPgType(filterType)) {
+                return rejectPg("PostgreSQL compatibility is disabled for matching_filter types");
+            }
 
             bool filterParsedOk = CellsFromTuple(&filterType, columnValues, typesRef, true, false, cells, err, owner);
 
@@ -475,13 +505,9 @@ private:
         }
     }
 
-    bool CheckAccess(TString& errorMessage) {
+    bool CheckAccess(const TSecurityObject* securityObject, TString& errorMessage) {
         const ui32 access = NACLib::EAccessRights::SelectRow;
-        if (access != 0
-                && UserToken != nullptr
-                && KeyRange->Status == TKeyDesc::EStatus::Ok
-                && KeyRange->SecurityObject != nullptr
-                && !KeyRange->SecurityObject->CheckAccess(access, *UserToken))
+        if (UserToken && securityObject && !securityObject->CheckAccess(access, *UserToken))
         {
             TStringStream explanation;
             explanation << "Access denied for " << UserToken->GetUserSID()
@@ -510,7 +536,7 @@ private:
         }
 
         TString accessCheckError;
-        if (!CheckAccess(accessCheckError)) {
+        if (KeyRange->Status == TKeyDesc::EStatus::Ok && !CheckAccess(KeyRange->SecurityObject.Get(), accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
         }
 

@@ -83,7 +83,7 @@ public:
     }
 
     void Add(const TString& storageId, TActionReadBlobs&& data) {
-        AFL_VERIFY(BlobsByStorage.emplace(storageId, std::move(data)).second);
+        YDB_LOG_VERIFY(BlobsByStorage.emplace(storageId, std::move(data)).second);
     }
 
     void Add(const TString& storageId, const TBlobRange& blobId, TString&& value) {
@@ -108,7 +108,7 @@ public:
 
     const TString& GetBlobRangeVerified(const TString& storageId, const TBlobRange& range) const {
         auto it = BlobsByStorage.find(storageId);
-        AFL_VERIFY(it != BlobsByStorage.end());
+        YDB_LOG_VERIFY(it != BlobsByStorage.end());
         return it->second.GetBlobRangeVerified(range);
     }
 
@@ -129,7 +129,9 @@ public:
 
     TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
         auto result = ExtractOptional(storageId, range);
-        AFL_VERIFY(result)("range", range.ToString())("storage_id", storageId);
+        YDB_LOG_VERIFY(result,
+            {"range", range},
+            {"storageId", storageId});
         return std::move(*result);
     }
 
@@ -145,7 +147,7 @@ public:
 
     ~TCompositeReadBlobs() {
         // A non-empty value is possible here in case of destruction at start.
-        // AFL_VERIFY(IsEmpty());
+        // YDB_LOG_VERIFY(IsEmpty());
     }
 
     TCompositeReadBlobs& operator=(TCompositeReadBlobs&& item) noexcept {

@@ -71,6 +71,7 @@ struct TUserInfoBase {
 
     ui64 PartitionSessionId = 0;
     TActorId PipeClient;
+    TActorId ReadSessionActor;
 
     std::optional<TString> CommittedMetadata = std::nullopt;
 };
@@ -119,6 +120,8 @@ private:
     void SetImportant(bool important, TDuration availabilityPeriod);
 
 public:
+
+    NKikimrPQ::TPQTabletConfig::EConsumerType Type = NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING;
 
     bool ActualTimestamps = false;
     // WriteTimestamp of the last committed message

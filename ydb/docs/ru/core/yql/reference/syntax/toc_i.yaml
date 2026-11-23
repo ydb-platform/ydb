@@ -23,6 +23,7 @@ items:
 - { name: BATCH DELETE,                 href: batch-delete.md }
 - { name: BATCH UPDATE,                 href: batch-update.md }
 - { name: BACKUP,                       href: backup.md,                     when: feature_backup_collections }
+- { name: CHECKSUM TABLE,               href: checksum-table.md,             when: backend_name == "YDB" }
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md }
 - { name: CREATE BACKUP COLLECTION,     href: create-backup-collection.md,   when: feature_backup_collections }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
@@ -66,6 +67,7 @@ items:
 - { name: EXPORT и IMPORT,              href: export_import.md,              when: feature_mapreduce }
 - { name: INSERT,                       href: insert_into.md }
 - { name: INTO RESULT,                  href: into_result.md }
+- { name: KILL SESSION,                 href: kill-session.md,               when: backend_name == "YDB" }
 - { name: PRAGMA,                       href: pragma.md }
 - { name: PROCESS,                      href: process.md,                    when: feature_mapreduce and process_command == "PROCESS" }
 - { name: REDUCE,                       href: reduce.md,                     when: feature_mapreduce and reduce_command == "REDUCE" }

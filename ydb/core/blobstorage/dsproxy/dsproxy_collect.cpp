@@ -190,7 +190,12 @@ public:
         }
 
         for (const auto& vdisk : Info->GetVDisks()) {
-            SendCollectGarbageRequest(Info->GetVDiskId(vdisk.OrderNumber));
+            const auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            if (!Info->IsWriteTargetRealm(vd.FailRealm)) {
+                QuorumTracker.ExcludeDisk(vd);
+                continue;
+            }
+            SendCollectGarbageRequest(vd);
         }
 
         Become(&TBlobStorageGroupCollectGarbageRequest::StateWait);

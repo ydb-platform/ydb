@@ -2,6 +2,7 @@
 
 #include "bloom_filter_defaults.h"
 #include "flat_page_iface.h"
+#include "flat_part_slots.h"
 #include "flat_row_eggs.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -60,6 +61,7 @@ namespace NPage {
 
         bool ForceCompression = false;  /* Do not leave uncompressed    */
         ECodec Codec = ECodec::Plain;   /* Data page encoding method    */
+        ui32 CodecLevel = 1;           /* ZSTD compression level       */
         ui32 PageSize = 7 * 1024;       /* Data page target size        */
         ui32 PageRows = Max<ui32>();    /* Max rows per page, for UTs   */
         ui32 IndexMin = 32 * 1024;      /* Index initial buffer size    */
@@ -102,6 +104,7 @@ namespace NPage {
         IKeySpace* UnderlayMask = nullptr;
         ISplitKeys* SplitKeys = nullptr;
         TRowVersion MinRowVersion = TRowVersion::Min();
+        TPartLayout Layout;             /* Page collections of written parts, needs b-tree index only when separate */
 
         TVector<TGroupConf> Groups;
 

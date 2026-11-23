@@ -1,7 +1,10 @@
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/service/service.h>
+#include <ydb/services/workload_manager/service/workload_service_impl.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 namespace NKikimr::NWorkloadManager {
@@ -160,6 +163,139 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
 }
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceSubscriptions) {
+    struct TSubscriptionFixture {
+        TTestBasicRuntime Runtime;
+        bool EnabledResourcePoolsOnServerless = false;
+        NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
+        TDatabaseState Database{
+            .SelfId = {},
+            .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless,
+            .WorkloadManagerConfig = WorkloadManagerConfig,
+        };
+        const TString DatabaseId = "/Root";
+        const TString PoolId = "test_pool";
+        TActorId PoolHandler;
+
+        TSubscriptionFixture() {
+            Runtime.Initialize(TAppPrepare().Unwrap());
+            Database.SelfId = Runtime.AllocateEdgeActor();
+            Runtime.EnableScheduleForActor(Database.SelfId);
+            Runtime.RegisterService(MakeSchemeCacheID(), Runtime.AllocateEdgeActor());
+            PoolHandler = Runtime.AllocateEdgeActor();
+        }
+
+        TActorId Subscribe() {
+            const auto subscriber = Runtime.AllocateEdgeActor();
+            Runtime.Send(Database.SelfId, subscriber, new TEvSubscribeOnPoolChanges(DatabaseId, PoolId));
+            auto ev = Runtime.GrabEdgeEvent<TEvSubscribeOnPoolChanges>(Database.SelfId, FUTURE_WAIT_TIMEOUT);
+            Runtime.RunCall([&] {
+                Database.DoSubscribeRequest(std::move(ev));
+                return true;
+            });
+            return subscriber;
+        }
+
+        TActorId Fetcher() const {
+            return Database.PendingSubscriptions.at(PoolId).Fetcher;
+        }
+
+        void Reply(Ydb::StatusIds::StatusCode status, TActorId fetcher = {}) {
+            Runtime.Send(Database.SelfId, fetcher ? fetcher : Fetcher(),
+                new TEvPrivate::TEvFetchPoolResponse(status, DatabaseId, PoolId, {}, TPathId(1, 42), {}));
+            auto ev = Runtime.GrabEdgeEvent<TEvPrivate::TEvFetchPoolResponse>(Database.SelfId, FUTURE_WAIT_TIMEOUT);
+            Runtime.RunCall([&] {
+                Database.UpdatePoolInfo(ev, status == Ydb::StatusIds::SUCCESS ? PoolHandler : TActorId{});
+                return true;
+            });
+        }
+
+        TEvPrivate::TEvRetryPoolSubscription::TPtr Retry() {
+            auto ev = Runtime.GrabEdgeEvent<TEvPrivate::TEvRetryPoolSubscription>(Database.SelfId, FUTURE_WAIT_TIMEOUT);
+            UNIT_ASSERT(ev);
+            Runtime.RunCall([&] {
+                Database.RetryPoolSubscription(*ev->Get());
+                return true;
+            });
+            return ev;
+        }
+    };
+
+    Y_UNIT_TEST(TestResourcePoolSubscriptionRetriesFetchErrors) {
+        TSubscriptionFixture fixture;
+        auto rejectRemoval = fixture.Runtime.AddObserver<TEvUpdatePoolInfo>([](auto&) {
+            UNIT_FAIL("A fetch error must not notify subscribers that the pool was removed");
+        });
+        const auto firstSubscriber = fixture.Subscribe();
+        const auto firstFetcher = fixture.Fetcher();
+        fixture.Reply(Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Database.PendingSubscriptions.size(), 1);
+
+        // A subscriber arriving during backoff joins the same fetch.
+        const auto secondSubscriber = fixture.Subscribe();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Fetcher(), firstFetcher);
+        fixture.Retry();
+        UNIT_ASSERT(fixture.Fetcher() != firstFetcher);
+
+        for (const auto status : {Ydb::StatusIds::INTERNAL_ERROR, Ydb::StatusIds::UNAUTHORIZED, Ydb::StatusIds::BAD_REQUEST}) {
+            const auto fetcher = fixture.Fetcher();
+            fixture.Reply(status);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Database.PendingSubscriptions.size(), 1);
+            fixture.Retry();
+            UNIT_ASSERT(fixture.Fetcher() != fetcher);
+        }
+
+        fixture.Reply(Ydb::StatusIds::SUCCESS);
+        auto update = fixture.Runtime.GrabEdgeEvent<TEvPrivate::TEvUpdatePoolSubscription>(fixture.PoolHandler, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(update);
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->PathId, TPathId(1, 42));
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Subscribers.size(), 2);
+        UNIT_ASSERT(update->Get()->Subscribers.contains(firstSubscriber));
+        UNIT_ASSERT(update->Get()->Subscribers.contains(secondSubscriber));
+        UNIT_ASSERT(fixture.Database.PendingSubscriptions.empty());
+    }
+
+    Y_UNIT_TEST(TestResourcePoolSubscriptionNotFoundAfterFetchError) {
+        TSubscriptionFixture fixture;
+        const auto subscriber = fixture.Subscribe();
+        fixture.Reply(Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Database.PendingSubscriptions.size(), 1);
+        fixture.Retry();
+        fixture.Reply(Ydb::StatusIds::NOT_FOUND);
+
+        auto update = fixture.Runtime.GrabEdgeEvent<TEvUpdatePoolInfo>(subscriber, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(update);
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->DatabaseId, fixture.DatabaseId);
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->PoolId, fixture.PoolId);
+        UNIT_ASSERT(!update->Get()->Config);
+        UNIT_ASSERT(!update->Get()->SecurityObject);
+        UNIT_ASSERT(fixture.Database.PendingSubscriptions.empty());
+    }
+
+    Y_UNIT_TEST(TestResourcePoolSubscriptionIgnoresStaleFetchAndRetry) {
+        TSubscriptionFixture fixture;
+        fixture.Subscribe();
+        const auto oldFetcher = fixture.Fetcher();
+        fixture.Reply(Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Database.PendingSubscriptions.size(), 1);
+        auto retry = fixture.Retry();
+        fixture.Reply(Ydb::StatusIds::NOT_FOUND);
+
+        const auto subscriber = fixture.Subscribe();
+        const auto newFetcher = fixture.Fetcher();
+        fixture.Runtime.RunCall([&] {
+            fixture.Database.RetryPoolSubscription(*retry->Get());
+            return true;
+        });
+        fixture.Reply(Ydb::StatusIds::NOT_FOUND, oldFetcher);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Fetcher(), newFetcher);
+
+        fixture.Reply(Ydb::StatusIds::SUCCESS);
+        auto update = fixture.Runtime.GrabEdgeEvent<TEvPrivate::TEvUpdatePoolSubscription>(fixture.PoolHandler, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(update);
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Subscribers.size(), 1);
+        UNIT_ASSERT(update->Get()->Subscribers.contains(subscriber));
+    }
+
     TActorId SubscribeOnPool(TIntrusivePtr<IYdbSetup> ydb) {
         const auto& settings = ydb->GetSettings();
         auto& runtime = *ydb->GetRuntime();

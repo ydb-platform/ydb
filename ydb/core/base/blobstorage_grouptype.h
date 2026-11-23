@@ -18,9 +18,10 @@ struct TBloblStorageErasureParameters;
 
 struct TBlobStorageGroupType : public TErasureType {
 
-    TBlobStorageGroupType(TErasureType::EErasureSpecies s = TErasureType::ErasureNone)
-        : TErasureType(s)
-    {}
+    static constexpr ui32 MaxSubgroupSize = 12;
+    static constexpr ui32 MaxHandoffNodes = 6;
+
+    TBlobStorageGroupType(TErasureType::EErasureSpecies s = TErasureType::ErasureNone);
 
     struct TPartLayout {
         TStackVec<ui32, 32> VDiskPartMask;

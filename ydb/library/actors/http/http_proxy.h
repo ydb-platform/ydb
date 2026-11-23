@@ -8,12 +8,15 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
-#include <library/cpp/dns/cache.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/variant.h>
 #include "http.h"
 #include "http_proxy_sock64.h"
 #include "http_proxy_ssl.h"
+
+#include <functional>
+#include <memory>
+#include <optional>
 
 namespace NHttp {
 
@@ -122,6 +125,7 @@ struct TEvHttpProxy {
         THttpIncomingRequestPtr Request;
         TString UserToken; // built and serialized
         TString Database; // raw extracted from request; empty if not specified
+        std::optional<std::shared_ptr<const std::function<TString(TStringBuf)>>> PathNormalizer;
 
         TEvHttpIncomingRequest(THttpIncomingRequestPtr request)
             : Request(std::move(request))

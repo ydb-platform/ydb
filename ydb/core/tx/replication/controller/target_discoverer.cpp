@@ -2,17 +2,22 @@
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "target_transfer.h"
 #include "util.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
@@ -25,6 +30,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         Y_ABORT_UNLESS(idx < Paths.size());
         Send(YdbProxy, new TEvYdbProxy::TEvDescribePathRequest(Paths.at(idx).first, {}), 0, idx);
         Pending.insert(idx);
+    }
+
+    void DescribeTopicParent(ui32 idx) {
+        const auto& path = Paths.at(idx).first;
+        const bool isAbsolutePath = IsStartWithSlash(path);
+        const auto absolutePath = CanonizePath(isAbsolutePath ? path
+            : Config.GetSrcConnectionParams().GetDatabase() + "/" + path);
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribePathRequest(TString(ExtractParent(absolutePath)), {}), 0, idx);
+        TopicParents.insert(idx);
     }
 
     void Handle(TEvYdbProxy::TEvDescribePathResponse::TPtr& ev) {
@@ -41,12 +55,23 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         Y_ABORT_UNLESS(*it < Paths.size());
         const auto& path = Paths.at(*it);
 
+        const bool isTopicParent = TopicParents.erase(*it);
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Describe path succeeded",
                 {"path", path.first});
 
             const auto& entry = result.GetEntry();
+            if (isTopicParent) {
+                // DescribePath exposes a CDC stream as its hidden topic. Its parent is
+                // a table; the hidden topic's parent is the stream, also exposed as Topic.
+                if (!EqualToOneOf(entry.Type, NYdb::NScheme::ESchemeEntryType::Table,
+                    NYdb::NScheme::ESchemeEntryType::Topic))
+                {
+                    return DescribeTopic(ev->Cookie);
+                }
+                return RejectTarget(ev->Cookie, "CDC topics cannot be replication sources");
+            }
             switch (entry.Type) {
             case NYdb::NScheme::ESchemeEntryType::SubDomain:
             case NYdb::NScheme::ESchemeEntryType::Directory:
@@ -61,6 +86,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 }
                 break;
             case NYdb::NScheme::ESchemeEntryType::Topic:
+                if (IsReplication()) {
+                    if (!AppData()->FeatureFlags.GetEnableTopicReplication()) {
+                        return RejectTarget(ev->Cookie, "Topic replication is disabled by EnableTopicReplication");
+                    }
+                    return DescribeTopicParent(ev->Cookie);
+                }
                 if (IsTransfer()) {
                     return DescribeTopic(ev->Cookie);
                 }
@@ -73,9 +104,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"path", path.first},
                 {"type", entry.Type});
 
-            NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
-            Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+            return RejectTarget(ev->Cookie, TStringBuilder() << "Unsupported entry type: " << entry.Type);
         } else {
             YDB_LOG_ERROR("Describe path failed",
                 {"path", path.first},
@@ -127,24 +156,59 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"kind", target.Kind});
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
-                switch (index.GetIndexType()) {
-                case NYdb::NTable::EIndexType::GlobalSync:
-                case NYdb::NTable::EIndexType::GlobalUnique:
-                    break;
-                default:
-                    continue;
-                }
+                const auto indexSrcPath = CanonizePath(ChildPath(SplitPath(path.first),
+                    TString{index.GetIndexName()}));
+                const auto indexDstPath = CanonizePath(ChildPath(SplitPath(path.second),
+                    TString{index.GetIndexName()}));
 
-                const auto& target = ToAdd.emplace_back(
-                    TReplication::ETargetKind::IndexTable,
-                    std::make_shared<TTargetIndexTable::TIndexTableConfig>(
-                        CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
-                        CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
-                    ));
-                YDB_LOG_INFO("Add target",
-                    {"srcPath", target.Config->GetSrcPath()},
-                    {"dstPath", target.Config->GetDstPath()},
-                    {"kind", target.Kind});
+                if (index.GetIndexType() != NYdb::NTable::EIndexType::GlobalAsync) {
+                    // Async indexes are maintained by the destination's own change exchange.
+                    // Other index types (fulltext, vector, json) are replicated as their impl
+                    // tables: their names are defined by the index type and its keys.
+                    const auto indexType = NTableIndex::TryConvertIndexType(index.GetIndexType(),
+                        AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
+                    if (!indexType || !NTableIndex::HasReplicatedImplTables(*indexType)) {
+                        YDB_LOG_DEBUG("Skip target for local index",
+                            {"path", indexSrcPath},
+                            {"type", index.GetIndexType()});
+                        continue;
+                    }
+
+                    TVector<TString> indexColumns;
+                    for (const auto& column : index.GetIndexColumns()) {
+                        indexColumns.emplace_back(column.data(), column.size());
+                    }
+
+                    if (*indexType == NKikimrSchemeOp::EIndexTypeGlobal
+                        || *indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique)
+                    {
+                        // Secondary indexes use the legacy scheme: src is the index, dst is its impl table.
+                        const auto& target = ToAdd.emplace_back(
+                            TReplication::ETargetKind::IndexTable,
+                            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                                indexSrcPath,
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << NTableIndex::ImplTable),
+                                false));
+                        YDB_LOG_INFO("Add target",
+                            {"srcPath", target.Config->GetSrcPath()},
+                            {"dstPath", target.Config->GetDstPath()},
+                            {"kind", target.Kind});
+                        continue;
+                    }
+
+                    for (const auto implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
+                        const auto& target = ToAdd.emplace_back(
+                            TReplication::ETargetKind::IndexTable,
+                            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                                CanonizePath(TStringBuilder() << indexSrcPath << '/' << implTable),
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << implTable),
+                                true));
+                        YDB_LOG_INFO("Add target",
+                            {"srcPath", target.Config->GetSrcPath()},
+                            {"dstPath", target.Config->GetDstPath()},
+                            {"kind", target.Kind});
+                    }
+                }
             }
         } else {
             YDB_LOG_ERROR("Describe table failed",
@@ -188,12 +252,17 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe topic succeeded",
                 {"path", path.first});
 
-            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
-                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
-            YDB_LOG_INFO("Add target",
-                {"srcPath", target.Config->GetSrcPath()},
-                {"dstPath", target.Config->GetDstPath()},
-                {"kind", target.Kind});
+            if (IsReplication()) {
+                TString error;
+                if (!CheckTopic(result.GetTopicDescription(), error)) {
+                    return RejectTarget(ev->Cookie, error);
+                }
+                ToAdd.emplace_back(TReplication::ETargetKind::Topic,
+                    std::make_shared<TTargetTopic::TTopicConfig>(path.first, path.second));
+            } else {
+                ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
+                    std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
+            }
         } else {
             YDB_LOG_ERROR("Describe topic failed",
                 {"path", path.first},
@@ -208,6 +277,42 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         }
 
         Pending.erase(it);
+        MaybeReply();
+    }
+
+    bool CheckTopic(const NYdb::NTopic::TTopicDescription& description, TString& error) const {
+        if (Config.GetConsistencySettings().GetLevelCase() != NKikimrReplication::TConsistencySettings::kRow) {
+            error = "Topic replication supports row consistency only";
+            return false;
+        }
+        if (description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
+            != NYdb::NTopic::EAutoPartitioningStrategy::Disabled)
+        {
+            error = "Topic replication requires fixed partitions";
+            return false;
+        }
+
+        const auto& partitions = description.GetPartitions();
+        if (partitions.empty()) {
+            error = "Source topic has no partitions";
+            return false;
+        }
+        const auto invalidPartition = FindIf(partitions, [&](const auto& partition) {
+            return !partition.GetActive() || partition.GetPartitionId() >= partitions.size()
+                || !partition.GetParentPartitionIds().empty() || !partition.GetChildPartitionIds().empty();
+        });
+        if (invalidPartition != partitions.end()) {
+            error = "Topic replication requires unsplit contiguous partitions";
+            return false;
+        }
+        return true;
+    }
+
+    void RejectTarget(ui32 idx, const TString& error) {
+        NYdb::NIssue::TIssues issues;
+        issues.AddIssue(error);
+        Failed.emplace_back(Paths.at(idx).first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+        Pending.erase(idx);
         MaybeReply();
     }
 
@@ -237,18 +342,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(it->second.first, {}), 0, it->first);
     }
 
-    static bool IsSystemObject(const NYdb::NScheme::TSchemeEntry& entry) {
-        if (entry.Type != NYdb::NScheme::ESchemeEntryType::Directory) {
-            return false;
-        }
-
-        return entry.Name.starts_with("~")
-            || entry.Name.starts_with(".sys")
-            || entry.Name.starts_with(".tmp")
-            || entry.Name.starts_with(".metadata")
-            || entry.Name.starts_with("export-");
-    }
-
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
@@ -270,7 +363,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 switch (child.Type) {
                 case NYdb::NScheme::ESchemeEntryType::SubDomain:
                 case NYdb::NScheme::ESchemeEntryType::Directory:
-                    if (!IsSystemObject(child)) {
+                    if (child.Type != NYdb::NScheme::ESchemeEntryType::Directory
+                        || !NNaming::IsInternalName(child.Name))
+                    {
                         ListDirectory(std::make_pair(
                             path.first  + '/' + child.Name,
                             path.second + '/' + child.Name));
@@ -400,6 +495,7 @@ private:
     THashMap<ui64, std::pair<TString, TString>> Listings;
 
     THashSet<ui32> Pending;
+    THashSet<ui32> TopicParents;
     THashSet<ui32> DescribeRetries;
     THashSet<ui64> ListingRetries;
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry> ToAdd;

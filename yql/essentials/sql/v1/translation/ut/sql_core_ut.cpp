@@ -4,6 +4,57 @@
 
 using namespace NSQLTranslationV1;
 
+Y_UNIT_TEST_SUITE(TranslationIssuePositions) {
+
+Y_UNIT_TEST(DuplicateIndexSettingPointsToName) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table ADD INDEX idx GLOBAL ON (col)\n"
+                        "WITH (distance = cosine,\n"
+                        "  distance =\n"
+                        "    42);",
+                        "<main>:4:3: Error: Duplicated distance\n");
+}
+
+Y_UNIT_TEST(CompactSettingPointsToValue) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table COMPACT WITH (\n"
+                        "  cascade =\n"
+                        "    23);",
+                        "<main>:4:5: Error: CASCADE value should be a boolean\n");
+}
+
+Y_UNIT_TEST(UnknownCompactSettingPointsToName) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table COMPACT WITH (\n"
+                        "  unknown_option =\n"
+                        "    23);",
+                        "<main>:3:3: Error: UNKNOWN_OPTION: unknown setting for compact\n");
+}
+
+Y_UNIT_TEST(ForbiddenCoverPointsToCover) {
+    ExpectFailWithError("USE ydb;\n"
+                        "ALTER TABLE table ADD INDEX idx LOCAL USING min_max\n"
+                        "ON (col)\n"
+                        "  COVER (payload);",
+                        "<main>:4:3: Error: COVER is not supported for local MIN_MAX index\n");
+}
+
+Y_UNIT_TEST(MissingClusterPointsToTable) {
+    ExpectFailWithError("SELECT *\n"
+                        "FROM\n"
+                        "  Input;",
+                        "<main>:3:3: Error: No cluster name given and no default cluster is selected\n");
+}
+
+Y_UNIT_TEST(AsTableClusterPointsToReference) {
+    ExpectFailWithError("SELECT * FROM\n"
+                        "  plato.\n"
+                        "    AS_TABLE([]);",
+                        "<main>:2:3: Error: Cluster shouldn't be specified for AS_TABLE source\n");
+}
+
+} // Y_UNIT_TEST_SUITE(TranslationIssuePositions)
+
 Y_UNIT_TEST_SUITE(ExternalFunction) {
 Y_UNIT_TEST(ValidUseFunctions) {
     UNIT_ASSERT(SqlToYql(
@@ -46,12 +97,12 @@ Y_UNIT_TEST(ValidUseFunctions) {
 
 Y_UNIT_TEST(InValidUseFunctions) {
     ExpectFailWithError("PROCESS plato.Input USING some::udf(*) WITH INPUT_TYPE=Struct<a:Int32>",
-                        "<main>:1:33: Error: PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block\n");
+                        "<main>:1:40: Error: PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block\n");
 
     ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'jhhjfh88134d')"
                         " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>"
                         " ASSUME ORDER BY key",
-                        "<main>:1:129: Error: PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block\n");
+                        "<main>:1:138: Error: PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block\n");
 
     ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', 'bar', 'baz')",
                         "<main>:1:15: Error: EXTERNAL FUNCTION requires from 2 to 3 arguments, but got: 4\n");

@@ -23,6 +23,7 @@
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
+#include <util/system/env.h>
 #include <util/thread/factory.h>
 
 using namespace NYdb;
@@ -227,9 +228,9 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         auto ref = R"___(<main>: Error: Type annotation, code: 1030
     <main>:2:25: Error: At function: KiWriteTable!
-        <main>:2:43: Error: Failed to convert type: Struct<'Key':String,'Value':String> to Struct<'Key':Uint32?,'Value':String?>
-            <main>:2:43: Error: Failed to convert 'Key': String to Optional<Uint32>
-        <main>:2:43: Error: Failed to convert input columns types to scheme types, code: 2031
+        <main>:3:17: Error: Failed to convert type: Struct<'Key':String,'Value':String> to Struct<'Key':Uint32?,'Value':String?>
+            <main>:3:17: Error: Failed to convert 'Key': String to Optional<Uint32>
+        <main>:3:17: Error: Failed to convert input columns types to scheme types, code: 2031
 )___";
         UNIT_ASSERT_EQUAL(result.GetIssues().Size(), 1);
         UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), ref);
@@ -1811,10 +1812,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        if (GetEnv("YDB_TEST_READ_TABLE_VERBOSE") == "1") {
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        }
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -1962,9 +1965,11 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        if (GetEnv("YDB_TEST_READ_TABLE_VERBOSE") == "1") {
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        }
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -2120,9 +2125,11 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        if (GetEnv("YDB_TEST_READ_TABLE_VERBOSE") == "1") {
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        }
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 

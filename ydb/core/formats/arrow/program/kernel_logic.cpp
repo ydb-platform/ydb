@@ -69,13 +69,13 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
         auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
-        AFL_VERIFY(accessorResult.IsSuccess());
+        YDB_LOG_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     } else {
-        AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
+        YDB_LOG_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
         auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
-        AFL_VERIFY(accessorResult.IsSuccess());
+        YDB_LOG_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     }
 
@@ -121,6 +121,20 @@ std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
 
 NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilder() const {
     return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
+}
+
+NJson::TJsonValue TLogicPatternMatch::DoDebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("class", GetClassName());
+    auto& hints = result.InsertValue("hints", NJson::JSON_ARRAY);
+    for (const auto& hint : Hints) {
+        NJson::TJsonValue item = NJson::JSON_MAP;
+        item.InsertValue("input", hint.InputIndex);
+        item.InsertValue("operation", hint.Operation.DebugString());
+        item.InsertValue("value", hint.Value);
+        hints.AppendValue(std::move(item));
+    }
+    return result;
 }
 
 TString TSimpleKernelLogic::SignalDescription() const {

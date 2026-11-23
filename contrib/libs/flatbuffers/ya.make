@@ -26,8 +26,13 @@ SRCS(
     src/idl_gen_text.cpp
     src/idl_parser.cpp
     src/reflection.cpp
-    src/util.cpp
 )
+
+IF (NOT ARCH_XTENSA)
+    SRCS(
+        src/util.cpp
+    )
+ENDIF()
 
 END()
 

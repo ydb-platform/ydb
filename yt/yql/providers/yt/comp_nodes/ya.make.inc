@@ -17,14 +17,11 @@ SET(ORIG_SOURCES
 )
 
 PEERDIR(
-    library/cpp/streams/brotli
     yql/essentials/minikql
     yql/essentials/public/udf
     yql/essentials/utils
     yql/essentials/providers/common/codec
-    yql/essentials/providers/common/mkql
     yt/yql/providers/yt/codec
-    yt/yql/providers/yt/expr_nodes
 )
 
 ADDINCL(

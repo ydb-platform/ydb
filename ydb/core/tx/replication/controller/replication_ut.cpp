@@ -32,6 +32,48 @@ Y_UNIT_TEST_SUITE(Replication) {
         }
     }
 
+    Y_UNIT_TEST(CredentialReadiness) {
+        const auto ready = [](const NKikimrReplication::TConnectionParams& params) {
+            NKikimrReplication::TReplicationConfig config;
+            config.MutableSrcConnectionParams()->CopyFrom(params);
+            return MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root")->IsCredentialsReady();
+        };
+
+        NKikimrReplication::TConnectionParams params;
+        UNIT_ASSERT(ready(params)); // Local source does not need credentials.
+        params.SetEndpoint("localhost:2135");
+        UNIT_ASSERT(!ready(params));
+
+        auto* token = params.MutableOAuthToken();
+        token->SetTokenSecretName("token");
+        UNIT_ASSERT(!ready(params));
+        token->SetToken(""); // Explicit anonymous access is already resolved.
+        UNIT_ASSERT(ready(params));
+        token->SetToken("resolved-token");
+        UNIT_ASSERT(ready(params));
+
+        auto* password = params.MutableStaticCredentials();
+        password->SetUser("user");
+        password->SetPasswordSecretName("password");
+        UNIT_ASSERT(!ready(params));
+        password->SetPassword("");
+        UNIT_ASSERT(ready(params));
+        password->SetPassword("resolved-password");
+        UNIT_ASSERT(ready(params));
+
+        auto* iam = params.MutableIamCredentials();
+        iam->MutableInitialToken()->SetTokenSecretName("initial-token");
+        UNIT_ASSERT(!ready(params));
+        iam->MutableInitialToken()->SetToken("resolved-initial-token");
+        UNIT_ASSERT(!ready(params)); // Resource discovery must finish too.
+        iam->SetResourceId("resource-id");
+        UNIT_ASSERT(ready(params));
+
+        params.ClearEndpoint();
+        iam->ClearResourceId();
+        UNIT_ASSERT(ready(params));
+    }
+
     Y_UNIT_TEST(ResourceId) {
         const ui64 id = 1;
         const auto pathId = TPathId(1, 2);
@@ -74,15 +116,146 @@ Y_UNIT_TEST_SUITE(Replication) {
         UNIT_ASSERT(!replication->GetConfig().GetInitialScan());
     }
 
+    Y_UNIT_TEST(InitialStateFollowsInitialScanAndSwitchover) {
+        // A replication that takes over its destination tables must start working, not wait paused
+        // for an import that will never come: the tables already hold the data. Getting this wrong
+        // creates the targets and then never starts a worker.
+        NKikimrReplication::TReplicationConfig config;
+        config.SetInitialScan(false);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Paused);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Ready);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_IMPORT);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Paused);
+
+        config.SetBootstrap(NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN);
+        config.SetInitialScan(true);
+        UNIT_ASSERT_VALUES_EQUAL(InitialReplicationState(config), TReplication::EState::Ready);
+    }
+
+    struct TLagSetup {
+        TReplication::TPtr Replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
+            NKikimrReplication::TReplicationConfig(), "/Root/db");
+        TReplication::ITarget* Target;
+        TReplication::ITarget* Other;
+
+        TLagSetup() {
+            const auto add = [&](const TString& path) {
+                const auto id = Replication->AddTarget(TReplication::ETargetKind::Table,
+                    std::make_shared<TTargetTable::TTableConfig>(path, path + "_replica"));
+                return Replication->FindTarget(id);
+            };
+            Target = add("/Root/table");
+            Other = add("/Root/other");
+            Target->AddWorker(1);
+            Target->AddWorker(2);
+            Other->AddWorker(1);
+            Target->UpdateLag(1, TDuration::Seconds(5));
+            Target->UpdateLag(2, TDuration::Seconds(5));
+            Other->UpdateLag(1, TDuration::Seconds(2));
+        }
+    };
+
+    Y_UNIT_TEST(WorkerLagPropagatesMaximumChanges) {
+        TLagSetup s;
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+        s.Target->UpdateLag(1, TDuration::Seconds(10));
+        UNIT_ASSERT(s.Target->GetLag() == TDuration::Seconds(10));
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(10));
+        s.Target->UpdateLag(1, TDuration::Seconds(1));
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+    }
+
+    Y_UNIT_TEST(LagCallbackTracksAggregateChanges) {
+        TLagSetup s;
+        TVector<std::optional<TDuration>> changes;
+        s.Replication->SetLagChangedCallback([&] {
+            changes.push_back(s.Replication->GetLag());
+        });
+
+        s.Target->UpdateLag(1, TDuration::Seconds(1)); // Maximum stays at five.
+        s.Target->AddWorker(3);
+        s.Target->InvalidateLag(3); // Already unavailable.
+        s.Target->RemoveWorker(3);
+        s.Target->RemoveWorker(2); // Maximum drops to the other target's two.
+        s.Other->RemoveWorker(1);
+        s.Replication->RemoveTarget(s.Other->GetId());
+        const auto added = s.Replication->AddTarget(ui64(100), TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/new", "/Root/new_replica"));
+        s.Replication->RemoveTarget(added->GetId());
+        const auto next = s.Replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/next", "/Root/next_replica"));
+        s.Replication->RemoveTarget(next);
+
+        const TVector<std::optional<TDuration>> expected{
+            std::nullopt, TDuration::Seconds(5), TDuration::Seconds(2),
+            std::nullopt, TDuration::Seconds(1), std::nullopt, TDuration::Seconds(1),
+            std::nullopt, TDuration::Seconds(1)};
+        UNIT_ASSERT_VALUES_EQUAL(changes.size(), expected.size());
+        for (size_t i = 0; i < changes.size(); ++i) {
+            UNIT_ASSERT_C(changes[i] == expected[i], "lag callback " << i);
+        }
+
+        s.Replication->SetLagChangedCallback({});
+        s.Target->InvalidateLag(1);
+        UNIT_ASSERT_VALUES_EQUAL(changes.size(), expected.size());
+    }
+
+    Y_UNIT_TEST(InvalidWorkerLagCannotBeMasked) {
+        TLagSetup s;
+        s.Target->InvalidateLag(1);
+        s.Target->InvalidateLag(1); // Repeated invalidation is harmless.
+        UNIT_ASSERT(!s.Target->GetLag());
+        UNIT_ASSERT(!s.Replication->GetLag());
+        UNIT_ASSERT(s.Other->GetLag() == TDuration::Seconds(2));
+        s.Target->UpdateLag(2, TDuration::Seconds(20));
+        UNIT_ASSERT(!s.Replication->GetLag());
+        s.Target->UpdateLag(1, TDuration::Seconds(1));
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(20));
+    }
+
+    Y_UNIT_TEST(AddingWorkerInvalidatesLagUntilReportOrRemoval) {
+        TLagSetup s;
+        s.Target->AddWorker(1); // Existing workers keep their state.
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+        s.Target->AddWorker(3);
+        UNIT_ASSERT(!s.Replication->GetLag());
+        s.Target->RemoveWorker(3);
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+        s.Target->AddWorker(3);
+        s.Target->UpdateLag(3, TDuration::Seconds(9));
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(9));
+    }
+
+    Y_UNIT_TEST(RemovingWorkerClearsLagAndInvalidState) {
+        TLagSetup s;
+        s.Target->UpdateLag(1, TDuration::Seconds(20));
+        s.Target->RemoveWorker(1);
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+        s.Target->AddWorker(1);
+        s.Target->UpdateLag(1, TDuration::Seconds(20));
+        s.Target->InvalidateLag(1);
+        s.Target->RemoveWorker(1);
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
+        s.Target->RemoveWorker(1);
+        s.Target->RemoveWorker(2);
+        UNIT_ASSERT(!s.Target->GetLag());
+        UNIT_ASSERT(!s.Replication->GetLag());
+        s.Replication->RemoveTarget(s.Target->GetId());
+        UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(2));
+    }
+
     Y_UNIT_TEST(RemoveTargetClearsReportedLag) {
         auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
             NKikimrReplication::TReplicationConfig(), "/Root/db");
         const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
         const auto index = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value", false));
         const auto otherIndex = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/other", "/Root/replica/other"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/other", "/Root/replica/other", false));
         replication->UpdateLag(base, TDuration::Seconds(1));
         replication->UpdateLag(index, TDuration::Seconds(20));
         replication->UpdateLag(otherIndex, TDuration::Seconds(20));
@@ -110,7 +283,7 @@ Y_UNIT_TEST_SUITE(Replication) {
         const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
         const auto index = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value"));
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/table/by_value", "/Root/replica/by_value", false));
         replication->UpdateLag(base, TDuration::Seconds(1));
         UNIT_ASSERT(!replication->GetLag());
 

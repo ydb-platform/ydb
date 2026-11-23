@@ -39,6 +39,7 @@ public:
         ETargetKind GetKind() const override;
         const TString& GetSrcPath() const override;
         const TString& GetDstPath() const override;
+        bool GetSrcIsImpl() const override;
 
     private:
         const ETargetKind Kind;
@@ -66,8 +67,6 @@ public:
 
     const TPathId& GetDstPathId() const override;
     void SetDstPathId(const TPathId& value) override;
-    const TPathId& GetPendingDstPathId() const override;
-    void SetPendingDstPathId(const TPathId& value) override;
 
     const TString& GetStreamName() const override;
     void SetStreamName(const TString& value) override;
@@ -87,6 +86,7 @@ public:
     void RemoveWorker(ui64 id) override;
     TVector<ui64> GetWorkers() const override;
     void UpdateLag(ui64 workerId, TDuration lag) override;
+    void InvalidateLag(ui64 workerId) override;
     const std::optional<TDuration> GetLag() const override;
 
     void Progress(const TActorContext& ctx) override;
@@ -95,6 +95,8 @@ public:
 
     void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
 
+    TString GetSrcIndexPath() const override;
+
 private:
     TReplication* const Replication;
     const ETargetKind Kind;
@@ -102,7 +104,6 @@ private:
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;
-    TPathId PendingDstPathId;
     TString StreamName;
     TString StreamConsumerName;
     EStreamState StreamState = EStreamState::Ready;

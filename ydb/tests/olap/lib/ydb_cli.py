@@ -320,7 +320,7 @@ class YdbCliHelper:
             host = YdbCluster.get_client_host()
         if remote_execution.is_localhost(host):
             # Functional tests can execute the built CLI without copying it for every chunk.
-            return cls.get_cli_path()
+            return os.path.abspath(cls.get_cli_path())
         if not target_dir:
             target_dir = remote_execution.get_remote_tmp_path(host, 'ydb_cli', str(time()))
         remote_path = os.path.join(target_dir, os.path.basename(cls.get_cli_path()))

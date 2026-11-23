@@ -2,6 +2,8 @@
 #include "read_iterator_sampling.h"
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
+#include "hnsw_index/hnsw_index.h"
+#include "hnsw_index/hnsw_index_build_actor.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 #include "probes.h"
@@ -17,6 +19,7 @@
 #include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <util/system/hp_timer.h>
+#include <util/generic/scope.h>
 
 #include <cmath>
 #include <utility>
@@ -28,6 +31,30 @@ LWTRACE_USING(DATASHARD_PROVIDER)
 namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
+
+namespace {
+
+bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state, TPathId indexId) {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        return false;
+    }
+    // ANN candidate reads cannot observe conflicts on rows they did not visit.
+    if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().HasVolatileTxsAtSnapshot(state.ReadVersion)) {
+        return false;
+    }
+    const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
+    const auto& record = state.Request->Record;
+    const auto* index = table->HnswIndexes.FindPtr(indexId);
+    if (!index || !record.HasVectorTopK()
+            || record.GetVectorTopK().GetColumn() >= record.ColumnsSize()
+            || index->VectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
+        return false;
+    }
+    return !shard.IsFollower() && !state.ReadVersion.IsMax();
+}
+
+} // namespace
+
 
 struct TReadIteratorVectorTopItem {
     TOwnedCellVec Row;
@@ -51,6 +78,14 @@ struct TReadIteratorVectorTop {
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<ui32> DistinctColumns;
+
+    // Set when a ready in-memory HNSW index is available for this table/column;
+    // if set, TReader::IterateRange uses it instead of the brute-force scan below.
+    std::shared_ptr<NDataShard::THnswIndex> HnswIndex;
+    TPathId HnswIndexId;
+    std::shared_ptr<void> HnswReadPin;
+    std::optional<THnswSearchResult> HnswCandidates;
+    TRowVersion HnswCandidatesVersion = TRowVersion::Max();
 
     std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
@@ -220,13 +255,16 @@ public:
 public:
     void FlushBatch(TOwnedCellVecBatch & result) {
         result = std::move(Batch);
-        Batch = {};
+        Batch = TOwnedCellVecBatch(std::make_unique<TMemoryPool>(InitialPoolSize));
     }
 
 private:
+    // Reserve 256 bytes for the private pool chunk header so the first allocation rounds to 8 KiB.
+    static constexpr size_t InitialPoolSize = 8 * 1024 - 256;
+
     std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
-    TOwnedCellVecBatch Batch;
+    TOwnedCellVecBatch Batch{std::make_unique<TMemoryPool>(InitialPoolSize)};
     ui64 BytesCount = 0;
 
     std::unique_ptr<IBlockBuilder> Clone() const override {
@@ -249,11 +287,14 @@ struct TShortColumnInfo {
 struct TShortTableInfo {
     TShortTableInfo() = default;
 
-    TShortTableInfo(const TUserTable::TCPtr& tableInfo) {
+    TShortTableInfo(const TUserTable::TCPtr& tableInfo, bool vectorTopK = false) {
         LocalTid = tableInfo->LocalTid;
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
+        if (vectorTopK && AppData()->FeatureFlags.GetEnableHnswIndex() && !tableInfo->HnswIndexes.empty()) {
+            HnswTable = tableInfo;
+        }
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
@@ -304,11 +345,29 @@ struct TShortTableInfo {
         return result;
     }
 
+    bool CoversFullShard(const TTableRange& range) const {
+        if (range.Point) {
+            return false;
+        }
+        if (range.IsFullRange(KeyColumnCount)) {
+            return true;
+        }
+        if (!HnswTable) {
+            return false;
+        }
+        const auto shardRange = HnswTable->Range.ToTableRange();
+        return CompareBorders<false, false>(range.From, shardRange.From,
+                   range.InclusiveFrom, shardRange.InclusiveFrom, KeyColumnTypes) <= 0
+            && CompareBorders<true, true>(range.To, shardRange.To,
+                   range.InclusiveTo, shardRange.InclusiveTo, KeyColumnTypes) >= 0;
+    }
+
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
+    TUserTable::TCPtr HnswTable;
 };
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
@@ -520,6 +579,9 @@ public:
         iterRange.MaxKey = keyTo;
         iterRange.MinInclusive = fromInclusive;
         iterRange.MaxInclusive = toInclusive;
+        const TTableRange tableRange(
+            keyFromCells.GetCells(), fromInclusive,
+            keyToCells.GetCells(), toInclusive);
         const bool reverse = State.Reverse;
 
         if (TArrayRef<const TCell> cells = (reverse ? keyToCells.GetCells() : keyFromCells.GetCells())) {
@@ -538,10 +600,10 @@ public:
 
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), iterRange, txc);
+            result = IterateRange(iter.Get(), iterRange, tableRange, txc);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), iterRange, txc);
+            result = IterateRange(iter.Get(), iterRange, tableRange, txc);
         }
 
         txc.Env.DisableReadMissingReferences();
@@ -1316,8 +1378,151 @@ private:
                             State.ReadVersion);
     }
 
+    // Distinct posting-table keys may refer to the same base row. Allow one
+    // candidate expansion, then fall back to the exact scan. Each Search scans
+    // the change journal, so low-cardinality distinct keys must not cause an
+    // unbounded number of graph searches and journal distance calculations.
+    // Non-key distinct values require the exact table path.
+    THnswSearchResult SearchHnswDistinct() const {
+        const auto& topK = *State.VectorTopK;
+        const auto& keyColumnIds = TableInfo.HnswTable->KeyColumnIds;
+        TVector<size_t> positions;
+        for (ui32 columnIndex : topK.DistinctColumns) {
+            const auto tag = State.Columns[columnIndex];
+            const auto it = Find(keyColumnIds.begin(), keyColumnIds.end(), tag);
+            if (it == keyColumnIds.end()) {
+                return THnswSearchResult{.Covered = false};
+            }
+            positions.push_back(it - keyColumnIds.begin());
+        }
+        const size_t available = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
+        size_t requested = Min(available, static_cast<size_t>(topK.Limit));
+        constexpr size_t MaxSearchAttempts = 2;
+        for (size_t attempt = 0; attempt < MaxSearchAttempts; ++attempt) {
+            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion);
+            if (!candidates.Covered || positions.empty()) {
+                return candidates;
+            }
+            THnswSearchResult unique;
+            THashSet<TString> seen;
+            for (auto& candidate : candidates.Results) {
+                const TSerializedCellVec key(candidate.first);
+                TVector<TCell> cells;
+                for (size_t position : positions) {
+                    cells.push_back(key.GetCells().at(position));
+                }
+                if (seen.insert(TSerializedCellVec::Serialize(cells)).second) {
+                    unique.Results.push_back(std::move(candidate));
+                    if (unique.Results.size() == topK.Limit) {
+                        return unique;
+                    }
+                }
+            }
+            if (requested == available) {
+                return unique;
+            }
+            requested += Min(requested, available - requested);
+        }
+        return THnswSearchResult{.Covered = false};
+    }
+
+    std::optional<EReadStatus> MaterializeHnswResults(
+        const THnswSearchResult& results,
+        TTransactionContext& txc)
+    {
+        auto& topK = *State.VectorTopK;
+
+        TVector<TSerializedCellVec> keys;
+        keys.reserve(results.Results.size());
+        for (const auto& [serializedKey, _] : results.Results) {
+            keys.emplace_back(serializedKey);
+        }
+
+        bool ready = true;
+        for (const auto& keyCells : keys) {
+            ready &= PrechargeKey(txc, keyCells).Ready;
+        }
+        if (!ready) {
+            return EReadStatus::NeedData;
+        }
+
+        // Precharge loads pages, but Select may still request external blobs.
+        // Collect rows before mutating VectorTopK, so retrying a missing page
+        // or blob cannot append the same row twice.
+        struct TFetchedRow {
+            NTable::TRowState RowState;
+        };
+        TVector<TFetchedRow> fetched;
+        fetched.reserve(keys.size());
+
+        for (size_t i = 0; i < keys.size(); ++i) {
+            const auto rawKey = ToRawTypeValue(keys[i].GetCells(), TableInfo, /* addNulls */ false);
+
+            TFetchedRow row;
+            row.RowState.Init(State.Columns.size());
+            NTable::TSelectStats stats;
+            auto status = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, row.RowState, stats, 0,
+                State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+            if (status == NTable::EReady::Page || txc.Env.MissingReferencesSize()) {
+                // ReadMissingReferences permits Data with unresolved cells.
+                // Retry before accepting any candidate or updating VectorTopK.
+                return EReadStatus::NeedData;
+            }
+            if (status == NTable::EReady::Gone) {
+                // The journal should already have filtered a visible deletion.
+                // Discard an inconsistent graph and finish through the scan.
+                Self->InvalidateHnswIndex(TableInfo.LocalTid, topK.HnswIndexId);
+                return {};
+            }
+            fetched.emplace_back(std::move(row));
+        }
+
+        if (ColumnTypes.empty()) {
+            ColumnTypes = TableInfo.GetColumnTypes(State.Columns);
+        }
+
+        for (const auto& row : fetched) {
+            TDbTupleRef value(ColumnTypes.data(), (*row.RowState).data(), ColumnTypes.size());
+            RowsProcessed++;
+            topK.AddRow(value.Cells());
+        }
+
+        return EReadStatus::Done;
+    }
+
     template <typename TIterator>
-    EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
+    EReadStatus IterateRange(
+        TIterator* iter,
+        NTable::TKeyRange& iterRange,
+        const TTableRange& tableRange,
+        TTransactionContext& txc)
+    {
+        // ANN replaces only reads covering the complete local partition.
+        // Restricted ranges retain their exact table-scan semantics.
+        if (State.VectorTopK && State.VectorTopK->HnswIndex
+                && CanUseHnsw(*Self, State, State.VectorTopK->HnswIndexId)
+                && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)) {
+            if (TableInfo.CoversFullShard(tableRange)) {
+                auto& topK = *State.VectorTopK;
+                if (!topK.HnswCandidates || topK.HnswCandidatesVersion != State.ReadVersion) {
+                    topK.HnswReadPin = topK.HnswIndex->PinReadVersion(State.ReadVersion);
+                    topK.HnswCandidates = SearchHnswDistinct();
+                    topK.HnswCandidatesVersion = State.ReadVersion;
+                }
+                const auto& results = *topK.HnswCandidates;
+                // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
+                // the exact path when it cannot supply enough visible neighbors.
+                if (results.Covered && results.Results.size() >= State.VectorTopK->Limit) {
+                    if (const auto status = MaterializeHnswResults(results, txc)) {
+                        return *status;
+                    }
+                }
+            }
+            Self->RegisterHnswFallback(TableInfo.LocalTid, TableInfo.CoversFullShard(tableRange)
+                ? TDataShard::EHnswFallback::Candidates : TDataShard::EHnswFallback::PartialRange, State.VectorTopK->HnswIndexId);
+        }
+
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
@@ -1610,6 +1815,11 @@ std::unique_ptr<TEvDataShard::TEvReadResult> MakeEvReadResult(ui32 nodeId) {
 
 
 const TDuration MaxTimePerIteration = TDuration::MilliSeconds(10);
+
+TString ZeroReadQuotaError(const NKikimrTxDataShard::TEvRead& request) {
+    return TStringBuilder() << "Request " << request.GetReadId() << " rejected, resource pool "
+        << request.GetPoolId() << " has zero CPU quota";
+}
 
 const NHPTimer::STime TReader::MaxCyclesPerIteration =
     ((NHPTimer::GetCyclesPerSecond() * MaxTimePerIteration.MicroSeconds()) + TDuration::Seconds(1).MicroSeconds() - 1)
@@ -1972,10 +2182,6 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     size_t ExecuteCount = 0;
     bool ResultSent = false;
 
-    // Set when the read quota was exhausted in Execute(): instead of replying
-    // with an error, the iterator is kept and a delayed continue is scheduled.
-    TMaybe<TDuration> ThrottleDelay;
-
     std::unique_ptr<TEvDataShard::TEvReadResult> Result;
 
     std::unique_ptr<IBlockBuilder> BlockBuilder;
@@ -2119,6 +2325,7 @@ public:
 
                 // Switch to repeatable read at the same version
                 SetMvccSnapshot(state.ReadVersion, /* isRepeatable */ true);
+                state.SnapshotAcquired |= Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
 
                 // We may have had repeatable read conflicts, promote them
                 PromoteRepeatableReadConflicts();
@@ -2206,7 +2413,8 @@ public:
                 }
 
                 if (!snapshotFound) {
-                    bool isMvccReadable = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                    bool isMvccReadable = Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                        TTableId(state.PathId), state.ReadVersion, state.SnapshotAcquired);
                     if (!isMvccReadable) {
                         SetStatusError(
                             Result->Record,
@@ -2297,6 +2505,22 @@ public:
             }
         }
 
+        const auto schedulableRead = state.SchedulableRead;
+        if (schedulableRead) {
+            // Admission happened before entering the pipeline. Do not prolong
+            // dependencies with quota waits, including after a page-fault restart.
+            if (!schedulableRead->ConsumeQuotaForAdmittedRead(MaxTimePerIteration)) {
+                SetStatusError(Result->Record, Ydb::StatusIds::PRECONDITION_FAILED, ZeroReadQuotaError(request->Record));
+                return EExecutionStatus::DelayComplete;
+            }
+        }
+        NHPTimer::STime readCycles = 0;
+        Y_DEFER {
+            if (schedulableRead) {
+                schedulableRead->ReturnQuota(readCycles);
+            }
+        };
+
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
@@ -2335,28 +2559,27 @@ public:
             }
         }
 
-        const auto& schedulableRead = state.SchedulableRead;
-        if (schedulableRead && !schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
-            // Read quota for the resource pool is exhausted - keep the iterator alive
-            // and resume it via the cheaper TTxReadContinue path after a delay.
-            // The reschedule itself is done in Complete().
-            ThrottleDelay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
-            return EExecutionStatus::DelayComplete;
-        }
-
         LWTRACK(ReadExecute, state.Request->Orbit);
         if (state.Sampling) {
             state.SamplingStats.SetExecutions(state.SamplingStats.GetExecutions() + 1);
         }
+        // A preparation error must not leave a reader from an earlier attempt.
+        Reader.reset();
         bool readResult = Read(txc, ctx, state);
 
-        if (schedulableRead) {
+        if (schedulableRead && Reader) {
             Reader->UpdateCycles();
-            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+            readCycles = Reader->ElapsedCycles();
         }
 
         if (!readResult) {
             return EExecutionStatus::Restart;
+        }
+
+        // Preparation may fail before Reader exists. Do not acquire locks or
+        // inspect the reader on this path; the scope above returns the reservation.
+        if (Result && Result->Record.HasStatus()) {
+            return EExecutionStatus::DelayComplete;
         }
 
         // Check if successful result depends on unresolved volatile transactions
@@ -2516,7 +2739,7 @@ public:
             Y_ENSURE(it != Self->TableInfos.end());
 
             auto& userTableInfo = it->second;
-            TableInfo = TShortTableInfo(userTableInfo);
+            TableInfo = TShortTableInfo(userTableInfo, record.HasVectorTopK());
 
             Y_ENSURE(!userTableInfo->IsBackup);
 
@@ -2683,11 +2906,19 @@ public:
             } else if (!topK.HasTargetVector()) {
                 error = "Target vector is not specified";
             } else {
+                // The exact-scan distance calculator does not consume HNSW
+                // construction settings. Keep them in topK for graph selection
+                // and rebuilds, including when this read falls back to a scan.
+                auto distanceSettings = topK.GetSettings();
+                distanceSettings.clear_m();
+                distanceSettings.clear_ef_construction();
+                distanceSettings.clear_min_rows();
+                distanceSettings.clear_delta_rows();
                 // Use auto-detect if vector_dimension is 0 (brute force search without index)
-                if (topK.GetSettings().vector_dimension() == 0) {
-                    topState->KMeans = NKMeans::CreateClustersAutoDetect(topK.GetSettings(), topK.GetTargetVector(), 0, error);
+                if (distanceSettings.vector_dimension() == 0) {
+                    topState->KMeans = NKMeans::CreateClustersAutoDetect(distanceSettings, topK.GetTargetVector(), 0, error);
                 } else {
-                    topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
+                    topState->KMeans = NKMeans::CreateClusters(distanceSettings, 0, error);
                 }
                 if (!topState->KMeans && error.empty()) {
                     error = "CreateClusters failed";
@@ -2711,6 +2942,54 @@ public:
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();
+
+            if (AppData()->FeatureFlags.GetEnableHnswIndex() && TableInfo.HnswTable) {
+                const ui32 localTid = TableInfo.LocalTid;
+                const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
+                auto requested = topK.GetSettings();
+                if (NKMeans::NeedsVectorSettingsAutoSelect(requested)) {
+                    NKMeans::AutoSelectVectorSettings(requested, topK.GetTargetVector());
+                }
+                TPathId selected;
+                Ydb::Table::VectorIndexSettings hnswSettings;
+                for (const auto& [id, metadata] : TableInfo.HnswTable->HnswIndexes) {
+                    if (topK.HasHnswIndexId() && id != TPathId::FromProto(topK.GetHnswIndexId())) {
+                        continue;
+                    }
+                    auto candidate = requested;
+                    if (!candidate.has_m() && metadata.Settings.has_m()) { candidate.set_m(metadata.Settings.m()); }
+                    if (!candidate.has_ef_construction() && metadata.Settings.has_ef_construction()) { candidate.set_ef_construction(metadata.Settings.ef_construction()); }
+                    if (metadata.VectorColumnTag != vectorColumnTag
+                            || !AreHnswIndexSettingsCompatible(metadata.Settings, candidate)) {
+                        continue;
+                    }
+                    if (selected) {
+                        selected = {}; // Ambiguous legacy request: keep the exact scan.
+                        break;
+                    }
+                    selected = id;
+                    hnswSettings = metadata.Settings;
+                    // Threshold overrides affect when to build, not graph compatibility.
+                    if (requested.has_min_rows()) { hnswSettings.set_min_rows(requested.min_rows()); }
+                    if (requested.has_delta_rows()) { hnswSettings.set_delta_rows(requested.delta_rows()); }
+                }
+                topState->HnswIndexId = selected;
+                const bool canUseHnsw = selected && CanUseHnsw(*Self, state, selected);
+                if (selected && !canUseHnsw) {
+                    Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead, selected);
+                }
+                if (canUseHnsw) {
+                    topState->HnswIndex = Self->GetHnswIndex(localTid, vectorColumnTag,
+                        hnswSettings, false, state.ReadVersion, selected);
+                    if (topState->HnswIndex) {
+                        topState->HnswReadPin = topState->HnswIndex->PinReadVersion(state.ReadVersion);
+                    }
+                    Self->RegisterHnswCacheLookup(localTid, bool(topState->HnswIndex), selected);
+                }
+                if (canUseHnsw && !topState->HnswIndex) {
+                    Self->RequestHnswIndexBuild(localTid, vectorColumnTag, hnswSettings, selected);
+                }
+            }
             state.VectorTopK = std::move(topState);
         }
 
@@ -2824,19 +3103,6 @@ public:
             {"iterator", state.ReadId},
             {"executeCount", ExecuteCount});
 
-        if (ThrottleDelay) {
-            // Read quota was exhausted in Execute(): keep the iterator and resume
-            // it via TTxReadContinue after the delay. No result is sent here.
-            // ReadContinuePending prevents ReadAck from scheduling a duplicate.
-            state.ReadContinuePending = true;
-            ctx.Schedule(*ThrottleDelay, new TEvDataShard::TEvReadContinue(LocalReadId));
-            YDB_LOG_TRACE_CTX(ctx, "Read iterator throttled, rescheduling continue after throttle delay",
-                {"tabletId", Self->TabletID()},
-                {"iterator", state.ReadId},
-                {"throttleDelay", *ThrottleDelay});
-            return;
-        }
-
         SendResult(ctx);
 
         it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
@@ -2884,7 +3150,7 @@ private:
                 return true;
             }
             auto userTableInfo = it->second;
-            TableInfo = TShortTableInfo(userTableInfo);
+            TableInfo = TShortTableInfo(userTableInfo, state.Request->Record.HasVectorTopK());
             auto currentSchemaVersion = TableInfo.SchemaVersion;
             if (state.SchemaVersion != currentSchemaVersion) {
                 SetStatusError(
@@ -2927,7 +3193,8 @@ private:
             }
 
             if (!snapshotFound) {
-                bool isMvccReadable = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                bool isMvccReadable = Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                    TTableId(state.PathId), state.ReadVersion, state.SnapshotAcquired);
                 if (!isMvccReadable) {
                     SetStatusError(
                         Result->Record,
@@ -3312,6 +3579,27 @@ public:
 
             Y_ENSURE(state.State == TReadIteratorState::EState::Init);
             state.EnqueuedLocalTxId = 0;
+            state.ReadContinuePending = false;
+
+            // Wait before building the operation or registering dependencies.
+            // This is admission only: no quota/CPU slot is held while queued or
+            // waiting for pages, dependencies or commit. Once admitted, the first
+            // operation accounts every read attempt without further quota waits.
+            if (const auto& read = state.SchedulableRead) {
+                if (!read->TryConsumeQuota(MaxTimePerIteration)) {
+                    const auto delay = read->EstimateQuotaDelay(MaxTimePerIteration);
+                    if (!delay) {
+                        ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, ZeroReadQuotaError(record), ctx.SelfID.NodeId(), state);
+                        Reply->Record.SetSeqNo(state.SeqNo + 1);
+                        return true;
+                    }
+                    state.ReadContinuePending = true;
+                    ctx.Schedule(*delay,
+                        new TEvDataShard::TEvReadContinue(LocalReadId));
+                    return true;
+                }
+                read->ReturnQuota();
+            }
 
             bool setUsingSnapshotFlag = false;
 
@@ -3391,7 +3679,10 @@ public:
                     if (!snapshotFound) {
                         bool snapshotUnavailable = false;
 
-                        if (state.ReadVersion < Self->GetSnapshotManager().GetLowWatermark() || state.ReadVersion.Step == Max<ui64>()) {
+                        if (!Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                                TTableId(state.PathId), state.ReadVersion)
+                            || state.ReadVersion.Step == Max<ui64>())
+                        {
                             snapshotUnavailable = true;
                         }
 
@@ -3478,6 +3769,12 @@ public:
 
                 // We don't want this read to interact with other operations
                 setUsingSnapshotFlag = true;
+            }
+
+            if (state.PathId.OwnerId == Self->GetPathOwnerId() && !state.IsHeadRead && !Self->IsFollower()) {
+                // Admission and local protection happen in the same transaction.
+                // The iterator outlives its initial pipeline operation.
+                state.SnapshotAcquired = Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
             }
 
             Op = new TReadOperation(Self, ctx.Now(), LocalReadId);
@@ -3684,7 +3981,7 @@ public:
                 return true;
             }
             auto userTableInfo = it->second;
-            TableInfo = TShortTableInfo(userTableInfo);
+            TableInfo = TShortTableInfo(userTableInfo, state.Request->Record.HasVectorTopK());
             auto currentSchemaVersion = TableInfo.SchemaVersion;
             if (state.SchemaVersion != currentSchemaVersion) {
                 SetStatusError(
@@ -3729,7 +4026,8 @@ public:
             }
 
             if (!snapshotFound) {
-                bool isMvccReadable = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                bool isMvccReadable = Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                    TTableId(state.PathId), state.ReadVersion, state.SnapshotAcquired);
                 if (!isMvccReadable) {
                     SetStatusError(
                         Result->Record,
@@ -3781,13 +4079,19 @@ public:
         const auto& schedulableRead = state.SchedulableRead;
         if (schedulableRead) {
             if (!schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
+                const auto delay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
+                if (!delay) {
+                    SetStatusError(Result->Record, Ydb::StatusIds::PRECONDITION_FAILED, ZeroReadQuotaError(state.Request->Record));
+                    SendResult(ctx);
+                    return true;
+                }
                 // KQP read quota exhausted, reschedule with delay.
                 // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
                 state.ReadContinuePending = true;
                 Reader.reset();
                 Result.reset();
                 ctx.Schedule(
-                    schedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
+                    *delay,
                     new TEvDataShard::TEvReadContinue(LocalReadId));
                 return true;
             }
@@ -4131,6 +4435,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     if (!Pipeline.CheckInflightLimit()) {
+        // Advance admitted work before replying to overload/retry traffic.
+        Executor()->TryExecuteReadyTransaction();
         replyWithError(
             Ydb::StatusIds::OVERLOADED,
             TStringBuilder() << "Request " << readId.ReadId << " rejected, MaxTxInFly was exceeded"
@@ -4179,7 +4485,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         schedulableRead = SchedulableReadFactory->Get(record.GetDatabaseId(), record.GetPoolId());
         if (schedulableRead && !schedulableRead->IsValid()) {
             replyWithError(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
-                << "Request " << readId.ReadId << " rejected, resource pool " << record.GetPoolId() << " has zero CPU quota"
+                << ZeroReadQuotaError(record)
                 << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
             return;
         }
@@ -4240,10 +4546,28 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
     // Explicitly set ReadContinuePending so ReadAck won't schedule a duplicate
     // continue regardless of what may have cleared the flag before this point.
     if (state.SchedulableRead && !state.SchedulableRead->HasAvailableQuota()) {
+        const auto delay = state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
+        if (!delay) {
+            auto result = MakeEvReadResult(ctx.SelfID.NodeId());
+            const auto issue = ZeroReadQuotaError(state.Request->Record);
+            SetStatusError(result->Record, Ydb::StatusIds::PRECONDITION_FAILED, issue);
+            result->Record.SetReadId(state.ReadId.ReadId);
+            result->Record.SetSeqNo(state.SeqNo + 1);
+            SendImmediateReadResult(state.ReadId.Sender, result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
+            state.Request->ReadSpan.EndError(issue);
+            DeleteReadIterator(it);
+            return;
+        }
         state.ReadContinuePending = true;
         ctx.Schedule(
-            state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
+            *delay,
             new TEvDataShard::TEvReadContinue(localReadId));
+        return;
+    }
+
+    if (state.State == TReadIteratorState::EState::Init) {
+        state.EnqueuedLocalTxId = Executor()->EnqueueLowPriority(
+            new TTxReadViaPipeline(this, localReadId, state.Request->ReadSpan.GetTraceId()));
         return;
     }
 

@@ -46,6 +46,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     }
 
     if (op.PartitionsToAddSize()) {
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("creating topic with providing of partitions count is forbidden");
         return nullptr;
     }
@@ -59,6 +60,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (op.HasPQTabletConfig() && op.GetPQTabletConfig().HasPartitionStrategy()) {
         const auto strategy = op.GetPQTabletConfig().GetPartitionStrategy();
         if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
             return nullptr;
         }
@@ -191,10 +193,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     tabletConfig.SetYdbDatabasePath(databasePath);
 
     Y_PROTOBUF_SUPPRESS_NODISCARD tabletConfig.SerializeToString(&pqGroupInfo->TabletConfig);
-
-    if (op.HasBootstrapConfig()) {
-        Y_PROTOBUF_SUPPRESS_NODISCARD op.GetBootstrapConfig().SerializeToString(&pqGroupInfo->BootstrapConfig);
-    }
 
     return pqGroupInfo;
 }

@@ -226,11 +226,11 @@ public:
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
         Exporter = exporter.DetachResult().release();
         auto initialState = Exporter->Prepare(Driver.get(), MakeRowSchema());
-        AFL_VERIFY(initialState.Scan == NTable::EScan::Feed);
+        YDB_LOG_VERIFY(initialState.Scan == NTable::EScan::Feed);
 
         NTable::TLead lead;
         auto seekState = Exporter->Seek(lead, 0);
-        AFL_VERIFY(seekState == NTable::EScan::Feed);
+        YDB_LOG_VERIFY(seekState == NTable::EScan::Feed);
         LastActivityTime = TInstant::Now();
         ScheduleDiagnostics();
         Become(&TThis::StateMain);
@@ -331,7 +331,9 @@ public:
             {"txId", msg.TxId},
             {"status", static_cast<ui8>(msg.Status)});
         auto it = S3Uploads.find(msg.TxId);
-        AFL_VERIFY(it != S3Uploads.end())("tx_id", msg.TxId)("event", "ChangeS3UploadStatus without prior StoreS3UploadId");
+        YDB_LOG_VERIFY(it != S3Uploads.end(),
+            {"txId", msg.TxId},
+            {"event", "ChangeS3UploadStatus without prior StoreS3UploadId"});
         it->second.Status = msg.Status;
         it->second.Error = std::move(msg.Error);
         it->second.Parts = std::move(msg.Parts);
@@ -340,6 +342,9 @@ public:
 
     void Handle(const TEvPrivate::TEvBackupExportRecordBatch::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
+        if (event.Generation != Generation) {
+            return;
+        }
         DataQueue.emplace(event.Data, event.IsLast);
         ++TotalBatchesReceived;
         Counters.OnBatchReceived();
@@ -357,13 +362,20 @@ public:
             return;
         }
         DrainQueue();
+        if (LastState == NTable::EScan::Final) {
+            SendFinalResult();
+            return;
+        }
         SendIntermediateResult();
         MarkAsLast();
+        if (LastState == NTable::EScan::Final) {
+            SendFinalResult();
+        }
     }
 
     void SendIntermediateResult() {
         if (!CurrentBatch.HasMoreRows() && !CurrentBatch.IsLast && CurrentBatch.NeedResult) {
-            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(false));
+            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(false, Generation));
             CurrentBatch.NeedResult = false;
             ++TotalIntermediateResults;
             Counters.OnIntermediateResultSent();
@@ -387,7 +399,7 @@ public:
                     {"totalBatchesReceived", TotalBatchesReceived},
                     {"totalRowsFed", TotalRowsFed},
                     {"totalIntermediateResults", TotalIntermediateResults});
-                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
+                Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true, Generation));
                 break;
             case NDataShard::EExportOutcome::Error:
                 Counters.OnError();
@@ -447,7 +459,7 @@ public:
             }
 
             FeedRowsToExporter();
-            if (LastState == NTable::EScan::Sleep) {
+            if (LastState == NTable::EScan::Sleep || LastState == NTable::EScan::Final) {
                 return;
             }
         }
@@ -472,6 +484,12 @@ public:
                 Counters.OnRowsFed(rowsFedInBatch);
                 return;
             }
+            if (result == NTable::EScan::Final) {
+                LastState = NTable::EScan::Final;
+                TotalRowsFed += rowsFedInBatch;
+                Counters.OnRowsFed(rowsFedInBatch);
+                return;
+            }
         }
         TotalRowsFed += rowsFedInBatch;
         Counters.OnRowsFed(rowsFedInBatch);
@@ -480,12 +498,19 @@ public:
     void Handle(const TEvPrivate::TEvBackupExportState::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
         if (event.State == NTable::EScan::Reset) {
-            Fail(
-                "ColumnShard export failed: uploader requested a scan reset (EScan::Reset), but restarting the scan is not supported. "
-                "A possible cause is S3 throttling (HTTP 429 TooManyRequests); check uploader logs for the original error. "
-                "Reduce S3 load and start a new export, for example: "
-                "ydb -e <endpoint> -d <database> export s3 --s3-endpoint <s3-endpoint> --bucket <bucket> "
-                "--item source=<table>,destination=<new-prefix>. Increasing --retries does not enable scan resets.");
+            ++Generation;
+            DataQueue = {};
+            CurrentBatch = {};
+            Counters.SetQueueSize(0);
+            Counters.ResetSleeping();
+            LastActivityTime = TInstant::Now();
+
+            // Seek clears the export buffer (including compression and checksums)
+            // and repeats the Ready/Feed handshake with the existing uploader.
+            NTable::TLead lead;
+            LastState = Exporter->Seek(lead, 0);
+            YDB_LOG_VERIFY(LastState == NTable::EScan::Feed);
+            Send(SubscriberActorId, new TEvPrivate::TEvBackupExportReset(Generation));
             return;
         }
         if (event.State == NTable::EScan::Final) {
@@ -541,6 +566,7 @@ private:
     NDataShard::IExport::TTableColumns TableColumns;
     TActorId SubscriberActorId;
     ui64 TxId;
+    ui32 Generation = 0;
     TVector<std::pair<TString, NScheme::TTypeInfo>> ColumnTypes;
 
     TUploaderCounters Counters;

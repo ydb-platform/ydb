@@ -80,7 +80,7 @@ vector                YDB vector workload.
 | `--table <имя>` | Имя таблицы для загрузки данных. | `vector_index_workload` |
 | `--index <имя>` | Имя векторного индекса, который будет построен после импорта. | `index` |
 | `--index-type <тип>` | Тип индекса, строимого после импорта. Возможные значения: `None`, `KmeansTree`. Указание `None` отключает построение индекса. | `KmeansTree` |
-| `--vector-type <тип>` | Тип векторов. Один из `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <тип>` | Тип векторов. Один из `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <значение>` | Размерность векторов. | `1024` |
 | `--distance <значение>` | Функция расстояния или сходства. Один из `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
 | `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. Если не задано, определяется сервером автоматически. См. [тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type). | Автоопределение |
@@ -114,7 +114,7 @@ vector                YDB vector workload.
 | `--table <имя>` | Имя таблицы для загрузки данных. | `vector_index_workload` |
 | `--index <имя>` | Имя векторного индекса, который будет построен после импорта. | `index` |
 | `--index-type <тип>` | Тип индекса. Возможные значения: `None`, `KmeansTree`. | `KmeansTree` |
-| `--vector-type <тип>` | Тип векторов. Один из `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <тип>` | Тип векторов. Один из `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <значение>` | Размерность векторов. | `1024` |
 | `--distance <значение>` | Функция расстояния или сходства. | `inner_product` |
 | `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. Если не задано, определяется сервером автоматически. | Автоопределение |
@@ -144,7 +144,7 @@ vector                YDB vector workload.
 |---|---|---|
 | `--table <имя>` | Имя таблицы, на которой строится индекс. | `vector_index_workload` |
 | `--index <имя>` | Имя создаваемого индекса. | `index` |
-| `--vector-type <тип>` | Тип векторов. Один из `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <тип>` | Тип векторов. Один из `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <значение>` | Размерность векторов. | `1024` |
 | `--distance <значение>` | Функция расстояния или сходства. | `inner_product` |
 | `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. Если не задано, определяется сервером автоматически. | Автоопределение |
@@ -194,7 +194,7 @@ vector                YDB vector workload.
 | `--query-table <имя>` | Имя таблицы с тестовой выборкой векторов. Если не задано, используются случайные строки из основной таблицы. | |
 | `--targets <значение>` | Размер тестовой выборки. | `100` |
 | `--limit <значение>` | Максимальное число записей в результатах одного запроса. | `5` |
-| `--kmeans-tree-clusters <значение>` | Максимальное число кластеров, проверяемых во время поиска ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize)). | `1` |
+| `--kmeans-tree-clusters <значение>` | Максимальное число кластеров, проверяемых во время поиска ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize)). | `1` |
 | `--recall` | Включить замер [полноты](https://ru.wikipedia.org/wiki/Полнота_и_точность) приближённого поиска относительно точного. | |
 | `--recall-threads <значение>` | Число параллельных запросов при оценке полноты. | `10` |
 | `--non-indexed` | Использовать настройки поиска из индекса, но искать без индекса, полным перебором. | |

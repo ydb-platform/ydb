@@ -39,7 +39,7 @@ public:
     }
 
     [[nodiscard]] bool DecInclude() {
-        AFL_VERIFY(CountIncludes);
+        YDB_LOG_VERIFY(CountIncludes);
         return --CountIncludes == 0;
     }
 
@@ -48,7 +48,7 @@ public:
     }
 
     [[nodiscard]] bool DecNotInclude() {
-        AFL_VERIFY(CountNotIncludes);
+        YDB_LOG_VERIFY(CountNotIncludes);
         return --CountNotIncludes == 0;
     }
 
@@ -82,7 +82,7 @@ public:
     }
 
     [[nodiscard]] bool Dec(const ui32 count = 1) {
-        AFL_VERIFY(Count);
+        YDB_LOG_VERIFY(Count);
         Count -= count;
         return Count == 0;
     }
@@ -99,7 +99,7 @@ public:
 
     void ProvideFrom(const TIntervalTxCounters& counters) {
         Count += counters.Count;
-        AFL_VERIFY(counters.Count);
+        YDB_LOG_VERIFY(counters.Count);
     }
 };
 
@@ -304,7 +304,7 @@ public:
             } else if (compareResult == std::partial_ordering::greater) {
                 return false;
             } else {
-                AFL_VERIFY(compareResult == std::partial_ordering::equivalent);
+                YDB_LOG_VERIFY(compareResult == std::partial_ordering::equivalent);
                 if (PrimaryKey->GetColumnsCount() == point.PrimaryKey->GetColumnsCount()) {
                     return IncludeState < point.IncludeState;
                 } else if (PrimaryKey->GetColumnsCount() < point.PrimaryKey->GetColumnsCount()) {
@@ -352,7 +352,7 @@ public:
 
     std::map<TIntervalPoint, TPointInfo>::iterator GetPointIterator(const TIntervalPoint& intervalPoint) {
         auto it = IntervalsInfo.find(intervalPoint);
-        AFL_VERIFY(it != IntervalsInfo.end());
+        YDB_LOG_VERIFY(it != IntervalsInfo.end());
         return it;
     }
 
@@ -371,7 +371,7 @@ public:
     }
 
     THashSet<ui64> GetAffectedTxIds(const std::shared_ptr<arrow::RecordBatch>& writtenPrimaryKeys) const {
-        AFL_VERIFY(writtenPrimaryKeys);
+        YDB_LOG_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -462,7 +462,8 @@ public:
 
     void RemoveInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto itIntervals = ReadIntervalsByPathId.find(pathId);
-        AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
+        YDB_LOG_VERIFY(itIntervals != ReadIntervalsByPathId.end(),
+            {"pathId", pathId});
         auto& intervals = itIntervals->second;
         auto itFrom = intervals.GetPointIterator(from);
         auto itTo = intervals.GetPointIterator(to);

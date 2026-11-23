@@ -10,6 +10,8 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <array>
+#include <optional>
+#include <memory>
 
 namespace NKikimr {
 namespace NResourceBroker {
@@ -23,6 +25,14 @@ inline TActorId MakeResourceBrokerID(ui32 node = 0) {
 }
 
 using TResourceValues = std::array<ui64, RESOURCE_COUNT>;
+
+/**
+ * Name of the named resource (see NKikimrTabletBase::TNamedResource)
+ * which represents usage of the resource broker queue.
+ */
+inline TString MakeQueueResourceName(const TString &queue) {
+    return "rb/" + queue;
+}
 
 class IResourceBroker;
 
@@ -38,15 +48,17 @@ struct TEvResourceBroker {
         EvConfigRequest,
         EvTaskRemoved,
         EvResourceBrokerRequest,
+        EvQueueUsageRequest,
 
         EvTaskOperationError = EvSubmitTask + 512,
         EvResourceAllocated,
         EvConfigureResult,
         EvConfigResponse,
-        EvResourceBrokerResponse
+        EvResourceBrokerResponse,
+        EvQueueUsageResponse,
     };
 
-    static_assert(EvResourceBrokerRequest < EvTaskOperationError);
+    static_assert(EvQueueUsageRequest < EvTaskOperationError);
 
     struct TTask {
         /**
@@ -60,6 +72,16 @@ struct TEvResourceBroker {
         TString Type;
         ui64 Priority;
         TIntrusivePtr<TThrRefBase> Cookie;
+        /**
+         * Tablet on whose behalf the task is executed (0 if unknown).
+         * Used to report per-tablet queue usage (e.g. to Hive for balancing).
+         */
+        ui64 TabletId = 0;
+        ui32 FollowerId = 0;
+        // A shared allocation lease will finish this task after the submitting
+        // actor dies. Used for buffers still owned by asynchronous children.
+        bool KeepOnClientDeath = false;
+        std::optional<std::weak_ptr<void>> OwnerLease = std::nullopt;
     };
 
     struct TEvSubmitTask : public TEventLocal<TEvSubmitTask, EvSubmitTask> {
@@ -90,6 +112,12 @@ struct TEvResourceBroker {
             Task.Priority = priority;
             Task.Cookie = cookie;
         }
+
+        TEvSubmitTask& SetOwner(ui64 tabletId, ui32 followerId = 0) {
+            Task.TabletId = tabletId;
+            Task.FollowerId = followerId;
+            return *this;
+        }
     };
 
     struct TStatus {
@@ -101,11 +129,13 @@ struct TEvResourceBroker {
             // Cannot remove task in-fly.
             TASK_IN_FLY,
             // Cannot finish task which is still in queue.
-            TASK_IN_QUEUE
+            TASK_IN_QUEUE,
+            MEMORY_LIMIT_EXCEEDED
         };
 
         ECode Code;
         TString Message;
+        std::optional<ui64> MemoryLimit = std::nullopt;
     };
 
     struct TEvTaskOperationError : public TEventLocal<TEvTaskOperationError, EvTaskOperationError> {
@@ -217,6 +247,32 @@ struct TEvResourceBroker {
 
     struct TEvResourceBrokerResponse : public TEventLocal<TEvResourceBrokerResponse, EvResourceBrokerResponse> {
         TIntrusivePtr<IResourceBroker> ResourceBroker;
+    };
+
+    /**
+     * Requests current per-tablet usage of all queues.
+     */
+    struct TEvQueueUsageRequest : public TEventLocal<TEvQueueUsageRequest, EvQueueUsageRequest> {};
+
+    struct TQueueTabletUsage {
+        ui64 TabletId = 0;
+        ui32 FollowerId = 0;
+        // Sum of required CPU resource of the tablet's tasks waiting in the queue.
+        ui64 Waiting = 0;
+        // Sum of required CPU resource of the tablet's tasks holding resources.
+        ui64 Running = 0;
+    };
+
+    struct TQueueUsage {
+        TString Name;
+        // Queue CPU limit, Max<ui64>() when the queue is not limited by CPU.
+        ui64 Limit = Max<ui64>();
+        // Only tablets with non-zero usage. Tasks without owner are not included.
+        TVector<TQueueTabletUsage> Tablets;
+    };
+
+    struct TEvQueueUsageResponse : public TEventLocal<TEvQueueUsageResponse, EvQueueUsageResponse> {
+        TVector<TQueueUsage> Queues;
     };
 };
 

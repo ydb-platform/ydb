@@ -45,5 +45,7 @@ IGraphTransformer::TStatus ListJoinCoreWrapper(const TExprNode::TPtr& input, TEx
 TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TExprContext& ctx);
 
 TExprNode::TPtr MakeNothingData(TExprContext& ctx, TPositionHandle pos, TStringBuf data);
+std::pair<TExprNode::TPtr, const TTypeAnnotationNode*> MakeRepr(
+    const TExprNode::TPtr& input, const TTypeAnnotationNode* type, TExprContext& ctx);
 
 } // namespace NYql::NTypeAnnImpl

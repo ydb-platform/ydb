@@ -47,6 +47,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::BlockStoreVolume;
     case ::Ydb::Scheme::Entry::COORDINATION_NODE:
         return ESchemeEntryType::CoordinationNode;
+    case ::Ydb::Scheme::Entry::SOLOMON_VOLUME:
+        return ESchemeEntryType::SolomonVolume;
     case ::Ydb::Scheme::Entry::SEQUENCE:
         return ESchemeEntryType::Sequence;
     case ::Ydb::Scheme::Entry::REPLICATION:
@@ -104,11 +106,16 @@ void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request)
     for (const auto& permission : Permissions) {
         permission.SerializeTo(*request.mutable_actions()->Add()->mutable_grant());
     }
+    request.set_interrupt_inheritance(InterruptInheritance);
 }
 
 TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
     if (request.clear_permissions()) {
         AddClearAcl();
+    }
+    // The request describes changes, so an omitted value leaves inheritance unchanged.
+    if (request.has_interrupt_inheritance()) {
+        AddInterruptInheritance(request.interrupt_inheritance());
     }
 
     for (const auto& action : request.actions()) {

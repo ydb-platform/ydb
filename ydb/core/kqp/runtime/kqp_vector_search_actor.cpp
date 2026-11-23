@@ -486,7 +486,7 @@ namespace NKikimr {
                     if (batch.empty()) {
                         continue;
                     }
-                    auto data = MakeIntrusive<TCachedLevelTableData>();
+                    auto data = MakeIntrusive<TEvKqp::TCachedLevelTableData>();
                     data->BatchRows = std::move(batch);
                     LevelsCache->Put(LevelTablePathId, SerializeParentKey(parent), data);
                 }
@@ -654,6 +654,11 @@ namespace NKikimr {
                 *topK->MutableSettings() = Settings.GetIndexSettings();
                 topK->SetTargetVector(TargetVector);
                 topK->SetLimit(limit);
+                // Only the posting read addresses this index's local graph.
+                if (Settings.HasHnswIndexId()
+                        && src->GetTable().GetTableId().SerializeAsString() == Settings.GetPostingTable().GetTableId().SerializeAsString()) {
+                    *topK->MutableHnswIndexId() = Settings.GetHnswIndexId();
+                }
                 return topK;
             }
 

@@ -23,12 +23,14 @@ SRCS(
     dsproxy_put_ut.cpp
     dsproxy_quorum_tracker_ut.cpp
     dsproxy_get_block_ut.cpp
+    dsproxy_status_ut.cpp
     dsproxy_sequence_ut.cpp
     dsproxy_patch_ut.cpp
     dsproxy_counters_ut.cpp
     dsproxy_request_reporting_ut.cpp
     dsproxy_discover_ut.cpp
     dsproxy_range_ut.cpp
+    dsproxy_index_range_ut.cpp
     dsproxy_vdisk_mock_ut.cpp
     dsproxy_check_integrity_ut.cpp
     dsproxy_dormant_ut.cpp

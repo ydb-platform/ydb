@@ -5,9 +5,10 @@ ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/statistics_workload/statistics_workload"
 
 TEST_SRCS(
     test_workload.py
+    test_row_count.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:1)
 
 SIZE(MEDIUM)
 
@@ -16,6 +17,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    ydb/tests/stress/statistics_workload/workload
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/library/stress

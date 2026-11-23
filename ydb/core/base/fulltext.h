@@ -11,6 +11,7 @@ enum class EIndexMode {
     Fulltext = 1,
     JsonIndexOverJson = 2,
     JsonIndexOverJsonDocument = 3,
+    FulltextQuery = 4,
 };
 
 void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams);
@@ -40,13 +41,7 @@ public:
     TConstArrayRef<ui8> GetBuf() const;
 };
 
-class IDeltaReader {
-public:
-    virtual ~IDeltaReader() = default;
-    virtual bool Read(ui64& docId, ui32& freq) = 0;
-};
-
-class TDeltaReader: public IDeltaReader {
+class TDeltaReader {
     TConstArrayRef<ui8> Buf;
     size_t Pos = 0;
     ui64 LastId = 0;
@@ -57,13 +52,13 @@ class TDeltaReader: public IDeltaReader {
     ui64 SavedLastId = 0;
 public:
     TDeltaReader(TConstArrayRef<ui8> buf, bool withFreq, bool sign);
-    bool Read(ui64& docId, ui32& freq) override;
+    bool Read(ui64& docId, ui32& freq);
     void Save();
     void Restore();
     void SetMaxId(ui64 maxId);
 };
 
-class TMultiDeltaReader: public IDeltaReader {
+class TMultiDeltaReader {
     struct TReaderRef {
         TDeltaReader *Reader;
         bool Added = false;
@@ -100,7 +95,8 @@ public:
     void SetMaxId(ui64 maxId);
     void Start();
     void Stop();
-    bool Read(ui64& docId, ui32& freq);
+    bool Read(ui64& docId, i64& freq);
+    bool ReadPositive(ui64& docId, ui32& freq);
 };
 
 }

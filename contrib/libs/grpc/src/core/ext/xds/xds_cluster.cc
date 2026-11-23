@@ -69,8 +69,8 @@
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/gprpp/validation_errors.h"
 #include "src/core/lib/json/json_writer.h"
-#include "src/core/lib/load_balancing/lb_policy_registry.h"
 #include "src/core/lib/matchers/matchers.h"
+#include "src/core/load_balancing/lb_policy_registry.h"
 
 namespace grpc_core {
 
@@ -714,8 +714,6 @@ y_absl::StatusOr<std::shared_ptr<const XdsClusterResource>> CdsResourceParse(
             StdStringToUpbString(
                 y_absl::string_view("com.google.csm.telemetry_labels")),
             &telemetry_labels_struct)) {
-      auto telemetry_labels =
-          std::make_shared<std::map<TString, TString>>();
       size_t iter = kUpb_Map_Begin;
       const google_protobuf_Struct_FieldsEntry* fields_entry;
       while ((fields_entry = google_protobuf_Struct_fields_next(
@@ -724,14 +722,16 @@ y_absl::StatusOr<std::shared_ptr<const XdsClusterResource>> CdsResourceParse(
         const google_protobuf_Value* value =
             google_protobuf_Struct_FieldsEntry_value(fields_entry);
         if (google_protobuf_Value_has_string_value(value)) {
-          telemetry_labels->emplace(
-              UpbStringToStdString(
-                  google_protobuf_Struct_FieldsEntry_key(fields_entry)),
-              UpbStringToStdString(google_protobuf_Value_string_value(value)));
+          if (UpbStringToAbsl(google_protobuf_Struct_FieldsEntry_key(
+                  fields_entry)) == "service_name") {
+            cds_update->service_telemetry_label = RefCountedStringValue(
+                UpbStringToAbsl(google_protobuf_Value_string_value(value)));
+          } else if (UpbStringToAbsl(google_protobuf_Struct_FieldsEntry_key(
+                         fields_entry)) == "service_namespace") {
+            cds_update->namespace_telemetry_label = RefCountedStringValue(
+                UpbStringToAbsl(google_protobuf_Value_string_value(value)));
+          }
         }
-      }
-      if (!telemetry_labels->empty()) {
-        cds_update->telemetry_labels = std::move(telemetry_labels);
       }
     }
   }

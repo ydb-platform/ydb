@@ -3,13 +3,17 @@
 #include <yql/essentials/providers/common/config/yql_setting.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
+#include <util/generic/set.h>
+#include <util/generic/strbuf.h>
+#include <util/generic/string.h>
 
 #include <utility>
 
 namespace NYql {
+
+using TUdfModuleSet = TSet<TString>;
 
 enum class EDatumValidationMode {
     None,
@@ -31,8 +35,12 @@ public:
     {
     }
 
-    TType Get() const {
+    const TType& Get() const {
         return Setting_.Get().GetOrElse(DefaultValue_);
+    }
+
+    bool IsSet() const {
+        return Setting_.Get().Defined();
     }
 
     void Set(const TType& value) {
@@ -46,14 +54,9 @@ private:
     TType DefaultValue_;
 };
 
-struct TRuntimeSettings {
-    using TPtr = TSharedPtr<TRuntimeSettings, TAtomicCounter>;
-    using TConstPtr = TSharedPtr<const TRuntimeSettings, TAtomicCounter>;
+namespace NPrivate {
 
-    TRuntimeSettings();
-    virtual ~TRuntimeSettings();
-
-    // =============================== Host settings ===============================
+struct TRuntimeHostSettings {
     TRuntimeSetting<EDatumValidationMode> DatumValidation{DefaultDatumValidationMode};
     // Noop feature.
     // Used for testing only.
@@ -62,9 +65,19 @@ struct TRuntimeSettings {
     TRuntimeSetting<bool> UdfProfileEnable{false};
     TRuntimeSetting<TDuration> UdfProfileMinTimeUs{TDuration::MicroSeconds(1000)};
     TRuntimeSetting<ui64> UdfProfileGraceCount{10};
-    TRuntimeSetting<THashSet<TString>> UdfProfileExcludeModules{{}};
+    TRuntimeSetting<TUdfModuleSet> UdfProfileExcludeModules{{}};
     TRuntimeSetting<ui32> UdfProfileHLLPrecision{14};
-    // =============================== Host settings end ===========================
+};
+
+} // namespace NPrivate
+
+struct TRuntimeSettings: public NPrivate::TRuntimeHostSettings {
+    using TPtr = TSharedPtr<TRuntimeSettings, TAtomicCounter>;
+    using TConstPtr = TSharedPtr<const TRuntimeSettings, TAtomicCounter>;
+
+    TRuntimeSettings();
+    virtual ~TRuntimeSettings();
+
     using TUdfSettings = TMap<TString, TString>;
 
     TStringBuf GetUdfSetting(TStringBuf module, TStringBuf settingName) const {

@@ -11,7 +11,7 @@
 #include "util_fmt_abort.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

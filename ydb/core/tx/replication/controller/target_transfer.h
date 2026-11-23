@@ -34,11 +34,11 @@ public:
         ui64 id, const IConfig::TPtr& config);
 
     void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
+    TString BuildStreamConsumerName() const override;
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
-    TString GetStreamPath() const override;
     void EnsureCounters();
 
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) override;
@@ -46,6 +46,7 @@ public:
     void RemoveWorker(ui64 id) override;
 
 protected:
+    TString BuildStreamPath() const override;
     TTargetWithStreamStats* GetStatsImpl() override;
     TTargetWithStreamCounters* GetCountersImpl() override;
 

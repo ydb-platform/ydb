@@ -27,7 +27,7 @@ LoggerContext::LoggerContext(
     std::vector<std::unique_ptr<LogRecordProcessor>> &&processors,
     const opentelemetry::sdk::resource::Resource &resource,
     std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>> logger_configurator,
-    LogRecordLimits log_record_limits) noexcept
+    LogRecordLimits log_record_limits)
     : resource_(resource),
       processor_(
           std::unique_ptr<LogRecordProcessor>(new MultiLogRecordProcessor(std::move(processors)))),

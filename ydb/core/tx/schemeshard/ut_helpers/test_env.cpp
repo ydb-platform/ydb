@@ -29,9 +29,12 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/system/env.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
+// Enable verbose diagnostics without rebuilding the tests.
+bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = GetEnv("ENABLE_SCHEMESHARD_LOG") == "1";
 static const bool ENABLE_DATASHARD_LOG = false;
 static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
@@ -629,6 +632,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , HiveState(new TFakeHiveState)
     , CoordinatorState(new TFakeCoordinator::TState)
     , ChannelsCount(opts.NChannels_)
+    , SchemeShardLogPriority(opts.SchemeShardLogPriority_)
 {
     EnableYDBBacktraceFormat();
     ui64 hive = TTestTxConfig::Hive;
@@ -668,7 +672,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.FeatureFlags.SetDisableFileStoreSSDSystemSpaceAccounting(opts.DisableFileStoreSSDSystemSpaceAccounting_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
+    app.SetEnableRebuildIndex(opts.EnableRebuildIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
+    app.SetEnableCdcAggregator(opts.EnableCdcAggregator_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
@@ -676,6 +682,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
+    if (opts.DisablePgCompatibility_) {
+        app.FeatureFlags.SetDisablePgCompatibility(*opts.DisablePgCompatibility_);
+    }
     app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
     app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
     app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
@@ -837,6 +846,15 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 ncha
 {
 }
 
+void NSchemeShardUT_Private::TTestEnv::SetVerboseLogPriority(TTestActorRuntime& runtime,
+        NActors::NLog::EComponent component, NActors::NLog::EPriority verbosePriority) {
+    if (!ENABLE_SCHEMESHARD_LOG && component == NKikimrServices::FLAT_TX_SCHEMESHARD) {
+        return;
+    }
+
+    runtime.SetLogPriority(component, ENABLE_SCHEMESHARD_LOG ? verbosePriority : NActors::NLog::PRI_NOTICE);
+}
+
 void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) {
     runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_ERROR);
@@ -850,16 +868,17 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, NActors::NLog::PRI_ERROR);
-    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);
     runtime.SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_ERROR);
 
 
-    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, SchemeShardLogPriority);
     runtime.SetLogPriority(NKikimrServices::SCHEMESHARD_DESCRIBE, NActors::NLog::PRI_NOTICE);
     runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_NOTICE);
     if (ENABLE_SCHEMESHARD_LOG) {
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::SCHEMESHARD_DESCRIBE, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -1333,7 +1352,9 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
 }
 
 NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
-    return new TTestEnv(*Runtime, GetTestEnvOptions().RunFakeConfigDispatcher(true));
+    return new TTestEnv(*Runtime, GetTestEnvOptions()
+        .RunFakeConfigDispatcher(true)
+        .SchemeShardLogPriority(NActors::NLog::PRI_NOTICE));
 }
 
 
@@ -1354,7 +1375,10 @@ void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchNa
 
     TxId = 1000;
 
-    TestMkDir(*Runtime, TxId++, "/MyRoot", "DirA");
+    if (CreateDefaultDirectory) {
+        TestMkDir(*Runtime, TxId, "/MyRoot", "DirA");
+    }
+    ++TxId;
 
     // This allows tablet resolver to detect deleted tablets
     EnableTabletResolverScheduling();

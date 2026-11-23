@@ -10,6 +10,9 @@
 #include "reserve.h"
 #include "stream_logic.h"
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
@@ -23,19 +26,19 @@
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
 
 void TGraphNode::AddEdgeTo(TGraphNode* to, const ui32 resourceId) {
-    AFL_VERIFY(OutputEdges.emplace(TAddress(to->GetIdentifier(), resourceId), to).second);
+    YDB_LOG_VERIFY(OutputEdges.emplace(TAddress(to->GetIdentifier(), resourceId), to).second);
 }
 
 void TGraphNode::AddEdgeFrom(TGraphNode* from, const ui32 resourceId) {
-    AFL_VERIFY(InputEdges.emplace(TAddress(from->GetIdentifier(), resourceId), from).second);
+    YDB_LOG_VERIFY(InputEdges.emplace(TAddress(from->GetIdentifier(), resourceId), from).second);
 }
 
 void TGraphNode::RemoveEdgeTo(const ui32 identifier, const ui32 resourceId) {
-    AFL_VERIFY(OutputEdges.erase(TAddress(identifier, resourceId)));
+    YDB_LOG_VERIFY(OutputEdges.erase(TAddress(identifier, resourceId)));
 }
 
 void TGraphNode::RemoveEdgeFrom(const ui32 identifier, const ui32 resourceId) {
-    AFL_VERIFY(InputEdges.erase(TAddress(identifier, resourceId)));
+    YDB_LOG_VERIFY(InputEdges.erase(TAddress(identifier, resourceId)));
 }
 
 bool TGraphNode::HasEdgeFrom(const ui32 nodeId, const ui32 resourceId) const {
@@ -49,7 +52,9 @@ bool TGraphNode::HasEdgeTo(const ui32 nodeId, const ui32 resourceId) const {
 bool TGraph::HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const {
     const bool hasEdgeTo = from->HasEdgeTo(to->GetIdentifier(), resourceId);
     const bool hasEdgeFrom = to->HasEdgeFrom(from->GetIdentifier(), resourceId);
-    AFL_VERIFY(hasEdgeTo == hasEdgeFrom)("from", hasEdgeFrom)("to", hasEdgeTo);
+    YDB_LOG_VERIFY(hasEdgeTo == hasEdgeFrom,
+        {"from", hasEdgeFrom},
+        {"to", hasEdgeTo});
     return hasEdgeFrom;
 }
 
@@ -65,7 +70,7 @@ void TGraph::RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId)
 
 void TGraph::RemoveNode(const ui32 idenitifier) {
     auto it = Nodes.find(idenitifier);
-    AFL_VERIFY(it != Nodes.end());
+    YDB_LOG_VERIFY(it != Nodes.end());
     for (auto&& i : it->second->GetInputEdges()) {
         i.second->RemoveEdgeTo(it->second->GetIdentifier(), i.first.GetResourceId());
     }
@@ -91,7 +96,7 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
     for (auto&& i : processors) {
         auto node = AddNode(i);
         for (auto&& output : i->GetOutput()) {
-            AFL_VERIFY(Producers.emplace(output.GetColumnId(), node.get()).second);
+            YDB_LOG_VERIFY(Producers.emplace(output.GetColumnId(), node.get()).second);
         }
         for (auto&& input : i->GetInput()) {
             if (Producers.find(input.GetColumnId()) != Producers.end()) {
@@ -102,11 +107,11 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
             const IDataSource::TDataAddress dataAddr(
                 input.GetColumnId(), Resolver.GetColumnName(input.GetColumnId()), NAccessor::NSubColumns::TCanonicalSubColumnName{});
             auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(input.GetColumnId(), dataAddr));
-            //            AFL_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
+            //            YDB_LOG_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
 
             auto nodeInputAssembler =
                 AddNode(std::make_shared<TOriginalColumnAccessorProcessor>(input.GetColumnId(), input.GetColumnId(), dataAddr));
-            AFL_VERIFY(Producers.emplace(input.GetColumnId(), nodeInputAssembler.get()).second);
+            YDB_LOG_VERIFY(Producers.emplace(input.GetColumnId(), nodeInputAssembler.get()).second);
             AddEdge(inputFetcher.get(), nodeInputAssembler.get(), input.GetColumnId());
         }
     }
@@ -169,7 +174,7 @@ TConclusion<bool> TGraph::OptimizeForFetchSubColumns(TGraphNode* condNode) {
         if (!addr->GetSubColumnName()) {
             continue;
         }
-        AFL_VERIFY(addr->GetColumnId() == originalAssemble->GetDataAddress().GetColumnId());
+        YDB_LOG_VERIFY(addr->GetColumnId() == originalAssemble->GetDataAddress().GetColumnId());
         auto it = resourceProducers.find(*addr);
         if (it == resourceProducers.end()) {
             const IDataSource::TDataAddress dataAddr(addr->GetColumnId(), Resolver.GetColumnName(addr->GetColumnId()), addr->GetSubColumnName());
@@ -259,7 +264,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         } else if (baseNode->Is(EProcessorType::Projection)) {
             policy = std::make_shared<TFetchingCalculationPolicy>();
         }
-        AFL_VERIFY(policy);
+        YDB_LOG_VERIFY(policy);
         auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
         auto nodeReserve = AddNode(reserveMemory);
         nodeReserve->GetProcessor()->AddOutput(0);
@@ -574,6 +579,93 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
     }
 }
 
+// ANDs one index check per hint into the kernel result. A check yields a constant column: all false
+// when the index denies the probe, all true otherwise. A deny means no row of the portion contains
+// the probe, and the kernel is false on every such row, so the AND changes no value. The rewrite
+// moves the kernel's only output edge, hence the single-consumer requirement.
+TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode) {
+    if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
+        return false;
+    }
+    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetKernelLogic()) {
+        return false;
+    }
+    const auto& hints = calc->GetKernelLogic()->GetIndexHints();
+    if (hints.empty() || condNode->GetOutputEdges().size() != 1) {
+        return false;
+    }
+    if (IndexesConstructed.contains(condNode->GetIdentifier())) {
+        return false;
+    }
+
+    struct TResolved {
+        TResourceAddress Addr;
+        TIndexCheckOperation Operation;
+        TString Value;
+    };
+    std::vector<TResolved> resolved;
+    for (const auto& hint : hints) {
+        if (hint.InputIndex >= calc->GetInput().size()) {
+            continue;
+        }
+        auto* dataNode = GetProducerVerified(calc->GetInput()[hint.InputIndex].GetColumnId());
+        if (auto addr = GetOriginalAddress(dataNode)) {
+            resolved.push_back(TResolved{*addr, hint.Operation, hint.Value});
+        }
+    }
+    if (resolved.empty()) {
+        return false;
+    }
+    IndexesConstructed.emplace(condNode->GetIdentifier());
+
+    auto* dest = condNode->GetOutputEdges().begin()->second;
+    const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
+    RemoveEdge(condNode, dest, destResourceId);
+
+    std::vector<ui32> andInputs;
+    std::vector<TGraphNode*> andSources;
+    const ui32 calcResourceId = BuildNextResourceId();
+    RegisterProducer(calcResourceId, condNode);
+    calc->SetOutputResourceIdOnce(calcResourceId);
+    andInputs.push_back(calcResourceId);
+    andSources.push_back(condNode);
+
+    for (const auto& item : resolved) {
+        const ui32 constId = BuildNextResourceId();
+        auto scalar = std::make_shared<arrow::BinaryScalar>(
+            arrow::Buffer::FromString(std::string(item.Value.data(), item.Value.size())), arrow::binary());
+        auto constNode = AddNode(std::make_shared<TConstProcessor>(scalar, constId));
+        RegisterProducer(constId, constNode.get());
+
+        const ui32 fetchId = BuildNextResourceId();
+        IDataSource::TFetchIndexContext fetchContext(item.Addr.GetColumnId(),
+            IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(item.Addr.GetSubColumnName(), item.Operation));
+        auto fetchNode = AddNode(std::make_shared<TOriginalColumnDataProcessor>(fetchId, fetchContext));
+        RegisterProducer(fetchId, fetchNode.get());
+
+        const ui32 checkId = BuildNextResourceId();
+        const auto columnName = Resolver.GetColumnName(item.Addr.GetColumnId(), false);
+        IDataSource::TCheckIndexContext checkContext(item.Addr.GetColumnId(), item.Addr.GetSubColumnName(), item.Operation,
+            columnName.empty() ? "COLUMN_NAME_NOT_RESOLVED" : columnName);
+        auto checkNode = AddNode(std::make_shared<TIndexCheckerProcessor>(fetchId, constId, checkContext, checkId));
+        RegisterProducer(checkId, checkNode.get());
+        AddEdge(fetchNode.get(), checkNode.get(), fetchId);
+        AddEdge(constNode.get(), checkNode.get(), constId);
+        andInputs.push_back(checkId);
+        andSources.push_back(checkNode.get());
+    }
+
+    auto andNode = AddNode(std::make_shared<TStreamLogicProcessor>(
+        TColumnChainInfo::BuildVector(andInputs), TColumnChainInfo(destResourceId), NKernels::EOperation::And));
+    for (size_t i = 0; i < andInputs.size(); ++i) {
+        AddEdge(andSources[i], andNode.get(), andInputs[i]);
+    }
+    AddEdge(andNode.get(), dest, destResourceId);
+    ResetProducer(destResourceId, andNode.get());
+    return true;
+}
+
 TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -815,6 +907,17 @@ TConclusionStatus TGraph::Collapse() {
 
             {
                 auto conclusion = OptimizeConditionsForIndexes(n.get());
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                if (*conclusion) {
+                    hasChanges = true;
+                    break;
+                }
+            }
+
+            {
+                auto conclusion = OptimizeConditionsForPatternHints(n.get());
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }

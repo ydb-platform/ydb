@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "opentelemetry/sdk/metrics/instruments.h"
@@ -71,6 +72,12 @@ public:
 constexpr std::int32_t kMaxScaleMin = -10;
 constexpr std::int32_t kMaxScaleMax = 20;
 constexpr std::size_t kMaxSizeMin   = 2;
+
+// Lower bound for the scale chosen at runtime by automatic downscaling. The specification only
+// requires a "reasonable minimum". At -11 every finite double maps to a bucket index in [-1, 0],
+// so the whole range fits in kMaxSizeMin buckets and no configuration needs more than its
+// max_size. This bounds the runtime scale only; max_scale still starts no lower than kMaxScaleMin.
+constexpr std::int32_t kMinRuntimeScale = -11;
 
 class Base2ExponentialHistogramAggregationConfig : public AggregationConfig
 {

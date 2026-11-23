@@ -1,4 +1,6 @@
 import pytest
+import yaml
+import yatest.common
 
 import gobuild
 
@@ -453,6 +455,41 @@ def test_gofmt_preserves_govet_check(module):
         ]
     )
     assert unit.checks == expected
+
+
+@pytest.mark.parametrize(
+    'module, expected',
+    [
+        ('project/pkg', '-scopelint.config=x'),
+        ('vendor/pkg', ''),
+        ('contrib/pkg', ''),
+        ('contrib/go/_std_1.27/src/fmt', ''),
+    ],
+)
+def test_lint_configs_dropped_for_third_party(module, expected):
+    unit = FakeUnit(
+        path=module,
+        variables={'_GO_SRCS_VALUE': 'main.go', '_GO_VET_LINT_CONFIGS': '-scopelint.config=x'},
+        sources=('main.go',),
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.get('_GO_VET_LINT_CONFIGS') == expected
+
+
+@pytest.mark.parametrize('name', ['extended_lint.yaml', 'migrations.yaml', 'risky_imports.yaml'])
+def test_lint_configs_have_no_third_party_entries(name):
+    # gobuild.py drops these configs for vendor/ and contrib/, an entry for them would be silently ignored
+    with open(yatest.common.source_path('build/rules/go/' + name)) as f:
+        config = yaml.safe_load(f)
+    scopes = config.get('scopes') or {}
+    paths = list(scopes)
+    paths += [path for scope in scopes.values() for path in (scope or {}).get('safe_for') or []]
+    paths += [path for rule in (config.get('migrations') or {}).values() for path in rule.get('packages') or []]
+
+    assert paths
+    assert [p for p in paths if not p.startswith('a.yandex-team.ru/') or p.startswith('a.yandex-team.ru/contrib/')] == []
 
 
 def test_go_non_go_sources_keep_their_processing():

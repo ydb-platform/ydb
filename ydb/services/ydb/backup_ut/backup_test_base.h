@@ -14,6 +14,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/is_in.h>
 #include <util/generic/maybe.h>
+#include <util/system/env.h>
 #include <util/system/sanitizers.h>
 
 #define YDB_SDK_CLIENT(type, funcName)                               \
@@ -27,6 +28,15 @@
         return *Y_CAT(funcName, Instance);                           \
     }                                                                \
     /**/
+
+inline void ConfigureBackupTestLogging(NKikimr::TTestActorRuntime& runtime) {
+    if (GetEnv("YDB_TEST_BACKUP_VERBOSE") == "1") {
+        for (auto service : {NKikimrServices::TX_PROXY, NKikimrServices::EXPORT,
+                             NKikimrServices::IMPORT, NKikimrServices::FLAT_TX_SCHEMESHARD}) {
+            runtime.SetLogPriority(service, NLog::EPriority::PRI_TRACE);
+        }
+    }
+}
 
 class TBackupTestBaseFixture : public NUnitTest::TBaseFixture {
 public:
@@ -114,10 +124,7 @@ protected:
             Server_.ConstructInPlace(AppConfig());
 
             auto& runtime = *Server_->GetRuntime();
-            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
+            ConfigureBackupTestLogging(runtime);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;

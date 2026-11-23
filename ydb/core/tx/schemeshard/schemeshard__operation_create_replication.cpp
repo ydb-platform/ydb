@@ -3,9 +3,15 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <google/protobuf/util/time_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -38,10 +44,40 @@ struct TReplicationStrategy : public IStrategy {
             return true;
         }
 
+        if (desc.GetConfig().HasAvailabilityPeriod()) {
+            const auto& period = desc.GetConfig().GetAvailabilityPeriod();
+            if (period.HasDuration()) {
+                const auto& duration = period.GetDuration();
+                if (!google::protobuf::util::TimeUtil::IsDurationValid(duration)
+                    || duration.seconds() < 0 || duration.nanos() < 0
+                    || (duration.seconds() == 0 && duration.nanos() == 0))
+                {
+                    result.SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Availability period must be a positive, representable duration");
+                    return true;
+                }
+
+                if (GetDuration(duration).MicroSeconds() >= NYql::NUdf::MAX_TIMESTAMP) {
+                    result.SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Availability period cannot be represented as SQL Interval after rounding to milliseconds");
+                    return true;
+                }
+            } else if (!period.HasUnlimited()) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period is not set");
+                return true;
+            }
+        }
+
         return false;
     }
 
-    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
+    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString&) const override {
+        if (!config.HasAvailabilityPeriod()) {
+            config.MutableAvailabilityPeriod()->MutableUnlimited();
+        } else if (config.GetAvailabilityPeriod().HasDuration()) {
+            auto& duration = *config.MutableAvailabilityPeriod()->MutableDuration();
+            SetDuration(GetDuration(duration), duration);
+        }
     }
 };
 
@@ -53,6 +89,10 @@ struct TTransferStrategy : public IStrategy {
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
+            return true;
+        }
+        if (desc.GetConfig().HasAvailabilityPeriod()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period is only supported for replication");
             return true;
         }
         if (desc.HasState()) {
@@ -471,12 +511,46 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
+        if (desc.GetConfig().HasBootstrap()) {
+            const auto bootstrap = desc.GetConfig().GetBootstrap();
+            const bool scans = bootstrap == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN;
+            const bool switchover = bootstrap == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER;
+
+            // BOOTSTRAP names what INITIAL_SCAN only implied. Both may be given, but not with
+            // contradictory meanings.
+            if (desc.GetConfig().HasInitialScan() && desc.GetConfig().GetInitialScan() != scans) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "BOOTSTRAP and INITIAL_SCAN contradict each other");
+                return result;
+            }
+            if (desc.GetConfig().HasTransferSpecific()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "BOOTSTRAP is not supported for a transfer");
+                return result;
+            }
+            // A switchover demotes tables the replication did not create, bypassing every
+            // protection a replica table has, so it needs a real cluster administrator. "All
+            // users are admins by default" does not count, as for an index implementation
+            // table alter.
+            const bool clusterAdmin = IsAdministrator(AppData(), context.UserToken.Get())
+                && !AppData()->AdministrationAllowedSIDs.empty();
+            if (switchover && !clusterAdmin) {
+                result->SetError(NKikimrScheme::StatusAccessDenied,
+                    "BOOTSTRAP = 'SWITCHOVER' requires a cluster administrator");
+                return result;
+            }
+            desc.MutableConfig()->SetInitialScan(scans);
+        }
+
         if (desc.GetConfig().HasTransferSpecific()) {
             desc.MutableConfig()->ClearInitialScan();
         } else if (!desc.GetConfig().HasInitialScan()) {
             desc.MutableConfig()->SetInitialScan(AppData()->ReplicationConfig.GetInitialScan());
         }
-        if (desc.GetConfig().GetInitialScan()) {
+        // A switchover has nothing to wait for: its destination tables already hold the data.
+        const bool startsWorking = desc.GetConfig().GetInitialScan()
+            || desc.GetConfig().GetBootstrap() == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER;
+        if (startsWorking) {
             desc.MutableState()->MutableStandBy();
         } else {
             desc.MutableState()->MutablePaused();

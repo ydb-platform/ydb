@@ -31,6 +31,17 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             }
         }
     }
+
+    void WriteDataWithCachedDescription(TTestActorRuntime& runtime, const TString& tableName, const TString& valueString) {
+        TString tablePath = TStringBuilder() << "/MyRoot/" << tableName;
+        // CreateTable fixes the partition count, and setup finishes before fault injection.
+        const auto tableDesc = DescribePath(runtime, tablePath, true, true);
+        for (ui64 part = 0; part < 2; ++part) {
+            for (ui64 key = 0; key < 100; ++key) {
+                UploadRow(runtime, tableDesc, part, {1}, {2}, {TCell::Make(key)}, {TCell(valueString)});
+            }
+        }
+    }
     
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceCompactBaseCase, 4, 4, false) {
         t.EnvOpts.EnableBackgroundCompaction(false);
@@ -43,17 +54,17 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
                 CreateTable(runtime, t.TxId, "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                WriteData(runtime, "Table1", TString(1000, 'A'));
+                WriteDataWithCachedDescription(runtime, "Table1", TString(1000, 'A'));
 
                 CreateTable(runtime, t.TxId, "Table2");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                WriteData(runtime, "Table2", TString(1000, 'B'));
+                WriteDataWithCachedDescription(runtime, "Table2", TString(1000, 'B'));
             }
 
             AsyncCompact(runtime, ++t.TxId, "/MyRoot", "/MyRoot/Table1");
@@ -89,9 +100,9 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
                 CreateTable(runtime, t.TxId, "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -128,9 +139,9 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
                 CreateTable(runtime, t.TxId, "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);

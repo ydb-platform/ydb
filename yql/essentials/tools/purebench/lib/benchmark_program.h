@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -16,8 +17,8 @@
 namespace NYql::NPureBench {
 
 enum class ESyntax {
-    SQL,
-    PG,
+    SQL /* "sql" */,
+    PG /* "pg" */,
 };
 
 struct TBenchmarkProgramOptions {
@@ -28,7 +29,7 @@ struct TBenchmarkProgramOptions {
     ESyntax MeasuredQuerySyntax = ESyntax::SQL;
     TString UdfsDirectory;
     TString LLVMSettings;
-    TString BlockEngineSettings = "disable";
+    EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
     TLangVersion LanguageVersion = GetMaxReleasedLangVersion();
     bool EnableCalibration = true;
 };
@@ -76,9 +77,9 @@ class IBenchmarkProgram {
 public:
     virtual ~IBenchmarkProgram() = default;
 
-    // Compiles queries once; regenerates input and warms up execution on each call.
+    // Generates input and warms execution. Repeated calls, including after failure, throw.
     virtual TBenchmarkPreparationResult PrepareBenchmark(IOutputStream* exprOutput) = 0;
-    // Collect includes result serialization in Elapsed.
+    // Collect prepares its output program lazily before timing; Elapsed includes result serialization.
     virtual TMeasureQueryResult RunMeasureQuery(EOutputMode outputMode) = 0;
     virtual TCalibrationQueryResult RunCalibrationQuery() = 0;
 };

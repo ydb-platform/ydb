@@ -20,6 +20,7 @@ SRCS(
     export.cpp
     import.cpp
     mock_env.cpp
+    read_table.cpp
     run_ydb.cpp
     sql_resource_pool.cpp
     supported_codecs.cpp
@@ -33,6 +34,7 @@ PEERDIR(
     contrib/libs/grpc
     contrib/libs/fmt
     contrib/libs/jwt-cpp
+    library/cpp/json
     library/cpp/json/writer
     ydb/core/security/certificate_check/test_utils
     ydb/core/wrappers/ut_helpers

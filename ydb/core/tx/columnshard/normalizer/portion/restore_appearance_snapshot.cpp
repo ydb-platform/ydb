@@ -61,7 +61,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
             if (!rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
                 TPortionLoadContext portion(rowset);
                 if (!portion.GetMetaProto().HasCompactedPortion() || !portion.GetMetaProto().GetCompactedPortion().HasAppearanceSnapshot()) {
-                    AFL_VERIFY(portions0.emplace(portion.GetAddress(), portion.GetMetaProto()).second);
+                    YDB_LOG_VERIFY(portions0.emplace(portion.GetAddress(), portion.GetMetaProto()).second);
                 }
             }
 

@@ -7,6 +7,8 @@ inputs:
   head_branch:
     required: true
     description: "Branch to merge into base"
+  head_tag:
+    description: "Optional tag to merge instead of the head branch tip"
   label:
     required: true
     description: "Label to mark your PR with"
@@ -44,6 +46,7 @@ runs:
       env:
         REPO: ${{ inputs.repository }}
         TOKEN: ${{ inputs.gh_personal_access_token }}
+        HEAD_TAG: ${{ inputs.head_tag }}
       run: |
         cd ./ydb/ci/rightlib
         MERGE_ARGS=''
@@ -60,4 +63,4 @@ runs:
           MERGE_ARGS+=" --overwrite-exclude ${{ inputs.overwrite_exclude }}"
         fi
         echo $MERGE_ARGS
-        ./create_sync_pr.py --base-branch="${{ inputs.base_branch }}" --head-branch="${{ inputs.head_branch }}" --process-label="${{ inputs.label }}" $MERGE_ARGS
+        ./create_sync_pr.py --base-branch="${{ inputs.base_branch }}" --head-branch="${{ inputs.head_branch }}" --head-tag="$HEAD_TAG" --process-label="${{ inputs.label }}" $MERGE_ARGS

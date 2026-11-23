@@ -2,71 +2,16 @@
 
 #include "flat_row_scheme.h"
 #include "flat_row_state.h"
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include "flat_tier_policy.h"
 
 #include <util/datetime/base.h>
-#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
 #include <optional>
-#include <variant>
 
 namespace NKikimr {
 namespace NTable {
-
-    /**
-     * Relative tier bound: the moment now - Offset
-     */
-    struct TTierRelativeBound {
-        TDuration Offset;
-    };
-
-    /**
-     * Absolute tier bound: a fixed moment in microseconds since the epoch,
-     * may be negative (before the epoch)
-     */
-    struct TTierAbsoluteBound {
-        i64 Micros = 0;
-    };
-
-    using TTierBound = std::variant<TTierRelativeBound, TTierAbsoluteBound>;
-
-    /**
-     * A range of column values in time: [From, To) or [From, To] when ToInclusive.
-     * A missing bound means the range is open on that side.
-     */
-    struct TTierRange {
-        std::optional<TTierBound> From;
-        std::optional<TTierBound> To;
-        bool ToInclusive = false;
-    };
-
-    /**
-     * A rule matches a row when the value falls into any of its ranges.
-     * Interval("P1D") is a single range {To = Relative(1d), ToInclusive = true},
-     * YEAR(c) = 2025 is a single range [2025-01-01, 2026-01-01).
-     */
-    struct TTierRule {
-        ui32 TierId = 0;
-        TVector<TTierRange> Ranges;
-    };
-
-    /**
-     * Tiering policy over a single column, enforced by TTierPredicate:
-     * - all bounds are either relative or absolute;
-     * - a relative rule is a single inclusive upper bound (Interval), relative
-     *   rules are ordered from the coldest tier to the warmest one (strictly
-     *   descending offsets), the first matching rule wins;
-     * - ranges of different absolute rules do not overlap, so their order
-     *   does not matter.
-     */
-    struct TTieringPolicy {
-        TTag ColumnTag = Max<TTag>();
-        NKikimrSchemeOp::TTTLSettings::EUnit Unit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO;
-        TVector<TTierRule> Rules;
-    };
 
     class TTierDecision {
     public:
@@ -120,6 +65,11 @@ namespace NTable {
          * Validates the policy alone, without a scheme (e.g. when the policy is altered)
          */
         static void Validate(const TTieringPolicy& policy);
+
+        /**
+         * Validates that the policy can be evaluated over a column of the given type
+         */
+        static void ValidateColumn(const TTieringPolicy& policy, const NScheme::TTypeInfo& type);
 
         TTierDecision Evaluate(const TRowState& row) const;
 

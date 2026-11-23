@@ -28,6 +28,19 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TYsonStructLoadOptions
+{
+    bool Postprocess = true;
+    bool SetDefaults = true;
+    std::function<NYPath::TYPath()> PathGetter;
+
+    //! A single key is sufficient for the current polymorphic YSON struct use case;
+    //! this can be generalized if another wrapper needs multiple keys.
+    std::optional<std::string> ExternallyConsumedKey;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Base class for structs that are meant to be serialized to or deserialized from YSON.
 /*!
  * Usually this class is used for various configs.
@@ -67,6 +80,9 @@ public:
     TYsonStructBase& operator=(TYsonStructBase&& that) noexcept;
 
     virtual ~TYsonStructBase() = default;
+
+    void Load(INodePtr node, const TYsonStructLoadOptions& options);
+    void Load(NYson::TYsonPullParserCursor* cursor, const TYsonStructLoadOptions& options);
 
     void Load(
         INodePtr node,

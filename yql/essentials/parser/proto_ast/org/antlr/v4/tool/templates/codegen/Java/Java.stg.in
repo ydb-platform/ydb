@@ -51,6 +51,11 @@ option cc_enable_arenas = true;
 
 package @ANTLR_PACKAGE_NAME@;
 
+// Inclusive absolute indices in the ANTLR token stream, including hidden-channel
+// tokens. EndTokenIndex may name EOF when EOF is explicitly matched.
+// An empty production at StartTokenIndex = 0 has EndTokenIndex = UINT32_MAX;
+// otherwise its end is one less than its start.
+
 message TToken {
     uint32 Id = 1;
     uint32 Line = 2;
@@ -63,6 +68,8 @@ message TToken {
 
 message @ANTLR_AST_NAME@ {
     <first(parser.funcs):{r | TRule_<r.currentRule.name> Rule_<r.currentRule.name> = 1;}; separator="">
+    uint32 StartTokenIndex = 2;
+    uint32 EndTokenIndex = 3;
 }
 >>
 
@@ -116,6 +123,8 @@ message TRule_<currentRule.name> {
     oneof Alt {
         <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
     }
+    uint32 StartTokenIndex = <length([first(code).alts, file])>;
+    uint32 EndTokenIndex = <length([first(code).alts, file, file])>;
     <else>
     <code:{e | <element(e, i)>}; separator="\n">
     <defineDescr(code)>
@@ -135,6 +144,8 @@ message TRule_<currentRule.name> {
     oneof Alt {
         <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
     }
+    uint32 StartTokenIndex = <length([first(code).alts, file])>;
+    uint32 EndTokenIndex = <length([first(code).alts, file, file])>;
     <else>
     // some common block
     <code:{e | <element(e, i)>}; separator="\n">
@@ -222,6 +233,8 @@ message TBlock<elemId> {
     oneof Alt {
         <alts:{a | TAlt<i> Alt<i> = <i>; }; separator="\n">
     }
+    uint32 StartTokenIndex = <length([alts, file])>;
+    uint32 EndTokenIndex = <length([alts, file, file])>;
 <else>
     <alts>
     <defineDescr(alts)>
@@ -239,17 +252,25 @@ message TAlt<altNum> {
 defineDescr(alt) ::= <<
 <if(rest(alt) || !alt.ops)>
 string Descr = <length([alt, file])>;
+uint32 StartTokenIndex = <length([alt, file, file])>;
+uint32 EndTokenIndex = <length([alt, file, file, file])>;
 <else>
 <if(first(alt.ops).ops)>
 <if(first(first(alt.ops).ops).ops)>
 // CodeBlockForOuterMostAlt -> CodeBlockForAlt -> CodeBlockForAlt
 string Descr = <length([first(first(alt.ops).ops).ops, file])>;
+uint32 StartTokenIndex = <length([first(first(alt.ops).ops).ops, file, file])>;
+uint32 EndTokenIndex = <length([first(first(alt.ops).ops).ops, file, file, file])>;
 <else>
 // CodeBlockForAlt -> CodeBlockForAlt
 string Descr = <length([first(alt.ops).ops, file])>;
+uint32 StartTokenIndex = <length([first(alt.ops).ops, file, file])>;
+uint32 EndTokenIndex = <length([first(alt.ops).ops, file, file, file])>;
 <endif>
 <else>
 string Descr = <length([alt.ops, file])>;
+uint32 StartTokenIndex = <length([alt.ops, file, file])>;
+uint32 EndTokenIndex = <length([alt.ops, file, file, file])>;
 <endif>
 <endif>
 >>

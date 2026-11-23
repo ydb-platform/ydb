@@ -10,7 +10,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
@@ -218,9 +217,12 @@ private:
             Y_ABORT_UNLESS(Topics.size() == result->ResultSet.size());
             Y_ABORT_UNLESS(Result == nullptr);
             FirstRequestDone = true;
-            ui64 index = 0;
             Result = std::move(result);
-            for (const auto& entry : Result->ResultSet) {
+            // Index must follow the SchemeCache entry. A continue that skipped
+            // index++ paired a later fallback with an earlier topic and could
+            // retry an entry whose status was already Ok.
+            for (ui64 index = 0; index < Result->ResultSet.size(); ++index) {
+                const auto& entry = Result->ResultSet[index];
                 if (DbRoot.empty()) {
                     continue;
                 }
@@ -237,7 +239,6 @@ private:
                     }
                     SecondTryTopics.push_back(index);
                 }
-                index++;
             }
             //return true;
             return SecondTryTopics.empty(); //ToDo - second try topics

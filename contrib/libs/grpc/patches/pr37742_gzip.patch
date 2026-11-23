@@ -1,17 +1,17 @@
---- a/src/core/ext/filters/client_channel/retry_filter_legacy_call_data.h       (index)
-+++ b/src/core/ext/filters/client_channel/retry_filter_legacy_call_data.h       (working tree)
-@@ -267,6 +267,9 @@ class RetryFilter::LegacyCallData {
+--- a/src/core/client_channel/retry_filter_legacy_call_data.h       (index)
++++ b/src/core/client_channel/retry_filter_legacy_call_data.h       (working tree)
+@@ -267,6 +267,9 @@
      grpc_transport_stream_op_batch_payload batch_payload_;
      // For send_initial_metadata.
-     grpc_metadata_batch send_initial_metadata_{calld_->arena_};
+     grpc_metadata_batch send_initial_metadata_;
 +
 +    SliceBuffer send_message_;
 +
      // For send_trailing_metadata.
-     grpc_metadata_batch send_trailing_metadata_{calld_->arena_};
+     grpc_metadata_batch send_trailing_metadata_;
      // For intercepting recv_initial_metadata.
---- a/src/core/ext/filters/client_channel/retry_filter_legacy_call_data.cc
-+++ b/src/core/ext/filters/client_channel/retry_filter_legacy_call_data.cc
+--- a/src/core/client_channel/retry_filter_legacy_call_data.cc
++++ b/src/core/client_channel/retry_filter_legacy_call_data.cc
 @@ -1334,6 +1337,7 @@ void RetryFilter::LegacyCallData::CallAttempt::BatchData::OnComplete(
    }
    if (batch_data->batch_.send_message) {

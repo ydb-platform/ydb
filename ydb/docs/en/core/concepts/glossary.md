@@ -56,31 +56,33 @@ Many terms related to the [implementation of distributed storage](#distributed-s
 
 **Storage group**, **distributed storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID), but using disks from multiple servers. Depending on the selected [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
 
-[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase the disk space capacity and I/O throughput available to that database.
-
-[Static](#static-group) and [dynamic](#dynamic-group) storage groups are physical, meaning their data is placed directly on [VDisk](#vdisk)s.
+[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Data of cluster-wide system [tablets](#tablet) is stored in [static groups](#static-group). Each [database](#database) includes one or more [dynamic groups](#dynamic-group), which provide that database with disk capacity and I/O throughput.
 
 #### Static group {#static-group}
 
 **Static group** is a special [storage group](#storage-group) created during the initial cluster deployment. Its main role is to store data of system [tablets](#tablet), which can be considered as cluster-wide metadata.
 
-A static group may require special attention during major cluster maintenance, such as decommissioning an [availability zone](#regions-az).
+A static group requires special attention during major cluster maintenance, such as decommissioning an [availability zone](#regions-az).
 
 #### Dynamic group {#dynamic-group}
 
 Ordinary storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
 
+Each dynamic group belongs to a single [database](#database) and stores that database's data. [Tablets](#tablet) in the database reach these groups through [channels](#channel). Each channel is assigned to one group, and that assignment can change over time.
+
 #### Virtual storage group {#virtual-storage-groups}
 
-**Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
+**Virtual storage group** is an entity that exposes the same external interface as a [storage group](#storage-group). A virtual storage group stores the data written to it either in other storage groups or in S3-compatible storage, in contrast to [static](#static-group) and [dynamic groups](#dynamic-group), which store their data on [VDisks](#vdisk).
+
+Virtual storage groups decouple the physical placement of data from the logical allocation of storage to tablets. This gives the administrator more flexibility in storage management, including the ability to decommission dynamic groups and reduce the storage allocated to a particular [database](#database).
 
 #### BlobDepot {#blob-depot}
 
-**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups.
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other dynamic groups or in S3-compatible storage and is also used to decommission dynamic groups.
 
 ### Storage pool {#storage-pool}
 
-**Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the cluster {{ ydb-short-name }}. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
+**Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
 
 ### Actor {#actor}
 
@@ -210,19 +212,15 @@ There are two main approaches to representing tabular data in memory or on disk:
 
 #### Primary key {#primary-key}
 
-A **primary key** is an ordered list of columns whose values uniquely identify a row. It is used to create the table's [primary index](#primary-index). It is set by the user {{ ydb-short-name }} when [creating a table](../yql/reference/syntax/create_table/index.md) and significantly affects the performance of operations on that table.
+A **primary key** is an ordered list of columns whose values uniquely identify a row. It determines the physical order of rows in the table; thus, each table can have only one primary key. The primary key is set by the {{ ydb-short-name }} user when [creating a table](../yql/reference/syntax/create_table/index.md) and significantly affects the performance of operations on that table. The primary key is unique by its very definition.
 
 Guidance on choosing primary keys is provided in [{#T}](../dev/primary-key/index.md).
 
-#### Primary index {#primary-index}
-
-A **primary index** or **primary key index** is the main data structure used to find rows in a table. It is created based on the selected [primary key](#primary-key) and determines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
-
 #### Secondary index {#secondary-index}
 
-A **secondary index** is an additional data structure used to find rows in a table, typically when this cannot be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently of the table's underlying data. Thus, a table can have multiple secondary indexes for different scenarios. The capabilities of {{ ydb-short-name }} regarding secondary indexes are described in a separate article [{#T}](query_execution/secondary_indexes.md). A secondary index can be either unique or non-unique.
+A **secondary index** is an additional data structure used to find rows in a table, typically when this cannot be done efficiently using the [primary key](#primary-key). Unlike the primary key, secondary indexes are managed independently of the table's underlying data. Thus, a table can have multiple secondary indexes for different scenarios. The capabilities of {{ ydb-short-name }} regarding secondary indexes are described in a separate article [{#T}](query_execution/secondary_indexes.md). A secondary index can be either unique or non-unique.
 
-Special types of secondary indexes are distinguished: [vector index](#vector-index), [full-text index](#fulltext-index), and [JSON index](#json-index).
+Special types of secondary indexes are also available: [vector index](#vector-index), [full-text index](#fulltext-index), and [JSON index](#json-index).
 
 #### Vector index {#vector-index}
 
@@ -314,6 +312,39 @@ A **producer** is an entity that writes new messages to a topic.
 #### Reader {#consumer}
 
 A **consumer** is an entity that reads messages from a topic.
+
+### Query execution {#runtime-stats}
+
+The terms below describe the [query execution plan](../dev/optimization/structure.md) and the distributed execution of its stages.
+
+#### Operator {#operator}
+
+An **operator** is an element of a [query plan](../dev/optimization/index.md) that describes an action on data (reading a table, filtering, joining, aggregation, and so on).
+
+#### Logical operator {#logical-operator}
+
+A **logical operator** describes **what** to do with the data, without specifying how to execute it on the [cluster](#cluster). Logical operators form the logical plan early in compilation.
+
+#### Physical operator {#physical-operator}
+
+A **physical operator** describes **what** runs and **how**: the chosen algorithm (for example, `TableFullScan` or `InnerJoin (Map)`), how the work is distributed across [processing stages](#processing-stage), and how it takes part in data exchange between [nodes](#node).
+
+#### Communication channels {#channels}
+
+**Communication channels** are elements of the [query execution plan](../dev/optimization/structure.md) that transfer data between [processing stages](#processing-stage). A communication channel consists of an output channel, which sends data from one [processing stage](#processing-stage), and an input channel, which receives data into another [processing stage](#processing-stage). Communication channels carry data between compute stages and between storage stages and compute stages. Different connection types use different mechanisms, for example [hash shuffle](../dev/optimization/structure.md#connections) or a [merge operation](../dev/optimization/structure.md#connections).
+
+#### Processing stage {#processing-stage}
+
+**Processing stages** are blocks of the [query execution plan](../dev/optimization/structure.md) into which an SQL query is split during compilation. Stages process data sequentially: the data flow goes from storage to the query result and, in the general case, forms a [directed acyclic graph](https://en.wikipedia.org/wiki/Directed_acyclic_graph). Each stage consists of one or more [tasks](#task) executed in parallel on different [cluster nodes](#node) and contains [physical operators](#physical-operator).
+
+There are two kinds of stages:
+
+- stages that run directly on table partitions (that is, implemented by [DataShard](#data-shard) logic for row-oriented tables or by [ColumnShard](#column-shard) logic for column-oriented tables);
+- compute stages, which run without access to long-term data storage.
+
+#### Task {#task}
+
+A **task** is the unit of distributed execution inside a [processing stage](#processing-stage): a single logical thread of execution on one [node](#node) of the cluster which processes part of that stage's data.
 
 ### Change data capture {#cdc}
 
@@ -543,6 +574,10 @@ The optional suffix `@<auth-domain>` identifies the source of the access subject
 ### Query optimizer {#optimizer}
 
 [**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) — a set of {{ ydb-short-name }} components responsible for converting the logical representation of a query into a concrete physically executable plan for obtaining the requested result. The main goal of the optimizer is to choose, among all possible query execution plans, one that is sufficiently efficient in terms of predicted execution time and cluster resource consumption. It is described in more detail in a separate article [{#T}](query_execution/optimizer.md).
+
+#### Cardinality {#cardinality}
+
+**Cardinality** is the [query optimizer](#optimizer)'s estimate of the number of rows (records) at the output of an [operator](#operator) in the [query plan](../dev/optimization/index.md) or of a join of the given tables.
 
 ### Compile cache {#compile-cache}
 
@@ -826,13 +861,21 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 #### PDisk {#pdisk}
 
-**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk ensures data integrity control (including [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors, integrity control using checksums), transparent encryption of all data on the disk, and transactional guarantees for disk operations (write acknowledgment strictly after `fsync`).
+**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk provides durability guarantees for disk operations (a write is acknowledged strictly after it completes successfully).
 
-PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into blocks called [slots](#slot) (about 128 megabytes in size; smaller blocks are also allowed). At any given time, no more than one VDisk can own each slot. PDisk also maintains a recovery log shared by PDisk service records and all VDisks.
+PDisk stores data for its clients ([VDisks](#vdisk)) and manages their I/O. Each PDisk serves multiple VDisks and divides its capacity, IOPS, and bandwidth among them. PDisk includes a specialized operation scheduler that shares the device's bandwidth among the VDisks. VDisks can move from one PDisk to another using replication mechanisms without interrupting data access for applications and users.
+
+The maximum number of VDisks on a single PDisk is determined by the number of [VDisk slots](#slot), which depends on the physical device type. Each VDisk occupies a certain number of slots on a PDisk (usually one slot, and two in some configurations). When the free slots are exhausted, no additional VDisks can be placed on that PDisk.
+
+PDisk keeps state-recovery logs for PDisk service records and for all VDisks. It detects data corruption using checksums. In addition, PDisk supports transparent encryption of all data on the disk.
 
 #### VDisk {#vdisk}
 
-**VDisk**, **virtual disk** is a component that implements data storage of [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on [PDisk](#pdisk). VDisk stores all its data on PDisk. One VDisk corresponds to one PDisk, but usually several VDisks are associated with one PDisk. Unlike PDisk, which hides blocks and journals behind itself, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command. VDisk is a member of [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group provide reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. A set of VDisks in a storage group forms a distributed RAID.
+**VDisk** or **virtual disk** is a component that implements storage of [distributed storage](#distributed-storage) [LogoBlob](#logoblob) data on a [PDisk](#pdisk). A VDisk stores all of its data on a PDisk. One VDisk stores its data on a single PDisk, while one PDisk usually corresponds to several VDisks.
+
+VDisk provides an interface for reading and writing LogoBlobs identified by [LogoBlobID](#logoblobid).
+
+VDisk is a member of a [storage group](#storage-group). The VDisk itself is local: it runs on the node where its PDisk is located. Multiple VDisks in a storage group provide reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of loss. The set of VDisks in a storage group forms the equivalent of a distributed RAID array.
 
 #### Yard {#yard}
 

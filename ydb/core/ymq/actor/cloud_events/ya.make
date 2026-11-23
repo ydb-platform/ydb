@@ -6,12 +6,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/ymq/actor/cloud_events/proto
-    ydb/library/actors/core
+    ydb/core/audit
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/protos
     ydb/core/util
+    ydb/core/ymq/actor/cloud_events/proto
     ydb/core/ymq/base
-    ydb/core/audit
+    ydb/library/actors/core
 )
 
 YQL_LAST_ABI_VERSION()

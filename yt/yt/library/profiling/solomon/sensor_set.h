@@ -15,6 +15,8 @@
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
+#include <variant>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,6 +38,8 @@ struct TCounterState final
     const std::function<i64()> Reader;
     TTagIdSet TagSet;
 
+    TCounterCube::TProjectionCookie ProjectionCookie;
+
     i64 LastValue = 0;
 };
 
@@ -56,6 +60,8 @@ struct TTimeCounterState final
 
     const TWeakPtr<ITimeCounter> Owner;
     TTagIdSet TagSet;
+
+    TTimeCounterCube::TProjectionCookie ProjectionCookie;
 
     TDuration LastValue = TDuration::Zero();
 };
@@ -80,6 +86,8 @@ struct TGaugeState final
     const TWeakPtr<TRefCounted> Owner;
     const std::function<double()> Reader;
     TTagIdSet TagSet;
+
+    TGaugeCube::TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(TGaugeState)
@@ -99,6 +107,8 @@ struct TSummaryState final
 
     const TWeakPtr<ISummary> Owner;
     TTagIdSet TagSet;
+
+    TSummaryCube::TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSummaryState)
@@ -118,6 +128,8 @@ struct TTimerSummaryState final
 
     const TWeakPtr<ITimer> Owner;
     TTagIdSet TagSet;
+
+    TTimerCube::TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(TTimerSummaryState)
@@ -129,6 +141,12 @@ DECLARE_REFCOUNTED_STRUCT(THistogramState)
 
 struct THistogramState final
 {
+    using TProjectionCookie = std::variant<
+        TTimeHistogramCube::TProjectionCookie,
+        TGaugeHistogramCube::TProjectionCookie,
+        TRateHistogramCube::TProjectionCookie
+    >;
+
     THistogramState(
         TWeakPtr<THistogram> owner,
         TTagIdSet tagSet)
@@ -138,6 +156,8 @@ struct THistogramState final
 
     const TWeakPtr<THistogram> Owner;
     TTagIdSet TagSet;
+
+    TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(THistogramState)

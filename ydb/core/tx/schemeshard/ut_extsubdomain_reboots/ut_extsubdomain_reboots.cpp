@@ -333,6 +333,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST_FLAG(CreateForceDrop, AlterDatabaseCreateHiveFirst) {
         TTestWithReboots t;
+        t.CreateDefaultDirectory = false;
         t.GetTestEnvOptions()
             .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
 
@@ -355,7 +356,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(2, NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+                                   {NLs::ChildrenCount(1, NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subDomainPathId));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subDomainPathId));
             }
@@ -364,6 +365,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST_FLAGS(AlterForceDrop, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestWithReboots t;
+        t.CreateDefaultDirectory = false;
         t.GetTestEnvOptions()
             .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
 
@@ -407,7 +409,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(2, NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
+                                   {NLs::ChildrenCount(1, NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5, 6});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subDomainPathId));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subDomainPathId));
@@ -488,6 +490,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST(AlterSchemeLimits) {
         TTestWithReboots t;
+        t.CreateDefaultDirectory = false;
         //INFO: Temporarily this test will not run when EnableAlterDatabase is not set
         t.GetTestEnvOptions().EnableAlterDatabase(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -566,7 +569,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
                 const auto defaultLimits = TSchemeLimits().AsProto();
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-                    NLs::ChildrenCount(3),
+                    NLs::ChildrenCount(2),
                     NLs::SchemeLimits(defaultLimits)
                 });
 

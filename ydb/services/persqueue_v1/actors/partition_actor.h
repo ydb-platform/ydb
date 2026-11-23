@@ -117,6 +117,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+            HFunc(TEvPersQueue::TEvReplicationData, Handle);
 
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
@@ -145,6 +146,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
@@ -171,6 +173,7 @@ private:
     void SendPublishDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
+    void SendReadWindowExhausted(const TActorContext& ctx);
     void CommitDone(ui64 cookie, const TActorContext& ctx);
     NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial, ui64 cookie) const;
     NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
@@ -223,6 +226,7 @@ private:
 
     ui64 WTime;
     bool InitDone;
+    std::deque<THolder<TEvPersQueue::TEvReplicationData>> PendingReplicationData;
     bool StartReading;
     bool AllPrepareInited;
     bool FirstInit;
@@ -235,6 +239,7 @@ private:
     NKikimrClient::TPersQueueRequest CurrentRequest;
 
     ui64 EndOffset;
+    TMaybe<ui64> RetainedStartOffset;
     ui64 SizeLag;
 
     TString ReadGuid; // empty if not reading
@@ -291,11 +296,13 @@ private:
 
     bool FirstRead;
     bool ReadingFinishedSent;
+    bool WindowExhaustedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;
+    inline bool IsPartitionExhausted() const;
 };
 
 

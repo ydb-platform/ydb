@@ -80,7 +80,7 @@ Example:
 | `--table <name>` | Name of the table to load data into. | `vector_index_workload` |
 | `--index <name>` | Name of the vector index to build after import. | `index` |
 | `--index-type <type>` | Index type to build after import. Possible values: `None`, `KmeansTree`. Set to `None` to skip index building. | `KmeansTree` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension (size of embedding vectors). | `1024` |
 | `--distance <value>` | Distance or similarity function. One of `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | Auto-detected |
@@ -114,7 +114,7 @@ Generate random vectors and load them into the table. Vector components are samp
 | `--table <name>` | Name of the table to load data into. | `vector_index_workload` |
 | `--index <name>` | Name of the vector index to build after import. | `index` |
 | `--index-type <type>` | Index type to build after import. Possible values: `None`, `KmeansTree`. | `KmeansTree` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |
@@ -144,7 +144,7 @@ If the table was loaded with `--index-type None`, or if you want to build an add
 |---|---|---|
 | `--table <name>` | Name of the table to build the index on. | `vector_index_workload` |
 | `--index <name>` | Name of the index to create. | `index` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |
@@ -194,7 +194,7 @@ Executes vector search queries against the indexed table. Optionally measures re
 | `--query-table <name>` | Name of the table with predefined search vectors. If not specified, random rows from the main table are used. | |
 | `--targets <value>` | Number of vectors to use as test targets. | `100` |
 | `--limit <value>` | Maximum number of nearest vectors to return per query. | `5` |
-| `--kmeans-tree-clusters <value>` | Maximum number of clusters to inspect during search ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize)). | `1` |
+| `--kmeans-tree-clusters <value>` | Maximum number of clusters to inspect during search ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize)). | `1` |
 | `--recall` | Measure [recall](https://en.wikipedia.org/wiki/Precision_and_recall) of the approximate search compared to exact search. | |
 | `--recall-threads <value>` | Number of concurrent queries during recall measurement. | `10` |
 | `--non-indexed` | Take vector settings from the index, but search without the index (full scan). | |

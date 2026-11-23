@@ -108,6 +108,8 @@ const THashSet<TStringBuf> KNOWN_SIMPLE_FLAGS = {
     "AnsiOrderByLimitInUnionAll",
 };
 
+} // namespace
+
 bool IsKnownSimpleFlag(TStringBuf flag) {
     if (CTX_PRAGMA_FIELDS.contains(flag) || CTX_PRAGMA_MAYBE_FIELDS.contains(flag)) {
         return true;
@@ -124,15 +126,15 @@ bool IsKnownSimpleFlag(TStringBuf flag) {
     return false;
 }
 
-} // namespace
-
 TContext::TContext(TLexers lexers, TParsers parsers,
                    const NSQLTranslation::TTranslationSettings& settings,
                    NSQLTranslation::TSQLHints hints,
+                   const NSQLTranslation::TParsedTokenList& tokens,
                    TIssues& issues,
                    TString query)
     : Lexers(std::move(lexers))
     , Parsers(std::move(parsers))
+    , Tokens_(tokens)
     , ClusterMapping_(settings.ClusterMapping)
     , PathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
@@ -203,6 +205,14 @@ TContext::~TContext()
     for (auto& x : AllScopes) {
         x->Clear();
     }
+}
+
+TString TContext::QueryText(const TTokenIndexRange& range, TQueryTextOptions options) const {
+    return NSQLTranslationV1::QueryText(Tokens_, range, options);
+}
+
+TString TContext::ContextRecreationQuery() const {
+    return ContextRecreationQueryText(Tokens_, ForAllStatementsParts);
 }
 
 const NYql::TPosition& TContext::Pos() const {
@@ -422,7 +432,7 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
-        if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
+        if (*arg == YtProviderName || *arg == KikimrProviderName)
         {
             ProviderPathPrefixes_[*arg] = value;
             return true;
@@ -445,11 +455,18 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 
 void TContext::SetRelativePathPrefix(const TString& value) {
     PathPrefix_ = BuildTablePath(Settings.PathPrefix, value);
+    ProviderPathPrefixes_.clear();
+    ClusterPathPrefixes_ = Settings.ClusterPathPrefixes;
     for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
         if (prefix) {
             prefix = BuildTablePath(prefix, value);
         }
     }
+}
+
+void TContext::ResetRelativePathPrefix() {
+    PathPrefix_ = Settings.PathPrefix;
+    ClusterPathPrefixes_ = Settings.ClusterPathPrefixes;
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
@@ -628,7 +645,7 @@ bool TContext::UseUnordered(const TTableRef& table) const {
     return YtProviderName == table.Service;
 }
 
-TScopedStatePtr TContext::CreateScopedState() const {
+TScopedStatePtr TContext::CreateScopedState() {
     auto state = MakeIntrusive<TScopedState>();
     state->UnicodeLiterals = Settings.UnicodeLiterals;
 
@@ -636,8 +653,11 @@ TScopedStatePtr TContext::CreateScopedState() const {
         state->CurrCluster = TDeferredAtom({}, Settings.DefaultCluster);
 
         const auto provider = GetClusterProvider(Settings.DefaultCluster);
-        YQL_ENSURE(provider);
-        state->CurrService = *provider;
+        if (provider) {
+            state->CurrService = *provider;
+        } else {
+            Error() << "Unknown default cluster: " << Settings.DefaultCluster;
+        }
     }
 
     return state;

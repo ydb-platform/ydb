@@ -1,0 +1,71 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "StructType";
+                                        [
+                                            [
+                                                "Data";
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "Input line #64"
+                            ];
+                            [
+                                "Input line #94"
+                            ];
+                            [
+                                "Input line #49"
+                            ];
+                            [
+                                "Input line #14"
+                            ];
+                            [
+                                "Input line #43"
+                            ];
+                            [
+                                "Input line #34"
+                            ];
+                            [
+                                "Input line #47"
+                            ];
+                            [
+                                "Input line #42"
+                            ];
+                            [
+                                "Input line #46"
+                            ];
+                            [
+                                "Input line #41"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

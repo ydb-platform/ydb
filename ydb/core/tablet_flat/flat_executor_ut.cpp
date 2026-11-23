@@ -1,5 +1,7 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
+#include "flat_page_blobs.h"
+#include "flat_redo_observer.h"
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
@@ -311,9 +313,12 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow &) override
+    EScan Feed(TArrayRef<const TCell> key, const TRow &row) override
     {
         Y_ENSURE(key[0].AsValue<ui64>() == ExpectedRowId);
+        if (CheckRow) {
+            CheckRow(*Scheme, row);
+        }
         ++ExpectedRowId;
         ++StoredRows;
         return EScan::Feed;
@@ -346,6 +351,8 @@ private:
     }
 
 public:
+    using TCheckRow = std::function<void(const TScheme&, const TRow&)>;
+    TCheckRow CheckRow;
     TArrayRef<const TCell> LeadKey;
     ui64 ExpectedPageFaults = Max<ui64>();
 
@@ -399,6 +406,7 @@ struct TEvTestFlatTablet {
         ui64 ExpectedPageFaults = Max<ui64>();
 
         std::optional<std::pair<ui64, ui64>> ReadAhead;
+        TDummyScan::TCheckRow CheckRow;
         TArrayRef<const TCell> LeadKey;
     };
     struct TEvStartQueuedScan : public TEventLocal<TEvStartQueuedScan, EvStartQueuedScan> {};
@@ -436,9 +444,12 @@ protected:
 };
 
 class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFlat {
+public:
+    static constexpr ui64 ScanCookie = 123;
+
+private:
     TDummyScan *Scan;
     ui64 ScanTaskId;
-    ui64 ScanCookie;
     ui64 SnapshotId;
     TActorId Sender;
 
@@ -481,6 +492,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         auto abort = ev->Get()->Status;
         auto rows = abort != NTable::EStatus::Done ? 0 : ev->Get()->ExpectRows;
         Scan = new TDummyScan(SelfId(), postpone, abort, rows);
+        Scan->CheckRow = std::move(ev->Get()->CheckRow);
         Scan->LeadKey = ev->Get()->LeadKey;
         Scan->ExpectedPageFaults = ev->Get()->ExpectedPageFaults;
         TScanOptions options;
@@ -555,7 +567,6 @@ public:
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Scan(nullptr)
         , ScanTaskId(0)
-        , ScanCookie(123)
         , SnapshotId(0)
         , Sender(sender)
     {}
@@ -2638,6 +2649,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
         KeyColumnId = 1,
         ValueColumnId = 2,
         CounterColumnId = 3,
+        SharedBlobColumnId = 4,
+        ExtraBlobColumnId = 5,
     };
 
     struct TTxInitSchema : public ITransaction {
@@ -2654,6 +2667,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
                 .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
                 .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
                 .AddColumn(TableId, "counter", CounterColumnId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "sharedBlob", SharedBlobColumnId, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "extraBlob", ExtraBlobColumnId, NScheme::TString::TypeId, false, false)
                 .AddColumnToKey(TableId, KeyColumnId)
                 .SetCompactionPolicy(TableId, *policy)
                 .SetFamilyBlobs(TableId, 0, -1, 128);
@@ -2737,6 +2752,284 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
         ui64 Rows = 0;
         const TRowVersion WriteVersion;
     };
+
+    void PrepareCompactedBlobPart(TMyEnvBase& env, THolder<ITransaction> writeRows) {
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        env.SendSync(new NFake::TEvExecute{new TTxInitSchema});
+        env.SendSync(new NFake::TEvExecute{std::move(writeRows)});
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+    }
+
+    void PrepareSharedBlobVersions(TMyEnvBase& env, ui32 versions, size_t blobSize, ui32 keys = 1) {
+        struct TTxWriteBlobVersions : public ITransaction {
+            TTxWriteBlobVersions(ui32 versions, size_t blobSize, ui32 keys)
+                : Versions(versions)
+                , BlobSize(blobSize)
+                , Keys(keys)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                for (ui32 keyId = 1; keyId <= Keys; ++keyId) {
+                    const auto key = NScheme::TInt64::TInstance(keyId);
+                    const TString shared(keyId * BlobSize, 's');
+                    for (ui32 step = 1; step <= Versions; ++step) {
+                        const TString value(BlobSize, char(step));
+                        const NTable::TUpdateOp ops[] = {
+                            {ValueColumnId, NTable::ECellOp::Set, NScheme::TString::ToRawTypeValue(value)},
+                            {SharedBlobColumnId, NTable::ECellOp::Set, NScheme::TString::ToRawTypeValue(shared)},
+                        };
+                        // All later versions inherit the shared blob written by the first version.
+                        const TArrayRef<const NTable::TUpdateOp> updates(ops, step == 1 ? 2 : 1);
+                        txc.DB.Update(TableId, NTable::ERowOp::Upsert, {key}, updates, TRowVersion(step, 1));
+                    }
+                }
+                return true;
+            }
+
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+
+            const ui32 Versions;
+            const size_t BlobSize;
+            const ui32 Keys;
+        };
+
+        PrepareCompactedBlobPart(env, MakeHolder<TTxWriteBlobVersions>(versions, blobSize, keys));
+    }
+
+    Y_UNIT_TEST(ScanSharedBlobAtOlderSnapshot) {
+        constexpr size_t BlobSize = 64 * 1024;
+        TMyEnvBase env;
+        PrepareSharedBlobVersions(env, 2, BlobSize);
+
+        auto scanAt = [&](ui32 step) {
+            auto* scan = new TEvTestFlatTablet::TEvQueueScan(1, TRowVersion(step, 1));
+            scan->CheckRow = [step](const NTable::TRowScheme& scheme, const NTable::TRowState& row) {
+                UNIT_ASSERT_VALUES_EQUAL(row.Get(scheme.ColInfo(ValueColumnId)->Pos).AsBuf(), TString(BlobSize, char(step)));
+                UNIT_ASSERT_VALUES_EQUAL(row.Get(scheme.ColInfo(SharedBlobColumnId)->Pos).AsBuf(), TString(BlobSize, 's'));
+            };
+            env.SendAsync(scan);
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        };
+        scanAt(2);
+        // The historical value lives in a later blob frame than the shared column it precedes in scan order.
+        scanAt(1);
+    }
+
+    Y_UNIT_TEST(ScanKeepsPrefetchedBlobAcrossKeysAtOlderSnapshot) {
+        constexpr size_t BlobSize = 4 * 1024;
+        TMyEnvBase env;
+        PrepareSharedBlobVersions(env, 2, BlobSize, 2);
+
+        ui32 rows = 0;
+        TVector<ui32> rowsAtRequest;
+        auto observeFetches = env->AddObserver<NSharedCache::TEvRequest>([&](const auto& ev) {
+            const auto* msg = ev->Get();
+            if (dynamic_cast<const NTable::NPage::TExtBlobs*>(msg->PageCollection.Get())) {
+                for (const auto& page : msg->Pages) {
+                    // Only the second key's shared blob has an 8 KiB payload.
+                    if (page.Size == 2 * BlobSize + sizeof(NTable::NPage::TLabel)) {
+                        rowsAtRequest.push_back(rows);
+                    }
+                }
+            }
+        });
+
+        auto* scan = new TEvTestFlatTablet::TEvQueueScan(2, TRowVersion(1, 1));
+        scan->ReadAhead = std::pair<ui64, ui64>{512 * 1024, 1024 * 1024};
+        scan->CheckRow = [&](const NTable::TRowScheme& scheme, const NTable::TRowState& row) {
+            ++rows;
+            UNIT_ASSERT_VALUES_EQUAL(row.Get(scheme.ColInfo(ValueColumnId)->Pos).AsBuf(), TString(BlobSize, char(1)));
+            UNIT_ASSERT_VALUES_EQUAL(row.Get(scheme.ColInfo(SharedBlobColumnId)->Pos).AsBuf(), TString(rows * BlobSize, 's'));
+        };
+        env.SendAsync(scan);
+        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+
+        // The second key reads its historical value before the shared blob from its earlier frame.
+        // Its read-ahead request while scanning the first key should be the only one.
+        UNIT_ASSERT_VALUES_EQUAL(rowsAtRequest, (TVector<ui32>{0}));
+    }
+
+    Y_UNIT_TEST(ScanKeepsPrefetchedBlobAcrossFramesInBothColumnOrders) {
+        struct TWriteRows : ITransaction {
+            TWriteRows(ui32 shared, ui32 newer)
+                : Shared(shared), Newer(newer)
+            {}
+
+            static TString Blob(ui32 kib, char fill) {
+                // Read-ahead counts the physical size, including the page label.
+                return TString(kib * 1024 - sizeof(NTable::NPage::TLabel), fill);
+            }
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                const auto first = NScheme::TInt64::TInstance(1);
+                const auto second = NScheme::TInt64::TInstance(2);
+                using NTable::ECellOp;
+                using TStringType = NScheme::TString;
+                txc.DB.Update(TableId, NTable::ERowOp::Upsert, {first}, {
+                    {Shared, ECellOp::Set, TStringType::ToRawTypeValue(Blob(1, 'a'))},
+                    {Newer, ECellOp::Set, TStringType::ToRawTypeValue(Blob(1, 'b'))},
+                }, TRowVersion(1, 1));
+                txc.DB.Update(TableId, NTable::ERowOp::Upsert, {second}, {
+                    {ValueColumnId, ECellOp::Set, TStringType::ToRawTypeValue(Blob(3, 'h'))},
+                    {Shared, ECellOp::Set, TStringType::ToRawTypeValue(Blob(2, 's'))},
+                }, TRowVersion(1, 1));
+                txc.DB.Update(TableId, NTable::ERowOp::Upsert, {second}, {
+                    {ValueColumnId, ECellOp::Null, {}},
+                    {Newer, ECellOp::Set, TStringType::ToRawTypeValue(Blob(6, 'n'))},
+                }, TRowVersion(2, 1));
+                return true;
+            }
+
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+
+            const ui32 Shared;
+            const ui32 Newer;
+        };
+
+        for (auto [shared, newer] : {std::pair<ui32, ui32>{SharedBlobColumnId, ExtraBlobColumnId},
+                                     std::pair<ui32, ui32>{ExtraBlobColumnId, SharedBlobColumnId}}) {
+            TMyEnvBase env;
+            PrepareCompactedBlobPart(env, MakeHolder<TWriteRows>(shared, newer));
+            ui32 rows = 0;
+            TVector<ui32> sharedRequests, newerRequests;
+            auto observer = env->AddObserver<NSharedCache::TEvRequest>([&](const auto& ev) {
+                const auto* msg = ev->Get();
+                if (dynamic_cast<const NTable::NPage::TExtBlobs*>(msg->PageCollection.Get())) {
+                    for (const auto& page : msg->Pages) {
+                        if (page.Size == 2 * 1024) {
+                            sharedRequests.push_back(rows);
+                        } else if (page.Size == 6 * 1024) {
+                            newerRequests.push_back(rows);
+                        }
+                    }
+                }
+            });
+
+            auto* scan = new TEvTestFlatTablet::TEvQueueScan(2, TRowVersion(1, 1));
+            scan->ReadAhead = std::pair<ui64, ui64>{4 * 1024, 8 * 1024};
+            scan->CheckRow = [&](const NTable::TRowScheme& scheme, const NTable::TRowState& row) {
+                auto cell = [&](ui32 tag) { return row.Get(scheme.ColInfo(tag)->Pos); };
+                if (++rows == 1) {
+                    UNIT_ASSERT(cell(ValueColumnId).IsNull());
+                    UNIT_ASSERT_VALUES_EQUAL(cell(shared).AsBuf(), TWriteRows::Blob(1, 'a'));
+                    UNIT_ASSERT_VALUES_EQUAL(cell(newer).AsBuf(), TWriteRows::Blob(1, 'b'));
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(cell(ValueColumnId).AsBuf(), TWriteRows::Blob(3, 'h'));
+                    UNIT_ASSERT_VALUES_EQUAL(cell(shared).AsBuf(), TWriteRows::Blob(2, 's'));
+                    UNIT_ASSERT(cell(newer).IsNull());
+                }
+            };
+            env.SendAsync(scan);
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+
+            // Both blobs were prefetched on the first key. Reading the historical
+            // value must retain the shared blob from the destination key's earlier frame.
+            UNIT_ASSERT_VALUES_EQUAL_C(sharedRequests, (TVector<ui32>{0}), "shared column " << shared);
+            UNIT_ASSERT_VALUES_EQUAL(newerRequests, (TVector<ui32>{0}));
+        }
+    }
+
+    Y_UNIT_TEST(VersionScanReadsSharedBlobAcrossFrames) {
+        constexpr ui32 Versions = 32;
+        constexpr size_t BlobSize = 4 * 1024;
+        struct TRowImage {
+            TRowVersion Version;
+            TString Value;
+            TString Shared;
+        };
+        struct TScanResult {
+            TActorId Actor;
+            TVector<TRowImage> Rows;
+            NTable::EStatus Status = NTable::EStatus::Lost;
+        };
+        struct TBlobVersionScan final : NTable::IVersionScan {
+            explicit TBlobVersionScan(TScanResult& result)
+                : Result(result)
+            {}
+
+            TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override {
+                Result.Actor = TActivationContext::AsActorContext().SelfID;
+                TConf conf;
+                conf.NoErased = false;
+                return {EScan::Feed, conf};
+            }
+
+            EScan Seek(TLead& lead, ui64 seq) override {
+                lead.To({ValueColumnId, SharedBlobColumnId}, {}, NTable::ESeek::Lower);
+                return seq == 0 ? EScan::Feed : EScan::Final;
+            }
+
+            EScan BeginKey(TArrayRef<const TCell> key) override {
+                UNIT_ASSERT_VALUES_EQUAL(key.at(0).AsValue<i64>(), 1);
+                return EScan::Feed;
+            }
+
+            EScan Feed(const TRow& row, TRowVersion& version) override {
+                Result.Rows.push_back({version, TString(row.Get(0).AsBuf()), TString(row.Get(1).AsBuf())});
+                return EScan::Feed;
+            }
+
+            EScan BeginDeltas() override { return EScan::Feed; }
+            EScan Feed(const TRow&, ui64) override { Y_TABLET_ERROR("Unexpected uncommitted row"); }
+            EScan Feed(NTable::ELockMode, ui64) override { Y_TABLET_ERROR("Unexpected lock"); }
+            EScan EndDeltas() override { return EScan::Feed; }
+            EScan EndKey() override { return EScan::Feed; }
+
+            TAutoPtr<IDestructable> Finish(EStatus status) override {
+                Result.Status = status;
+                return this;
+            }
+
+            void Describe(IOutputStream& out) const override {
+                out << "BlobVersionScan";
+            }
+
+            TScanResult& Result;
+        };
+
+        TScanResult result;
+        TMyEnvBase env;
+        PrepareSharedBlobVersions(env, Versions, BlobSize);
+        THashMap<TLogoBlobID, ui32> fetches;
+        auto observeFetches = env->AddObserver<NSharedCache::TEvRequest>([&](const auto& ev) {
+            if (ev->Sender == result.Actor) {
+                const auto* msg = ev->Get();
+                if (const auto* blobs = dynamic_cast<const NTable::NPage::TExtBlobs*>(msg->PageCollection.Get())) {
+                    for (const auto& page : msg->Pages) {
+                        ++fetches[blobs->Glob(page.Offset.AsPageIndex()).Logo];
+                    }
+                }
+            }
+        });
+        env.SendAsync(new NFake::TEvExecute{[&result](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetReadAhead(512 * 1024, 1024 * 1024);
+            executor->QueueScan(TableId, new TBlobVersionScan(result), TTestFlatTablet::ScanCookie, options);
+        }});
+        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+
+        UNIT_ASSERT_C(result.Status == NTable::EStatus::Done, "Scan stopped after " << result.Rows.size() << " committed versions");
+        UNIT_ASSERT_VALUES_EQUAL(result.Rows.size(), Versions);
+        for (ui32 step = Versions; step > 0; --step) {
+            const auto& row = result.Rows[Versions - step];
+            UNIT_ASSERT_VALUES_EQUAL(row.Version, TRowVersion(step, 1));
+            UNIT_ASSERT_VALUES_EQUAL(row.Value, TString(BlobSize, char(step)));
+            UNIT_ASSERT_VALUES_EQUAL(row.Shared, TString(BlobSize, 's'));
+        }
+        // One changing blob per version and one shared blob, all within the read-ahead budget.
+        UNIT_ASSERT_VALUES_EQUAL(fetches.size(), Versions + 1);
+        for (const auto& [blob, count] : fetches) {
+            UNIT_ASSERT_VALUES_EQUAL_C(count, 1u, "Requests for " << blob);
+        }
+    }
 
     Y_UNIT_TEST(TestMultiVersionCompactionLargeBlobs) {
         TMyEnvBase env;
@@ -3486,6 +3779,38 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
     };
 
+    Y_UNIT_TEST(FollowerSnapshotCheckpointSealsLogBatch) {
+        struct TTxEnableBatching : ITransaction {
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                txc.DB.Alter().SetExecutorAllowLogBatching(true)
+                    .SetExecutorLogFlushPeriod(TDuration::Seconds(30));
+                return true;
+            }
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+        };
+
+        TMyEnvBase env;
+        TRowsModel rows;
+        env.FireDummyTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{new TTxEnableBatching()});
+        ui32 step = 0, checkpoint = 0, nextCheckpoint = 0;
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(1, step)});
+        env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
+            checkpoint = executor->CreateFollowerSnapshotCheckpoint();
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        UNIT_ASSERT_GE(checkpoint, step);
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(2, step)});
+        env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
+            nextCheckpoint = executor->CreateFollowerSnapshotCheckpoint();
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        UNIT_ASSERT_GT(nextCheckpoint, checkpoint);
+    }
+
     Y_UNIT_TEST(BasicFollowerRead) {
         TMyEnvBase env;
         TRowsModel rows;
@@ -3526,6 +3851,62 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
                 "Key 4 = Upsert value = Set key4value\n"
                 "Key 5 = Upsert value = Set key5value\n");
         }
+    }
+
+    // The leader gets the follower list with its only follower. The follower is then lost for good, as the leader sees
+    // it; as it is in the list, the leader must keep it, and must not tell the user tablet that it is detached.
+    Y_UNIT_TEST(FollowerInRefreshedListIsKept) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        TActorId leaderSys;
+        TActorId followerSys;
+        auto attachObserver = env->AddObserver<TEvTablet::TEvFollowerAttach>([&](auto& ev) {
+            leaderSys = ev->GetRecipientRewrite();
+            followerSys = ev->Sender;
+        });
+        // only the list sent by the test reaches the leader
+        auto refreshObserver = env->AddObserver<TEvTablet::TEvFollowerListRefresh>([&](auto& ev) {
+            if (ev->Sender != env.Edge) {
+                ev.Reset();
+            }
+        });
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        env.FireDummyFollower(1);
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+        UNIT_ASSERT(leaderSys && followerSys);
+
+        env->Send(new IEventHandle(leaderSys, env.Edge, new TEvTablet::TEvFollowerListRefresh({followerSys})));
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+
+        // the next update for the follower is answered as if the follower is gone
+        bool loseFollower = true;
+        std::optional<ui64> updateCookie;
+        auto updateObserver = env->AddObserver<TEvTablet::TEvFollowerUpdate>([&](auto& ev) {
+            if (loseFollower && ev->Sender == leaderSys && ev->GetRecipientRewrite() == followerSys) {
+                updateCookie = ev->Cookie;
+                ev.Reset();
+            }
+        });
+        ui32 numDetached = 0;
+        auto detachedObserver = env->AddObserver<TEvTablet::TEvFollowerDetached>([&](auto&) {
+            ++numDetached;
+        });
+
+        ui32 step = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(1, step) });
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return updateCookie.has_value(); };
+        env->DispatchEvents(options, TDuration::Seconds(10));
+        UNIT_ASSERT_C(updateCookie, "the leader didn't send an update to the follower");
+        loseFollower = false;
+
+        env->Send(new IEventHandle(leaderSys, followerSys, new TEvents::TEvUndelivered(
+            TEvTablet::TEvFollowerUpdate::EventType, TEvents::TEvUndelivered::ReasonActorUnknown), 0, *updateCookie));
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(numDetached, 0);
     }
 
     Y_UNIT_TEST(VacuumWaitsForFollowerGc) {
@@ -9354,6 +9735,95 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
         }
     };
 
+    struct TCallbackTx : public TSimpleTx {
+        using TCallback = std::function<bool(TTransactionContext&, const TActorContext&)>;
+
+        TCallbackTx(TTxState& state, TCallback callback)
+            : TSimpleTx(state)
+            , Callback(std::move(callback))
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            ++State.Executed;
+            return Callback(txc, ctx);
+        }
+
+        TCallback Callback;
+    };
+
+    Y_UNIT_TEST(TestHelpNormalQueue) {
+        TMyEnvBase env;
+        env.FireDummyTablet();
+
+        TTxState first, second, third;
+        env.SendSync(new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+            x->Enqueue(new TCallbackTx(first, [&](auto&, const auto&) {
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction()); // No nested execution.
+                return true;
+            }));
+            x->Enqueue(new TSimpleTx(second));
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 1);
+            UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+
+            // Both posted activations remain; one can serve a new transaction
+            // and the other must safely handle an empty queue.
+            x->Enqueue(new TSimpleTx(third));
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                UNIT_ASSERT_VALUES_EQUAL(third.Executed, 1);
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }});
+        }});
+    }
+
+    Y_UNIT_TEST(TestHelpLowPriorityQueue) {
+        TMyEnvBase env;
+        env.FireDummyTablet();
+
+        TTxState normal, first, second, third, fourth;
+        env.SendSync(new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+            x->EnqueueLowPriority(new TSimpleTx(first));
+            x->EnqueueLowPriority(new TSimpleTx(second));
+            x->Enqueue(new TSimpleTx(normal));
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(normal.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 1);
+            UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+
+            // The posted normal and low-priority activations must safely
+            // consume an empty queue without executing any transaction twice.
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+                // After the stale events have been consumed, new low-priority
+                // work must still activate, one transaction per mailbox turn.
+                x->EnqueueLowPriority(new TSimpleTx(third));
+                x->EnqueueLowPriority(new TSimpleTx(fourth));
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                    UNIT_ASSERT_VALUES_EQUAL(third.Executed, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(fourth.Executed, 0);
+                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                        UNIT_ASSERT_VALUES_EQUAL(fourth.Executed, 1);
+                        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+                    }});
+                }});
+            }});
+        }});
+        for (const auto* state : {&normal, &first, &second, &third, &fourth}) {
+            UNIT_ASSERT_VALUES_EQUAL(state->Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->Completed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->Destroyed, 1);
+        }
+    }
+
     Y_UNIT_TEST(TestEnqueueCancel) {
         TMyEnvBase env;
 
@@ -9944,6 +10414,132 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
             Cerr << "...checking rows (expecting new)" << Endl;
             env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) }, /* retry */ true);
         }
+    }
+
+    struct TTruncateRedoObserver : public NTable::IRedoObserver {
+        THashSet<i64> Keys;
+        TVector<i64> Events;
+        ui32 Truncates = 0;
+
+        void OnRedoUpdate(ui32 table, NTable::ERowOp op, TArrayRef<const TRawTypeValue> key,
+                TArrayRef<const NTable::TUpdateOp>, TArrayRef<const NPageCollection::TMemGlob>,
+                TRowVersion, ui64, ui32) override
+        {
+            UNIT_ASSERT_VALUES_EQUAL(table, ui32(TRowsModel::TableId));
+            UNIT_ASSERT_VALUES_EQUAL(key.size(), 1);
+            const i64 value = TCell(key[0].AsRef()).AsValue<i64>();
+            Events.push_back(value);
+            if (op == NTable::ERowOp::Erase) {
+                Keys.erase(value);
+            } else {
+                Keys.insert(value);
+            }
+        }
+
+        void OnRedoCommit(ui32, ui64, TRowVersion) override {}
+        void OnRedoRemove(ui32, ui64) override {}
+
+        void OnTruncate(ui32 table) override {
+            UNIT_ASSERT_VALUES_EQUAL(table, ui32(TRowsModel::TableId));
+            Keys.clear();
+            Events.push_back(-1);
+            ++Truncates;
+        }
+    };
+
+    class TObservedTablet : public TTestFlatTablet {
+    public:
+        TObservedTablet(const TActorId& sender, const TActorId& tablet, TTabletStorageInfo* info,
+                TTruncateRedoObserver& observer)
+            : TTestFlatTablet(sender, tablet, info)
+            , Observer(observer)
+        {}
+
+        NTable::IRedoObserver* GetFollowerRedoObserver() override {
+            return &Observer;
+        }
+
+    private:
+        TTruncateRedoObserver& Observer;
+    };
+
+    void CheckTruncateRedoObserver(bool compact, i64 newRows) {
+        TTruncateRedoObserver observer;
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.FireFollower(env.Edge, env.Tablet, [&env, &observer](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TObservedTablet(env.Edge, tablet, info, observer);
+        }, /* followerId */ 1);
+        env.WaitForWakeUp();
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), 100);
+
+        if (compact) {
+            env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+            env.WaitFor<NFake::TEvCompacted>();
+            env->SimulateSleep(TDuration::MilliSeconds(1));
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+        }
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 0);
+
+        observer.Events.clear();
+        env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(newRows) });
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, newRows) });
+
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Events.size(), 1 + newRows);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Events[0], -1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), newRows);
+        for (i64 i = 0; i < newRows; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events[i + 1], 101 + i);
+            UNIT_ASSERT(observer.Keys.contains(101 + i));
+        }
+
+        // Ordinary writes must not clear the observer again.
+        env.SendSync(rows.RowTo(101 + newRows).MakeRows(1));
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, newRows + 1) });
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), newRows + 1);
+
+        // Repeated truncates must be reported, including an already empty table.
+        for (ui32 expected = 2; expected <= 3; ++expected) {
+            observer.Events.clear();
+            env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(0) });
+            env->SimulateSleep(TDuration::MilliSeconds(1));
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+            UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events[0], -1);
+            UNIT_ASSERT(observer.Keys.empty());
+        }
+    }
+
+    Y_UNIT_TEST(TruncateRedoObserver) {
+        CheckTruncateRedoObserver(false, 0);
+    }
+
+    Y_UNIT_TEST(TruncateAndWriteRedoObserver) {
+        CheckTruncateRedoObserver(false, 4);
+    }
+
+    Y_UNIT_TEST(TruncateCompactedRedoObserver) {
+        CheckTruncateRedoObserver(true, 0);
+    }
+
+    Y_UNIT_TEST(TruncateCompactedAndWriteRedoObserver) {
+        CheckTruncateRedoObserver(true, 4);
     }
 
     Y_UNIT_TEST(TruncateAtFollower) {
@@ -10685,6 +11281,92 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveData) {
         TAutoPtr<IEventHandle> handle;
         env->GrabEdgeEventRethrow<TEvTablet::TEvMoveDataResponse>(handle);
         UNIT_ASSERT(wasCompact);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
+
+    static constexpr ui32 TableId = 101;
+    static constexpr ui32 KeyColumnId = 1;
+    static constexpr ui32 TimeColumnId = 2;
+    static constexpr ui32 ColdTierId = 1;
+
+    NTable::TTieringPolicy MakeTieringPolicy() {
+        NTable::TTieringPolicy policy;
+        policy.ColumnTag = TimeColumnId;
+        policy.Rules.push_back(NTable::TTierRule{
+            .TierId = ColdTierId,
+            .Ranges = { NTable::TTierRange{ .To = NTable::TTierRelativeBound{ TDuration::Days(1) }, .ToInclusive = true } },
+        });
+        return policy;
+    }
+
+    struct TTxInitTieredSchema : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            if (txc.DB.GetScheme().GetTableInfo(TableId)) {
+                return true;
+            }
+
+            txc.DB.Alter()
+                .AddTable("tiered", TableId)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TUint64::TypeId, false, false)
+                .AddColumn(TableId, "created_at", TimeColumnId, NScheme::NTypeIds::Timestamp, false, false)
+                .AddColumnToKey(TableId, KeyColumnId)
+                .AddFamily(TableId, ColdTierId, NTable::TScheme::DefaultRoom)
+                .SetFamilyCompression(TableId, ColdTierId, NTable::NPage::ECodec::LZ4)
+                .SetFamilyIndexPlacement(TableId, ColdTierId, false, false)
+                .SetTieringPolicy(TableId, MakeTieringPolicy());
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxCheckTieredSchema : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            const auto* table = txc.DB.GetScheme().GetTableInfo(TableId);
+            UNIT_ASSERT(table);
+            const auto* tier = table->Families.FindPtr(ColdTierId);
+            UNIT_ASSERT(tier);
+            UNIT_ASSERT(tier->Room == NTable::TScheme::DefaultRoom);
+            UNIT_ASSERT(tier->Codec == NTable::NPage::ECodec::LZ4);
+            UNIT_ASSERT(!tier->KeyIndexInDescriptor);
+            UNIT_ASSERT(!tier->GroupIndexesInDescriptor);
+            UNIT_ASSERT(table->TieringPolicy);
+            UNIT_ASSERT(*table->TieringPolicy == MakeTieringPolicy());
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(TiersAndPolicySurviveRestart) {
+        TMyEnvBase env;
+
+        auto boot = [&env]() {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+
+        boot();
+        env.SendSync(new NFake::TEvExecute{ new TTxInitTieredSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckTieredSchema });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        boot();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckTieredSchema });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
     }
 }
 

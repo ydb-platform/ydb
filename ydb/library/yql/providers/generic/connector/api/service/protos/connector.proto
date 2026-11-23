@@ -519,6 +519,14 @@ message TPredicate {
         TExpression pattern = 2;
     }
 
+    // "$column [I]LIKE $pattern [ESCAPE $literal]"
+    message TLike {
+        TExpression value = 1;
+        TExpression pattern = 2;
+        optional TExpression escape = 3;
+        bool case_sensitive = 4; // !ILIKE
+    }
+
     oneof payload {
         TNegation negation = 1;
         TConjunction conjunction = 2;
@@ -532,5 +540,6 @@ message TPredicate {
         TCoalesce coalesce = 10;
         TIf if = 11;
         TRegexp regexp = 12;
+        TLike like = 13;
     }
 }

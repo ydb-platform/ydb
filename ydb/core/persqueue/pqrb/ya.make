@@ -26,6 +26,8 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/persqueue/events
     ydb/core/persqueue/common
+    ydb/core/persqueue/public
+    ydb/core/persqueue/public/metrics
 )
 
 END()

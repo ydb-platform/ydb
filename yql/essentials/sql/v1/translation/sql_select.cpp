@@ -54,10 +54,10 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
             linkSettings.Strategy = newStrategy;
             linkSettings.Values = hint.Values;
         } else if (newStrategy == linkSettings.Strategy) {
-            ctx.Error() << "Duplicate join strategy hint";
+            ctx.Error(hint.Pos) << "Duplicate join strategy hint";
             return false;
         } else {
-            ctx.Error() << "Conflicting join strategy hints";
+            ctx.Error(hint.Pos) << "Conflicting join strategy hints";
             return false;
         }
     }
@@ -114,8 +114,8 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
         case TRule_join_op::kAltJoinOp1: {
             joinOp = "Cross";
             if (!Ctx_.AnsiImplicitCrossJoin) {
-                Error() << "Cartesian product of tables is disabled. Please use "
-                           "explicit CROSS JOIN or enable it via PRAGMA AnsiImplicitCrossJoin";
+                Ctx_.Error(node) << "Cartesian product of tables is disabled. Please use "
+                                    "explicit CROSS JOIN or enable it via PRAGMA AnsiImplicitCrossJoin";
                 return false;
             }
             const auto& alt = node.GetAlt_join_op1();
@@ -129,7 +129,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
             const auto& alt = node.GetAlt_join_op2();
             if (alt.HasBlock1()) {
                 Ctx_.IncrementMonCounter("sql_join_operations", "Natural");
-                Error() << "Natural join is not implemented yet";
+                Ctx_.Error(alt.GetBlock1()) << "Natural join is not implemented yet";
                 return false;
             }
             if (!CollectJoinLinkSettings(Ctx_.TokenPosition(alt.GetToken3()), linkSettings, Ctx_)) {
@@ -171,9 +171,8 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                         TString normalizedOp = alt.GetBlock2().GetAlt1().HasBlock1() ? joinOp : "";
                         normalizedOp.to_upper();
                         if (!(normalizedOp == "LEFT" || normalizedOp == "RIGHT" || normalizedOp == "FULL")) {
-                            Token(alt.GetBlock2().GetAlt1().GetBlock2().GetToken1());
-                            Error() << "Invalid join type: " << normalizedOp << (normalizedOp.empty() ? "" : " ") << "OUTER JOIN. "
-                                    << "OUTER keyword is optional and can only be used after LEFT, RIGHT or FULL";
+                            Ctx_.Error(alt.GetBlock2().GetAlt1().GetBlock2()) << "Invalid join type: " << normalizedOp << (normalizedOp.empty() ? "" : " ") << "OUTER JOIN. "
+                                                                              << "OUTER keyword is optional and can only be used after LEFT, RIGHT or FULL";
                             Ctx_.IncrementMonCounter("sql_errors", "BadJoinType");
                             return false;
                         }
@@ -197,7 +196,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
     }
     joinOp = NormalizeJoinOp(joinOp);
     if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
-        if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_UNUSED_HINT, [](auto& out) {
+        if (!Ctx_.Warning(Ctx_.Position(node), TIssuesIds::YQL_UNUSED_HINT, [](auto& out) {
                 out << "Non-default join strategy will not be used for CROSS JOIN";
             })) {
             return false;
@@ -208,7 +207,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
     TNodePtr joinKeyExpr;
     if (block.HasBlock4()) {
         if (joinOp == "Cross") {
-            Error() << "Cross join should not have ON or USING expression";
+            Ctx_.Error(block.GetBlock4().GetRule_join_constraint1()) << "Cross join should not have ON or USING expression";
             Ctx_.IncrementMonCounter("sql_errors", "BadJoinExpr");
             return false;
         }
@@ -220,7 +219,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
         }
     } else {
         if (joinOp != "Cross") {
-            Error() << "Expected ON or USING expression";
+            Ctx_.Error(node) << "Expected ON or USING expression";
             Ctx_.IncrementMonCounter("sql_errors", "BadJoinExpr");
             return false;
         }
@@ -249,8 +248,6 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
         }
         case TRule_join_constraint::kAltJoinConstraint2: {
             auto& alt = node.GetAlt_join_constraint2();
-            Token(alt.GetToken1());
-            TPosition pos(Ctx_.Pos());
             TVector<TDeferredAtom> names;
             if (!PureColumnOrNamedListStr(alt.GetRule_pure_column_or_named_list2(), *this, names)) {
                 return nullptr;
@@ -395,7 +392,7 @@ TSourcePtr TSqlSelect::FlattenSource(const TRule_flatten_source& node) {
 TSourcePtr TSqlSelect::JoinSource(const TRule_join_source& node) {
     // join_source: (ANY)? flatten_source (join_op (ANY)? flatten_source join_constraint?)*;
     if (node.HasBlock1() && !node.Block3Size()) {
-        Error() << "ANY is not allowed without JOIN";
+        Ctx_.Error(node.GetBlock1()) << "ANY is not allowed without JOIN";
         return nullptr;
     }
 
@@ -405,7 +402,7 @@ TSourcePtr TSqlSelect::JoinSource(const TRule_join_source& node) {
     }
 
     if (node.Block3Size()) {
-        TPosition pos(Ctx_.Pos());
+        const auto pos = Ctx_.Position(node);
         TVector<TSourcePtr> sources;
         TVector<TMaybe<TPosition>> anyPositions;
         TVector<bool> anyFlags;
@@ -452,10 +449,9 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
         case TRule_result_column::kAltResultColumn1: {
             const auto& alt = node.GetAlt_result_column1();
 
-            Token(alt.GetToken2());
             auto idAsteriskQualify = OptIdPrefixAsStr(alt.GetRule_opt_id_prefix1(), *this);
             Ctx_.IncrementMonCounter("sql_features", idAsteriskQualify ? "QualifyAsterisk" : "Asterisk");
-            terms.push_back(BuildColumn(Ctx_.Pos(), "*", idAsteriskQualify));
+            terms.push_back(BuildColumn(Ctx_.Position(node), "*", idAsteriskQualify));
             break;
         }
         case TRule_result_column::kAltResultColumn2: {
@@ -478,7 +474,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                         label = Id(alt.GetBlock2().GetAlt2().GetRule_an_id_as_compat1(), *this);
                         if (!Ctx_.AnsiOptionalAs) {
                             // AS is mandatory
-                            Ctx_.Error() << "Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility";
+                            Ctx_.Error(alt.GetBlock2().GetAlt2().GetRule_an_id_as_compat1()) << "Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility";
                             return false;
                         }
                         implicitLabel = true;
@@ -486,7 +482,10 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                     case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
                         YQL_ENSURE(false, "Unreachable");
                 }
-                term->SetLabel(label, Ctx_.Pos());
+                const auto labelPos = implicitLabel
+                                          ? Ctx_.Position(alt.GetBlock2().GetAlt2().GetRule_an_id_as_compat1())
+                                          : Ctx_.Position(alt.GetBlock2().GetAlt1().GetRule_an_id_or_type2());
+                term->SetLabel(label, labelPos);
                 term->MarkImplicitLabel(implicitLabel);
             }
             terms.push_back(term);
@@ -560,7 +559,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
                     return table.Source;
                 }
 
-                TPosition pos(Ctx_.Pos());
+                const auto pos = Ctx_.Position(table_ref);
                 Ctx_.IncrementMonCounter("sql_select_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
                 return BuildTableSource(pos, table);
             }
@@ -596,6 +595,7 @@ TSourcePtr TSqlSelect::HintedSingleSource(
 
     TSourcePtr ret;
     TTableHints hints;
+    TMap<TString, TPosition> hintPositions;
     TTableHints contextHints = GetContextHints(Ctx_);
     TString provider;
     TMaybe<TString> keyFunc;
@@ -622,23 +622,25 @@ TSourcePtr TSqlSelect::HintedSingleSource(
     }
 
     if (node.HasBlock2()) {
-        auto tmp = TableHintsImpl(node.GetBlock2().GetRule_table_hints1(), provider, keyFunc.GetOrElse(""));
+        auto tmp = TableHintsImpl(node.GetBlock2().GetRule_table_hints1(), provider, keyFunc.GetOrElse(""), &hintPositions);
         if (!tmp) {
             return nullptr;
         }
         hints = *tmp;
     }
 
+    const auto hintsPos = node.HasBlock2() ? Ctx_.Position(node.GetBlock2().GetRule_table_hints1()) : Ctx_.Position(node);
     TNodePtr watermarkLambda;
     TTableHints watermarkHints;
+    TMap<TString, TPosition> watermarkHintPositions;
     if (!ret->IsTableSource()) {
         for (auto it = hints.begin(); it != hints.end();) {
             auto& [name, value] = *it;
             auto normalizedName = name;
-            auto normalizeError = NormalizeName(Ctx_.Pos(), normalizedName);
+            auto normalizeError = NormalizeName(hintPositions.at(name), normalizedName);
             if (!normalizeError.Empty()) {
                 YQL_ENSURE(value.empty() || value.front());
-                const auto pos = value ? value.front()->GetPos() : Ctx_.Pos();
+                const auto pos = value ? value.front()->GetPos() : hintPositions.at(name);
                 Ctx_.Error(pos) << normalizeError->GetMessage();
                 return nullptr;
             } else if (normalizedName == "watermark") {
@@ -646,7 +648,9 @@ TSourcePtr TSqlSelect::HintedSingleSource(
                 watermarkLambda = std::move(value[0]);
                 it = hints.erase(it);
             } else if (normalizedName.StartsWith("watermark")) {
-                watermarkHints.emplace(normalizedName, std::move(value));
+                if (watermarkHints.emplace(normalizedName, std::move(value)).second) {
+                    watermarkHintPositions.emplace(normalizedName, hintPositions.at(name));
+                }
                 it = hints.erase(it);
             } else {
                 ++it;
@@ -655,18 +659,19 @@ TSourcePtr TSqlSelect::HintedSingleSource(
     }
 
     if (hints || contextHints) {
+        const auto rejectedHintPos = hints ? hintPositions.at(hints.begin()->first) : hintsPos;
         if (isAnonymous) {
-            Ctx_.Error(Ctx_.Pos()) << "Hints are not supported for anonymous tables";
+            Ctx_.Error(rejectedHintPos) << "Hints are not supported for anonymous tables";
             return nullptr;
         }
-        if (!ret->SetTableHints(Ctx_, Ctx_.Pos(), hints, contextHints)) {
+        if (!ret->SetTableHints(Ctx_, rejectedHintPos, hints, contextHints, hintPositions)) {
             return nullptr;
         }
     }
 
     if (watermarkLambda) {
         auto pos = watermarkLambda->GetPos();
-        auto watermarkSettings = BuildInputOptions(pos, watermarkHints);
+        auto watermarkSettings = BuildInputOptions(pos, watermarkHints, watermarkHintPositions);
         if (!watermarkSettings) {
             watermarkSettings = BuildList(pos);
         }
@@ -683,11 +688,10 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
     TPosition derivedColumnsPos;
     if (node.HasBlock3() && node.GetBlock3().HasBlock2()) {
         const auto& columns = node.GetBlock3().GetBlock2().GetRule_pure_column_list1();
-        Token(columns.GetToken1());
-        derivedColumnsPos = Ctx_.Pos();
+        derivedColumnsPos = Ctx_.Position(columns);
 
         if (node.GetRule_hinted_single_source1().GetRule_single_source1().Alt_case() != TRule_single_source::kAltSingleSource3) {
-            Error() << "Derived column list is only supported for VALUES";
+            Ctx_.Error(columns) << "Derived column list is only supported for VALUES";
             return nullptr;
         }
 
@@ -702,7 +706,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
         if (node.HasBlock4()) {
             // CAN/CSA-ISO/IEC 9075-2:18 7.6 <table reference>
             // 4) TF shall not simply contain both a <sample clause> and a <row pattern recognition clause and name>.
-            Ctx_.Error() << "Source shall not simply contain both a sample clause and a row pattern recognition clause";
+            Ctx_.Error(node.GetBlock4()) << "Source shall not simply contain both a sample clause and a row pattern recognition clause";
             return {};
         }
         auto matchRecognizeClause = TSqlMatchRecognizeClause(*this);
@@ -719,7 +723,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 label = Id(node.GetBlock3().GetBlock1().GetAlt2().GetRule_an_id_as_compat1(), *this);
                 if (!Ctx_.AnsiOptionalAs) {
                     // AS is mandatory
-                    Ctx_.Error() << "Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility";
+                    Ctx_.Error(node.GetBlock3().GetBlock1().GetAlt2().GetRule_an_id_as_compat1()) << "Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility";
                     return {};
                 }
                 break;
@@ -794,11 +798,11 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_column_name& no
     if (columnName.empty()) {
         // TODO(vitya-smirnov): Id() should return TMaybe<TString>
         if (!Ctx_.HasPendingErrors) {
-            Ctx_.Error() << "Empty column name is not allowed";
+            Ctx_.Error(node.GetRule_an_id2()) << "Empty column name is not allowed";
         }
         return false;
     }
-    keys.push_back(BuildColumn(Ctx_.Pos(), columnName, sourceName));
+    keys.push_back(BuildColumn(Ctx_.Position(node), columnName, sourceName));
     return true;
 }
 
@@ -806,13 +810,16 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
     // without_column_name: (an_id DOT an_id) | an_id_without;
     TString sourceName;
     TString columnName;
+    TPosition columnPos;
     switch (node.Alt_case()) {
         case TRule_without_column_name::kAltWithoutColumnName1:
             sourceName = Id(node.GetAlt_without_column_name1().GetRule_an_id1(), *this);
             columnName = Id(node.GetAlt_without_column_name1().GetRule_an_id3(), *this);
+            columnPos = Ctx_.Position(node.GetAlt_without_column_name1().GetRule_an_id3());
             break;
         case TRule_without_column_name::kAltWithoutColumnName2:
             columnName = Id(node.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);
+            columnPos = Ctx_.Position(node.GetAlt_without_column_name2().GetRule_an_id_without1());
             break;
         case TRule_without_column_name::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
@@ -821,11 +828,11 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
     if (columnName.empty()) {
         // TODO(vitya-smirnov): Id() should return TMaybe<TString>
         if (!Ctx_.HasPendingErrors) {
-            Ctx_.Error() << "Empty column name is not allowed";
+            Ctx_.Error(columnPos) << "Empty column name is not allowed";
         }
         return false;
     }
-    keys.push_back(BuildColumn(Ctx_.Pos(), columnName, sourceName));
+    keys.push_back(BuildColumn(Ctx_.Position(node), columnName, sourceName));
     return true;
 }
 
@@ -842,8 +849,7 @@ bool TSqlSelect::ColumnList(TVector<TNodePtr>& keys, const TRule& node) {
         return false;
     }
 
-    for (auto b : node.GetBlock2()) {
-        Token(b.GetToken1());
+    for (const auto& b : node.GetBlock2()) {
         if constexpr (std::is_same_v<TRule, TRule_column_list>) {
             result = ColumnName(keys, b.GetRule_column_name2());
         } else {
@@ -872,8 +878,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     // (WITH external_call_settings)?
     // (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?)?
 
-    Token(node.GetToken1());
-    TPosition startPos(Ctx_.Pos());
+    const auto startPos = Ctx_.Position(node);
 
     if (!selectPos) {
         selectPos = startPos;
@@ -917,7 +922,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     }
 
     if (block5.HasBlock6()) {
-        Ctx_.Error() << "PROCESS does not allow HAVING yet!";
+        Ctx_.Error(block5.GetBlock6()) << "PROCESS does not allow HAVING yet!";
         return nullptr;
     }
 
@@ -936,7 +941,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     for (auto& arg : args) {
         if (/* auto placeholder = */ dynamic_cast<TTableRows*>(arg.Get())) {
             if (listCall) {
-                Ctx_.Error() << "Only one TableRows() argument is allowed.";
+                Ctx_.Error(arg->GetPos()) << "Only one TableRows() argument is allowed.";
                 return nullptr;
             }
             listCall = true;
@@ -944,7 +949,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     }
 
     if (!call.IsExternal() && block5.HasBlock4()) {
-        Ctx_.Error() << "PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block";
+        Ctx_.Error(block5.GetBlock4()) << "PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block";
         return nullptr;
     }
 
@@ -970,7 +975,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     }
 
     if (call.IsExternal() && block5.HasBlock7()) {
-        Ctx_.Error() << "PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block";
+        Ctx_.Error(block5.GetBlock7()) << "PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block";
         return nullptr;
     }
 
@@ -989,8 +994,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     // REDUCE named_single_source (COMMA named_single_source)* (PRESORT sort_specification_list)?
     // ON column_list USING ALL? using_call_expr (AS an_id)?
     // (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?
-    Token(node.GetToken1());
-    TPosition startPos(Ctx_.Pos());
+    const auto startPos = Ctx_.Position(node);
     if (!selectPos) {
         selectPos = startPos;
     }
@@ -1060,7 +1064,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     for (auto& arg : args) {
         if (/* auto placeholder = */ dynamic_cast<TTableRows*>(arg.Get())) {
             if (listCall) {
-                Ctx_.Error() << "Only one TableRows() argument is allowed.";
+                Ctx_.Error(arg->GetPos()) << "Only one TableRows() argument is allowed.";
                 return nullptr;
             }
             listCall = true;
@@ -1099,15 +1103,9 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     // group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
     selectOpOrderBy = {};
     selectOpAssumeOrderBy = false;
-    if (node.HasBlock1()) {
-        Token(node.GetBlock1().GetToken1());
-    } else {
-        Token(node.GetToken2());
-    }
-
-    TPosition startPos(Ctx_.Pos());
+    const auto startPos = Ctx_.Position(node);
     if (!selectPos) {
-        selectPos = Ctx_.Pos();
+        selectPos = startPos;
     }
 
     const auto hints = Ctx_.PullHintForToken(selectPos);
@@ -1135,9 +1133,8 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
 
     TSourcePtr source(BuildFakeSource(selectPos, /* missingFrom = */ true, Mode_ == NSQLTranslation::ESqlMode::SUBQUERY));
     if (node.HasBlock1() && node.HasBlock9()) {
-        Token(node.GetBlock9().GetToken1());
         Ctx_.IncrementMonCounter("sql_errors", "DoubleFrom");
-        Ctx_.Error() << "Only one FROM clause is allowed";
+        Ctx_.Error(node.GetBlock9()) << "Only one FROM clause is allowed";
         return nullptr;
     }
     if (node.HasBlock1()) {
@@ -1161,8 +1158,6 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
     if (node.HasBlock10()) {
         const auto& block = node.GetBlock10();
-        Token(block.GetToken1());
-        TPosition pos(Ctx_.Pos());
         TNodePtr where;
         {
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
@@ -1204,7 +1199,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         groupBySuffix = clause.GetSuffix();
 
         if (source->IsStream() && !hasHopping) {
-            Ctx_.Error() << "Streaming group by query must have a hopping window specification.";
+            Ctx_.Error(node.GetBlock11().GetRule_group_by_clause1()) << "Streaming group by query must have a hopping window specification.";
             return nullptr;
         }
     }
@@ -1223,7 +1218,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     TWinSpecs windowSpec;
     if (node.HasBlock13()) {
         if (source->IsStream()) {
-            Ctx_.Error() << "WINDOW is not allowed in streaming queries";
+            Ctx_.Error(node.GetBlock13().GetRule_window_clause1()) << "WINDOW is not allowed in streaming queries";
             return nullptr;
         }
         if (!TSqlWindow(*this).Build(node.GetBlock13().GetRule_window_clause1(), windowSpec)) {
@@ -1238,14 +1233,12 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         auto& orderBlock = node.GetBlock14().GetRule_ext_order_by_clause1();
         assumeSorted = orderBlock.HasBlock1();
 
-        Token(orderBlock.GetRule_order_by_clause2().GetToken1());
-
         if (source->IsStream()) {
-            Ctx_.Error() << "ORDER BY is not allowed in streaming queries";
+            Ctx_.Error(orderBlock.GetRule_order_by_clause2()) << "ORDER BY is not allowed in streaming queries";
             return nullptr;
         }
 
-        if (!ValidateLimitOrderByWithSelectOp(placement, "ORDER BY")) {
+        if (!ValidateLimitOrderByWithSelectOp(placement, "ORDER BY", Ctx_.Position(orderBlock.GetRule_order_by_clause2()))) {
             return nullptr;
         }
 
@@ -1283,7 +1276,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         if (!SelectTerm(terms, node.GetRule_result_column5())) {
             return nullptr;
         }
-        for (auto block : node.GetBlock6()) {
+        for (const auto& block : node.GetBlock6()) {
             if (!SelectTerm(terms, block.GetRule_result_column2())) {
                 return nullptr;
             }
@@ -1305,7 +1298,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
         return {};
     }
 
-    TPosition startPos(Ctx_.Pos());
+    const auto startPos = Ctx_.Position(node);
     if (!selectPos) {
         selectPos = startPos;
     }
@@ -1365,14 +1358,14 @@ TSQLStatus TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVe
     return SortSpecificationList(node.GetRule_sort_specification_list3(), orderBy);
 }
 
-bool TSqlSelect::ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> placement, TStringBuf what) {
+bool TSqlSelect::ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> placement, TStringBuf what, TPosition pos) {
     if (!placement.Defined()) {
         // not in select_op chain
         return true;
     }
 
     if (!placement->IsLastInSelectOp) {
-        Ctx_.Error() << what << " within UNION ALL is only allowed after last subquery";
+        Ctx_.Error(pos) << what << " within UNION ALL is only allowed after last subquery";
         return false;
     }
     return true;
@@ -1389,16 +1382,15 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     if (!res) {
         return {};
     }
-    TPosition startPos(Ctx_.Pos());
+    const auto startPos = Ctx_.Position(node);
     /// LIMIT INTEGER block
     TNodePtr skipTake;
     if (node.HasBlock2()) {
         const auto& block = node.GetBlock2();
 
-        Token(block.GetToken1());
-        TPosition pos(Ctx_.Pos());
+        const auto pos = Ctx_.Position(block);
 
-        if (!ValidateLimitOrderByWithSelectOp(placement, "LIMIT")) {
+        if (!ValidateLimitOrderByWithSelectOp(placement, "LIMIT", pos)) {
             return {};
         }
 
@@ -1444,12 +1436,12 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
     const bool discard = node.HasBlock1();
     const bool hasLabel = node.HasBlock3();
     if (hasLabel && (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW || Mode_ == NSQLTranslation::ESqlMode::SUBQUERY)) {
-        Ctx_.Error() << "INTO RESULT is not allowed in current mode";
+        Ctx_.Error(node.GetBlock3()) << "INTO RESULT is not allowed in current mode";
         return {};
     }
 
     if (discard && hasLabel) {
-        Ctx_.Error() << "DISCARD and INTO RESULT cannot be used at the same time";
+        Ctx_.Error(node.GetBlock3()) << "DISCARD and INTO RESULT cannot be used at the same time";
         return {};
     }
 
@@ -1538,8 +1530,7 @@ template <typename TRule>
              std::same_as<TRule, TRule_select_subexpr>
 TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
     if (node.HasBlock1()) {
-        Token(node.GetBlock1().GetRule_cte_with_clause1().GetToken1());
-        Ctx_.Error() << "WITH CTE is available only with YqlSelect";
+        Ctx_.Error(node.GetBlock1().GetRule_cte_with_clause1()) << "WITH CTE is available only with YqlSelect";
         return nullptr;
     }
 

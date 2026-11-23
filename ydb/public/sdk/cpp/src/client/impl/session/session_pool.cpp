@@ -62,6 +62,7 @@ bool IsSessionCloseRequested(const TStatus& status) {
 }
 
 void TSessionCloseCommand::Execute(TKqpSessionCommon& session, ISessionClient* client) const {
+    // Count each session once; the first close reason wins.
     if (Transition(session) && client && session.IsOwnedBySessionPool()) {
         client->RecordSessionClosed(Reason);
     }
@@ -268,19 +269,22 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
     std::unique_ptr<IGetSessionCtx> getSessionCtx;
     {
         std::lock_guard guard(Mtx_);
-        if (Closed_ || impl->GetState() != TKqpSessionCommon::S_IDLE)
+        if (Closed_)
             return false;
 
+        // Register before checking eligibility so shutdown cannot miss the pool.
+        impl->UpdateServerCloseHandler(this);
+        if (!impl->CanReturnToPool()) {
+            impl->UpdateServerCloseHandler(nullptr);
+            return false;
+        }
+
         if (auto maybeCtx = WaitersQueue_.TryGet()) {
+            impl->UpdateServerCloseHandler(nullptr);
             getSessionCtx = std::move(maybeCtx);
             if (!active)
                 IncrementActiveCounterUnsafe();
         } else {
-            impl->UpdateServerCloseHandler(this);
-            if (impl->GetState() != TKqpSessionCommon::S_IDLE) {
-                impl->UpdateServerCloseHandler(nullptr);
-                return false;
-            }
             Sessions_.emplace(std::make_pair(
                 impl->GetTimeToTouchFast(),
                 impl));
@@ -457,8 +461,11 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
     }
 
     if (session) {
+        // Shutdown records CloseRequested_ without changing the pooled IDLE state.
         Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
-        RecordSessionClosed(reason);
+        if (session->MarkBroken()) {
+            RecordSessionClosed(reason);
+        }
         CloseAndDeleteSession(std::move(session), client);
     }
 }

@@ -6,7 +6,7 @@ namespace NKqp {
 namespace {
 const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg", "variance_1_1", "some", "distinct"};
 
-bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connection) {
+bool IsValidConnectionToPushAggregation(const TConnection& connection) {
     return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection) || IsConnection<TMapConnection>(connection);
 }
 
@@ -16,8 +16,8 @@ bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const
     if (aggregateStageId == inputStageId) {
         return false;
     }
-    const auto connection = props.StageGraph.GetConnections(inputStageId, aggregateStageId);
-    if (connection.size() != 1 || !IsValidConnectionToPushAggregation(connection.front())) {
+    auto* edge = props.StageGraph.FindUniqueEdge(props.GetStage(*input), props.GetStage(*aggregate));
+    if (!edge || !IsValidConnectionToPushAggregation(edge->Connection())) {
         return false;
     }
 
@@ -83,7 +83,9 @@ TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusiveP
     }
 
     const auto intermediate = MakeIntrusive<TOpAggregate>(aggregate->GetInput(), intermediateTraits, aggKeys, EOpPhase::Intermediate, distinctAll, props, pos);
-    return MakeIntrusive<TOpAggregate>(intermediate, finalTraits, distinctAll ? distKeys : aggKeys, EOpPhase::Final, distinctAll, props, pos);
+    auto finalProps = props;
+    finalProps.StageInputEdges.clear();
+    return MakeIntrusive<TOpAggregate>(intermediate, finalTraits, distinctAll ? distKeys : aggKeys, EOpPhase::Final, distinctAll, finalProps, pos);
 }
 
 } // namespace
@@ -104,24 +106,23 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
 
     const auto aggInput = aggregate->GetInput();
     if (CanPushAggregateToStage(aggregate, aggInput, props)) {
-        const auto aggStageId = *aggregate->Props.StageId;
         const auto inputStageId = *aggInput->Props.StageId;
-        const auto connections = props.StageGraph.GetConnections(inputStageId, aggStageId);
-        Y_ENSURE(connections.size() == 1, "Invalid number of connections.");
-        const auto outputIndex = connections.front()->GetOutputIndex();
+        auto* edge = props.GetStageInputEdge(*aggregate, 0);
+        Y_ENSURE(edge, "Aggregate has no stage input");
         auto opProps = aggregate->Props;
         opProps.StageId = inputStageId;
+        opProps.StageInputEdges.clear();
 
         TIntrusivePtr<TConnection> connection;
         if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
-            connection = MakeIntrusive<TMapConnection>(outputIndex);
+            connection = MakeIntrusive<TMapConnection>(edge->OutputIndex());
         } else if (!aggregate->GetKeyColumns().Items().empty()) {
-            connection = MakeIntrusive<TShuffleConnection>(GetAggregateOutputShuffle(*aggregate), outputIndex);
+            connection = MakeIntrusive<TShuffleConnection>(GetAggregateOutputShuffle(*aggregate), edge->OutputIndex());
         } else {
-            connection = MakeIntrusive<TUnionAllConnection>(outputIndex);
+            connection = MakeIntrusive<TUnionAllConnection>(edge->OutputIndex());
         }
 
-        props.StageGraph.UpdateConnection(inputStageId, aggStageId, connection);
+        edge->ReplaceConnection(connection);
         return MakeIntrusive<TOpAggregate>(aggInput, aggregate->GetAggregationTraits(), aggregate->GetKeyColumns(), EOpPhase::Intermediate,
                                            aggregate->IsDistinctAll(), opProps, aggregate->Pos);
     }

@@ -13,7 +13,7 @@ private:
     YDB_READONLY_DEF(TOlapStoreInfo::TPtr, StoreInfo);
     std::optional<TOlapSchema> TableSchema;
     std::optional<TOlapTTL> TableTTL;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const override;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoBuildUpdate(const NKikimrSchemeOp::TModifyScheme& modification) const override;
     virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) override;
     [[nodiscard]] TConclusionStatus InitializeWithTableInfo(const TEntityInitializationContext& context);
 public:
@@ -36,7 +36,7 @@ public:
     }
 
     const TOlapSchema& GetTableSchemaVerified() const {
-        AFL_VERIFY(!!TableSchema);
+        YDB_LOG_VERIFY(!!TableSchema);
         return *TableSchema;
     }
 

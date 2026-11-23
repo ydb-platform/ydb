@@ -30,6 +30,8 @@ Y_UNIT_TEST_SUITE(UdfManifest) {
                  R"({"module_name":42,"module_type":"module","module_kind":"wasm"})",
                  R"({"module_name":"m","module_type":"library","module_kind":"wasm","functions":[]})",
                  R"({"module_name":"m","module_type":"library","module_kind":"wasm","objects":[]})",
+                 R"({"module_name":"m","module_type":"library","module_kind":"wasm","service_methods":[]})",
+                 R"({"module_name":"m","module_type":"module","module_kind":"native","service_abi_version":2})",
                  R"({"module_name":"m","module_type":"library","module_kind":"wasm","required_libraries":[]})",
                  R"({"module_name":"m","module_type":"module","module_kind":"native","module_extension":"wasm"})",
                  R"({"module_name":"m","module_type":"library","module_kind":"wasm","module_extension":"so"})" }) {

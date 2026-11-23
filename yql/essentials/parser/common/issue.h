@@ -30,7 +30,6 @@ private:
         Issues_.AddIssue(std::forward<NYql::TIssue>(issue));
     }
 
-private:
     NYql::TIssues& Issues_;
     const TString File_;
 };

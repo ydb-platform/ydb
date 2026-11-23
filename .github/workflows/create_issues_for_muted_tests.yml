@@ -86,7 +86,7 @@ jobs:
             MATRIX_BUILD_TYPES="$(json_array "$DISPATCH_BUILD_TYPE")"
           elif [ "$EVENT_NAME" = "pull_request" ]; then
             case "$PR_HEAD_REF" in
-              update-muted-ya_*)
+              update-muted-ya_*|robots/mute/update-muted-ya_*)
                 BUILD_TYPE="${PR_HEAD_REF##*_}"
                 validate_build_type "$BUILD_TYPE"
                 MATRIX_BUILD_TYPES="$(json_array "$BUILD_TYPE")" ;;

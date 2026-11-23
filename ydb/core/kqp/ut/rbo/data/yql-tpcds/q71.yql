@@ -10,7 +10,7 @@ SELECT
     t_minute,
     Sum(ext_price) AS ext_price
 FROM
-    `/Root/test/ds/item`
+    `item`
 , (
     SELECT
         ws_ext_sales_price AS ext_price,
@@ -18,9 +18,9 @@ FROM
         ws_item_sk AS sold_item_sk,
         ws_sold_time_sk AS time_sk
     FROM
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_date_sk == ws_sold_date_sk
         AND d_moy == 12
@@ -32,9 +32,9 @@ FROM
         cs_item_sk AS sold_item_sk,
         cs_sold_time_sk AS time_sk
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_date_sk == cs_sold_date_sk
         AND d_moy == 12
@@ -46,16 +46,16 @@ FROM
         ss_item_sk AS sold_item_sk,
         ss_sold_time_sk AS time_sk
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_date_sk == ss_sold_date_sk
         AND d_moy == 12
         AND d_year == 2000
 ) AS tmp
 ,
-    `/Root/test/ds/time_dim`
+    `time_dim`
 WHERE
     sold_item_sk == i_item_sk
     AND i_manager_id == 1

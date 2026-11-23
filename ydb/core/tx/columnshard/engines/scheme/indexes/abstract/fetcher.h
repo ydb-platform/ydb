@@ -19,19 +19,19 @@ public:
     }
 
     const TBlobRange& GetRangeVerified() const {
-        AFL_VERIFY(BlobRange);
+        YDB_LOG_VERIFY(BlobRange);
         return *BlobRange;
     }
 
     const TString& GetBlobData() const {
-        AFL_VERIFY(BlobData);
+        YDB_LOG_VERIFY(BlobData);
         return *BlobData;
     }
 
     void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs::TGuard& blobs) {
-        AFL_VERIFY(!BlobData);
-        AFL_VERIFY(!!BlobRange);
-        AFL_VERIFY(!!StorageId);
+        YDB_LOG_VERIFY(!BlobData);
+        YDB_LOG_VERIFY(!!BlobRange);
+        YDB_LOG_VERIFY(!!StorageId);
         BlobData = blobs.ExtractVerified(*StorageId, *BlobRange);
     }
 
@@ -39,7 +39,7 @@ public:
         : StorageId(storageId)
         , BlobRange(range)
     {
-        AFL_VERIFY(BlobRange->IsValid());
+        YDB_LOG_VERIFY(BlobRange->IsValid());
     }
 
     explicit TRangeFetchingState(const TString& blobData)
@@ -61,12 +61,12 @@ private:
 
     public:
         const TRangeFetchingState& GetHeaderFetching() const {
-            AFL_VERIFY(!!HeaderFetching);
+            YDB_LOG_VERIFY(!!HeaderFetching);
             return *HeaderFetching;
         }
 
         TRangeFetchingState& MutableHeaderFetching() {
-            AFL_VERIFY(!!HeaderFetching);
+            YDB_LOG_VERIFY(!!HeaderFetching);
             return *HeaderFetching;
         }
 
@@ -78,10 +78,10 @@ private:
             std::vector<TBlobRange> result;
             if (!!HeaderFetching) {
                 if (!HeaderFetching->HasData()) {
-                    AFL_VERIFY(ColumnsFetching.empty());
+                    YDB_LOG_VERIFY(ColumnsFetching.empty());
                     result.emplace_back(HeaderFetching->GetRangeVerified());
                 } else {
-                    AFL_VERIFY(ColumnsFetching.size());
+                    YDB_LOG_VERIFY(ColumnsFetching.size());
                 }
             }
             for (auto&& i : ColumnsFetching) {
@@ -131,18 +131,18 @@ private:
                 } else {
                     auto addressRange =
                         originalData.GetBlobRangeVerified().BuildSubset(0, std::min<ui32>(originalData.GetBlobRangeVerified().GetSize(), 4096));
-                    AFL_VERIFY(colsFetching.empty());
+                    YDB_LOG_VERIFY(colsFetching.empty());
                     return TFetchingState(TRangeFetchingState(storageId, addressRange));
                 }
             } else {
                 const TString& data = originalData.GetDataVerified();
-                AFL_VERIFY(header);
+                YDB_LOG_VERIFY(header);
                 auto addressRange =
                     header->GetAddressRangeOptional(address, TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, data.size()), 0, data.size()));
                 if (!addressRange) {
                     colsFetching.emplace_back(TRangeFetchingState(""));
                 } else {
-                    AFL_VERIFY(addressRange->GetOffset() + addressRange->GetSize() <= data.size());
+                    YDB_LOG_VERIFY(addressRange->GetOffset() + addressRange->GetSize() <= data.size());
                     auto finalAddressData = data.substr(addressRange->GetOffset(), addressRange->GetSize());
                     colsFetching.emplace_back(TRangeFetchingState(finalAddressData));
                 }
@@ -159,7 +159,7 @@ public:
     }
 
     const std::shared_ptr<IIndexHeader>& GetHeader() const {
-        AFL_VERIFY(Header);
+        YDB_LOG_VERIFY(Header);
         return Header;
     }
 
@@ -177,8 +177,8 @@ public:
         }
         if (!wasHeader && !!Header) {
             FetchingState = BuildFetchingState(storageId, OriginalData, Header, IndexAddresses);
-            AFL_VERIFY(!FetchingState.NeedFetchHeader());
-            AFL_VERIFY(FetchingState.GetColumnsFetching().size());
+            YDB_LOG_VERIFY(!FetchingState.NeedFetchHeader());
+            YDB_LOG_VERIFY(FetchingState.GetColumnsFetching().size());
         }
     }
 
@@ -233,7 +233,7 @@ public:
         for (auto&& i : IndexAddresses) {
             IndexAddressesVector.emplace_back(i.first);
         }
-        AFL_VERIFY(IndexMeta);
+        YDB_LOG_VERIFY(IndexMeta);
     }
 };
 

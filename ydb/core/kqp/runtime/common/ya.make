@@ -7,7 +7,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/kqp/common
     ydb/core/scheme
     ydb/core/tablet_flat
     ydb/library/aclib

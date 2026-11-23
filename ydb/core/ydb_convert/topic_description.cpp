@@ -59,6 +59,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
     }
 
     out.set_important(in.GetImportant());
+    out.set_replicate_offsets(in.GetReplicateOffsets());
     if (in.has_availabilityperiodms()) {
         out.mutable_availability_period()->set_seconds(in.availabilityperiodms() / 1000);
         out.mutable_availability_period()->set_nanos((in.availabilityperiodms() % 1000) * 1'000'000);
@@ -71,6 +72,9 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
     (*out.mutable_attributes())["_service_type"] = serviceType;
 
     switch (in.GetType()) {
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+            break;
+        }
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
             out.mutable_streaming_consumer_type();
             break;
@@ -172,6 +176,20 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
 
     out.set_content_based_deduplication(config.GetContentBasedDeduplication());
 
+    if (config.HasWriteMode()) {
+        switch (config.GetWriteMode()) {
+            case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+                (*out.mutable_attributes())["_write_mode"] = "available";
+                break;
+            case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+                (*out.mutable_attributes())["_write_mode"] = "unavailable";
+                break;
+            case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+                (*out.mutable_attributes())["_write_mode"] = "prohibited";
+                break;
+        }
+    }
+
     if (!config.GetRequireAuthWrite()) {
         (*out.mutable_attributes())["_allow_unauthenticated_write"] = "true";
     }
@@ -266,8 +284,12 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     for (const auto& consumer : config.GetConsumers()) {
-        if (!FillConsumer(*out.add_consumers(), config, consumer, status, error)) {
+        auto& publicConsumer = *out.add_consumers();
+        if (!FillConsumer(publicConsumer, config, consumer, status, error)) {
             return false;
+        }
+        if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            (*out.mutable_attributes())["_ydb_replication_consumer"] = publicConsumer.name();
         }
     }
     return true;

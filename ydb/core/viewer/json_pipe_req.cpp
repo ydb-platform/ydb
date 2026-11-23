@@ -2,7 +2,7 @@
 #include "log.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/base/path.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -137,7 +137,11 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
 }
 
 TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter) const {
-    if (!HasAppData() || !AppData()->PathNormalizer || !AppData()->PathNormalizer->HasRules()) {
+    if (!Event && !HttpEvent) {
+        return path;
+    }
+    const auto& normalizer = Event ? Event->Get()->PathNormalizer : HttpEvent->Get()->PathNormalizer;
+    if (!normalizer || !*normalizer) {
         return path;
     }
     if (parameter == "database" && Params.Get(parameter).empty()) {
@@ -160,6 +164,10 @@ TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter
     const TString& canonical = Params.Get(parameter);
     if (!original.empty() && !canonical.empty() && path.StartsWith(canonical)
         && (path.size() == canonical.size() || path[canonical.size()] == '/')) {
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()
+            && (parameter == "database" || parameter == "database_path" || parameter == "tenant")) {
+            original = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, original);
+        }
         if (parameter != "path" || original.StartsWith('/')) {
             original = CanonizePath(original);
         }
@@ -171,7 +179,7 @@ TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter
 void TViewerPipeClient::BuildParamsFromJson(TStringBuf data, bool pathList) {
     NJson::TJsonValue jsonData;
     if (NJson::ReadJsonTree(data, &jsonData)) {
-        NormalizePathParameters(jsonData, pathList);
+        NormalizePathParameters(jsonData, (Event ? Event->Get()->PathNormalizer : HttpEvent->Get()->PathNormalizer).value_or(nullptr), pathList);
         if (jsonData.IsMap()) {
             for (const auto& [key, value] : jsonData.GetMap()) {
                 switch (value.GetType()) {
@@ -197,7 +205,7 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data, bool pathList) {
 }
 
 void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data, bool pathList) {
-    for (const auto& [key, value] : NormalizePathParameters(TCgiParameters(data), pathList)) {
+    for (const auto& [key, value] : NormalizePathParameters(TCgiParameters(data), (Event ? Event->Get()->PathNormalizer : HttpEvent->Get()->PathNormalizer).value_or(nullptr), pathList)) {
         Params.InsertUnescaped(key, value);
     }
 }
@@ -253,7 +261,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     , Event(ev)
 {
     const bool pathList = Event->Get()->Request.GetPath().EndsWith("/storage_stats");
-    Params = NormalizePathParameters(Event->Get()->Request.GetParams(), pathList);
+    Params = NormalizePathParameters(Event->Get()->Request.GetParams(), Event->Get()->PathNormalizer.value_or(nullptr), pathList);
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/json") {
         BuildParamsFromJson(Event->Get()->Request.GetPostContent(), pathList);
     }
@@ -272,7 +280,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     , HttpEvent(ev)
 {
     const bool pathList = HttpEvent->Get()->Request->URL.Before('?').EndsWith("/storage_stats");
-    Params = NormalizePathParameters(TCgiParameters(HttpEvent->Get()->Request->URL.After('?')), pathList);
+    Params = NormalizePathParameters(TCgiParameters(HttpEvent->Get()->Request->URL.After('?')), HttpEvent->Get()->PathNormalizer.value_or(nullptr), pathList);
     NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
         BuildParamsFromJson(HttpEvent->Get()->Request->Body, pathList);
@@ -749,7 +757,8 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> 
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId) {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(
+        ui32 nodeId, ui32 pdiskId, bool includeDDiskPoolNames) {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
     request->Record.SetInclusiveFrom(true);
@@ -760,6 +769,9 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> 
     request->Record.MutableTo()->SetNodeId(nodeId);
     request->Record.MutableTo()->SetPDiskId(pdiskId);
     request->Record.MutableTo()->SetVSlotId(std::numeric_limits<ui32>::max());
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 
@@ -803,24 +815,32 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResp
     return RequestBSControllerPools();
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots() {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+static auto MakeBSControllerVSlotsRequest(bool includeDDiskPoolNames) {
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
+    return request;
+}
+
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots(bool includeDDiskPoolNames) {
+    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+    auto request = MakeBSControllerVSlotsRequest(includeDDiskPoolNames);
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots() {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots(bool includeDDiskPoolNames) {
     if (UseCache && Viewer) {
         bool needUpdate = false;
         auto cachedData = Viewer->SharedCacheState->StorageVSlots.GetFromCache(CachedDataMaxAge, needUpdate);
         if (needUpdate) {
-            UpdateSharedCacheTablet(GetBSControllerId(), std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>());
+            UpdateSharedCacheTablet(GetBSControllerId(), MakeBSControllerVSlotsRequest(includeDDiskPoolNames));
         }
         if (cachedData) {
             return cachedData;
         }
     }
-    return RequestBSControllerVSlots();
+    return RequestBSControllerVSlots(includeDDiskPoolNames);
 }
 
 TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> TViewerPipeClient::RequestBSControllerPDisks() {
@@ -1018,7 +1038,7 @@ void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikim
 void TViewerPipeClient::RequestStateStorageEndpointsLookup(const TString& path) {
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second));
+                                                   EBoardLookupMode::SecondWithAllReplies));
     ++DataRequests;
 }
 
@@ -1026,7 +1046,7 @@ TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeCl
     TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-Endpoints"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second, {}, cookie));
+                                                   EBoardLookupMode::SecondWithAllReplies, {}, cookie));
     if (response.Span) {
         response.Span.Attribute("path", path);
     }
@@ -1471,6 +1491,9 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
     CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {
         NeedRedirect = false;
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            Database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, Database);
+        }
         Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
         if (Database) {

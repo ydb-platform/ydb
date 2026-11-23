@@ -97,7 +97,11 @@ public:
             << " Deadline# " << Deadline
             << " RestartCounter# " << RestartCounter);
         for (const auto& vdisk : Info->GetVDisks()) {
-            SendGetBlockRequest(Info->GetVDiskId(vdisk.OrderNumber));
+            const auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
+                continue;
+            }
+            SendGetBlockRequest(vd);
             ++Requests;
         }
 

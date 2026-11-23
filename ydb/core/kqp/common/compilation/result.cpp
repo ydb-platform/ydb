@@ -1,16 +1,10 @@
 #include "result.h"
+#include <library/cpp/json/json_writer.h>
 #include <ydb/core/util/proto_duration.h>
 
 namespace NKikimr::NKqp {
 
 constexpr size_t QUERY_TEXT_LIMIT = 10240;
-
-std::shared_ptr<NYql::TAstParseResult> TKqpCompileResult::GetAst() const {
-    if (QueryAst) {
-        return QueryAst->Ast;
-    }
-    return nullptr;
-}
 
 void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std::optional<ui64> lastAccessedAt) const {
     to->SetQueryId(Uid);

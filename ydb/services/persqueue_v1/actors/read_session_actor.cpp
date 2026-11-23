@@ -4,6 +4,7 @@
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
@@ -65,6 +66,9 @@ TReadSessionActor<Protocol>::TReadSessionActor(
     }
     if (auto value = Request->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER)) {
         SdkBuildInfo = *value;
+    }
+    if (auto value = Request->GetPeerMetaValues("x-ydb-supports-replication-messages")) {
+        SupportsReplicationMessages = *value == "true";
     }
 }
 
@@ -336,6 +340,11 @@ void TReadSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TP
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Die(const TActorContext& ctx) {
+    if (Dead) {
+        return;
+    }
+    Dead = true;
+
     if (AuthInitActor) {
         ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
     }
@@ -522,6 +531,42 @@ void TReadSessionActor<Protocol>::ProcessDirectReads(TPartitionsMap::iterator it
 
         ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(assignId, directReadId));
     }
+
+    // All in-flight direct reads are acked: flush the deferred window-exhausted
+    // end_partition_session (if any) so the client stops the partition session
+    // only after it has received every data batch.
+    SendWindowExhaustedIfNeeded(it, ctx);
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::SendWindowExhaustedIfNeeded(TPartitionsMap::iterator it, const TActorContext& ctx) {
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.WindowExhausted || !partitionInfo.DirectReads.empty()) {
+        return;
+    }
+
+    partitionInfo.WindowExhausted = false;
+
+    if (partitionInfo.Releasing || partitionInfo.ReleaseSent) {
+        // The partition is already being released: a stop_partition_session
+        // request is on its way to the client (or the partition was never
+        // announced to it). The stop is the authoritative teardown signal,
+        // so a separate end_partition_session would be redundant and could
+        // arrive out of order with it.
+        return;
+    }
+
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage result;
+        result.set_status(Ydb::StatusIds::SUCCESS);
+        auto* r = result.mutable_end_partition_session();
+        r->set_partition_session_id(partitionInfo.Partition.AssignId);
+
+        LOG_I("Sending to client end partition stream event (max_offset reached, direct reads drained)");
+        SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
+    }
+
+    partitionInfo.WindowExhaustedSent = true;
 }
 
 template <EProtocol Protocol>
@@ -584,7 +629,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReleased::TPtr& ev, cons
                 return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                     << "releasing partition, but not all direct reads are done " << partitionInfo.Partition, ctx);
             }
-            SendReleaseSignal(it->second, true, ctx);
+            if (!SendReleaseSignal(partitionInfo, true, ctx)) {
+                return;
+            }
         }
     } else {
         AFL_ENSURE(DirectRead);
@@ -731,7 +778,7 @@ void TReadSessionActor<Protocol>::NotifyChildren(const TPartitionActorInfo& part
         if (!directChildren.empty()) {
             for (auto& [_, actorInfo]: Partitions) {
                 for (auto& child: directChildren) {
-                    if (actorInfo.Partition.Partition == child->Id) {
+                    if (actorInfo.Partition.Partition == child->Id && actorInfo.Topic->GetInternalName() == topicName) {
                         ctx.Send(actorInfo.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partition.Partition.Partition));
                     }
                 }
@@ -885,7 +932,8 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database);
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database,
+        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);
@@ -903,7 +951,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
             const auto internalName = converter->GetOriginalPath();
             if constexpr (Protocol != EProtocol::PQv1) {
                 auto [alias, inserted] = AliasedTopicPaths.emplace(internalName,
-                    topic.path() == path ? TString() : TString(topic.path()));
+                    TStringBuf(topic.path()).StartsWith('/') && topic.path() != path ? TString(topic.path()) : TString());
                 if (!inserted && alias->second != topic.path()) {
                     alias->second.clear(); // Ambiguous request: keep the existing response path.
                 }
@@ -971,7 +1019,7 @@ void TReadSessionActor<Protocol>::SetupBytesReadByUserAgentCounter() {
     BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
-        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("consumer", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId))
         ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
         ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
@@ -985,7 +1033,7 @@ void TReadSessionActor<Protocol>::SetupCounters() {
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
     if (!ReadWithoutConsumer) {
-        subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+        subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", NPQ::MetricsConsumerName(ClientId));
     }
     const TString name = "sensor";
 
@@ -1017,7 +1065,7 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
     auto aggr = NPersQueue::GetLabels(topic);
     TVector<std::pair<TString, TString>> cons;
     if (!ReadWithoutConsumer) {
-        cons = {{"Client", ClientId}, {"ConsumerPath", ClientPath}};
+        cons = {{"Client", ClientId}, {"ConsumerPath", NPQ::MetricsConsumerName(ClientId)}};
     }
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsLocked"}, true);
@@ -1044,7 +1092,7 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
     auto subgroups = NPersQueue::GetSubgroupsForTopic(topic, cloudId, dbId, dbPath, folderId);
     if (!ReadWithoutConsumer)
-        subgroups.push_back({"consumer", ClientPath});
+        subgroups.push_back({"consumer", NPQ::MetricsConsumerName(ClientId)});
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.started"}, true, "name");
     topicCounters.PartitionsReleased     = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.stopped"}, true, "name");
@@ -1345,7 +1393,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
     std::unordered_set<ui64> notCommitedToFinishParents;
     for (auto& parent: partitionNode->DirectParents) {
         for (auto& [_, actorInfo]: Partitions) { // TODO: map
-            if (actorInfo.Partition.Partition == parent->Id && !actorInfo.IsLastOffsetCommitted()) {
+            if (actorInfo.Partition.Partition == parent->Id && actorInfo.Topic->GetInternalName() == name && !actorInfo.IsLastOffsetCommitted()) {
                 notCommitedToFinishParents.emplace(actorInfo.Partition.Partition);
             }
         }
@@ -1430,7 +1478,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
             auto alias = AliasedTopicPaths.find(topicName);
             if (alias != AliasedTopicPaths.end() && !alias->second.empty() && it->second.Topic->GetClientsideName().StartsWith("/")) {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(alias->second);
-            } else if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot()) {
+            } else if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot() || database == "/Root") {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
             } else {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());
@@ -1447,6 +1495,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
 
             result.mutable_start_partition_session_request()->mutable_partition_offsets()->set_start(ev->Get()->Offset);
             result.mutable_start_partition_session_request()->mutable_partition_offsets()->set_end(ev->Get()->EndOffset);
+            if (ev->Get()->RetainedStartOffset) {
+                result.mutable_start_partition_session_request()->set_retained_start_offset(*ev->Get()->RetainedStartOffset);
+            }
 
             if (DirectRead) {
                 result.mutable_start_partition_session_request()->mutable_partition_location()->set_node_id(ev->Get()->NodeId);
@@ -1482,7 +1533,8 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
     }
 
     LOG_D("Sending to client partition status");
-    SendControlMessage(it->second.Partition, std::move(result), ctx, false);
+    // A status read_offset must not overtake the data already read at that offset.
+    SendControlMessage(it->second.Partition, std::move(result), ctx);
 }
 
 template <EProtocol Protocol>
@@ -1545,7 +1597,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvError::TPtr& ev, const
 }
 
 template <EProtocol Protocol>
-void TReadSessionActor<Protocol>::SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx) {
+bool TReadSessionActor<Protocol>::SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx) {
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
 
@@ -1571,12 +1623,13 @@ void TReadSessionActor<Protocol>::SendReleaseSignal(TPartitionActorInfo& partiti
     }
 
     if (!SendControlMessage(partition.Partition, std::move(result), ctx)) {
-        return;
+        return false;
     }
 
     AFL_ENSURE(partition.LockSent);
 
     partition.ReleaseSent = true;
+    return true;
 }
 
 template <EProtocol Protocol>
@@ -1822,11 +1875,14 @@ void TReadSessionActor<Protocol>::ProcessBalancerDead(ui64 tabletId, const TActo
                     auto jt = it;
                     ++it;
 
-                    if (jt->second.LockSent) {
-                        SendReleaseSignal(jt->second, true, ctx);
+                    if (jt->second.LockSent && !SendReleaseSignal(jt->second, true, ctx)) {
+                        return;
                     }
 
                     ReleasePartition(jt, true, ctx);
+                    if (Dead) {
+                        return;
+                    }
                 } else {
                     ++it;
                 }
@@ -1930,6 +1986,35 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     i64 diff = DirectReadByteSize - ByteSize;
     ByteSize = DirectReadByteSize;
     return diff;
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    if (!SupportsReplicationMessages) {
+        return;
+    }
+    const auto& record = ev->Get()->Record;
+    if (!ActualPartitionActors.contains(ev->Sender) || !Partitions.contains(record.GetPartitionSessionId())) {
+        return;
+    }
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+        auto* partitionData = response.mutable_read_response()->add_partition_data();
+        partitionData->set_partition_session_id(record.GetPartitionSessionId());
+        auto* batch = partitionData->add_batches();
+        batch->set_codec(Ydb::Topic::CODEC_RAW);
+        auto* message = batch->add_message_data();
+        message->set_offset(0);
+        message->set_data(record.GetPayload());
+        message->set_uncompressed_size(record.GetPayload().size());
+        auto* metadata = message->add_metadata_items();
+        metadata->set_key("_ydb_service_replication_message");
+        metadata->set_value("true");
+        if (!WriteToStreamOrDie(ctx, std::move(response))) {
+            return;
+        }
+    }
 }
 
 template <EProtocol Protocol>
@@ -2458,7 +2543,7 @@ template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
+        ctx, ctx.SelfID, ClientId, Cookie, Session, Request->GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 
@@ -2476,41 +2561,61 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev
 }
 
 template <EProtocol Protocol>
+typename TReadSessionActor<Protocol>::TPartitionsMap::iterator TReadSessionActor<Protocol>::ResolvePartitionActorEvent(const TActorId& sender, const TString& topic, ui32 partitionId, ui64 assignId) {
+    if (!ActualPartitionActors.contains(sender)) {
+        return Partitions.end();
+    }
+
+    auto partitionIt = Partitions.find(assignId);
+    if (partitionIt == Partitions.end()) {
+        return Partitions.end();
+    }
+
+    if (partitionIt->second.Topic->GetInternalName() != topic
+            || partitionIt->second.Partition.Partition != partitionId) {
+        return Partitions.end();
+    }
+
+    return partitionIt;
+}
+
+template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
 
-    auto it = Topics.find(msg->Topic);
-    if (it == Topics.end()) {
+    auto partitionIt = ResolvePartitionActorEvent(ev->Sender, msg->Topic, msg->PartitionId, msg->AssignId);
+    if (partitionIt == Partitions.end()) {
+        // Stale/late event: the partition may have already been released or the
+        // session is shutting down. Ignore it instead of tearing down the whole
+        // session, matching the other stale-event paths in this actor. Do not
+        // notify the balancer either: it must not learn about a partition this
+        // session no longer holds.
         return;
     }
+    auto& partitionInfo = partitionIt->second;
 
-    auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
-
-    TPartitionActorInfo* partitionInfo = nullptr;
-    for (auto& [_, p] : Partitions) {
-        if (p.Partition.Partition == msg->PartitionId) {
-            partitionInfo = &p;
-            break;
-        }
+    // The topic holder for the partition's topic. The partition's topic is
+    // registered in Topics; the guard keeps this handler safe independently of
+    // ResolvePartitionActorEvent.
+    auto topicIt = Topics.find(partitionInfo.Topic->GetInternalName());
+    if (topicIt == Topics.end()) {
+        return;
     }
+    auto& topic = topicIt->second;
 
-    if (!partitionInfo) {
-        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-            << "Inconsistent state #04", ctx);
-    }
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, partitionInfo.Partition.Partition, AutoPartitioningSupport, msg->FirstMessage));
 
-    partitionInfo->EndOffset = msg->EndOffset;
-    partitionInfo->ReadingFinished = true;
+    partitionInfo.EndOffset = msg->EndOffset;
+    partitionInfo.ReadingFinished = true;
 
-    NotifyChildren(*partitionInfo, ctx);
+    NotifyChildren(partitionInfo, ctx);
 
     if constexpr (Protocol == EProtocol::Topic) {
         if (AutoPartitioningSupport) {
             TServerMessage result;
             result.set_status(Ydb::StatusIds::SUCCESS);
             auto* r = result.mutable_end_partition_session();
-            r->set_partition_session_id(partitionInfo->Partition.AssignId);
+            r->set_partition_session_id(partitionInfo.Partition.AssignId);
 
             for (auto p : msg->AdjacentPartitionIds) {
                 r->add_adjacent_partition_ids(p);
@@ -2518,17 +2623,76 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
             for (auto p : msg->ChildPartitionIds) {
                 r->add_child_partition_ids(p);
                 if (ReadWithoutConsumer && topic->Groups.empty()) {
-                    if (!SendLockPartitionToSelf(p, it->first, topic, ctx)) {
+                    if (!SendLockPartitionToSelf(p, partitionInfo.Topic->GetInternalName(), topic, ctx)) {
                         return;
                     }
                 }
             }
 
-            LOG_I("Sending to client end partition stream event");
-            SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+            if (partitionInfo.WindowExhaustedSent) {
+                // The client already received end_partition_session for this
+                // partition session when its max_offset window was exhausted.
+                // A second one (even with child partition ids after a split)
+                // would be a duplicate for the same partition session id.
+                LOG_I("Suppressing duplicate end partition stream event (max_offset exhaustion already reported)",
+                    {"partition", partitionInfo.Partition});
+            } else {
+                LOG_I("Sending to client end partition stream event");
+                SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
+            }
+
+            // A real finish supersedes a deferred exhaustion EOF: drop the
+            // latch so a later flush in SendWindowExhaustedIfNeeded cannot
+            // emit a duplicate empty end_partition_session.
+            partitionInfo.WindowExhausted = false;
         }
     }
 
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+
+    auto partitionIt = ResolvePartitionActorEvent(ev->Sender, msg->Topic, msg->PartitionId, msg->AssignId);
+    if (partitionIt == Partitions.end()) {
+        // Stale/late event: the partition may have already been released or the
+        // session is shutting down. Ignore it instead of tearing down the whole
+        // session, matching the other stale-event paths in this actor.
+        return;
+    }
+    auto& partitionInfo = partitionIt->second;
+
+    // Do NOT update EndOffset and do NOT mark the partition as ReadingFinished.
+
+    // The partition is still alive: the client's read window (max_offset) is
+    // exhausted, not the partition itself. The read balancer is deliberately
+    // NOT notified - it treats Finish as a closed-by-split/merge partition.
+    // The partition stays locked to this session until the session is closed;
+    // the balancer releases it on session disconnect.
+
+    if constexpr (Protocol == EProtocol::Topic) {
+        // Unlike TEvReadingFinished (auto-partitioning close), this EOF signal is
+        // sent unconditionally: it reflects the client's own max_offset window and
+        // is independent of auto-partitioning support, so it must reach every
+        // Topic-protocol client that set max_offset.
+        //
+        // For direct read the last data batch goes to StreamDirectRead while
+        // this EOF goes to the control StreamRead, so the client could receive
+        // the EOF first, stop the partition session and drop the batch. Defer
+        // the EOF until all in-flight direct reads are acked.
+        partitionInfo.WindowExhausted = true;
+        // A formed read response for this partition may still be in flight
+        // (e.g. parked in the quota queue under METERING_MODE_REQUEST_UNITS)
+        // and not yet counted in DirectReads. In that case only latch the
+        // flag and leave the sending to ProcessDirectReads, which runs after
+        // ProcessAnswer inserts the read into DirectReads and once more on
+        // every direct_read_ack. Regular (non-direct) reads never reach
+        // ProcessDirectReads, so for them the EOF must be sent right away.
+        if (!DirectRead || PartitionToReadResponse.find(ev->Sender) == PartitionToReadResponse.end()) {
+            SendWindowExhaustedIfNeeded(partitionIt, ctx);
+        }
+    }
 }
 
 

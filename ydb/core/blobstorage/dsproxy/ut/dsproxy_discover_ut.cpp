@@ -6,7 +6,10 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+
+using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
 
 namespace NKikimr {
 namespace NDSProxyDiscoverTest {
@@ -356,6 +359,105 @@ Y_UNIT_TEST(Block42ErrorWhenBlobIsLostAfterDiscover) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::ERROR);
 }
 
+void CheckMirror3dcSurvivingDiscovery(const TMirror3dcGroupState& states,
+        bool readBody, bool hasBlob) {
+
+    const TBlobStorageGroupType type(TErasureType::ErasureMirror3dc);
+    TTestBasicRuntime runtime;
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, type, 0, 0, TBlobStorageGroupInfo::EEM_NONE,
+        DormantTimeoutDefaultControl, false, TVector<EMirror3dcFailRealmState>(states.FailRealmStates.begin(), states.FailRealmStates.end()), states.State);
+    TTestState testState(runtime, env.Info);
+    TGroupMock& group = testState.GetGroupMock();
+    const ui64 tabletId = 72075186224047637;
+    const TLogoBlobID blobId(tabletId, 1, 1, 0, testState.BlobSize, 0);
+    for (ui32 idx = 0; idx < 9; ++idx) {
+        TVDiskMock& disk = group.GetVDiskInSubgroup(blobId, idx);
+        const ui32 realm = disk.GetVDiskId().FailRealm;
+        if (states.FailRealmStates[realm] != TDataCenterState::EXCLUDED && states.FailRealmStates[realm] != TDataCenterState::RECOVERING) {
+            if (hasBlob) {
+                UNIT_ASSERT_VALUES_EQUAL(disk.Put(TLogoBlobID(blobId, idx % 3 + 1), testState.BlobData), NKikimrProto::OK);
+            }
+            break;
+        }
+    }
+    ui32 rangeRequests = 0;
+    bool readData = false;
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (std::find(env.VDisks.begin(), env.VDisks.end(), event->Recipient) == env.VDisks.end()) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        switch (event->GetTypeRewrite()) {
+            case TEvBlobStorage::EvVGet: {
+                TEvBlobStorage::TEvVGet::TPtr request(static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(event.Release()));
+                const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+                UNIT_ASSERT_C(!env.Info->IsFailRealmExcluded(disk.FailRealm), "Discover must not query F");
+                TEvBlobStorage::TEvVGetResult::TPtr reply = testState.CreateEventResultPtr(request, NKikimrProto::UNKNOWN);
+                if (request->Get()->Record.HasRangeQuery()) {
+                    ++rangeRequests;
+                } else {
+                    readData |= !request->Get()->Record.GetIndexOnly();
+                }
+                group.OnVGet(*request->Get(), *reply->Get());
+                runtime.Send(reply.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            case TEvBlobStorage::EvVPut: {
+                TEvBlobStorage::TEvVPut::TPtr request(static_cast<TEventHandle<TEvBlobStorage::TEvVPut>*>(event.Release()));
+                const TVDiskID disk = group.GetVDiskID(*request->Get());
+                UNIT_ASSERT(!env.Info->IsFailRealmExcluded(disk.FailRealm));
+                const NKikimrProto::EReplyStatus status = group.OnVPut(*request->Get());
+                TEvBlobStorage::TEvVPutResult::TPtr reply = testState.CreateEventResultPtr(request, status, disk);
+                runtime.Send(reply.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            case TEvBlobStorage::EvVGetBlock: {
+                TEvBlobStorage::TEvVGetBlock::TPtr request(static_cast<TEventHandle<TEvBlobStorage::TEvVGetBlock>*>(event.Release()));
+                const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+                UNIT_ASSERT(!env.Info->IsFailRealmExcluded(disk.FailRealm));
+                TEvBlobStorage::TEvVGetBlockResult::TPtr reply = testState.CreateEventResultPtr(request, NKikimrProto::OK, tabletId);
+                reply->Get()->Record.SetGeneration(7);
+                runtime.Send(reply.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+        }
+    });
+    std::unique_ptr<TEvBlobStorage::TEvDiscover> discover = std::make_unique<TEvBlobStorage::TEvDiscover>(
+        tabletId, 1, readBody, true, TInstant::Max(), 0, true);
+    runtime.Send(new IEventHandle(env.RealProxyActorId, testState.EdgeActor, discover.release()), 0, true);
+    const TEvBlobStorage::TEvDiscoverResult::TPtr result = testState.GrabEventPtr<TEvBlobStorage::TEvDiscoverResult>();
+    const bool allFailed = std::all_of(states.FailRealmStates.begin(), states.FailRealmStates.end(), [](EMirror3dcFailRealmState state) { return state == TDataCenterState::EXCLUDED; });
+    const NKikimrProto::EReplyStatus expected = allFailed ? NKikimrProto::ERROR
+        : hasBlob ? NKikimrProto::OK : NKikimrProto::NODATA;
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expected);
+    if (expected != NKikimrProto::ERROR) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->BlockedGeneration, 7);
+    }
+    if (expected == NKikimrProto::OK) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Id, blobId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Buffer, readBody ? testState.BlobData : TString());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rangeRequests, 3 * std::count_if(states.FailRealmStates.begin(), states.FailRealmStates.end(),
+        IsReadable));
+    if (hasBlob) {
+        UNIT_ASSERT(readData || !readBody);
+    }
+    runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST(Mirror3dcAllRealmsExcluded) {
+
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, false);
+}
+
+Y_UNIT_TEST(Mirror3dcSurvivingCopyInSoloRealm) {
+
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, true, true);
+}
+
 Y_UNIT_TEST(Mirror3dcSuccess) {
     TBlobStorageGroupType type(TErasureType::ErasureMirror3dc);
     TTestBasicRuntime runtime;
@@ -385,7 +487,7 @@ Y_UNIT_TEST(Mirror3dcSuccess) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Id, blobId2);
 }
 
-Y_UNIT_TEST(Mirror3dcSuccessLastBlobMissingParts) {
+Y_UNIT_TEST(Mirror3dcSkipsNewerCandidateBelowEnsuredLayout) {
     TBlobStorageGroupType type(TErasureType::ErasureMirror3dc);
     TTestBasicRuntime runtime;
     SetupRuntime(runtime);
@@ -408,11 +510,42 @@ Y_UNIT_TEST(Mirror3dcSuccessLastBlobMissingParts) {
 
     testState.HandleVGetsWithMock(9);
     testState.HandleVGetsWithMock(9);
-    testState.HandleVPutsWithMock(3);
+    testState.HandleVPutsWithMock(1);
 
     TEvBlobStorage::TEvDiscoverResult::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvDiscoverResult>();
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Id, blobId2);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Id, blobId1);
+}
+
+Y_UNIT_TEST(Mirror3dcLeavingRealmCompletesEnsuredCandidate) {
+    TTestBasicRuntime runtime;
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc), 0, 0,
+        TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false,
+        {TDataCenterState::INCLUDED, TDataCenterState::LEAVING, TDataCenterState::INCLUDED},
+        NKikimrBlobStorage::TGroupState::DC_FAILURE);
+    TTestState state(runtime, env.Info);
+    const TLogoBlobID id(123456, 1, 1, 0, state.BlobSize, 0);
+    auto& group = state.GetGroupMock();
+    group.Put(id, state.BlobData); // 1+1+1 satisfies E for a blob written before the exclusion.
+    auto request = std::make_unique<TEvBlobStorage::TEvDiscover>(id.TabletID(), 1, true, false, TInstant::Max(), 0, true);
+    runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, request.release()), 0);
+    state.HandleVGetsWithMock(9);
+    group.Wipe();
+    for (;;) {
+        TAutoPtr<IEventHandle> handle;
+        auto [get, result] = runtime.GrabEdgeEventsRethrow<TEvBlobStorage::TEvVGet, TEvBlobStorage::TEvDiscoverResult>(handle);
+        if (result) {
+            UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::ERROR);
+            break;
+        }
+        UNIT_ASSERT(get && !get->Record.HasRangeQuery());
+        TEvBlobStorage::TEvVGet::TPtr vget(static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(handle.Release()));
+        auto reply = state.CreateEventResultPtr(vget, NKikimrProto::UNKNOWN);
+        group.OnVGet(*vget->Get(), *reply->Get());
+        runtime.Send(reply.Release());
+    }
 }
 
 Y_UNIT_TEST(Mirror3dcErrorWhenBlobIsLostAfterDiscover) {

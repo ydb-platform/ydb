@@ -369,6 +369,54 @@ Y_UNIT_TEST(DqPhyMapJoinStatsUsesMapJoinAlgo) {
     UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(TKqpJoinAlgoType::Undefined), 0);
 }
 
+Y_UNIT_TEST(DqPhyHashJoinStatsMatchesBlockHashJoin) {
+    for (const bool buildSideLeft : {false, true}) {
+        TMockProviderContextYT24403 pctx;
+        NYql::TExprContext ctx;
+        auto pos = ctx.AppendPosition({});
+        auto leftInput = Build<TCoAtomList>(ctx, pos).Done();
+        auto rightInput = Build<TCoAtomList>(ctx, pos).Done();
+        auto join = Build<TDqPhyHashJoin>(ctx, pos)
+            .LeftInput(leftInput)
+            .RightInput(rightInput)
+            .LeftLabel<TCoAtom>().Build("left")
+            .RightLabel<TCoAtom>().Build("right")
+            .JoinType().Build("Inner")
+            .JoinKeys()
+                .Add<TDqJoinKeyTuple>()
+                    .LeftLabel().Build("left")
+                    .LeftColumn().Build("k")
+                    .RightLabel().Build("right")
+                    .RightColumn().Build("k")
+                    .Build()
+                .Build()
+            .LeftJoinKeyNames().Add().Build("left.k").Build()
+            .RightJoinKeyNames().Add().Build("right.k").Build()
+            .Settings()
+                .Add<TCoNameValueTuple>()
+                    .Name().Build("BuildSide")
+                    .Value<TCoAtom>().Build(buildSideLeft ? "Left" : "Right")
+                    .Build()
+                .Build()
+            .Done();
+
+        TKqpStatsStore kqpStats;
+        kqpStats.SetStats(leftInput.Raw(), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 100, 1, 1));
+        kqpStats.SetStats(rightInput.Raw(), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 10, 1, 1));
+        auto blockJoin = ctx.RenameNode(join.Ref(), TDqPhyBlockHashJoin::CallableName());
+
+        InferStatisticsForDqJoinBase(blockJoin, &kqpStats, pctx);
+        InferStatisticsForDqJoinBase(join.Ptr(), &kqpStats, pctx);
+
+        const auto expectedAlgo = buildSideLeft ? TKqpJoinAlgoType::ReverseBlockJoin : TKqpJoinAlgoType::GraceJoin;
+        UNIT_ASSERT(kqpStats.GetStats(join.Raw()));
+        UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.size(), 1);
+        UNIT_ASSERT(pctx.CalledComputeJoinStats.contains(expectedAlgo));
+        UNIT_ASSERT_VALUES_EQUAL(kqpStats.GetStats(join.Raw())->Nrows, kqpStats.GetStats(blockJoin.Get())->Nrows);
+        UNIT_ASSERT_VALUES_EQUAL(kqpStats.GetStats(join.Raw())->Cost, kqpStats.GetStats(blockJoin.Get())->Cost);
+    }
+}
+
 Y_UNIT_TEST(RelCollector) {
     NYql::TExprContext ctx;
     auto pos = ctx.AppendPosition({});
@@ -480,6 +528,69 @@ Y_UNIT_TEST(KqpOptimizeEquiJoinWithCostsNative) {
         return MakeNativeOptimizerNew(pctx, settings, ctx, false);
     };
     _KqpOptimizeEquiJoinWithCosts(optFactory, ctx);
+}
+
+Y_UNIT_TEST(EquiJoinRebuildKeepsResidualAtItsJoin) {
+    for (bool nested : {false, true}) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext types;
+        TKqpStatsStore stats;
+        TBaseProviderContext pctx;
+        const auto pos = ctx.AppendPosition({});
+        TVector<TExprBase> inputs;
+        for (const TStringBuf label : {"A", "B", "C", "F"}) {
+            if (!nested && label == "F") {
+                continue;
+            }
+            auto input = ctx.NewList(pos, {});
+            stats.SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(BaseTable, 100, 2, 1000));
+            inputs.emplace_back(ctx.NewList(pos, {input, ctx.NewAtom(pos, label)}));
+        }
+        auto join = [&](TStringBuf kind, NYql::TExprNode::TPtr left, NYql::TExprNode::TPtr right,
+                        const std::vector<TStringBuf>& lhs, const std::vector<TStringBuf>& rhs) {
+            return ctx.NewList(pos, {ctx.NewAtom(pos, kind), left, right,
+                MakeLabel(ctx, lhs), MakeLabel(ctx, rhs), ctx.NewList(pos, {})});
+        };
+        auto ab = join("Left", ctx.NewAtom(pos, "A"), ctx.NewAtom(pos, "B"), {"A", "id"}, {"B", "a"});
+        auto tree = join("Inner", ab, ctx.NewAtom(pos, "C"), {"A", "id", "B", "x"}, {"C", "a", "C", "x"});
+        if (nested) {
+            tree = join("Left", ctx.NewAtom(pos, "F"), tree, {"F", "id"}, {"A", "id"});
+        }
+        inputs.emplace_back(tree);
+        inputs.emplace_back(ctx.NewList(pos, {}));
+        auto original = Build<TCoEquiJoin>(ctx, pos).Add(inputs).Done();
+        std::unique_ptr<IOptimizerNew> optimizer(MakeNativeOptimizerNew(pctx, {}, ctx, false));
+        auto result = KqpOptimizeEquiJoinWithCosts(original, ctx, types, stats, 4, *optimizer,
+            [](auto& rels, auto label, auto, auto statistics) {
+                rels.push_back(std::make_shared<TRelOptimizerNode>(TString(label), *statistics));
+            }, TOptimizerHints::Parse(nested ? "JoinOrder(F ((A C) B))" : "JoinOrder((A C) B)"));
+        if (nested) {
+            auto outer = result.Cast<TCoEquiJoin>();
+            UNIT_ASSERT_VALUES_EQUAL(outer.ArgCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(outer.Arg(2).Cast<TCoEquiJoinTuple>().Type().Value(), "Left");
+            bool found = false;
+            for (size_t i = 0; i < 2; ++i) {
+                auto input = outer.Arg(i).Cast<TCoEquiJoinInput>();
+                if (input.Scope().Maybe<TCoAtomList>()) {
+                    UNIT_ASSERT_VALUES_EQUAL(input.Scope().Cast<TCoAtomList>().Size(), 3);
+                    result = input.List();
+                    found = true;
+                }
+            }
+            UNIT_ASSERT(found);
+        }
+        UNIT_ASSERT(result.Ref().IsCallable("FlatMap"));
+        auto filtered = TCoEquiJoin(result.Ref().ChildPtr(0));
+        UNIT_ASSERT_VALUES_EQUAL(filtered.ArgCount(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.Arg(3).Cast<TCoEquiJoinTuple>().Type().Value(), "Left");
+        UNIT_ASSERT(stats.GetStats(filtered.Raw())->CBOFired);
+        const auto& filter = result.Ref().Child(1)->Tail();
+        UNIT_ASSERT(filter.IsCallable("OptionalIf"));
+        const auto& equality = filter.Head().Head();
+        UNIT_ASSERT(equality.IsCallable("=="));
+        UNIT_ASSERT_VALUES_EQUAL(equality.Head().Tail().Content(), "B.x");
+        UNIT_ASSERT_VALUES_EQUAL(equality.Tail().Tail().Content(), "C.x");
+    }
 }
 
 } // KqpCBO

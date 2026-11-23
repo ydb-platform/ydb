@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
 
 #include <util/string/builder.h>
@@ -318,7 +319,8 @@ std::expected<TResolvedName, TString> ResolveName(
     TStringBuf database,
     TStringBuf name,
     TStringBuf localDc,
-    TStringBuf dc
+    TStringBuf dc,
+    bool enableRelativePaths
 ) {
     const auto& pqConfig = AppData()->PQConfig;
     const bool isFederation = !pqConfig.GetTopicsAreFirstClassCitizen();
@@ -331,10 +333,20 @@ std::expected<TResolvedName, TString> ResolveName(
         name = canonName;
     }
 
-    TStringBuf topicName = StripLeadingSlash(name);
     const TStringBuf databaseNorm = StripSlashes(database);
-    const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
     const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
+
+    if (!isFederation && enableRelativePaths && AppData()->FeatureFlags.GetEnableRelativePaths()) {
+        // Resolve the original path before stripping any database or federation prefix.
+        // Only paths starting with '/' are absolute.
+        TString path = name.empty()
+            ? JoinWithDatabase(database, databaseNorm, name)
+            : CanonizePath(PrependDomainIfNeeded(database, name));
+        return MakeResolved(std::move(path), database, databaseNorm, lbRoot, false);
+    }
+
+    TStringBuf topicName = StripLeadingSlash(name);
+    const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
 
     // Reject trailing '/' before stripping PQ/database prefixes (exact PQ root is "/").
     if (isFederation && topicName.EndsWith("/")) {
@@ -378,12 +390,11 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     auto wrap = [&](TString path) {
+        NPersQueue::CountTopicPathWithDatabasePrefix(database, name, path);
         return MakeResolved(std::move(path), database, databaseNorm, lbRoot, isFederation);
     };
 
     if (!isFederation) {
-        // FCC: never interpret rt3. / -- / @ as a legacy name. A leaf like
-        // TestSchemeList--test-topic-1 is a literal topic under the database.
         return wrap(JoinWithDatabase(database, databaseNorm, topicName));
     }
 
@@ -462,6 +473,30 @@ std::expected<TResolvedName, TString> ResolveName(
         return wrap(JoinWithDatabase(database, databaseNorm, *parsed));
     }
     return wrap(JoinWithRoot(lbRoot, database, std::move(*parsed)));
+}
+
+TResolvedName ResolveSchemePath(TStringBuf database, TStringBuf path) {
+    TString canonPath;
+    if (path.StartsWith('/') && !path.EndsWith('/') && !path.Contains("//")) {
+        canonPath = TString{path};
+    } else {
+        canonPath = CanonizePath(TString{path});
+    }
+
+    const auto& pqConfig = AppData()->PQConfig;
+    if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
+        const TString& lbRoot = pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+        if (auto target = TryFederationAccountTarget(canonPath, lbRoot)) {
+            return TResolvedName{
+                .Path = std::move(target->Path),
+                .NavigateDatabase = std::move(target->AccountDatabase),
+            };
+        }
+    }
+    return TResolvedName{
+        .Path = std::move(canonPath),
+        .NavigateDatabase = TString{database},
+    };
 }
 
 std::optional<TFederationAccountTarget> TryFederationAccountTarget(

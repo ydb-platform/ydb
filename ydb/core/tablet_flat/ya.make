@@ -8,6 +8,8 @@ SRCS(
     flat_boot_lease.cpp
     flat_boot_misc.cpp
     flat_comp.cpp
+    flat_compaction_context.cpp
+    flat_compaction_keyspace.cpp
     flat_comp_create.cpp
     flat_comp_gen.cpp
     flat_cxx_database.h
@@ -82,6 +84,8 @@ SRCS(
     flat_table_observer.h
     flat_table_committed.cpp
     flat_table_committed.h
+    flat_tier_policy.cpp
+    flat_tier_policy.h
     flat_tier_predicate.cpp
     flat_tier_predicate.h
     flat_update_op.h
@@ -97,7 +101,6 @@ SRCS(
     tablet_flat_executor.cpp
     tablet_flat_executed.h
     tablet_flat_executed.cpp
-    flat_executor.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
@@ -119,6 +122,8 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zstd
+    library/cpp/blockcodecs
     ydb/library/actors/util
     ydb/library/actors/core
     ydb/library/services

@@ -63,7 +63,7 @@ sequenceDiagram
 ```
 
 
-The same happens if data referenced by an offset in the checkpoint has already been removed from the topic due to [TTL](../../concepts/datamodel/topic.md#message-retention).
+The same happens if data referenced by an offset in the checkpoint has already been removed from the topic due to [TTL](../../concepts/datamodel/topic.md#retention-time).
 
 For how this affects delivery guarantees, see [{#T}](guarantees.md#incomplete-windows-restart).
 

@@ -56,7 +56,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent
 }
 
 NKikimr::NTxUT::TShardReader& TShardReader::SetReplyColumnIds(const std::vector<ui32>& replyColumnIds) {
-    AFL_VERIFY(!SerializedProgram);
+    YDB_LOG_VERIFY(!SerializedProgram);
     if (!ProgramProto) {
         ProgramProto = NKikimrSSA::TProgram();
     }

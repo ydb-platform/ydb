@@ -58,6 +58,33 @@ public:
     }
 };
 
+const NKqpProto::TKqpInternalSink* FindTableTruncateSink(const NKqpProto::TKqpPhyTx& tx) {
+    for (const auto& stage : tx.GetStages()) {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.HasInternalSink()
+                && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableTruncateSettings>()) {
+                return &sink.GetInternalSink();
+            }
+        }
+    }
+    return nullptr;
+}
+
+NKikimrKqp::TKqpTableTruncateSettings TKqpPhyTxHolder::GetUnsafeTruncate() const {
+    const auto* sink = FindTableTruncateSink(*Proto);
+    YQL_ENSURE(sink);
+    YQL_ENSURE(Proto->GetType() == NKqpProto::TKqpPhyTx::TYPE_GENERIC);
+    YQL_ENSURE(Proto->StagesSize() == 1 && Proto->ResultsSize() == 0 && Proto->ParamBindingsSize() == 0);
+    const auto& stage = Proto->GetStages(0);
+    YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 0
+        && stage.SinksSize() == 1 && stage.OutputTransformsSize() == 0);
+
+    NKikimrKqp::TKqpTableTruncateSettings settings;
+    YQL_ENSURE(sink->GetSettings().UnpackTo(&settings));
+    YQL_ENSURE(!settings.GetTablePath().empty());
+    return settings;
+}
+
 TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPreparedQuery>& pq,
     const NKqpProto::TKqpPhyTx* proto, const std::shared_ptr<TPreparedQueryAllocHolder>& alloc, TIntrusivePtr<TTableConstInfoMap> tableConstInfoById)
     : PreparedQuery(pq)

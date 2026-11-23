@@ -10,4 +10,9 @@ namespace NKikimr {
         XXH3_64BIT_HEADER, // header with 8-byte checksum (XXH3 64 bits)
     };
 
+    inline EBlobHeaderMode GetEffectiveBlobHeaderMode(EBlobHeaderMode mode, ui32 totalPartCount) {
+        return totalPartCount > 8 && mode == EBlobHeaderMode::OLD_HEADER
+            ? EBlobHeaderMode::NO_HEADER : mode;
+    }
+
 } // NKikimr

@@ -47,6 +47,9 @@ constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
 constexpr TStringBuf KqpSysViewSourceName = "KqpSysViewSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
+constexpr TStringBuf KqpTableTruncateSinkName = "KqpTableTruncateSink";
+
+NNodes::TMaybeNode<NNodes::TKqpTableTruncateSettings> GetTableTruncateSettings(const NNodes::TKqpPhysicalTx& tx);
 
 enum class EStreamLookupStrategyType {
     Unspecified,
@@ -173,6 +176,7 @@ public:
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
     static constexpr TStringBuf ReverseSettingName = "Reverse";
     static constexpr TStringBuf SortedSettingName = "Sorted";
+    static constexpr TStringBuf RequireSortedReadSettingName = "RequireSortedRead";
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
     static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
@@ -201,6 +205,7 @@ public:
     TMaybe<ui64> SequentialInFlight;
     TMaybe<ui64> TabletId;
     bool ForcePrimary = false;
+    bool RequireSortedRead = false;
     ui64 PointPrefixLen = 0;
     THashMap<TString, TString> IndexSelectionInfo;
 

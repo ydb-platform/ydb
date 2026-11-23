@@ -1,21 +1,24 @@
 #include "interconnect_proxy_wrapper.h"
 #include "interconnect_tcp_proxy.h"
-#include <ydb/library/actors/interconnect/mock/ic_mock.h>
 
 namespace NActors {
+
+    static IActor* CreateIcProxy(const ui32 nodeId, TInterconnectProxyCommon::TPtr common, IActor** self) {
+        return new TInterconnectProxyTCP(nodeId, std::move(common), self);
+    }
 
     class TInterconnectProxyWrapper : public IActorCallback {
         TIntrusivePtr<TInterconnectProxyCommon> Common;
         const ui32 NodeId;
-        TInterconnectMock *Mock;
+        TIcProxyCreator Creator;
         IActor *Proxy = nullptr;
 
     public:
-        TInterconnectProxyWrapper(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 nodeId, TInterconnectMock *mock)
+        TInterconnectProxyWrapper(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 nodeId, TIcProxyCreator creator)
             : IActorCallback(static_cast<TReceiveFunc>(&TInterconnectProxyWrapper::StateFunc), EActivityType::INTERCONNECT_PROXY_WRAPPER)
             , Common(std::move(common))
             , NodeId(nodeId)
-            , Mock(mock)
+            , Creator(std::move(creator))
         {}
 
         STFUNC(StateFunc) {
@@ -23,13 +26,8 @@ namespace NActors {
                 PassAway();
             } else {
                 if (!Proxy) {
-                    IActor *actor = Mock
-                        ? Mock->CreateProxyMock(TActivationContext::ActorSystem()->NodeId, NodeId, Common)
-                        : new TInterconnectProxyTCP(NodeId, Common, &Proxy);
+                    IActor *actor = Creator(NodeId, Common, &Proxy);
                     RegisterWithSameMailbox(actor);
-                    if (Mock) {
-                        Proxy = actor;
-                    }
                     Y_ABORT_UNLESS(Proxy);
                 }
                 InvokeOtherActor(*Proxy, &IActor::Receive, ev);
@@ -38,17 +36,28 @@ namespace NActors {
     };
 
     TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common,
-            TInterconnectSessionPoolMapping poolMapping, TInterconnectMock *mock) {
-        return [common = std::move(common), poolMapping = std::move(poolMapping), mock]
+            TInterconnectSessionPoolMapping poolMapping) {
+        return [common = std::move(common), poolMapping = std::move(poolMapping)]
                 (TActorSystem *as, ui32 nodeId) -> TActorId {
-            return as->Register(new TInterconnectProxyWrapper(common, nodeId, mock), TMailboxType::HTSwap,
+            return as->Register(new TInterconnectProxyWrapper(common, nodeId, &CreateIcProxy), TMailboxType::HTSwap,
                 poolMapping.GetPoolId(nodeId));
         };
     }
 
-    TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 poolId,
-            TInterconnectMock *mock) {
-        return CreateProxyWrapperFactory(std::move(common), TInterconnectSessionPoolMapping({poolId}), mock);
+    TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 poolId) {
+        return CreateProxyWrapperFactory(std::move(common), TInterconnectSessionPoolMapping({poolId}), &CreateIcProxy);
     }
 
+    TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common,
+            TInterconnectSessionPoolMapping poolMapping, TIcProxyCreator proxyCreator) {
+        return [common = std::move(common), poolMapping = std::move(poolMapping), proxyCreator = std::move(proxyCreator)]
+                (TActorSystem *as, ui32 nodeId) -> TActorId {
+            return as->Register(new TInterconnectProxyWrapper(common, nodeId, proxyCreator), TMailboxType::HTSwap,
+                poolMapping.GetPoolId(nodeId));
+        };
+    }
+
+    TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 poolId, TIcProxyCreator proxyCreator) {
+        return CreateProxyWrapperFactory(std::move(common), TInterconnectSessionPoolMapping({poolId}), proxyCreator);
+    }
 } // NActors

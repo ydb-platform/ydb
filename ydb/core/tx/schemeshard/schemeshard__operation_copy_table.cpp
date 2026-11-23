@@ -363,6 +363,7 @@ public:
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
 
+                        context.OnComplete.DeleteShard(context.SS->CdcStreams.at(id)->AggregatorShardIdx);
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);
 
@@ -562,7 +563,7 @@ public:
             if (checks && Transaction.HasCreateCdcStream()) {
                 NCdcStreamAtTable::CheckSrcDirOnPropose(
                     checks,
-                    srcPath.IsInsideTableIndexPath(false));
+                    srcPath);
             }
 
             if (!checks) {
@@ -1052,6 +1053,16 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     *operation->MutableVectorIndexKmeansTreeDescription() =
                         std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
                     break;
+                case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                    const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+                        &indexInfo->SpecializedIndexDescription);
+                    if (!description) {
+                        return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter,
+                            "HNSW index type and description do not match")};
+                    }
+                    *operation->MutableHnswIndexDescription() = *description;
+                    break;
+                }
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:

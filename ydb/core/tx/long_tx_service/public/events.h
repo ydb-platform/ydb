@@ -57,6 +57,9 @@ namespace NLongTxService {
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_LONG_TX_SERVICE),
                       "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_LONG_TX_SERVICE)");
 
+        // With snapshot locking enabled, readable modes receive a snapshot
+        // checked for freshness before the reply. BeginTx does not retain it:
+        // later reads may fail once its history is cleaned up.
         struct TEvBeginTx
             : TEventPB<TEvBeginTx, NKikimrLongTxService::TEvBeginTx, EvBeginTx>
         {
@@ -196,8 +199,15 @@ namespace NLongTxService {
                 Orbit = std::move(orbit);
             }
 
+            void SetOptionalArg(const TRowVersion& snapshot) {
+                Snapshot = snapshot;
+            }
+
             TString DatabaseName;
             TVector<NKikimr::TTableId> TableIds;
+            // Register this exact version within the local promotion window; locking must be enabled.
+            // Readers must still check that its history exists.
+            TMaybe<TRowVersion> Snapshot;
             NLWTrace::TOrbit Orbit;
         };
 

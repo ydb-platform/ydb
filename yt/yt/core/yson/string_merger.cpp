@@ -92,7 +92,7 @@ public:
     {
         YsonWriter_.OnKeyedItem(key);
         PathStack_.Pop();
-        PathStack_.Push(std::string{key});
+        PathStack_.Push(key);
         auto path = PathStack_.GetPath();
         auto it = PathToIndex_.find(path);
         if (it != PathToIndex_.end()) {

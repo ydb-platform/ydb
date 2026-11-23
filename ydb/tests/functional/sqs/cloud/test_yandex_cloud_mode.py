@@ -15,6 +15,7 @@ import pytest
 import ydb
 from hamcrest import assert_that, equal_to, not_none, has_item, has_items, is_not, contains_string
 from hamcrest import raises, greater_than
+from ydb.tests.library.common.wait_for import wait_for_and_assert
 from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 from ydb.tests.library.sqs.cloud_test_base import YandexCloudSqsTestBase
 from ydb.tests.library.sqs.test_base import get_test_with_sqs_tenant_installation
@@ -191,13 +192,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         self._sqs_api.create_queue(self.queue_name, is_fifo=False)
         touch_account_dir()  # should be ok now
 
-        # wait for user list update
-        time.sleep(1.1)
-
-        existing_queues = self._sqs_api.list_queues()
-        assert_that(
-            len(existing_queues) == 1
-        )
+        wait_for_and_assert(lambda: len(self._sqs_api.list_queues()), equal_to(1))
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_fifo_groups_with_dlq_in_cloud(self, tables_format):
@@ -209,8 +204,8 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         queue_url = self._sqs_api.create_queue(self.queue_name, is_fifo=is_fifo)
         dlq_url = self._sqs_api.create_queue(dlq_name, is_fifo=is_fifo)
 
-        # wait for user list update
-        time.sleep(1.1)
+        self._wait_for_queue_ready(queue_url)
+        self._wait_for_queue_ready(dlq_url)
 
         dlq_arn = self._get_queue_arn(dlq_url)
 
@@ -277,8 +272,8 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
 
         dlq_url = self._sqs_api.create_queue('dlq_' + self.queue_name, is_fifo=is_fifo)
 
-        # wait for user list update
-        time.sleep(1.1)
+        self._wait_for_queue_ready(queue_url)
+        self._wait_for_queue_ready(dlq_url)
 
         dlq_arn = self._get_queue_arn(dlq_url)
 
@@ -404,8 +399,8 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         queue2_name = 'second_' + self.queue_name
         queue2_url = self._sqs_api.create_queue(queue2_name, is_fifo=is_fifo)
 
-        # wait for user list update
-        time.sleep(1.1)
+        self._wait_for_queue_ready(queue1_url)
+        self._wait_for_queue_ready(queue2_url)
 
         queue_1_arn = self._get_queue_arn(queue1_url)
         queue_2_arn = self._get_queue_arn(queue2_url)
@@ -522,8 +517,8 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         dlq_name = 'dlq_for_' + self.queue_name
         dlq_url = self._sqs_api.create_queue(dlq_name, is_fifo=is_fifo)
 
-        # wait for user list update
-        time.sleep(1.1)
+        self._wait_for_queue_ready(queue_url)
+        self._wait_for_queue_ready(dlq_url)
 
         for url in [queue_url, dlq_url]:
             attributes = self._sqs_api.get_queue_attributes(url)
@@ -617,13 +612,11 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         # normal attributed queue creation
         queue_with_dlq_url = self._sqs_api.create_queue(queue_with_dlq, is_fifo=is_fifo, attributes={'RedrivePolicy': redrive_policy})
 
-        # wait for user list update
-        time.sleep(1.1)
-
-        # check dlq
-        result = self._sqs_api.list_dead_letter_source_queues(dlq_url)
-        assert_that(len(result), equal_to(1))
-        assert_that(result, has_item(queue_with_dlq_url))
+        # Wait until the source queue is visible in the DLQ index.
+        wait_for_and_assert(
+            lambda: self._sqs_api.list_dead_letter_source_queues(dlq_url),
+            equal_to([queue_with_dlq_url]),
+        )
 
         # check policy
         attributes = self._sqs_api.get_queue_attributes(queue_with_dlq_url)
@@ -645,8 +638,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         self._sqs_api = self._create_api_for_user('ignored', raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
         queue_url = self._sqs_api.create_queue(self.queue_name, is_fifo=is_fifo)
 
-        # wait for user list update
-        time.sleep(1.1)
+        self._wait_for_queue_ready(queue_url)
 
         assert_that(
             (self.cloud_id in queue_url) and (self.queue_name in queue_url)
@@ -741,20 +733,14 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         for i in range(2):
             url_2 = folder_api_2.create_queue('queue_{}'.format(i))
 
-        # wait for update
-        time.sleep(2.1)
-
-        assert_that(folder_api_1.private_count_queues(), equal_to('4'))
-        assert_that(folder_api_2.private_count_queues(), equal_to('2'))
+        wait_for_and_assert(folder_api_1.private_count_queues, equal_to('4'))
+        wait_for_and_assert(folder_api_2.private_count_queues, equal_to('2'))
 
         folder_api_1.delete_queue(url_1)
         folder_api_2.delete_queue(url_2)
 
-        # wait for update
-        time.sleep(2.1)
-
-        assert_that(folder_api_1.private_count_queues(), equal_to('3'))
-        assert_that(folder_api_2.private_count_queues(), equal_to('1'))
+        wait_for_and_assert(folder_api_1.private_count_queues, equal_to('3'))
+        wait_for_and_assert(folder_api_2.private_count_queues, equal_to('1'))
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_queues_count_over_limit(self, tables_format):
@@ -788,8 +774,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         queue_url = self._sqs_api.create_queue(queue_name)
         logging.debug('Queue url: {}'.format(queue_url))
 
-        # wait for user list update
-        time.sleep(1.1)
+        self._wait_for_queue_ready(queue_url)
 
         self._sqs_api.send_message(queue_url, 'data')
 

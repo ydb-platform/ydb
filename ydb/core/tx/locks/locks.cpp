@@ -154,13 +154,6 @@ void TLockInfo::AddAncestorLock(TAncestorLock lock) {
     AncestorLocks[tabletId] = std::move(lock);
 }
 
-ui64 TLockInfo::GetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex) const {
-    auto it = AncestorLocks.find(dataShard);
-    if (it == AncestorLocks.end()) return 0;
-    auto jt = it->second.WriteSeqNumStates.find(writerIndex);
-    return jt != it->second.WriteSeqNumStates.end() ? jt->second.WriteSeqNum : 0;
-}
-
 const TWriteSeqNumState* TLockInfo::FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const {
     auto it = AncestorLocks.find(dataShard);
     if (it == AncestorLocks.end()) return nullptr;
@@ -1447,15 +1440,27 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
 
     // We have to tell client that there were some locks (even if we don't set them)
     TVector<TLock> out;
-    for (auto& table : Update->AffectedTables) {
-        out.push_back(MakeLock(
-            Update->LockTxId, Self->TabletID(),
-            lock ? lock->GetGeneration() : Self->Generation(), counter,
-            table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock(),
-            Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
+    // Operations that register no key ranges but consume a write seq num (e.g. an
+    // empty re-routed batch for a covering shard after a split/merge) have no
+    // affected tables; echo the lock over the tables of the lock itself instead, so
+    // the client still learns the lock with its updated write chain. When the lock
+    // could not be acquired (broken or too many), echo the error lock over the same
+    // tables, so the client sees the same lock-acquire failure a data write would
+    // produce instead of a silently successful empty write.
+    THashSet<TPathId> chainOnlyTables;
+    if (Update->AffectedTables.Empty() && Update->WriteSeqNumUpdate) {
+        const TLockInfo* echoLock = Update->Lock ? Update->Lock.Get() : lock.Get();
+        if (echoLock) {
+            chainOnlyTables = echoLock->GetReadTables();
+            chainOnlyTables.insert(echoLock->GetWriteTables().begin(), echoLock->GetWriteTables().end());
+        }
+    }
 
-        if (Update->WriteSeqNumUpdate) {
-            Y_ENSURE(Update->Lock);
+    // Ancestor seq nums are echoed per table, independently of the current-shard
+    // echo. SetAncestorWriteSeqNums holds every ancestor group exactly once, so
+    // no ancestor lock is ever echoed twice.
+    auto makeAncestorEchoes = [&](const TPathId& tableId) {
+        if (Update->WriteSeqNumUpdate && Update->Lock) {
             const auto& lock = Update->Lock;
             for (auto [shardId, seqNum] : Update->WriteSeqNumUpdate->SetAncestorWriteSeqNums) {
                 auto it = lock->AncestorLocks.find(shardId);
@@ -1469,39 +1474,25 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 out.push_back(MakeLock(
                     Update->LockTxId, shardId,
                     ancestorLock.Generation, ancestorCounter,
-                    table.GetTableId(), lock->IsWriteLock(), writerSeqNum));
+                    tableId, lock->IsWriteLock(), writerSeqNum));
             }
         }
+    };
+
+    auto makeEchoLocks = [&](const TPathId& tableId) {
+        out.push_back(MakeLock(
+            Update->LockTxId, Self->TabletID(),
+            lock ? lock->GetGeneration() : Self->Generation(), counter,
+            tableId, Update->Lock && Update->Lock->IsWriteLock(),
+            Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
+        makeAncestorEchoes(tableId);
+    };
+
+    for (auto& table : Update->AffectedTables) {
+        makeEchoLocks(table.GetTableId());
     }
-
-    if (Update->HasSeqNumDuplicateWrites()) {
-        Y_ENSURE(Update->Lock);
-        const auto& lock = Update->Lock;
-        THashSet<TPathId> tables = lock->GetReadTables();
-        tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
-        for (const auto& table : tables) {
-            if (Update->WriteSeqNumUpdate->ThisShardDuplicateWrite) {
-                out.push_back(MakeLock(
-                    Update->LockTxId, Self->TabletID(),
-                    lock->GetGeneration(), counter,
-                    table, lock->IsWriteLock(), lock->GetLockWriteSeqNum()));
-            }
-
-            for (auto shardId : Update->WriteSeqNumUpdate->AncestorShardsWithDuplicateWrites) {
-                auto it = lock->AncestorLocks.find(shardId);
-                Y_ENSURE(it != lock->AncestorLocks.end());
-                const auto& ancestorLock = it->second;
-                auto ancestorCounter = TLock::IsError(counter) ? counter : ancestorLock.Counter;
-                TLockWriteSeqNum seqNum{
-                    .WriterIndex = Update->WriteSeqNumUpdate->WriterIndex,
-                    .WriteSeqNum = lock->GetAncestorWriteSeqNum(shardId, seqNum.WriterIndex),
-                };
-                out.push_back(MakeLock(
-                    Update->LockTxId, shardId,
-                    ancestorLock.Generation, ancestorCounter,
-                    table, lock->IsWriteLock(), seqNum));
-            }
-        }
+    for (const auto& table : chainOnlyTables) {
+        makeEchoLocks(table);
     }
 
     return {out, brokenLocks};

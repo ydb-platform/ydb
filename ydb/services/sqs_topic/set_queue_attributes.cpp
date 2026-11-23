@@ -192,13 +192,7 @@ namespace NKikimr::NSqsTopic::V1 {
                     ->set_dead_letter_queue(*NewQueueAttributes.DeadLetterQueue);
             }
 
-            // should we increase global limit?
             if (NewQueueAttributes.MessageRetentionPeriod.Defined()) {
-                ui64 requestedRetentionSeconds = NewQueueAttributes.MessageRetentionPeriod->Seconds();
-                ui64 currentRetentionSeconds = PQGroup.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds();
-                if (requestedRetentionSeconds > currentRetentionSeconds) {
-                    SetDuration(*NewQueueAttributes.MessageRetentionPeriod, *topicRequest.mutable_set_retention_period());
-                }
                 SetDuration(*NewQueueAttributes.MessageRetentionPeriod, *consumer->mutable_set_availability_period());
             }
 

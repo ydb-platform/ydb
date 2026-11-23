@@ -60,7 +60,7 @@ public:
     }
 
     static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
-        AFL_VERIFY(scalar);
+        YDB_LOG_VERIFY(scalar);
         return TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, 1));
     }
 
@@ -86,7 +86,9 @@ public:
         template <class TAppender>
         void AddAt(const ui32 recordIndex, const TAppender& append) {
             if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                YDB_LOG_VERIFY(*LastRecordIndex < recordIndex,
+                    {"last", LastRecordIndex},
+                    {"index", recordIndex});
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex - 1));
             } else {
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
@@ -98,7 +100,7 @@ public:
     public:
         TPlainBuilderBase(std::unique_ptr<arrow::ArrayBuilder> builder)
             : Builder(std::move(builder)) {
-            AFL_VERIFY(!!Builder);
+            YDB_LOG_VERIFY(!!Builder);
         }
 
         void AddNull(const ui32 recordIndex) {
@@ -107,7 +109,9 @@ public:
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
             if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordsCount)("last", LastRecordIndex)("count", recordsCount);
+                YDB_LOG_VERIFY(*LastRecordIndex < recordsCount,
+                    {"last", LastRecordIndex},
+                    {"count", recordsCount});
                 TStatusValidator::Validate(Builder->AppendNulls(recordsCount - *LastRecordIndex - 1));
             } else {
                 TStatusValidator::Validate(Builder->AppendNulls(recordsCount));
@@ -129,7 +133,7 @@ public:
 
         template <class TValue>
         void AddValue(const ui32 recordIndex, const TValue& value) {
-            AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AFL_VERIFY(NArrow::Append<TArrowDataType>(builder, value)); });
+            AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { YDB_LOG_VERIFY(NArrow::Append<TArrowDataType>(builder, value)); });
         }
     };
 

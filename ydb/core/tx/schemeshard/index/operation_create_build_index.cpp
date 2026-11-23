@@ -70,7 +70,16 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "HNSW index support is disabled (EnableHnswIndex)")};
+            }
+            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "HNSW index implementation is not available yet (SQL support)")};
+            }
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
@@ -93,8 +102,11 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    if (op.GetIsRebuild() && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
+    if (op.GetIsRebuild()
+            && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed,
+            "REBUILD INDEX is only supported for vector indexes")};
     }
 
     auto counts = GetIndexObjectCounts(indexDesc);
@@ -218,6 +230,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             auto alterIndex = outTx.MutableAlterTableIndex();
             alterIndex->SetName(index.LeafName());
             alterIndex->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                *alterIndex->MutableHnswIndexDescription() = indexDesc.GetHnswIndexDescription();
+            }
             // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
             *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
             *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();
@@ -271,9 +286,16 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         *outTx.MutableCreateTable() = std::move(implTableDesc);
         outTx.SetInternal(tx.GetInternal());
 
+        // Index tables with independent replication targets get the replica config even when they
+        // are populated by the builder during bootstrap import.
+        if (forReplication || (tableInfo->IsImportingReplica()
+            && NTableIndex::HasReplicatedImplTables(GetIndexType(indexDesc))))
+        {
+            *outTx.MutableCreateTable()->MutableReplicationConfig() = tableInfo->ReplicationConfig();
+        }
+
         if (forReplication) {
             outTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-            *outTx.MutableCreateTable()->MutableReplicationConfig() = tableInfo->ReplicationConfig();
             return CreateNewTable(NextPartId(opId, result), outTx, localSequences);
         }
 
@@ -299,7 +321,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
             // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
@@ -310,7 +333,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                     indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
                 }
             }
-            const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            // HNSW ranks candidates using the posting-table embedding.
+            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+                Y_ENSURE(!indexColumns.KeyColumns.empty());
+                indexDataColumns.insert(indexColumns.KeyColumns.back());
+            }
             result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
             result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
             if (prefixVectorIndex) {

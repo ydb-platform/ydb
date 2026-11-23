@@ -48,7 +48,8 @@ LIBRARY()
     )
 
     PEERDIR(
-        ydb/core/blobstorage/vdisk/common
+        ydb/core/blobstorage/base
+        ydb/core/blobstorage/contracts
         ydb/core/blob_depot
         ydb/core/protos
         ydb/core/wrappers

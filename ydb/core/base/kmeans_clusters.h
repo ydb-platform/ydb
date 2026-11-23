@@ -13,6 +13,10 @@ namespace NKikimr::NTableIndex::NKMeans {
 
 namespace NKikimr::NKMeans {
 
+inline constexpr ui32 MinHnswM = 2;
+inline constexpr ui32 MaxHnswM = 100;
+inline constexpr ui32 MaxHnswEfConstruction = 1000;
+
 class IClusters {
 public:
     virtual ~IClusters() = default;
@@ -41,6 +45,10 @@ public:
 
     virtual void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
 
+    virtual void FindClusters(TConstArrayRef<TStringBuf> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
+
+    virtual void FindClusters(TConstArrayRef<TCell> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
+
     virtual std::optional<ui32> FindCluster(const TStringBuf embedding) = 0;
 
     virtual std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) = 0;
@@ -56,7 +64,13 @@ public:
     virtual TString GetEmptyRow() const = 0;
 };
 
-std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error);
+enum class EClustersMode {
+    Accumulate,
+    AssignOnly,
+};
+
+std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error,
+    EClustersMode mode = EClustersMode::Accumulate);
 
 // Auto-detect vector type and dimension from target vector when settings have dimension=0
 std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSettings settings, const TStringBuf& targetVector, ui32 maxRounds, TString& error);
@@ -66,6 +80,12 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 
 bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+
+// HNSW's single-level routing may consist of a single cluster.
+bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error);
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);

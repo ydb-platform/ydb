@@ -5,11 +5,6 @@
 
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
-#include <util/generic/ptr.h>
-
-namespace NKikimrReplication {
-    class TRunWorkerCommand;
-}
 
 namespace NKikimr::NReplication::NController {
 
@@ -19,6 +14,7 @@ public:
 
     void SetReady();
     bool IsReady() const;
+    bool SupportsSourceOffsets = false;
 
     void AttachWorker(const TWorkerId& id);
     void DetachWorker(const TWorkerId& id);
@@ -32,12 +28,6 @@ private:
 
 class TWorkerInfo {
 public:
-    explicit TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
-
-    void SetCommand(NKikimrReplication::TRunWorkerCommand* cmd);
-    bool HasCommand() const;
-    const NKikimrReplication::TRunWorkerCommand* GetCommand() const;
-
     void AttachSession(ui32 nodeId);
     void ClearSession();
     bool HasSession() const;
@@ -52,7 +42,6 @@ public:
     const TRowVersion& GetHeartbeat() const;
 
 private:
-    THolder<NKikimrReplication::TRunWorkerCommand> Command;
     TMaybe<ui32> Session;
     bool DataEnded = false;
     TMaybe<TRowVersion> Heartbeat;

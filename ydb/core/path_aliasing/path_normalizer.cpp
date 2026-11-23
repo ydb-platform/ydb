@@ -1,5 +1,6 @@
 #include "path_normalizer.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 
@@ -15,12 +16,14 @@ namespace NKikimr::NPathAliasing {
         struct TRule {
             TString Src;
             TString Dst;
+            NMonitoring::TDynamicCounters::TCounterPtr Counter = {};
         };
 
         std::vector<TRule> Rules;
     };
 
-    TPathNormalizer::TPathNormalizer(const NKikimrConfig::TPathRewriteConfig& config) {
+    TPathNormalizer::TPathNormalizer(const NKikimrConfig::TPathRewriteConfig& config,
+        const NMonitoring::TDynamicCounterPtr& counters) {
         if (config.RulesSize() == 0) {
             return;
         }
@@ -61,6 +64,14 @@ namespace NKikimr::NPathAliasing {
             }
         }
 
+        if (counters) {
+            auto group = GetServiceCounters(counters, "ydb");
+            for (auto& rule : impl->Rules) {
+                rule.Counter = group->GetSubgroup("prefix", rule.Src)
+                    ->GetNamedCounter("name", "path_aliasing.rewrite_count", true);
+            }
+        }
+
         Impl = std::move(impl);
     }
 
@@ -93,6 +104,9 @@ namespace NKikimr::NPathAliasing {
                     --write;
                 }
                 result.resize(write);
+                if (rule.Counter) {
+                    rule.Counter->Inc();
+                }
                 return result;
             }
         }

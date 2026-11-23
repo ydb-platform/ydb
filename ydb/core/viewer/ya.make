@@ -97,6 +97,7 @@ SRCS(
     viewer_request.cpp
     viewer_request.h
     viewer_storage.h
+    viewer_storage_nbs.h
     viewer_storage_stats.h
     viewer_storage_usage.h
     viewer_sysinfo.h
@@ -861,6 +862,8 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/path_aliasing
@@ -871,12 +874,14 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/core/util
     ydb/core/viewer/json
-    ydb/core/viewer/yaml
     ydb/core/viewer/protos
+    ydb/core/viewer/yaml
     ydb/library/actors/core
     ydb/library/actors/helpers
+    ydb/library/actors/http
     ydb/library/computation_graph_renderer
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
     ydb/public/api/grpc
     ydb/public/api/protos
@@ -888,6 +893,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/auth
+    yql/essentials/minikql
 )
 
 YQL_LAST_ABI_VERSION()

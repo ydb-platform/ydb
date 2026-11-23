@@ -20,7 +20,7 @@ namespace NKikimr {
         ui32 blobReplyCounter = 0;
         for (ui32 i = 0; i < nums.size(); ++i) {
             const TVDiskID& vdiskId = Info->GetVDiskId(nums[i]); // obtain VDisk
-            if (TVDiskIdShort(vdiskId) != VCtx->ShortSelfVDisk) {
+            if (TVDiskIdShort(vdiskId) != VCtx->ShortSelfVDisk && Info->IsFailRealmReadable(vdiskId.FailRealm)) {
                 AddExtremeQuery(vdiskId, id, deadline, i);
                 ++blobReplyCounter;
             }
@@ -95,12 +95,15 @@ namespace NKikimr {
                     {"marker", "VDS34"},
                     {"selfId", SelfId()},
                     {"msg", vget->ToString()});
-                Send(queueIt->second.QueueActorId, vget.release());
+                Send(queueIt->second.QueueActorId, vget.release(), 0, vdiskId.GroupGeneration);
             }
         }
     }
 
     void TBlobRecoveryActor::Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
+        if (ev->Cookie != Info->GroupGeneration) {
+            return;
+        }
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvVGetResult"),
             {"marker", "VDS35"},
             {"selfId", SelfId()},
@@ -121,6 +124,8 @@ namespace NKikimr {
             for (auto it = begin; it != end; ) {
                 TPerBlobInfo& info = it->second;
                 if (auto context = info.Context.lock()) { // context acquired, request is still intact
+                    info.Item->Keep |= res.GetKeep();
+                    info.Item->DoNotKeep |= res.GetDoNotKeep();
                     if (status == NKikimrProto::DEADLINE && now < context->Iterator->first) {
                         auto& deadline = rerequest[fullId];
                         deadline = Max(deadline, context->Iterator->first);

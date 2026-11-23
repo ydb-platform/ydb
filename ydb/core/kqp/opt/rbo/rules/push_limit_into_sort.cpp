@@ -9,18 +9,11 @@ bool TPushLimitIntoSortRule::QuickMatch(const TIntrusivePtr<IOperator>& input) c
 }
 
 TIntrusivePtr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
-
     if (input->Kind != EOperator::Limit) {
         return input;
     }
 
     auto limit = CastOperator<TOpLimit>(input);
-    if (limit->HasOffset()) {
-        return input;
-    }
-
     if (limit->GetInput()->Kind != EOperator::Sort) {
         return input;
     }
@@ -30,8 +23,13 @@ TIntrusivePtr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
-    sort->LimitCond = limit->LimitCond;
-    return sort;
+    sort->LimitCond = limit->GetInputRowsLimit(ctx.ExprCtx, props);
+    if (!limit->HasOffset()) {
+        return sort;
+    }
+
+    // The sort also keeps the rows the offset skips, so the limit stays above it to skip them.
+    return MakeIntrusive<TOpLimit>(sort, limit->Pos, limit->Props, limit->LimitCond, limit->GetOffsetCond(), limit->GetLimitPhase());
 }
 }
 }

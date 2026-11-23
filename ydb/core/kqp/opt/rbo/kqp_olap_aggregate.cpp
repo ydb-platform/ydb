@@ -1,4 +1,5 @@
 #include "kqp_olap_aggregate.h"
+#include "kqp_rbo.h"
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -21,25 +22,29 @@ const TDataExprType* GetDataType(const TTypeAnnotationNode* type) {
     return itemType->GetKind() == ETypeAnnotationKind::Data ? itemType->Cast<TDataExprType>() : nullptr;
 }
 
-// Whether column shards compute `aggFunction` over a column of `type` the way compute does.
-bool IsOlapAggregateType(const TString& aggFunction, const TTypeAnnotationNode* type) {
+// Whether column shards compute `aggFunction` over a column of `type`, as the old optimizer pushes it. As there,
+// MIN and MAX of floating-point values ignore NaN, whereas compute orders it above every other value.
+bool IsOlapAggregateType(const TString& aggFunction, const TTypeAnnotationNode* type, bool hasKeys,
+                         bool castAverageInput) {
     const auto* dataType = GetDataType(type);
     // Column shards do not aggregate decimals.
     if (!dataType || IsDataTypeDecimal(dataType->GetSlot())) {
         return false;
     }
     const auto slot = dataType->GetSlot();
-    // Storage widens Float sums to Double, whereas compute accumulates in Float.
-    // Keep SUM(Float) in compute to preserve both its type and its rounding.
-    if (aggFunction == "sum" && slot == EDataSlot::Float) {
+    // With keys, column shards return the sum of a Float column as Double, which compute reads as Float. AVG sums the
+    // column too, unless the read program casts it to Double. The old optimizer pushes both and returns wrong values
+    // or fails, so keep them in compute.
+    const bool sumsFloat =
+        slot == EDataSlot::Float && (aggFunction == "sum" || (aggFunction == "avg" && !castAverageInput));
+    if (sumsFloat && hasKeys) {
         return false;
     }
-    // Compute orders NaN above every other value, whereas column shards compare
-    // with `<` and may drop it. Keep MIN and MAX of floating-point values in compute.
-    if ((aggFunction == "min" || aggFunction == "max") && IsDataTypeFloat(slot)) {
-        return false;
+    if (aggFunction == "sum") {
+        return IsDataTypeNumeric(slot) || slot == EDataSlot::Interval;
     }
-    if (aggFunction == "sum" || aggFunction == "avg") {
+    // AVG of Interval does not compile with the old optimizer.
+    if (aggFunction == "avg") {
         return IsDataTypeNumeric(slot);
     }
     return true;
@@ -78,28 +83,51 @@ bool IsCountAll(const TOpAggregationTraits& traits, const TOpMap* map) {
     return TCoVoid::Match(body.Get()) || TCoDataCtor::Match(body.Get());
 }
 
+// The result column of a trivial DISTINCT holding `key`. DISTINCT names it after
+// its select item, which a projection pushed into the read may no longer name.
+TInfoUnitId GetDistinctKeyOutput(const TOpAggregate& aggregate, TInfoUnitId key) {
+    if (!aggregate.IsDistinctAll()) {
+        return key;
+    }
+    auto output = key;
+    for (const auto& [id, traits] : aggregate.GetAggregationTraits().Items()) {
+        if (traits.Input == key) {
+            output = id;
+            break;
+        }
+    }
+    // A split DISTINCT outputs the result columns from its final aggregate.
+    if (aggregate.GetAggregationPhase() != EOpPhase::Intermediate || aggregate.Parents.size() != 1
+        || aggregate.Parents.front().first->Kind != EOperator::Aggregate) {
+        return output;
+    }
+    const auto& finalAggregate = CastOperator<TOpAggregate>(*aggregate.Parents.front().first);
+    if (!finalAggregate.IsDistinctAll()) {
+        return output;
+    }
+    for (const auto& [id, traits] : finalAggregate.GetAggregationTraits().Items()) {
+        if (traits.Input == output) {
+            return id;
+        }
+    }
+    return output;
+}
+
 } // anonymous namespace
 
 bool IsOlapAverageCast(const TTypeAnnotationNode& columnType) {
     return RemoveOptionality(columnType).Cast<TDataExprType>()->GetSlot() != EDataSlot::Double;
 }
 
-bool HasOlapAverageCast(const TOlapAggregate& aggregate, TExprContext& ctx) {
-    for (const auto& aggregation : aggregate.Aggregations) {
-        if (aggregation.Function == "avg" && IsOlapAverageCast(*aggregate.Read->GetIUType(*aggregation.Column, ctx))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, TExprContext& ctx) {
+std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, bool castAverageInput,
+                                                 TExprContext& ctx) {
     const auto& aggregations = aggregate.GetAggregationTraits();
     if (aggregate.IsDistinctAll() || aggregations.Keys().Empty()) {
         return std::nullopt;
     }
 
     TOlapAggregate result;
+    result.CastAverageInput = castAverageInput;
     auto* input = aggregate.GetInput().Get();
     if (input->Kind == EOperator::Map) {
         result.Map = CastOperator<TOpMap>(input);
@@ -137,7 +165,8 @@ std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, 
             return std::nullopt;
         }
         if (const auto column = ResolveReadColumn(traits.Input, read, result.Map)) {
-            if (!IsOlapAggregateType(traits.AggFunction, read.GetIUType(*column, ctx))) {
+            if (!IsOlapAggregateType(traits.AggFunction, read.GetIUType(*column, ctx), !result.Keys.empty(),
+                                     castAverageInput)) {
                 return std::nullopt;
             }
             result.Aggregations.push_back({output, traits.AggFunction, *column});
@@ -148,6 +177,79 @@ std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, 
         }
     }
 
+    return result;
+}
+
+std::optional<TOlapDistinct> MatchOlapDistinct(const TOpAggregate& aggregate, const TString& forcedKey,
+                                               const TInfoUnitRegistry& registry) {
+    const auto& keys = aggregate.GetKeyColumns().Unordered();
+    if (!aggregate.IsTrivialDistinct() || keys.Size() != 1) {
+        return std::nullopt;
+    }
+    const IOperator* consumer = &aggregate;
+    const TOpMap* map = nullptr;
+    auto* input = aggregate.GetInput().Get();
+    if (input->Kind == EOperator::Map) {
+        map = CastOperator<TOpMap>(input);
+        consumer = map;
+        input = map->GetInput().Get();
+    }
+    if (input->Kind != EOperator::Source) {
+        return std::nullopt;
+    }
+    auto* read = CastOperator<TOpRead>(input);
+    if (read->GetTableStorageType() != NYql::EStorageType::ColumnStorage) {
+        return std::nullopt;
+    }
+
+    const auto key = *keys.begin();
+    const auto keyName = registry.Get(GetDistinctKeyOutput(aggregate, key)).GetColumnName();
+    Y_ENSURE(keyName == forcedKey,
+             "OptForceOlapPushdownDistinct = '" << forcedKey << "' does not match DISTINCT key column '" << keyName << "'");
+    // Column shards mark a stored or projected column, not a key computed in compute.
+    const auto column = ResolveReadColumn(key, *read, map);
+    if (!column || read->Limit || read->SortDir != ESortDir::None || read->Parents.size() != 1
+        || (map && map->Parents.size() != 1)) {
+        return std::nullopt;
+    }
+    // The program outputs only the key column, so the consumer may use nothing else.
+    const auto keyColumn = registry.Get(*column).GetColumnName();
+    for (const auto id : GetLiveIn(consumer, 0)) {
+        if (registry.Get(id).GetColumnName() != keyColumn) {
+            return std::nullopt;
+        }
+    }
+    return TOlapDistinct{read, *column};
+}
+
+std::optional<TOlapComputeSharding> MatchOlapComputeSharding(const TOpAggregate& aggregate,
+                                                             const TInfoUnitRegistry& registry) {
+    const auto& keys = aggregate.GetKeyColumns().Items();
+    if (aggregate.GetAggregationPhase() != EOpPhase::Intermediate || keys.empty()) {
+        return std::nullopt;
+    }
+    auto* input = aggregate.GetInput().Get();
+    if (input->Kind == EOperator::Map) {
+        input = CastOperator<TOpMap>(input)->GetInput().Get();
+    }
+    if (input->Kind != EOperator::Source || input->Props.StageId != aggregate.Props.StageId) {
+        return std::nullopt;
+    }
+    auto* read = CastOperator<TOpRead>(input);
+    if (read->GetTableStorageType() != NYql::EStorageType::ColumnStorage) {
+        return std::nullopt;
+    }
+
+    TOlapComputeSharding result{read, {}};
+    for (const auto key : keys) {
+        if (!read->GetColumns().Contains(key)) {
+            return std::nullopt;
+        }
+        const auto& column = registry.Get(key).GetColumnName();
+        if (std::find(result.Columns.begin(), result.Columns.end(), column) == result.Columns.end()) {
+            result.Columns.push_back(column);
+        }
+    }
     return result;
 }
 

@@ -7,7 +7,6 @@ import io
 import json
 import logging
 import os
-import pexpect
 import re
 import sys
 import threading
@@ -174,6 +173,13 @@ class BaseAiInteractiveTest(BaseInteractiveTest):
             cls.mock_server.stop()
         super().teardown_class()
 
+    def close_interactive(self, child, timeout=60):
+        try:
+            super().close_interactive(child, timeout=timeout)
+        finally:
+            # Keep the mock available until the CLI has finished shutting down.
+            self.mock_server.clear()
+
     def _wait_for_ai_prompt(self, child):
         child.expect("AI\033\\[22;39m>", timeout=self.PROMPT_TIMEOUT)
 
@@ -287,9 +293,8 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_simple_text_response(self):
         self.mock_server.set_openai_response("Hello from mock AI!")
@@ -303,8 +308,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_system_prompt_contains_ydb_rules(self):
         child = self.spawn_ai_interactive("openai")
@@ -323,8 +327,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_connection_string_in_system_prompt(self):
         child = self.spawn_ai_interactive("openai")
@@ -342,8 +345,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_user_message_forwarded(self):
         child = self.spawn_ai_interactive("openai")
@@ -362,8 +364,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_tools_registered_openai_format(self):
         child = self.spawn_ai_interactive("openai")
@@ -386,8 +387,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_model_name_sent(self):
         child = self.spawn_ai_interactive("openai")
@@ -403,8 +403,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_max_completion_tokens_sent(self):
         child = self.spawn_ai_interactive("openai")
@@ -420,8 +419,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_auth_header_present(self):
         child = self.spawn_ai_interactive("openai")
@@ -439,8 +437,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_conversation_history_maintained(self):
         self.mock_server.set_openai_response("First response")
@@ -467,8 +464,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_tool_call_round_trip(self):
         call_count = [0]
@@ -525,8 +521,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_help_command_no_api_call(self):
         child = self.spawn_ai_interactive("openai")
@@ -543,8 +538,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exit_and_quit(self):
         for cmd in ("exit", "quit"):
@@ -554,9 +548,8 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
                 self._wait_for_ai_prompt(child)
                 self._send_query(child, cmd)
                 child.expect("Bye!", timeout=10)
-                child.expect(pexpect.EOF, timeout=5)
             finally:
-                child.close()
+                self.close_interactive(child)
 
     def test_request_path_is_chat_completions(self):
         child = self.spawn_ai_interactive("openai")
@@ -572,8 +565,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_large_ping_timeout(self):
         def handler(request):
@@ -592,8 +584,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
 
 # ---------------------------------------------------------------------------
@@ -609,9 +600,8 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_anthropic_simple_response(self):
         self.mock_server.set_anthropic_response("Hello from Anthropic mock!")
@@ -625,8 +615,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_system_prompt_is_top_level(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -646,8 +635,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_connection_string_in_system(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -663,8 +651,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_user_message_as_content_blocks(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -686,8 +673,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_tools_use_input_schema(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -709,8 +695,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_model_name_sent(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -726,8 +711,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_max_tokens_field(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -745,8 +729,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_auth_header_present(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -764,8 +747,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_conversation_history(self):
         self.mock_server.set_anthropic_response("First Anthropic answer")
@@ -792,8 +774,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_tool_call_round_trip(self):
         call_count = [0]
@@ -837,8 +818,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_request_path_is_messages(self):
         child = self.spawn_ai_interactive("anthropic")
@@ -854,8 +834,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exit_and_quit(self):
         for cmd in ("exit", "quit"):
@@ -865,9 +844,8 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
                 self._wait_for_ai_prompt(child)
                 self._send_query(child, cmd)
                 child.expect("Bye!", timeout=10)
-                child.expect(pexpect.EOF, timeout=5)
             finally:
-                child.close()
+                self.close_interactive(child)
 
 
 # ---------------------------------------------------------------------------
@@ -902,7 +880,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     # -- welcome message -----------------------------------------------------
 
@@ -916,7 +894,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_welcome_on_empty_config(self):
         profile_path = self._create_minimal_ai_config()
@@ -929,7 +907,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_welcome_shows_help_and_model_hints(self):
         child = self.spawn_ai_interactive("openai")
@@ -942,7 +920,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     # -- /switch (AI / YQL) --------------------------------------------------
 
@@ -959,7 +937,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_switch_ai_to_yql(self):
         child = self.spawn_ai_interactive("openai")
@@ -971,7 +949,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_switch_roundtrip_ai_yql_ai(self):
         child = self.spawn_ai_interactive("openai")
@@ -988,7 +966,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_yql_query_works_after_switch(self):
         child = self.spawn_ai_interactive("openai")
@@ -1006,7 +984,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_ai_works_after_roundtrip_switch(self):
         self.mock_server.set_openai_response("AI still alive")
@@ -1028,8 +1006,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_ai_session_context_remains_after_roundtrip_switch(self):
         child = self.spawn_ai_interactive("openai")
@@ -1054,8 +1031,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     # -- default preset auto-creation ----------------------------------------
 
@@ -1081,8 +1057,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     # -- profile file persistence --------------------------------------------
 
@@ -1108,8 +1083,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         cfg = self._read_profile_yaml()
         assert cfg["interactive_mode"] == 1
@@ -1142,8 +1116,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         cfg = self._read_profile_yaml()
         profiles = cfg.get("ai_profiles", {})
@@ -1190,10 +1163,13 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_enter(child)
 
             child.expect("profile is changed", timeout=10)
-            time.sleep(1)
+            child.expect("choose setting to change", timeout=10)
+            self._send_escape(child)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         cfg = self._read_profile_yaml()
         assert "ai_profiles" in cfg
@@ -1230,8 +1206,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         cfg = self._read_profile_yaml()
         profiles = cfg.get("ai_profiles") or {}
@@ -1291,8 +1266,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         cfg = self._read_profile_yaml()
         profile_id = cfg.get("current_profile")
@@ -1326,7 +1300,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_model_menu_shows_existing_profile(self):
         """The current profile appears in the ``/model`` menu."""
@@ -1343,7 +1317,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_model_menu_shows_setup_custom(self):
         """The ``/model`` menu includes the "Setup custom model" option."""
@@ -1360,7 +1334,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     # -- model switching via /model ------------------------------------------
 
@@ -1399,8 +1373,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     # -- custom model creation (Setup flow) ----------------------------------
 
@@ -1426,7 +1399,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_setup_custom_shows_custom_endpoint_option(self):
         """The endpoint selection menu includes a "Setup custom endpoint"
@@ -1449,7 +1422,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_setup_from_endpoint_preset_creates_profile(self):
         """Selecting a preset endpoint in the custom-model flow auto-fills
@@ -1480,8 +1453,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         cfg = self._read_profile_yaml()
         profiles = cfg.get("ai_profiles", {})
@@ -1510,8 +1482,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         # The in-memory default-preset profile must not have been persisted —
         # using the preset's token provider must not promote the profile to disk.
@@ -1543,8 +1514,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_config_clear_context(self):
         """Selecting "Clear session context" via ``/config`` resets the
@@ -1580,8 +1550,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_config_shows_switch_model_option(self):
         """``/config`` menu includes "Switch AI model" with the current name."""
@@ -1602,8 +1571,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_config_shows_change_settings_option(self):
         """``/config`` menu includes "Change current AI model settings"."""
@@ -1623,8 +1591,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_config_shows_remove_option(self):
         """``/config`` menu includes "Remove current AI model"."""
@@ -1644,8 +1611,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_config_edit_shows_current_settings(self):
         """``/config`` -> "Change current AI model settings" opens the Edit
@@ -1677,8 +1643,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_config_edit_token_shows_provider(self):
         """Navigating to the Token setting in the Edit menu shows the
@@ -1714,8 +1679,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     # -- audit log (YDB_CLI_AI_AUDIT_LOG) ------------------------------------
 
@@ -1771,10 +1735,8 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
         assert self.AUDIT_TAG not in buf.getvalue(), \
             "Audit lines must not appear when YDB_CLI_AI_AUDIT_LOG is unset"
 
@@ -1797,8 +1759,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_audit_log_agent_response_emitted(self):
         """The model's text response is recorded verbatim in an
@@ -1817,8 +1778,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_audit_log_tool_call_emitted(self):
         """A tool invocation produces an ``[AUDIT] tool_call`` line that
@@ -1858,8 +1818,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_audit_log_seq_increments(self):
         """Successive audit entries carry strictly increasing ``seq``
@@ -1876,10 +1835,8 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
                 self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         seqs = [int(m) for m in re.findall(r'\[AUDIT\][^\n]*?"seq":(\d+)', buf.getvalue())]
         assert len(seqs) >= 4, \
@@ -1924,10 +1881,8 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         usage = self._extract_model_usage(buf.getvalue())
         assert usage["input_tokens"] == 70, usage  # prompt_tokens - cached_tokens
@@ -1961,10 +1916,8 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
         usage = self._extract_model_usage(buf.getvalue())
         assert usage["input_tokens"] == 42, usage
@@ -1998,8 +1951,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
 
 # ---------------------------------------------------------------------------
@@ -2139,8 +2091,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_list_directory_tool(self):
         """list_directory tool: lists database root directory, returns JSON
@@ -2173,8 +2124,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_list_directory_tool_schema_in_request(self):
         """list_directory tool definition sent to the API has the correct
@@ -2211,8 +2161,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_describe_tool(self):
         """describe tool: describes the test table and returns schema
@@ -2242,8 +2191,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_describe_tool_with_optional_params(self):
         """describe tool: optional boolean parameters are accepted."""
@@ -2269,8 +2217,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_describe_tool_schema_in_request(self):
         """describe tool definition has required ``path`` and optional boolean
@@ -2310,8 +2257,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_ydb_help_tool(self):
         """ydb_help tool: returns help text for the CLI."""
@@ -2337,8 +2283,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_ydb_help_tool_with_subcommand(self):
         """ydb_help tool: returns help for a specific subcommand."""
@@ -2362,8 +2307,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_ydb_help_tool_with_invalid_subcommand(self):
         handler, call_count = self._make_tool_handler(
@@ -2386,8 +2330,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_ydb_help_tool_schema_in_request(self):
         """ydb_help tool definition has ``command`` parameter in its schema."""
@@ -2422,8 +2365,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exec_query_tool(self):
         """exec_query tool: executes a SELECT query after user approval and
@@ -2465,8 +2407,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exec_query_tool_truncated(self):
         handler, call_count = self._make_tool_handler(
@@ -2503,8 +2444,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exec_query_tool_query_failed(self):
         handler, _ = self._make_tool_handler(
@@ -2528,8 +2468,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exec_query_tool_schema_in_request(self):
         """exec_query tool definition has ``query`` parameter in its schema."""
@@ -2565,8 +2504,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_explain_query_tool(self):
         """explain_query tool: explains a query and returns the query plan and AST."""
@@ -2599,8 +2537,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_explain_query_tool_query_failed(self):
         """explain_query tool: returns an error if the query is invalid."""
@@ -2623,8 +2560,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_explain_query_tool_schema_in_request(self):
         """explain_query tool definition has ``query`` parameter in its schema."""
@@ -2659,8 +2595,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exec_shell_tool(self):
         """exec_shell tool: executes a shell command after user approval and
@@ -2691,8 +2626,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exec_shell_tool_nonzero_exit(self):
         """exec_shell tool: a command that exits with non-zero code reports
@@ -2718,8 +2652,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_exec_shell_tool_schema_in_request(self):
         """exec_shell tool definition has ``command`` parameter in its schema."""
@@ -2755,8 +2688,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_tool_schema_in_request(self):
         """docs_search tool definition has action, language, path and pattern parameters."""
@@ -2794,8 +2726,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_list_action(self):
         """docs_search list action returns JSON array with path and title_path for each entry."""
@@ -2825,8 +2756,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_list_with_path_filter(self):
         """docs_search list action with path filter returns only pages under that path."""
@@ -2857,8 +2787,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_list_ru_language(self):
         """docs_search list action returns Russian documentation pages when language=ru."""
@@ -2885,8 +2814,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_get_action(self):
         """docs_search get action returns Markdown content of the requested page."""
@@ -2913,8 +2841,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_get_action_not_found(self):
         """docs_search get action returns an error for a non-existent page."""
@@ -2941,8 +2868,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_find_action(self):
         """docs_search find action returns matches with context around the pattern."""
@@ -2978,8 +2904,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_find_with_path_filter(self):
         """docs_search find action with path filter narrows the search to a specific folder."""
@@ -3010,8 +2935,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_invalid_action(self):
         """docs_search returns an error for an unknown action."""
@@ -3038,8 +2962,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_invalid_language(self):
         """docs_search returns an error for an unsupported language."""
@@ -3066,8 +2989,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_get_without_path(self):
         """docs_search get action without a path parameter returns an error."""
@@ -3094,8 +3016,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_find_without_pattern(self):
         """docs_search find action without a pattern parameter returns an error."""
@@ -3122,8 +3043,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     # -- template / include / variable resolution tests ----------------------
 
@@ -3160,8 +3080,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_get_resolves_includes(self):
         """docs_search get expands {% include %} directives and resolves
@@ -3205,8 +3124,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
     def test_docs_search_get_resolves_nested_includes(self):
         """docs_search get follows multi-level include chains.
@@ -3251,8 +3169,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            self.mock_server.clear()
-            child.close()
+            self.close_interactive(child)
 
 
 # ---------------------------------------------------------------------------

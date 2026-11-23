@@ -1,10 +1,12 @@
 #include "kqp_opt_join_cost_based.h"
+#include "kqp_opt_join_condition_completion.h"
 #include "kqp_opt_dphyp_solver.h"
 #include "kqp_opt_make_join_hypergraph.h"
 #include "kqp_opt_cbo_latency_predictor.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/utils/log/log.h>
@@ -126,6 +128,28 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
         linkSettings.LeftHints.contains("any"), linkSettings.RightHints.contains("any"));
 }
 
+TExprBase BuildPostJoinFilter(const TExprBase& input, const TJoinOptimizerNode& join, TExprContext& ctx) {
+    if (join.PostJoinConditions.empty()) {
+        return input;
+    }
+    auto row = ctx.NewArgument(input.Pos(), "row");
+    TExprNode::TListType conditions;
+    for (const auto& [left, right] : join.PostJoinConditions) {
+        auto member = [&](const TJoinColumn& column) {
+            return ctx.NewCallable(input.Pos(), "Member", {row,
+                ctx.NewAtom(input.Pos(), NYql::FullColumnName(column.RelName, column.AttributeNameWithAliases))});
+        };
+        conditions.push_back(ctx.NewCallable(input.Pos(), IsEqualNullsKey(left, right) ? "IsNotDistinctFrom" : "==",
+            {member(left), member(right)}));
+    }
+    auto predicate = conditions.size() == 1 ? conditions.front() : ctx.NewCallable(input.Pos(), "And", std::move(conditions));
+    predicate = ctx.NewCallable(input.Pos(), "Coalesce", {predicate,
+        ctx.NewCallable(input.Pos(), "Bool", {ctx.NewAtom(input.Pos(), "false")})});
+    auto body = ctx.NewCallable(input.Pos(), "OptionalIf", {std::move(predicate), row});
+    return TExprBase(ctx.NewCallable(input.Pos(), "FlatMap", {input.Ptr(),
+        ctx.NewLambda(input.Pos(), ctx.NewArguments(input.Pos(), {row}), std::move(body))}));
+}
+
 /**
  * Build a join tree that will replace the original join tree in equiJoin
  * TODO: Add join implementations here
@@ -135,33 +159,48 @@ TExprBase BuildTree(
     TExprContext& ctx,
     const TCoEquiJoin& equiJoin,
     std::shared_ptr<TJoinOptimizerNode>& reorderResult,
-    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
+    TVector<TExprBase>& inputs,
+    TKqpStatsStore& kqpStats
 ) {
-
-    // Create dummy left and right arg that will be overwritten
-    TExprBase leftArg(equiJoin);
-    TExprBase rightArg(equiJoin);
-
-    // Build left argument of the join
-    if (reorderResult->LeftArg->Kind == RelNodeType) {
-        std::shared_ptr<TRelOptimizerNode> rel =
-            std::static_pointer_cast<TRelOptimizerNode>(reorderResult->LeftArg);
-        leftArg = BuildAtom(rel->Label, equiJoin.Pos(), ctx);
-    } else {
-        std::shared_ptr<TJoinOptimizerNode> join =
-            std::static_pointer_cast<TJoinOptimizerNode>(reorderResult->LeftArg);
-        leftArg = BuildTree(typeCtx, ctx ,equiJoin, join, shufflingOrderingsByJoinLabels);
-    }
-    // Build right argument of the join
-    if (reorderResult->RightArg->Kind == RelNodeType) {
-        std::shared_ptr<TRelOptimizerNode> rel =
-            std::static_pointer_cast<TRelOptimizerNode>(reorderResult->RightArg);
-        rightArg = BuildAtom(rel->Label, equiJoin.Pos(), ctx);
-    } else {
-        std::shared_ptr<TJoinOptimizerNode> join =
-            std::static_pointer_cast<TJoinOptimizerNode>(reorderResult->RightArg);
-        rightArg = BuildTree(typeCtx, ctx, equiJoin, join, shufflingOrderingsByJoinLabels);
-    }
+    auto buildArg = [&](const std::shared_ptr<IBaseOptimizerNode>& node) -> TExprBase {
+        if (node->Kind == RelNodeType) {
+            return BuildAtom(std::static_pointer_cast<TRelOptimizerNode>(node)->Label, equiJoin.Pos(), ctx);
+        }
+        auto join = std::static_pointer_cast<TJoinOptimizerNode>(node);
+        auto tree = BuildTree(typeCtx, ctx, equiJoin, join, shufflingOrderingsByJoinLabels, inputs, kqpStats);
+        if (join->PostJoinConditions.empty()) {
+            return tree;
+        }
+        // A filtered subtree becomes an EquiJoin input with the same qualified columns.
+        TVector<TExprBase> childInputs;
+        const auto subtreeLabels = join->Labels();
+        EraseIf(inputs, [&](const TExprBase& input) {
+            const auto scope = input.Cast<TCoEquiJoinInput>().Scope();
+            const auto label = scope.Ref().IsAtom() ? scope.Ref().Content() : scope.Ref().Head().Content();
+            if (Find(subtreeLabels, label) == subtreeLabels.end()) {
+                return false;
+            }
+            childInputs.push_back(input);
+            return true;
+        });
+        childInputs.push_back(tree);
+        childInputs.emplace_back(ctx.NewList(equiJoin.Pos(), {}));
+        auto child = Build<TCoEquiJoin>(ctx, equiJoin.Pos()).Add(childInputs).Done();
+        auto stats = std::make_shared<TOptimizerStatistics>(join->Stats);
+        stats->CBOFired = true;
+        kqpStats.SetStats(child.Raw(), stats);
+        auto filtered = BuildPostJoinFilter(child, *join, ctx);
+        kqpStats.SetStats(filtered.Raw(), stats);
+        TExprNode::TListType labels;
+        for (const auto& label : subtreeLabels) {
+            labels.push_back(ctx.NewAtom(equiJoin.Pos(), label));
+        }
+        inputs.emplace_back(ctx.NewList(equiJoin.Pos(), {filtered.Ptr(), ctx.NewList(equiJoin.Pos(), std::move(labels))}));
+        return BuildAtom(subtreeLabels.front(), equiJoin.Pos(), ctx);
+    };
+    auto leftArg = buildArg(reorderResult->LeftArg);
+    auto rightArg = buildArg(reorderResult->RightArg);
 
     TVector<TExprBase> leftJoinColumns;
     TVector<TExprBase> rightJoinColumns;
@@ -264,20 +303,34 @@ TExprBase RearrangeEquiJoinTree(
     TTypeAnnotationContext& typeCtx,
     TExprContext& ctx, const TCoEquiJoin& equiJoin,
     std::shared_ptr<TJoinOptimizerNode> reorderResult,
-    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
+    TKqpStatsStore& kqpStats
 ) {
     TVector<TExprBase> joinArgs;
     for (size_t i = 0; i < equiJoin.ArgCount() - 2; i++){
         joinArgs.push_back(equiJoin.Arg(i));
     }
-
-    joinArgs.push_back(BuildTree(typeCtx, ctx, equiJoin, reorderResult, shufflingOrderingsByJoinLabels));
-
-    joinArgs.push_back(equiJoin.Arg(equiJoin.ArgCount() - 1));
-
-    return Build<TCoEquiJoin>(ctx, equiJoin.Pos())
-        .Add(joinArgs)
-        .Done();
+    auto tree = BuildTree(typeCtx, ctx, equiJoin, reorderResult, shufflingOrderingsByJoinLabels, joinArgs, kqpStats);
+    joinArgs.push_back(tree);
+    const bool filter = !reorderResult->PostJoinConditions.empty();
+    const auto settings = equiJoin.Arg(equiJoin.ArgCount() - 1);
+    joinArgs.emplace_back(filter ? RemoveSetting(settings.Ref(), "rename", ctx) : settings.Ptr());
+    auto rebuilt = Build<TCoEquiJoin>(ctx, equiJoin.Pos()).Add(joinArgs).Done();
+    if (!filter) {
+        return rebuilt;
+    }
+    auto stats = std::make_shared<TOptimizerStatistics>(reorderResult->Stats);
+    stats->CBOFired = true;
+    kqpStats.SetStats(rebuilt.Raw(), stats);
+    auto result = BuildPostJoinFilter(rebuilt, *reorderResult, ctx);
+    const auto renames = LoadJoinRenameMap(settings.Ref());
+    if (!renames.empty()) {
+        // Projection may remove columns used by the residual; perform it last.
+        const auto type = equiJoin.Ref().GetTypeAnn()->Cast<NYql::TListExprType>()->GetItemType()->Cast<NYql::TStructExprType>();
+        result = Build<TCoMap>(ctx, equiJoin.Pos()).Input(result)
+            .Lambda(BuildJoinRenameLambda(equiJoin.Pos(), renames, *type, ctx)).Done();
+    }
+    return result;
 }
 
 /*
@@ -523,25 +576,6 @@ private:
         );
     }
 
-    /* Due to cycles we can miss some conditions in edges, because DPHyp enumerates trees */
-    template <typename TNodeSet>
-    void AddMissingConditions(
-        TJoinHypergraph<TNodeSet>& hypergraph,
-        const std::shared_ptr<IBaseOptimizerNode>& node
-    ) {
-        if (node->Kind != EOptimizerNodeKind::JoinNodeType) {
-            return;
-        }
-
-        auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(node);
-        AddMissingConditions(hypergraph, joinNode->LeftArg);
-        AddMissingConditions(hypergraph, joinNode->RightArg);
-        TNodeSet lhs = hypergraph.GetNodesByRelNames(joinNode->LeftArg->Labels());
-        TNodeSet rhs = hypergraph.GetNodesByRelNames(joinNode->RightArg->Labels());
-
-        hypergraph.FindAllConditionsBetween(lhs, rhs, joinNode->LeftJoinKeys, joinNode->RightJoinKeys);
-    }
-
 private:
     TCBOSettings OptimizerSettings_;
     TExprContext& ExprCtx;
@@ -664,7 +698,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints,
     bool /* enableShuffleElimination */,
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
-    TCBOOptimizerStats* cboStats
+    TCBOOptimizerStats* cboStats,
+    const TJoinSearchRunner& runSearch
 ) {
     if (optLevel <= 1) {
         return node;
@@ -735,9 +770,14 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    {
+    const auto search = [&] {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
         joinTree = opt.JoinSearch(joinTree, hints, cboStats);
+    };
+    if (runSearch) {
+        runSearch(search);
+    } else {
+        search();
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
@@ -749,7 +789,7 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
 
 
     // rewrite the join tree and record the output statistics
-    TExprBase res = RearrangeEquiJoinTree(typesCtx, ctx, equiJoin, joinTree, shufflingOrderingsByJoinLabels);
+    TExprBase res = RearrangeEquiJoinTree(typesCtx, ctx, equiJoin, joinTree, shufflingOrderingsByJoinLabels, kqpStats);
     joinTree->Stats.CBOFired = true;
     kqpStats.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
     if (shufflingOrderingsByJoinLabels) {

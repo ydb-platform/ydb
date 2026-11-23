@@ -34,6 +34,8 @@ def do(args):
         'PDiskSpaceColorBorder',
         'DatabaseSpaceBlockColor',
         'DatabaseSpaceUnblockColor',
+        'BridgeSyncTotalRateBytesPerSecond',
+        'BridgeSyncMaxSyncers',
         'SerialManagementStage',
     ]
     color_columns = {'PDiskSpaceColorBorder', 'DatabaseSpaceBlockColor', 'DatabaseSpaceUnblockColor'}

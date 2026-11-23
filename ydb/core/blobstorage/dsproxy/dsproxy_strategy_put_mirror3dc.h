@@ -38,8 +38,6 @@ class TMirror3dcPutStrategy : public TStrategyBase {
                 return {{0, 1, 1}, {1, 0, 1}, {1, 1, 0}};
             case L::LAYOUT_22:
                 return {{0, 2, 2}, {2, 0, 2}, {2, 2, 0}};
-            case L::LAYOUT_0:
-                return {{0, 0, 0}};
             case L::LAYOUT_1:
                 return {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}};
             case L::LAYOUT_2:
@@ -174,21 +172,24 @@ public:
             return checker->CheckQuorumForSubgroup(
                 TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(&info.GetTopology(), mask));
         };
+        TBlobStorageGroupInfo::TSubgroupVDisks failed(&info.GetTopology());
         ui32 available = 0;
         ui32 present = 0;
         ui32 sent = 0;
         for (ui32 disk = 0; disk < 9; ++disk) {
             const auto physicalRealm = info.GetVDiskId(state.Disks[disk].OrderNumber).FailRealm;
-            if (info.GetFailRealmState(physicalRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
-                continue;
-            }
             const auto situation = state.Disks[disk].DiskParts[disk % 3].Situation;
             const ui32 bit = 1u << disk;
-            if (situation != TSituation::Error) {
+            if (situation == TSituation::Error) {
+                failed += TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), disk);
+            } else if (info.IsWriteTargetRealm(physicalRealm)) {
                 available |= bit;
                 present |= situation == TSituation::Present ? bit : 0;
                 sent |= situation == TSituation::Sent ? bit : 0;
             }
+        }
+        if (!checker->CheckFailModelForSubgroup(failed)) {
+            return EStrategyOutcome::Error("Mirror-3-dc write exceeds the ensured failure model");
         }
         if (check(present)) {
             return EStrategyOutcome::DONE;

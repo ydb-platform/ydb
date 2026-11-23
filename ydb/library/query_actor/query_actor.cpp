@@ -3,11 +3,16 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/service_table.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <google/protobuf/util/time_util.h>
+#include <library/cpp/protobuf/interop/cast.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT LogComponent
 
@@ -220,7 +225,7 @@ void TQueryBase::RunQuery() {
     }
 }
 
-void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxControl txControl) {
+void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxControl txControl, TDuration operationTimeout) {
     using TExecuteDataQueryRequest = TGrpcRequestOperationCall<Table::ExecuteDataQueryRequest, Table::ExecuteDataQueryResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
@@ -236,6 +241,11 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
     request.set_session_id(SessionId);
     *request.mutable_query()->mutable_yql_text() = std::move(sql);
     request.mutable_query_cache_policy()->set_keep_in_cache(true);
+
+    if (operationTimeout) {
+        const auto maxTimeout = TDuration::Seconds(google::protobuf::util::TimeUtil::kDurationMaxSeconds);
+        *request.mutable_operation_params()->mutable_operation_timeout() = NProtoInterop::CastToProto(std::min(operationTimeout, maxTimeout));
+    }
 
     if (params) {
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
@@ -263,8 +273,12 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
 
-    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
-        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), true));
+    TMap<TString, TString> peerMeta;
+    if (MvccVersion) {
+        peerMeta.emplace(NKqp::YDB_MVCC_VERSION_HEADER, NKqp::FormatMvccVersion(*MvccVersion));
+    }
+    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(DoLocalRpc<TExecuteDataQueryRequest>(
+        std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), peerMeta, true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
@@ -308,6 +322,10 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
     using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Table::ExecuteScanQueryRequest, Table::ExecuteScanQueryPartialResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
+    if (MvccVersion) {
+        Finish(StatusIds::BAD_REQUEST, "RunStreamQuery does not support an explicit MVCC snapshot version");
+        return;
+    }
     YDB_LOG_DEBUG("RunStreamQuery",
         {"logPrefix", LogPrefix()},
         {"text", sql});

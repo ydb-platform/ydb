@@ -1,7 +1,10 @@
-#include "mock_env.h"
+#include "mock_table.h"
 
 #include <ydb/public/api/grpc/ydb_export_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+
+#include <library/cpp/json/json_reader.h>
+
+#include <type_traits>
 
 const TString TEST_BUCKET = "test-bucket";
 const TString TEST_S3_ENDPOINT = "https://ydb.s3.local";
@@ -14,8 +17,15 @@ public:
         ++ExportCalls;
         CheckS3Params(request);
         CheckItems(request);
-        auto status = FillResponse(response);
+        auto status = FillResponse<Ydb::Export::ExportToS3Result>(response, "s3");
         return status;
+    }
+
+    grpc::Status ExportToFs(grpc::ServerContext*, const Ydb::Export::ExportToFsRequest* request, Ydb::Export::ExportToFsResponse* response) override {
+        ++ExportCalls;
+        CHECK_EXP(request->settings().base_path() == CommonDstPrefix, "Incorrect FS base path");
+        CheckItems(request);
+        return FillResponse<Ydb::Export::ExportToFsResult>(response, "fs");
     }
 
     void CheckS3Params(const Ydb::Export::ExportToS3Request* request) {
@@ -34,19 +44,34 @@ public:
         CHECK_EXP(settings.source_path() == CommonSourcePrefix, "Incorrect common source prefix: \"" << settings.source_path() << "\" instead of \"" << CommonSourcePrefix << "\"");
         CHECK_EXP(settings.destination_prefix() == CommonDstPrefix, "Incorrect common destination prefix: \"" << settings.destination_prefix() << "\" instead of \"" << CommonDstPrefix << "\"");
         CHECK_EXP(settings.include_index_data() == IncludeIndexData, "Incorrect include index data: " << settings.include_index_data() << " instead of " << IncludeIndexData);
+        if (ParquetRowGroupSize) {
+            CHECK_EXP(settings.has_parquet(), "Expected Parquet format");
+            CHECK_EXP(settings.parquet().row_group_size() == *ParquetRowGroupSize,
+                "Incorrect Parquet row group size: " << settings.parquet().row_group_size() << " instead of " << *ParquetRowGroupSize);
+        } else {
+            CHECK_EXP(settings.has_ydb_dump(), "Expected YDB dump format");
+        }
         CheckEncryptionSettings(settings);
         CheckExcludeRegexps(settings);
     }
 
-    void CheckItems(const Ydb::Export::ExportToS3Request* request) {
+    template <typename TRequest>
+    void CheckItems(const TRequest* request) {
         const auto& settings = request->settings();
         CHECK_EXP(settings.items_size() == static_cast<int>(Items.size()),
             "Items size does not match. settings.items_size(): " << settings.items_size() << ". ExpectedItems.size(): " << Items.size());
         for (int i = 0; i < settings.items_size() && i < static_cast<int>(Items.size()); ++i) {
             CHECK_EXP(settings.items(i).source_path() == Items[i].first,
                 "Incorrect item source path at " << i << ": \"" << settings.items(i).source_path() << "\" instead of \"" << Items[i].first << "\"");
-            CHECK_EXP(settings.items(i).destination_prefix() == Items[i].second,
-                "Incorrect item destination prefix at " << i << ": \"" << settings.items(i).destination_prefix() << "\" instead of \"" << Items[i].second << "\"");
+            const auto& destination = [&]() -> const auto& {
+                if constexpr (std::is_same_v<TRequest, Ydb::Export::ExportToS3Request>) {
+                    return settings.items(i).destination_prefix();
+                } else {
+                    return settings.items(i).destination_path();
+                }
+            }();
+            CHECK_EXP(destination == Items[i].second,
+                "Incorrect item destination at " << i << ": \"" << destination << "\" instead of \"" << Items[i].second << "\"");
         }
     }
 
@@ -67,18 +92,24 @@ public:
         }
     }
 
-    grpc::Status FillResponse(Ydb::Export::ExportToS3Response* response) {
-        Ydb::Export::ExportToS3Result res;
+    template <typename TResult, typename TResponse>
+    grpc::Status FillResponse(TResponse* response, TStringBuf kind) {
+        TResult res;
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
+        if (BadRequestMessage) {
+            operation->set_status(Ydb::StatusIds::BAD_REQUEST);
+            operation->add_issues()->set_message(BadRequestMessage);
+            return grpc::Status();
+        }
         operation->set_status(Ydb::StatusIds::SUCCESS);
-        operation->set_id("ydb://export/6?id=1&kind=s3");
+        operation->set_id(TStringBuilder() << "ydb://export/6?id=1&kind=" << kind);
         operation->mutable_result()->PackFrom(res);
         return grpc::Status();
     }
 
     void CheckExpectations() override {
-        CHECK_EXP(ExportCalls == ExpectedExportCalls, "Incorrect ExportToS3 calls count: " << ExportCalls << " instead of " << ExpectedExportCalls);
+        CHECK_EXP(ExportCalls == ExpectedExportCalls, "Incorrect export calls count: " << ExportCalls << " instead of " << ExpectedExportCalls);
         TChecker::CheckExpectations();
     }
 
@@ -93,6 +124,7 @@ public:
         NumberOfRetries = DEFAULT_RETRIES;
         StorageClass = Ydb::Export::ExportToS3Settings::STORAGE_CLASS_UNSPECIFIED;
         Compression.clear();
+        ParquetRowGroupSize.Clear();
         Region.clear();
         DisableVirtualAddressing = false;
         CommonSourcePrefix.clear();
@@ -103,6 +135,7 @@ public:
         ExcludeRegexps.clear();
         ExpectedExportCalls = 1;
         ExportCalls = 0;
+        BadRequestMessage.clear();
     }
 
     TExportImpl& ExpectItem(TString srcPath, TString dstPrefix) {
@@ -112,6 +145,11 @@ public:
 
     TExportImpl& ExpectNoExportCall() {
         ExpectedExportCalls = 0;
+        return *this;
+    }
+
+    TExportImpl& ReplyWithBadRequest(TString message) {
+        BadRequestMessage = std::move(message);
         return *this;
     }
 
@@ -157,6 +195,11 @@ public:
 
     TExportImpl& ExpectCompression(TString compression) {
         Compression = std::move(compression);
+        return *this;
+    }
+
+    TExportImpl& ExpectParquet(ui32 rowGroupSize) {
+        ParquetRowGroupSize = rowGroupSize;
         return *this;
     }
 
@@ -206,6 +249,7 @@ public:
     ui32 NumberOfRetries = DEFAULT_RETRIES;
     Ydb::Export::ExportToS3Settings::StorageClass StorageClass = Ydb::Export::ExportToS3Settings::STORAGE_CLASS_UNSPECIFIED;
     TString Compression;
+    TMaybe<ui32> ParquetRowGroupSize;
     TString Region;
     bool DisableVirtualAddressing = false;
     TString CommonSourcePrefix;
@@ -216,54 +260,36 @@ public:
     std::vector<TString> ExcludeRegexps;
     int ExpectedExportCalls = 1;
     int ExportCalls = 0;
+    TString BadRequestMessage;
 };
 
-class TTableImpl : public TMockGrpcServiceBase<Ydb::Table::V1::TableService::Service> {
+class TTableImpl : public TMockTableService {
 public:
-    grpc::Status CreateSession(grpc::ServerContext* context, const Ydb::Table::CreateSessionRequest* request, Ydb::Table::CreateSessionResponse* response) override {
-        Y_UNUSED(context);
-        Y_UNUSED(request);
-        Ydb::Table::CreateSessionResult res;
-        res.set_session_id("test-session-id");
-        FillOperation(response, res);
-        return grpc::Status();
-    }
-
-    grpc::Status DeleteSession(grpc::ServerContext* context, const Ydb::Table::DeleteSessionRequest* request, Ydb::Table::DeleteSessionResponse* response) override {
-        Y_UNUSED(context);
-        Y_UNUSED(request);
-        auto* operation = response->mutable_operation();
-        operation->set_ready(true);
-        operation->set_status(Ydb::StatusIds::SUCCESS);
-        return grpc::Status();
-    }
-
-    grpc::Status KeepAlive(grpc::ServerContext* context, const Ydb::Table::KeepAliveRequest* request, Ydb::Table::KeepAliveResponse* response) override {
-        Y_UNUSED(context);
-        Y_UNUSED(request);
-        Ydb::Table::KeepAliveResult res;
-        res.set_session_status(Ydb::Table::KeepAliveResult::SESSION_STATUS_READY);
-        FillOperation(response, res);
-        return grpc::Status();
-    }
-
     grpc::Status DescribeTable(grpc::ServerContext* context, const Ydb::Table::DescribeTableRequest* request, Ydb::Table::DescribeTableResponse* response) override {
         Y_UNUSED(context);
         Ydb::Table::DescribeTableResult res;
         res.mutable_self()->set_name(TStringBuf(request->path()).RNextTok('/'));
         res.mutable_self()->set_type(Ydb::Scheme::Entry::TABLE);
+        if (const auto it = TableAttributes.find(request->path()); it != TableAttributes.end()) {
+            for (const auto& [name, value] : it->second) {
+                (*res.mutable_attributes())[name] = value;
+            }
+        }
         FillOperation(response, res);
         return grpc::Status();
     }
 
-private:
-    template <typename TResponse, typename TResult>
-    void FillOperation(TResponse* response, const TResult& result) {
-        auto* operation = response->mutable_operation();
-        operation->set_ready(true);
-        operation->set_status(Ydb::StatusIds::SUCCESS);
-        operation->mutable_result()->PackFrom(result);
+    TTableImpl& SetTableAttribute(TString path, TString name, TString value) {
+        TableAttributes[std::move(path)][std::move(name)] = std::move(value);
+        return *this;
     }
+
+    void ClearExpectations() override {
+        TableAttributes.clear();
+    }
+
+private:
+    THashMap<TString, THashMap<TString, TString>> TableAttributes;
 };
 
 class TExportFixture : public TCliTestFixture {
@@ -272,9 +298,62 @@ class TExportFixture : public TCliTestFixture {
         AddService<TExportImpl>();
         AddService<TTableImpl>();
     }
+
+public:
+    TList<TString> S3ExportArgs(const TList<TString>& options) {
+        TList<TString> args = {
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
+            "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+            "--access-key", "test-key", "--secret-key", "test-access-key",
+            "--destination-prefix", "dst",
+        };
+        args.insert(args.end(), options.begin(), options.end());
+        return args;
+    }
 };
 
 Y_UNIT_TEST_SUITE(ExportTest) {
+    Y_UNIT_TEST_F(BadRequestDoesNotRetryWithTablesOnly, TExportFixture) {
+        for (const bool nfs : {false, true}) {
+            for (const bool includeTable : {false, true}) {
+                for (const auto* message : {"Nothing to export", "Invalid export settings"}) {
+                    Service<TSchemeImpl>().ExpectListDirectory(GetDatabase() + "/view", Ydb::Scheme::Entry::VIEW);
+                    auto& service = Service<TExportImpl>();
+                    service.ExpectCommonDstPrefix("/dst")
+                        .ExpectItem(GetDatabase() + "/view", "")
+                        .ReplyWithBadRequest(message);
+                    TList<TString> args = {"-e", GetEndpoint(), "-d", GetDatabase(), "export"};
+                    if (nfs) {
+                        args.insert(args.end(), {"nfs", "--fs-path", "/dst"});
+                    } else {
+                        service.ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                            .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key");
+                        args.insert(args.end(), {"s3", "--destination-prefix", "/dst",
+                            "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
+                            "--access-key", "test-key", "--secret-key", "test-access-key"});
+                    }
+                    args.insert(args.end(), {"--include", "view", "--exclude", "^never$"});
+                    if (includeTable) {
+                        Service<TSchemeImpl>().ExpectListDirectory(GetDatabase() + "/keep", Ydb::Scheme::Entry::TABLE);
+                        service.ExpectItem(GetDatabase() + "/keep", "");
+                        args.insert(args.end(), {"--include", "keep"});
+                    }
+                    ExpectFail();
+                    RunCli(std::move(args));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(ExcludedNfsItemsDoNotStartExport, TExportFixture) {
+        Service<TSchemeImpl>().ExpectListDirectory(GetDatabase())
+            .ExpectChild(GetDatabase(), "skip", Ydb::Scheme::Entry::TABLE);
+        Service<TExportImpl>().ExpectNoExportCall();
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "export", "nfs",
+            "--fs-path", "/dst", "--exclude", "skip"});
+    }
+
     Y_UNIT_TEST_F(PassS3Parameters, TExportFixture) {
         const TString encryptionKey = "test-encryption-key";
         const TString encryptionKeyFile = EnvFile(encryptionKey, "export_encryption.key");
@@ -318,6 +397,75 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 "--include-index-data", "true",
             }
         );
+    }
+
+    Y_UNIT_TEST_F(PassS3FileFormat, TExportFixture) {
+        struct TTestCase {
+            TList<TString> Options;
+            TMaybe<ui32> RowGroupSize;
+            TString Compression;
+        };
+        const TTestCase cases[] = {
+            {{"--file-format", "csv"}, {}, {}},
+            {{"--file-format", "parquet"}, 10000, {}},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "1", "--compression", "zstd-3"}, 1, "zstd-3"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "10000000"}, 10000000, {}},
+        };
+
+        for (const auto& testCase : cases) {
+            auto& service = Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonDstPrefix("dst")
+                .ExpectCompression(testCase.Compression);
+            if (testCase.RowGroupSize) {
+                service.ExpectParquet(*testCase.RowGroupSize);
+            }
+
+            auto args = S3ExportArgs(testCase.Options);
+            args.insert(args.end(), {"--format", "proto-json-base64"});
+            const auto output = RunCli(std::move(args));
+            NJson::TJsonValue operation;
+            UNIT_ASSERT(NJson::ReadJsonTree(output, &operation, true));
+            UNIT_ASSERT_VALUES_EQUAL(operation["id"].GetStringSafe(), "ydb://export/6?id=1&kind=s3");
+        }
+    }
+
+    Y_UNIT_TEST_F(RejectInvalidS3FileFormatOptions, TExportFixture) {
+        struct TTestCase {
+            TList<TString> Options;
+            THashMap<TString, TString> Env;
+            TString Error;
+        };
+        const TString keyFile = EnvFile("test-encryption-key", "parquet-export.key");
+        const TTestCase cases[] = {
+            {{"--file-format", "tsv"}, {}, "file-format"},
+            {{"--file-format"}, {}, "file-format"},
+            {{"--parquet-row-group-size", "1"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "csv", "--parquet-row-group-size", "1"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "0"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "10000001"}, {}, "--parquet-row-group-size"},
+            {{"--file-format", "parquet", "--parquet-row-group-size=-1"}, {}, "Unexpected symbol"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "abc"}, {}, "Unexpected symbol"},
+            {{"--file-format", "parquet", "--parquet-row-group-size", "4294967296"}, {}, "Integer overflow"},
+            {{"--file-format", "parquet", "--parquet-row-group-size"}, {}, "parquet-row-group-size"},
+            {{"--file-format", "parquet", "--encryption-algorithm", "AES-128-GCM"}, {}, "incompatible with YDB backup encryption"},
+            {{"--file-format", "parquet", "--encryption-key-file", keyFile}, {}, "incompatible with YDB backup encryption"},
+            {{"--file-format", "parquet"},
+                {{"YDB_ENCRYPTION_KEY", "31323334353637383930313233343536"}}, "incompatible with YDB backup encryption"},
+            {{"--file-format", "parquet"},
+                {{"YDB_ENCRYPTION_KEY_FILE", keyFile}}, "incompatible with YDB backup encryption"},
+        };
+
+        for (const auto& testCase : cases) {
+            Service<TExportImpl>().ExpectNoExportCall();
+            ExpectFail();
+            TString error;
+            RunCli(S3ExportArgs(testCase.Options), testCase.Env, {}, &error);
+            UNIT_ASSERT_STRING_CONTAINS(error, testCase.Error);
+        }
     }
 
     Y_UNIT_TEST_F(PassItems, TExportFixture) {
@@ -436,6 +584,56 @@ Y_UNIT_TEST_SUITE(ExportTest) {
                 "--root-path", "/test_database/export-root",
                 "--destination-prefix", "dst",
                 "--exclude", "skip",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(SkipNotExportableItems, TExportFixture) {
+        Service<TSchemeImpl>()
+            .ExpectListDirectory("/test_database/export-root")
+            .ExpectChild("/test_database/export-root", "keep", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "omit", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "omitted_column", Ydb::Scheme::Entry::COLUMN_TABLE)
+            .ExpectChild("/test_database/export-root", "kept_column", Ydb::Scheme::Entry::COLUMN_TABLE)
+            .ExpectChild("/test_database/export-root", "replica", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "both", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "false_attributes", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/export-root", "topic", Ydb::Scheme::Entry::TOPIC)
+            .ExpectChild("/test_database/export-root", "omitted_view", Ydb::Scheme::Entry::VIEW)
+            .ExpectChild("/test_database/export-root", "kept_view", Ydb::Scheme::Entry::VIEW);
+
+        Service<TTableImpl>()
+            .SetTableAttribute("/test_database/export-root/omit", "__omit_backup", "true")
+            .SetTableAttribute("/test_database/export-root/omitted_column", "__omit_backup", "true")
+            .SetTableAttribute("/test_database/export-root/replica", "__async_replica", "true")
+            .SetTableAttribute("/test_database/export-root/both", "__async_replica", "true")
+            .SetTableAttribute("/test_database/export-root/both", "__omit_backup", "true")
+            .SetTableAttribute("/test_database/export-root/false_attributes", "__async_replica", "false")
+            .SetTableAttribute("/test_database/export-root/false_attributes", "__omit_backup", "false");
+
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectItem("/test_database/export-root/keep", "dst/keep")
+            .ExpectItem("/test_database/export-root/kept_column", "dst/kept_column")
+            .ExpectItem("/test_database/export-root/false_attributes", "dst/false_attributes")
+            .ExpectItem("/test_database/export-root/topic", "dst/topic")
+            .ExpectItem("/test_database/export-root/omitted_view", "dst/omitted_view")
+            .ExpectItem("/test_database/export-root/kept_view", "dst/kept_view");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "export", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--item", "src=export-root,dst=dst",
             }
         );
     }

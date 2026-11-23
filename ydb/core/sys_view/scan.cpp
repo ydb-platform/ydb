@@ -1,6 +1,6 @@
 #include "scan.h"
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 
 #include <ydb/core/sys_view/auth/group_members.h>
 #include <ydb/core/sys_view/auth/groups.h>

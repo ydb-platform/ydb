@@ -101,6 +101,7 @@ ELSEIF (PYTHON3)
         link_jsrc.py
         link_lib.py
         list.py
+        list_java_classes.py
         llvm_opt_wrapper.py
         make_container.py
         make_container_layer.py

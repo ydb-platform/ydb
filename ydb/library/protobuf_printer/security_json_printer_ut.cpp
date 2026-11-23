@@ -7,6 +7,8 @@
 #include <library/cpp/protobuf/json/config.h>
 #include <library/cpp/testing/unittest/gtest.h>
 
+#include <util/stream/str.h>
+
 using namespace NKikimr;
 
 namespace {
@@ -20,6 +22,36 @@ NJson::TJsonValue ReadJsonFromString(TStringBuf json) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(SecurityJsonPrinterTest) {
+    Y_UNIT_TEST(PrintToJsonValue) {
+        NTestProto::TInnerObject proto;
+        (*proto.mutable_inner_map())["key"] = "value";
+        proto.set_value(42);
+
+        NProtobufJson::TProto2JsonConfig config;
+        config.UseJsonName = true;
+        config.MapAsObject = true;
+
+        NJson::TJsonValue json;
+        SecureProto2Json(proto, json, config);
+        EXPECT_EQ(ReadJsonFromString(R"({"innerMap":{"key":"value"},"value":42})"), json);
+    }
+
+    Y_UNIT_TEST(PrintToStringStream) {
+        NTestProto::TInnerObject proto;
+        (*proto.mutable_inner_map())["key"] = "value";
+        proto.set_value(42);
+
+        NProtobufJson::TProto2JsonConfig config;
+        config.UseJsonName = true;
+        config.MapAsObject = true;
+
+        TStringStream json;
+        SecureProto2Json(proto, json, config);
+        EXPECT_EQ(
+            ReadJsonFromString(R"({"innerMap":{"key":"value"},"value":42})"),
+            ReadJsonFromString(json.Str()));
+    }
+
     Y_UNIT_TEST(MasksSensitiveFields) {
         NTestProto::TConnectionContent m;
         m.set_name("name1");

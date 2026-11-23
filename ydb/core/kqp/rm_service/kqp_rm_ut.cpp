@@ -1,4 +1,4 @@
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/struct_log/string_value_extractor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
@@ -180,9 +181,9 @@ NScheduler::TComputeSchedulerPtr MakeComputeScheduler() {
                 .MaxRandomDelay = TDuration::MicroSeconds(100),
             },
         });
-    scheduler->SetTotalCpuLimit(12);
-    scheduler->SetTotalMemoryLimit(QUERY_MEMORY_LIMIT);
-    scheduler->AddOrUpdatePool(DATABASE_ID, POOL_ID, {.MemoryLimit = POOL_MEMORY_LIMIT});
+    auto configuration = std::make_unique<NScheduler::NHdrf::NStatic::TRoot>(12, QUERY_MEMORY_LIMIT);
+    configuration->GetOrCreateDatabase(DATABASE_ID).GetOrCreatePool(POOL_ID).MemoryLimit = POOL_MEMORY_LIMIT;
+    scheduler->UpdateConfiguration(std::move(configuration));
     return scheduler;
 }
 
@@ -2364,8 +2365,13 @@ void KqpRm::ArenaGrowRefusalLoggedOnChange() {
             const auto* log = ev->Get<NLog::TEvLog>();
             if (log->Component == NKikimrServices::KQP_RESOURCE_MANAGER && log->Line.StartsWith("Memory arena growth")) {
                 const auto& fields = *log->StructuredMessage;
-                lines.push_back({log->Line, fields.GetValue<TString>("size").value_or(""),
-                    fields.GetValue<TString>("delta").value_or(""), fields.GetValue<TString>("granted").value_or("")});
+
+                NActors::NStructuredLog::TStringValueExtractor extractor;
+                const auto size = extractor.ExtractValue(fields, {"size"}).value_or("");
+                const auto delta = extractor.ExtractValue(fields, {"delta"}).value_or("");
+                const auto granted = extractor.ExtractValue(fields, {"granted"}).value_or("");
+
+                lines.push_back({log->Line, size, delta, granted});
             }
         }
         return prevFilter(runtime, ev);
@@ -3459,7 +3465,7 @@ void KqpRm::SchedulerQueryQuotaManager() {
 
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
     auto scheduler = MakeComputeScheduler();
-    auto schedulerQuery = scheduler->AddOrUpdateQuery(DATABASE_ID, POOL_ID, 1, {});
+    auto schedulerQuery = scheduler->AddOrUpdateQuery(DATABASE_ID, POOL_ID, 1);
     scheduler->UpdateFairShare();
     UNIT_ASSERT_VALUES_EQUAL(schedulerQuery->GetSnapshot()->MemoryFairShare, POOL_MEMORY_LIMIT);
 

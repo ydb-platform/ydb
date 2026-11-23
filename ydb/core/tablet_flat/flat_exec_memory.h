@@ -4,6 +4,8 @@
 #include "flat_exec_broker.h"
 #include "util_fmt_line.h"
 
+#include <ydb/core/base/resource_profile.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr {

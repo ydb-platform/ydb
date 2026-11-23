@@ -1,0 +1,22 @@
+import ydb.tests.olap.load.lib.tpch as tpch
+from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
+
+
+class TestTpchS1(tpch.TestTpch1, FunctionalTestBase):
+    iterations: int = 1
+
+    @classmethod
+    def addition_init_params(cls) -> list[str]:
+        if cls.float_mode:
+            return ['--float-mode', cls.float_mode]
+        return []
+
+    @classmethod
+    def setup_class(cls) -> None:
+        cls.setup_cluster()
+        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-types=dt64'] + cls.addition_init_params())
+        import_params = []
+        if cls.scale == 1:
+            import_params = ['--upload-threads', '4', '--max-in-flight', '4']
+        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'import'] + import_params + ['generator', f'--scale={cls.scale}'])
+        super().setup_class()

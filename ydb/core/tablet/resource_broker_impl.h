@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 
@@ -228,14 +229,19 @@ public:
     void EraseTask(TTaskPtr task, bool finished, TInstant now);
 
     TTaskPtr FrontTask();
-    void PopTask();
+    TTaskPtr FrontMemorylessTask();
+    void PopTask(TTaskPtr task);
 
     void UpdateRealResourceUsage(TInstant now);
+
+    TEvResourceBroker::TQueueUsage GetUsage() const;
 
     // Debug print of current state into specified stream.
     void OutputState(IOutputStream &os, const TString &prefix) const;
 
 private:
+    void UpdateTabletUsage(const TTaskPtr &task, bool insert);
+
     void HoldResources(TTaskPtr task);
     void ReleaseResources(TTaskPtr task);
 
@@ -246,7 +252,9 @@ private:
 public:
     TString Name;
     ui32 Weight;
+    bool StrictMemoryLimit;
     TSet<TTaskPtr, TTaskEarlier> Tasks;
+    TSet<TTaskPtr, TTaskEarlier> MemorylessTasks;
     TResourceLimit QueueLimit;
     TResourceLimitPtr TotalLimit;
     double RealResourceUsage;
@@ -255,6 +263,13 @@ public:
     TInstant UsageTimestamp;
     TQueueCounters QueueCounters;
     TQueueCountersPtr TotalCounters;
+
+    struct TTabletUsage {
+        ui64 Waiting = 0;
+        ui64 Running = 0;
+    };
+    // Usage of the queue by tablets (only for tasks with known owner).
+    THashMap<std::pair<ui64, ui32>, TTabletUsage> TabletUsage;
 };
 
 /**
@@ -310,8 +325,21 @@ public:
      * Returns TTask raw pointer if it exists.
      */
     const TTask* FindTask(ui64 taskId, const TActorId &client) const;
+
+    bool FitsMemoryLimit(const TString& type, const TResourceValues& resources) const {
+        const auto& queue = TaskConfig(type).Queue;
+        const auto bytes = resources[NKikimrResourceBroker::MEMORY];
+        return !queue->StrictMemoryLimit ||
+            bytes <= GetMemoryLimit(type);
+    }
+
+    ui64 GetMemoryLimit(const TString& type) const {
+        return Min(TaskConfig(type).Queue->QueueLimit.Limit[NKikimrResourceBroker::MEMORY],
+            ResourceLimit->Limit[NKikimrResourceBroker::MEMORY]);
+    }
+
     /**
-     * Create new task and queue it. Return true on success, and false if task with the same id already exists.
+     * Create and queue a task. Return false if the client already has a task with the same ID.
      */
     bool SubmitTask(const TEvResourceBroker::TTask &task, const TActorId &client, const TActorSystem &as);
     /**
@@ -356,9 +384,9 @@ public:
      * Build or reconfigure queues and limits according to new config. Config should
      * have at least one queue and one task type configuration (default queue and
      * unknown task). On re-configuration tasks may migrate between queues according
-     * to new mapping.
+     * to new mapping. Returns queued tasks rejected by the new strict memory limits.
      */
-    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as);
+    TVector<TTaskPtr> Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as);
 
     /**
      * Update current scheduler time which is used for all resource consumption
@@ -366,12 +394,15 @@ public:
      */
     void UpdateTime(TInstant now);
 
+    TVector<TEvResourceBroker::TQueueUsage> GetQueueUsage() const;
+
     // Debug print of current state into specified stream.
     void OutputState(IOutputStream &os) const;
 
 private:
     // Erase task from all structure.
     void EraseTask(TTaskPtr task, bool finished, const TActorSystem &as);
+    void EraseTaskFromIndexes(const TTask &task);
     // Update resource usage for all queues.
     void UpdateResourceUsage(const TActorSystem &as);
 
@@ -394,6 +425,8 @@ private:
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
+    // Contains exactly the task IDs in Tasks for each client; empty clients are removed.
+    THashMap<TActorId, THashSet<ui64>> TasksByClient;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TQueueCountersPtr TotalCounters;
     ::NMonitoring::TDynamicCounters::TCounterPtr MissingTaskTypeCounter;
@@ -415,6 +448,7 @@ public:
     bool ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) override;
 
     NKikimrResourceBroker::TResourceBrokerConfig GetConfig() const;
+    TVector<TEvResourceBroker::TQueueUsage> GetQueueUsage() const;
     void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config);
 
     using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
@@ -432,7 +466,7 @@ public:
 private:
     NKikimrResourceBroker::TResourceBrokerConfig Config;
     TScheduler Scheduler;
-    TMutex Lock;
+    mutable TMutex Lock;
     TActorSystem* ActorSystem;
 };
 
@@ -459,6 +493,7 @@ public:
             HFunc(TEvResourceBroker::TEvConfigure, Handle);
             HFunc(TEvResourceBroker::TEvConfigRequest, Handle);
             HFunc(TEvResourceBroker::TEvResourceBrokerRequest, Handle);
+            HFunc(TEvResourceBroker::TEvQueueUsageRequest, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
         default:
             Y_ABORT("TResourceBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
@@ -477,6 +512,7 @@ private:
     void Handle(TEvResourceBroker::TEvConfigure::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResourceBroker::TEvConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvResourceBroker::TEvQueueUsageRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
     NKikimrResourceBroker::TResourceBrokerConfig BootstrapConfig;

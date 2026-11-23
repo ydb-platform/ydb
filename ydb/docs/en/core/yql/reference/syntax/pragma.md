@@ -220,7 +220,7 @@ Output the [column order](select/order_by.md) in SELECT/JOIN/UNION ALL and prese
 
 ### PositionalUnionAll {#positionalunionall}
 
-Enable the standard column-by-column execution for [UNION ALL](select/union.md#unionall). This automatically enables
+Enable the standard column-by-column execution for [UNION ALL](select/union.md#union-all). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ### RegexUseRe2
@@ -295,7 +295,7 @@ Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.m
 | --- | --- |
 | Positive number | 5 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup-cube-group-sets).
+Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 

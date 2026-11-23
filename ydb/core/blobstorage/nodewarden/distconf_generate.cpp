@@ -2,6 +2,7 @@
 #include "distconf_statestorage_config_generator.h"
 
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -233,7 +234,21 @@ namespace NKikimr::NStorage {
 
         auto& config = *params.Config;
         const auto& replacedDisks = params.ReplacedDisks;
-        const auto& selfManagementConfig = config.GetSelfManagementConfig();
+        auto selfManagementConfig = config.GetSelfManagementConfig();
+        const auto pileRegistry = GetConfigPileRegistry(config);
+        if (params.BridgePileId && pileRegistry && params.BridgePileId.GetPileIndex() < pileRegistry->PilesSize()) {
+            const auto& pileName = pileRegistry->GetPiles(params.BridgePileId.GetPileIndex()).GetName();
+            if (const auto *rule = FindStoragePoolPileOverride(config.GetBlobStorageConfig(), pileName, std::nullopt)) {
+                ApplyStoragePoolPileOverride(selfManagementConfig, *rule);
+                if (rule->HasErasureSpecies()) {
+                    TBlobStorageGroupType::EErasureSpecies species;
+                    if (!TBlobStorageGroupType::ParseErasureName(species, rule->GetErasureSpecies())) {
+                        throw TExConfigError() << "invalid static group pile override ErasureSpecies";
+                    }
+                    params.GroupType = TBlobStorageGroupType(species);
+                }
+            }
+        }
         const auto& selfHealAllowedNodes = selfManagementConfig.GetStaticGroupSelfHealAllowedNodes();
         NKikimrConfig::TBlobStorageConfig *bsConfig = config.MutableBlobStorageConfig();
         if (params.Reassignments) {
@@ -434,6 +449,9 @@ namespace NKikimr::NStorage {
 
             for (const auto& group : ss.GetGroups()) {
                 if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == params.GroupId) {
+                    if (group.GetErasureSpecies() != params.GroupType.GetErasure()) {
+                        throw TExConfigError() << "can't change erasure of existing static group";
+                    }
                     existingGroup = true;
                     groupGeneration = group.GetGroupGeneration();
                     generation.emplace(group.GetGroupGeneration());
@@ -589,7 +607,6 @@ namespace NKikimr::NStorage {
         };
         EnumerateConfigDrives(config, 0, processDrive, nullptr, true);
 
-        const auto pileRegistry = GetConfigPileRegistry(config);
         for (const auto& [pdiskId, item] : pdisks) {
             const auto it = nodeLocations.find(pdiskId.NodeId);
             if (it == nodeLocations.end()) {
@@ -688,11 +705,15 @@ namespace NKikimr::NStorage {
                 break;
             }
         }
+        TVector<std::optional<NKikimrBlobStorage::TDataCenterState::EState>> realmStates;
         if (!sGroup) {
             sGroup = sSet->AddGroups();
             params.GroupId.CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetGroupID);
             sGroup->SetErasureSpecies(params.GroupType.GetErasure());
         } else {
+            for (const auto& realm : sGroup->GetRings()) {
+                realmStates.push_back(realm.HasState() ? std::optional(realm.GetState()) : std::nullopt);
+            }
             sGroup->ClearRings();
         }
         sGroup->SetGroupGeneration(params.GroupGeneration);
@@ -753,6 +774,9 @@ namespace NKikimr::NStorage {
         NBsController::TGroupMapper::Traverse(groupDefinition, [&](TVDiskIdShort vdiskId, TPDiskId pdiskId) {
             if (!sRealm || vdiskId.FailRealm != prev.FailRealm) {
                 sRealm = sGroup->AddRings();
+                if (vdiskId.FailRealm < realmStates.size() && realmStates[vdiskId.FailRealm]) {
+                    sRealm->SetState(*realmStates[vdiskId.FailRealm]);
+                }
                 sDomain = nullptr;
             }
             if (!sDomain || vdiskId.FailDomain != prev.FailDomain) {

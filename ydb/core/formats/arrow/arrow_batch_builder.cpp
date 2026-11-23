@@ -2,7 +2,6 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers_minikql.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/minikql/minikql.h>
@@ -285,10 +284,14 @@ arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKi
     return arrow::Status::OK();
 }
 
-void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
+arrow::Status TArrowBatchBuilder::TryAppendCell(const TCell& cell, ui32 colNum) {
     NumBytes += cell.Size();
     auto ydbType = YdbSchema[colNum].second;
-    auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
+    return NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
+}
+
+void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
+    auto status = TryAppendCell(cell, colNum);
     Y_ABORT_UNLESS(status.ok(), "Failed to append cell: %s", status.ToString().c_str());
 }
 
@@ -300,15 +303,19 @@ void TArrowBatchBuilder::AppendValue(const NUdf::TUnboxedValue& value, ui32 colN
 }
 
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {
-    AFL_VERIFY(key.ColumnCount + value.ColumnCount == YdbSchema.size())("key", key.ColumnCount)("value", value.ColumnCount)(
-                                                      "schema", YdbSchema.size());
+    YDB_LOG_VERIFY(key.ColumnCount + value.ColumnCount == YdbSchema.size(),
+        {"key", key.ColumnCount},
+        {"value", value.ColumnCount},
+        {"schema", YdbSchema.size()});
     ++NumRows;
 
     auto fnAppendTuple = [&] (const TDbTupleRef& tuple, size_t offsetInRow) {
         for (size_t i = 0; i < tuple.ColumnCount; ++i) {
             auto ydbType = tuple.Types[i];
             const ui32 colNum =  offsetInRow + i;
-            AFL_VERIFY(colNum < YdbSchema.size())("column", colNum)("schema", YdbSchema.size());
+            YDB_LOG_VERIFY(colNum < YdbSchema.size(),
+                {"column", colNum},
+                {"schema", YdbSchema.size()});
             Y_ABORT_UNLESS(ydbType == YdbSchema[colNum].second);
             auto& cell = tuple.Columns[i];
             AppendCell(cell, colNum);
@@ -334,13 +341,19 @@ void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& key, const TConstAr
 }
 
 void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& row) {
+    auto status = TryAddRow(row);
+    Y_ABORT_UNLESS(status.ok(), "Failed to add row: %s", status.ToString().c_str());
+}
+
+arrow::Status TArrowBatchBuilder::TryAddRow(const TConstArrayRef<TCell>& row) {
     ++NumRows;
 
     size_t offset = 0;
     for (size_t i = 0; i < row.size(); ++i, ++offset) {
         auto& cell = row[i];
-        AppendCell(cell, offset);
+        ARROW_RETURN_NOT_OK(TryAppendCell(cell, offset));
     }
+    return arrow::Status::OK();
 }
 
 void TArrowBatchBuilder::AddRow(const NUdf::TUnboxedValue& row, size_t membersCount, const TVector<ui32>* columnOrder) {

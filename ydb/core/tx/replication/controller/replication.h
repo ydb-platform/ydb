@@ -9,6 +9,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -37,6 +38,7 @@ public:
         Table,
         IndexTable,
         Transfer,
+        Topic,
     };
 
     enum class EDstState: ui8 {
@@ -46,7 +48,8 @@ public:
         Done,
         Removing,
         Paused,
-        Attaching,
+        Attaching, // Deprecated.
+        WaitingImport,
         Error = Max<ui8>()
     };
 
@@ -75,6 +78,7 @@ public:
             virtual ETargetKind GetKind() const = 0;
             virtual const TString& GetSrcPath() const = 0;
             virtual const TString& GetDstPath() const = 0;
+            virtual bool GetSrcIsImpl() const = 0;
         };
 
         virtual ~ITarget() = default;
@@ -96,11 +100,10 @@ public:
 
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
-        virtual const TPathId& GetPendingDstPathId() const = 0;
-        virtual void SetPendingDstPathId(const TPathId& value) = 0;
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
+        virtual TString BuildStreamConsumerName() const = 0;
         virtual const TString& GetStreamConsumerName() const = 0;
         virtual void SetStreamConsumerName(const TString& value) = 0;
         virtual TString GetStreamPath() const = 0;
@@ -119,6 +122,7 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
+        virtual void InvalidateLag(ui64 workerId) = 0;
         virtual const std::optional<TDuration> GetLag() const = 0;
 
         virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
@@ -130,6 +134,8 @@ public:
 
         virtual void UpdateConfig(const NKikimrReplication::TReplicationConfig&) = 0;
 
+        virtual TString GetSrcIndexPath() const = 0;
+
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
     };
@@ -137,7 +143,7 @@ public:
     friend class TTargetBase;
     void AddPendingAlterTarget(ui64 id);
     void RemovePendingAlterTarget(ui64 id);
-    void UpdateLag(ui64 targetId, TDuration lag);
+    void UpdateLag(ui64 targetId, std::optional<TDuration> lag);
 
     struct TDropOp {
         TActorId Sender;
@@ -180,11 +186,13 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const std::optional<TDuration> GetLag() const;
+    void SetLagChangedCallback(std::function<void()> callback);
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
+    bool IsCredentialsReady() const;
     void UpdateSecret(const TString& secretValue);
     bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 
@@ -206,5 +214,14 @@ private:
     std::optional<TDropOp> DropOp;
 
 }; // TReplication
+
+// Whether the replication takes over its destination tables as they are: they already exist and
+// already hold the data, so the controller demotes them in place instead of creating anything.
+bool IsSwitchover(const NKikimrReplication::TReplicationConfig& config);
+
+// The state a replication is created in. One without an initial scan waits paused until its
+// destination tables have been filled and handed over; a switchover has nothing to wait for,
+// because its tables already hold the data, so it starts working once they are demoted.
+TReplication::EState InitialReplicationState(const NKikimrReplication::TReplicationConfig& config);
 
 }

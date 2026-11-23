@@ -1,0 +1,6 @@
+@startuml
+Created -[#blue]-> FailWorkflowCommandCreated: Schedule
+FailWorkflowCommandCreated -[#blue]-> FailWorkflowCommandCreated: CommandFailWorkflowExecution
+FailWorkflowCommandCreated -[#blue]-> FailWorkflowCommandRecorded: WorkflowExecutionFailed
+FailWorkflowCommandRecorded --> [*]
+@enduml

@@ -8,6 +8,7 @@
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
+#include <util/string/hex.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -72,6 +73,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        StopStaticGroupRepairs();
         CancelStateStorageSelfHealRefresh();
         CancelConfigRefill();
         CancelBindingLiveness();
@@ -82,12 +84,49 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Halt() {
-        // TODO: implement
+        if (std::exchange(Halted, true)) {
+            return;
+        }
+        YDB_LOG_CRIT("distconf halted, the node takes no part in it until restart",
+            {"marker", "NWDC89"});
+        // the fence is put up out of the current call, as its caller may go on using the state of the root
+        TActivationContext::Send(new IEventHandle(TEvPrivate::EvHalt, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    void TDistributedConfigKeeper::HandleHalt() {
+        Y_ABORT_UNLESS(Halted);
+        AbortRootProbe();
+        AbortBinding("distconf halted");
+        if (Scepter) {
+            StopRootActivities("distconf halted");
+        }
+        for (const auto& [nodeId, info] : DirectBoundNodes) {
+            SendEvent(nodeId, info, TEvNodeConfigReversePush::MakeRejected());
+        }
+        while (!DirectBoundNodes.empty()) {
+            UnbindNode(DirectBoundNodes.begin()->first, "distconf halted");
+        }
     }
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
+            if (!IsSelfStatic && Cfg->BridgeConfig) {
+                const auto registry = GetPileRegistry(config, Cfg->BridgeConfig.get());
+                const auto *nodeInfo = Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo()
+                    ? &Cfg->DynamicNodeConfig->GetNodeInfo() : nullptr;
+                const auto pileName = nodeInfo && nodeInfo->HasLocation()
+                    ? TNodeLocation(nodeInfo->GetLocation()).GetBridgePileName() : std::nullopt;
+                if (!registry || !nodeInfo || !nodeInfo->HasLocation() || !NBridge::ResolvePileId(*registry, pileName)) {
+                    YDB_LOG_ERROR("Storage configuration rejected: dynamic node's location does not resolve to a bridge pile",
+                        {"marker", "NWDC92"},
+                        {"nodeId", SelfId().NodeId()},
+                        {"pileName", pileName.value_or("<none>")},
+                        {"generation", config.GetGeneration()});
+                    return false;
+                }
+            }
+
             // extract the main config from newly applied section
             MainConfigYaml = MainConfigFetchYaml = {};
             MainConfigYamlVersion.reset();
@@ -155,11 +194,19 @@ namespace NKikimr::NStorage {
             // A generation-zero root can learn its first managed configuration
             // from quorum recovery after BecomeRoot has already run.
             StartStateStorageSelfHealRefresh();
+            RefreshStaticGroupRepairs();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {
-            // TODO: fingerprint mismatch, abort operation
+            // two different configurations have been committed with the same generation; the protocol doesn't make
+            // it, so it is a bug or a restore of disks, and the node can't tell which one is right
+            YDB_LOG_CRIT("config fingerprint mismatch",
+                {"marker", "NWDC90"},
+                {"generation", config.GetGeneration()},
+                {"localFingerprint", HexEncode(StorageConfig->GetFingerprint())},
+                {"fingerprint", HexEncode(config.GetFingerprint())});
+            Halt();
         }
         return false;
     }
@@ -515,6 +562,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
+            hFunc(NGroupSyncer::TEvGroupState::TEvPropose, Handle);
             hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
@@ -546,6 +594,7 @@ namespace NKikimr::NStorage {
             fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
             fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
             fFunc(TEvPrivate::EvRetryConfigPropagation, HandleRetryConfigPropagation);
+            cFunc(TEvPrivate::EvHalt, HandleHalt);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);

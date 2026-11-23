@@ -31,7 +31,7 @@ using TGRpcServersFactory = std::function<TGRpcServers()>;
 
 struct TGRpcServersWrapper {
     TGRpcServers Servers;
-    // Servers replaced by TGRpcServersManager::Start() which may still be
+    // Servers stopped by TGRpcServersManager::Stop() or replaced by Start() which may still be
     // referenced by request contexts of alive actors; destroyed once all their
     // requests have deregistered or, at the latest, together with the wrapper
     // in ~TKikimrRunner(), after ActorSystem.Destroy().

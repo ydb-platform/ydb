@@ -49,11 +49,11 @@ SELECT
         END
     ) AS sat_sales
 FROM
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/store`
+    `store`
 WHERE
     d_date_sk == ss_sold_date_sk
     AND s_store_sk == ss_store_sk

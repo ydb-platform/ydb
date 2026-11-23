@@ -436,7 +436,7 @@ ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {}, bool allowPgForBackup = false);
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
@@ -694,6 +694,7 @@ ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxS
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateRepairIndexShadowData(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState::ETxState state);

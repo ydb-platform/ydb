@@ -27,7 +27,11 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
       ON ( <index_columns> )
       [COVER ( <cover_columns> )]
       [WITH ( <parameter_name> = <parameter_value>[, ...])]
-    [, ...]
+    [, ...],
+    STATISTICS <statistics_name>
+      ON ( <column_name> [, ...] )
+      [WITH ( <statistics_type> [, ...] )]
+    [, ...],
   PRIMARY KEY ( <column>[, ...]),
   [FAMILY <column_family> ( family_options[, ...])]
 )
@@ -74,6 +78,10 @@ Index definition on the table. Supported:
 * [Bloom indexes](bloom_skip_index.md),
 * [min-max index](min_max_index.md),
 * [JSON indexes](json_index.md).
+
+### STATISTICS
+
+Specifies columns and types of multi-column statistics to collect with [ANALYZE](../analyze.md). See [{#T}](statistics.md).
 
 ### PRIMARY KEY
 
@@ -234,7 +242,7 @@ Creating and populating a table based on the results of the `SELECT` query. For 
   ```
 
 
-  This code will create a row table with automatic partitioning enabled by partition size (`AUTO_PARTITIONING_BY_SIZE`) and a preferred partition size (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) of 512 megabytes. The full list of row table partitioning options is in the [Row table partitioning](../../../../concepts/datamodel/table.md#partitioning_row_table) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
+  This code will create a row table with automatic partitioning enabled by partition size (`AUTO_PARTITIONING_BY_SIZE`) and a preferred partition size (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) of 512 mebibytes (MiB). The full list of row table partitioning options is in the [Row table partitioning](../../../../concepts/datamodel/table.md#partitioning_row_table) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
 
 - Creating a column table
 
@@ -330,6 +338,7 @@ CREATE TABLE <table_name> (
 
 When creating row tables, you can specify:
 
+* [Statistics](statistics.md).
 * [Secondary index](secondary_index.md).
 * [Vector index](vector_index.md).
 * [Full-text index](fulltext_index.md).
@@ -341,6 +350,7 @@ When creating row tables, you can specify:
 
 When creating column tables, you can specify:
 
+* [Statistics](statistics.md).
 * [Bloom index](bloom_skip_index.md).
 * [Additional parameters](with.md).
 * [Creating and populating a table based on query results](as_select.md).

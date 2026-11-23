@@ -15,6 +15,8 @@ SRCS(
     yql_s3_write_actor.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(yql_s3_actor_stats_interface.h)
+
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/fmt
@@ -23,12 +25,11 @@ PEERDIR(
     library/cpp/protobuf/util
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
+    library/cpp/time_provider
     library/cpp/xml/document
     ydb/core/fq/libs/events
     ydb/core/util
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/providers/common/arrow
-    ydb/library/yql/providers/common/arrow/interface
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/generic/pushdown

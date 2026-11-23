@@ -1,0 +1,169 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LGPL-2.1-or-later    013be8dee8d148eb42f21a6fa83bb0a8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        include/librsvg/rsvg-cairo.h [8:20]
+        include/librsvg/rsvg-pixbuf.h [8:20]
+        include/librsvg/rsvg.h [8:20]
+
+KEEP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING.LIB [1:502]
+
+KEEP     Apache-2.0           5bf0bebc937c513cbffdfb73bca61f1e
+BELONGS ya.make
+    License text:
+            "Apache-2.0",
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        deny.toml [52:52]
+
+KEEP     Apache-2.0           5ce200d7b2b15c2ff22a1e0af255e3f8
+BELONGS ya.make
+    License text:
+            "Apache-2.0 WITH LLVM-exception",
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        deny.toml [53:53]
+
+KEEP     LGPL-2.1-only        7656e864923cf1514b8448baddfa1221
+BELONGS ya.make
+    License text:
+        - Consistently use the LGPL 2.1 wherever it is mentioned.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        NEWS [2155:2155]
+
+KEEP     MPL-2.0              89cbf2759e712bfa7b7230d1923b29c8
+BELONGS ya.make
+    License text:
+            "MPL-2.0",
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        deny.toml [54:54]
+
+KEEP     LGPL-2.1-or-later    c362686f25aa71224ea079340a6bcd7e
+BELONGS ya.make
+    License text:
+            "LGPL-2.1-or-later",
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        deny.toml [48:48]
+
+KEEP     MIT AND BSD-3-Clause ca4d2cbf7e1395ad392047f7433a0a81
+BELONGS ya.make
+    License text:
+            "MIT",
+            "BSD-3-Clause",
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 80.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        deny.toml [49:50]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 80.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        deny.toml [49:50]
+
+KEEP     BSD-3-Clause         d0c300717db4ff60cb2bdfbab951ae5d
+BELONGS ya.make
+    License text:
+            "BSD-3-Clause",
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        deny.toml [50:50]
+
+KEEP     LGPL-2.1-only AND LGPL-2.1-or-later fb2bfff4b1bd15abca6437872ca0ee47
+BELONGS ya.make
+    License text:
+        license = "LGPL-2.1-or-later"
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        Cargo.toml [9:9]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        Cargo.toml [9:9]

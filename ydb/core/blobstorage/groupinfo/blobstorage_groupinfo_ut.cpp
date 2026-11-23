@@ -1,4 +1,5 @@
 #include "blobstorage_groupinfo.h"
+#include "blobstorage_groupinfo_data_check.h"
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
@@ -11,21 +12,140 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
+    Y_UNIT_TEST(ParityBlockIntegrity) {
+        for (auto species : {TErasureType::Erasure4Plus2Block, TErasureType::Erasure8Plus2Block}) {
+            const TBlobStorageGroupInfo info(species);
+            const auto& type = info.Type;
+            const auto& checker = info.GetTopology().GetDataIntegrityChecker();
+            for (auto crc : {TErasureType::CrcModeNone, TErasureType::CrcModeWholePart}) {
+                for (ui32 size : {0, 1, 639, 640, 641, 4097}) {
+                    const TLogoBlobID id(1, 1, 1, 0, size, 0, 0, crc);
+                    const TString data(size, 'x');
+                    TDataPartSet encoded;
+                    type.SplitData(crc, data, encoded);
+                    TBlobStorageGroupInfo::IDataIntegrityChecker::TPartsData parts;
+                    parts.Parts.resize(type.TotalPartCount());
+                    for (ui32 part = 0; part < type.TotalPartCount(); ++part) {
+                        parts.Parts[part].emplace_back(part, encoded.Parts[part].OwnedString);
+                        const TString contiguous = encoded.Parts[part].OwnedString.ConvertToString();
+                        UNIT_ASSERT(CheckCrcAtTheEnd(crc, TContiguousSpan(contiguous.data(), contiguous.size())));
+                    }
+                    const auto check = [&](const auto& input, bool expected) {
+                        const auto result = checker.GetDataState(id, input, '\n');
+                        UNIT_ASSERT_VALUES_EQUAL_C(result.IsOk, expected,
+                            "species# " << species << " crc# " << static_cast<ui32>(crc) << " size# " << size << " " << result.DataInfo);
+                        return result;
+                    };
+                    check(parts, true);
+                    for (ui32 count : {type.DataParts() - 1, type.DataParts(), type.TotalPartCount() - 1}) {
+                        auto subset = parts;
+                        for (ui32 part = count; part < type.TotalPartCount(); ++part) {
+                            subset.Parts[part].clear();
+                        }
+                        check(subset, true);
+                    }
+                    for (ui32 part = 0; part < type.TotalPartCount(); ++part) {
+                        auto copies = parts;
+                        copies.Parts[part].emplace_back(type.TotalPartCount(), copies.Parts[part].front().second);
+                        check(copies, true);
+                        TString bad = encoded.Parts[part].OwnedString.ConvertToString();
+                        if (!bad.empty()) {
+                            bad.Detach()[0] ^= 1;
+                            copies.Parts[part].back().second = TRope(bad);
+                            const auto result = check(copies, false);
+                            if (crc == TErasureType::CrcModeNone) {
+                                UNIT_ASSERT_STRING_CONTAINS(result.DataInfo, "ver1");
+                                UNIT_ASSERT_STRING_CONTAINS(result.DataInfo, "CHECK part ");
+                            }
+                            copies = parts;
+                            copies.Parts[part].front().second = TRope(bad);
+                            check(copies, false);
+                        }
+                        copies = parts;
+                        copies.Parts[part].front().second = TRope(TString(bad.size() + 1, 'x'));
+                        check(copies, false);
+                    }
+                }
+            }
+        }
+    }
+
+
+
+    Y_UNIT_TEST(ParityBlockIntegrityRestoreLimit) {
+        for (auto species : {TErasureType::Erasure4Plus2Block, TErasureType::Erasure8Plus2Block}) {
+            const TBlobStorageGroupInfo info(species);
+            const auto& checker = info.GetTopology().GetDataIntegrityChecker();
+            const ui32 totalParts = info.Type.TotalPartCount();
+            const TLogoBlobID id(1, 1, 1, 0, 640, 0);
+            TDataPartSet encoded;
+            info.Type.SplitData(TErasureType::CrcModeNone, TString(id.BlobSize(), 'x'), encoded);
+            TBlobStorageGroupInfo::IDataIntegrityChecker::TPartsData parts;
+            parts.Parts.resize(totalParts);
+            for (ui32 part = 0; part < totalParts; ++part) {
+                parts.Parts[part].emplace_back(part, encoded.Parts[part].OwnedString);
+            }
+            const auto healthy = checker.GetDataState(id, parts, '\n', 1);
+            UNIT_ASSERT_C(healthy.IsOk, healthy.DataInfo);
+            UNIT_ASSERT(!healthy.DataInfo.Contains("truncated"));
+
+            TString bad = encoded.Parts[0].OwnedString.ConvertToString();
+            bad.Detach()[0] ^= 1;
+            parts.Parts[0].front().second = TRope(bad);
+            const auto corrupted = checker.GetDataState(id, parts, '\n', 1);
+            UNIT_ASSERT(!corrupted.IsOk);
+            UNIT_ASSERT_STRING_CONTAINS(corrupted.DataInfo, "Erasure diagnostics truncated after 1 restores");
+            parts.Parts[0].front().second = encoded.Parts[0].OwnedString;
+            parts.Parts[0].emplace_back(totalParts, TRope(bad));
+            const auto unlimited = checker.GetDataState(id, parts, '\n');
+            UNIT_ASSERT(!unlimited.IsOk);
+            UNIT_ASSERT_VALUES_EQUAL(checker.GetDataState(id, parts, '\n', 0).DataInfo, unlimited.DataInfo);
+            // Each omitted pair needs one restore, plus one more if part 1 is among the inputs.
+            const ui32 restores = (totalParts - 1) * (totalParts - 1);
+            for (ui32 limit : {1u, restores - 1, restores, restores + 1}) {
+                const auto result = checker.GetDataState(id, parts, '\n', limit);
+                UNIT_ASSERT(!result.IsOk);
+                if (limit < restores) {
+                    UNIT_ASSERT_STRING_CONTAINS(result.DataInfo,
+                        TStringBuilder() << "Erasure diagnostics truncated after " << limit << " restores");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(result.DataInfo, unlimited.DataInfo);
+                }
+            }
+
+            // Three distinct copies of every part exercise truncation inside the recursive version search.
+            for (ui32 part = 0; part < totalParts; ++part) {
+                parts.Parts[part].resize(1);
+                for (ui32 version : {1u, 2u}) {
+                    bad = encoded.Parts[part].OwnedString.ConvertToString();
+                    bad.Detach()[0] ^= version;
+                    parts.Parts[part].emplace_back(totalParts + version - 1, TRope(bad));
+                }
+            }
+            const auto result = checker.GetDataState(id, parts, '\n', 100);
+            UNIT_ASSERT(!result.IsOk);
+            UNIT_ASSERT_STRING_CONTAINS(result.DataInfo, "Erasure diagnostics truncated after 100 restores");
+        }
+    }
+
     Y_UNIT_TEST(FailRealmStateDefaults) {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
         TBlobStorageGroupInfo info(type, 1, 3, 3);
         TBlobStorageGroupInfo fromTopology(TBlobStorageGroupInfo::TTopology(type, 3, 3, 1),
             TBlobStorageGroupInfo::TDynamicInfo(info.GroupID, 1), "");
         for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info.GetFailRealmState(realm)), static_cast<ui32>(R::N0));
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(fromTopology.GetFailRealmState(realm)), static_cast<ui32>(R::N0));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info.GetFailRealmState(realm)), static_cast<ui32>(TDataCenterState::INCLUDED));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(fromTopology.GetFailRealmState(realm)), static_cast<ui32>(TDataCenterState::INCLUDED));
+            UNIT_ASSERT(info.IsFailRealmIncluded(realm));
+            UNIT_ASSERT(!info.IsFailRealmExcluded(realm));
+            UNIT_ASSERT(!info.IsFailRealmRecovering(realm));
         }
     }
 
     Y_UNIT_TEST(FailRealmStatesFromProtoAndGenerationUpdate) {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        constexpr R::EState states[] = {R::N0, R::N1, R::N2, R::F, R::R};
+        using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
+        constexpr TDataCenterState::EState states[] = {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::RECOVERING};
         NKikimrBlobStorage::TGroupInfo group;
         group.SetGroupID(1);
         group.SetGroupGeneration(1);
@@ -42,12 +162,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         auto previous = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(previous);
         for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(R::N0));
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(TDataCenterState::INCLUDED));
         }
-        for (ui32 offset = 0; offset < 5; ++offset) {
+        for (ui32 offset = 0; offset < 3; ++offset) {
             group.SetGroupGeneration(offset + 2);
             for (ui32 realm = 0; realm < 3; ++realm) {
-                group.MutableRings(realm)->SetState(states[(realm + offset) % 5]);
+                group.MutableRings(realm)->SetState(states[(realm + offset) % 3]);
             }
             // Exercise the wire representation before NodeWarden's Parse entry point.
             NKikimrBlobStorage::TGroupInfo received;
@@ -58,14 +178,22 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             UNIT_ASSERT(previous->PickTopology()->EqualityCheck(current->GetTopology()));
             auto localVDisk = MakeIntrusive<TBlobStorageGroupInfo>(current, current->GetVDiskId(0),
                 current->GetActorId(0));
+            UNIT_ASSERT(localVDisk->GetMirror3dcState() == current->GetMirror3dcState());
             for (ui32 realm = 0; realm < 3; ++realm) {
-                const auto expected = states[(realm + offset) % 5];
+                const auto expected = states[(realm + offset) % 3];
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetFailRealmState(realm)), static_cast<ui32>(expected));
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetDynamicInfo().FailRealmStates[realm]), static_cast<ui32>(expected));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetDynamicInfo().Mirror3dcState.FailRealmStates[realm]), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(localVDisk->GetFailRealmState(realm)), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->Group->GetRings(realm).GetState()), static_cast<ui32>(expected));
-                const auto old = offset ? states[(realm + offset - 1) % 5] : R::N0;
+                UNIT_ASSERT_VALUES_EQUAL(current->IsFailRealmIncluded(realm), expected == TDataCenterState::INCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(current->IsFailRealmExcluded(realm), expected == TDataCenterState::EXCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(current->IsFailRealmRecovering(realm), expected == TDataCenterState::RECOVERING);
+                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsFailRealmExcluded(realm), expected == TDataCenterState::EXCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsFailRealmRecovering(realm), expected == TDataCenterState::RECOVERING);
+                const auto old = offset ? states[(realm + offset - 1) % 3] : TDataCenterState::INCLUDED;
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(old));
+                UNIT_ASSERT_VALUES_EQUAL(previous->IsFailRealmExcluded(realm), old == TDataCenterState::EXCLUDED);
+                UNIT_ASSERT_VALUES_EQUAL(previous->IsFailRealmRecovering(realm), old == TDataCenterState::RECOVERING);
             }
             previous = std::move(current);
         }
@@ -131,6 +259,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 continue;
             }
 
+            // The exhaustive ingress corpus grows to 2^30 layouts for 8+2.
+            // Block82 ingress tests cover a bounded corpus separately.
+            if (erasureType == TBlobStorageGroupType::Erasure8Plus2Block) {
+                continue;
+            }
             const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
             TBlobStorageGroupInfo info(erasureType, 1, numFailDomains);
 

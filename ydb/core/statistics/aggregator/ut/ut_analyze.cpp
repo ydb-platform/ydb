@@ -5,6 +5,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -18,12 +19,15 @@
 
 #include <util/string/cast.h>
 
+#include <deque>
+
 namespace NKikimr {
 namespace NStat {
 
 struct TStatisticsAggregatorTestAccess {
     using TTraversalTick = TStatisticsAggregator::TEvPrivate::TEvScheduleTraversal;
     using TTraversalWakeup = TStatisticsAggregator::TEvPrivate::TEvScheduleForceTraversal;
+    using TAnalyzeCountersTick = TStatisticsAggregator::TEvPrivate::TEvReportAnalyzeCounters;
 };
 
 namespace {
@@ -88,6 +92,91 @@ void SetAggregatorStatisticsConfig(TTestEnv& env, ui64 tabletId, bool enabled, b
 } // namespace
 
 Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
+
+    Y_UNIT_TEST(AnalyzePendingCountersCoalesceStatisticsReports) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        ui64 tabletId = 0;
+        ResolvePathId(runtime, "/Root/Database", nullptr, &tabletId);
+        UNIT_ASSERT(tabletId);
+        const auto aggregator = ResolveTablet(runtime, tabletId);
+        const auto nodeIndex = aggregator.NodeId() - runtime.GetFirstNodeId();
+        using TTick = TStatisticsAggregatorTestAccess::TAnalyzeCountersTick;
+        std::deque<TTick::TPtr> ticks;
+        bool allowTick = false;
+        // Scheduled events have no sender, which TBlockEvents' logging expects.
+        auto observer = runtime.AddObserver<TTick>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator) {
+                if (allowTick) {
+                    allowTick = false;
+                } else {
+                    ticks.emplace_back(std::move(ev));
+                }
+            }
+        });
+        auto unblockTick = [&] {
+            allowTick = true;
+            runtime.Send(ticks.front().Release(), nodeIndex, true);
+            ticks.pop_front();
+        };
+        runtime.WaitFor("periodic ANALYZE counter report", [&] { return !ticks.empty(); });
+
+        auto pendingCounter = GetServiceCounters(runtime.GetAppData(nodeIndex).Counters, "statistics")
+            ->GetSubgroup("subsystem", "background_analyze")
+            ->GetSubgroup("status", "pending")->FindCounter("BackgroundAnalyze");
+        UNIT_ASSERT(pendingCounter);
+        *pendingCounter = 100;
+
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto pipe = runtime.ConnectToPipe(tabletId, sender, 0, GetPipeConfigWithRetries());
+        constexpr ui64 schemeShardId = 123;
+        for (ui64 tables = 1; tables <= 3; ++tables) {
+            NKikimrStat::TSchemeShardStats stats;
+            stats.SetAreAllStatsFull(true);
+            for (ui64 table = 1; table <= tables; ++table) {
+                auto* entry = stats.AddEntries();
+                entry->MutablePathId()->SetOwnerId(schemeShardId);
+                entry->MutablePathId()->SetLocalId(table);
+                entry->SetIsColumnTable(true);
+                entry->SetAreStatsFull(true);
+                entry->SetRowCount(1);
+            }
+            auto report = std::make_unique<TEvStatistics::TEvSchemeShardStats>();
+            report->Record.SetSchemeShardId(schemeShardId);
+            UNIT_ASSERT(stats.SerializeToString(report->Record.MutableStats()));
+            runtime.SendToPipe(pipe, sender, report.release());
+        }
+        runtime.SendToPipe(pipe, sender, new TEvTablet::TEvGetCounters());
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender));
+        WaitForAggregatorCommit(runtime, tabletId);
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // A burst of committed reports must not recompute the gauge until the
+        // single periodic event is allowed to run.
+        UNIT_ASSERT_VALUES_EQUAL(pendingCounter->Val(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(ticks.size(), 1);
+        unblockTick();
+        runtime.WaitFor("coalesced ANALYZE pending counter", [&] { return pendingCounter->Val() == 3; });
+        runtime.WaitFor("next periodic ANALYZE counter report", [&] { return !ticks.empty(); });
+
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto* config = request->Record.MutableConfig();
+        *config->MutableFeatureFlags() = env.GetServer().GetSettings().FeatureFlags;
+        config->MutableFeatureFlags()->SetEnableColumnStatistics(false);
+        config->MutableFeatureFlags()->SetEnableBackgroundAnalyzeChangeRatio(false);
+        *config->MutableStatisticsConfig() = env.GetServer().GetSettings().AppConfig->GetStatisticsConfig();
+        runtime.SendToPipe(tabletId, sender, request.release());
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender));
+        UNIT_ASSERT_VALUES_EQUAL(pendingCounter->Val(), 3);
+
+        // Reporting remains active when the column-statistics scheduler stops,
+        // and a disabled change-ratio feature clears the pending gauge.
+        unblockTick();
+        runtime.WaitFor("disabled ANALYZE pending counter", [&] { return pendingCounter->Val() == 0; });
+        runtime.WaitFor("ANALYZE counter timer with column statistics disabled", [&] { return !ticks.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(ticks.size(), 1);
+    }
 
     Y_UNIT_TEST_TWIN(Analyze, ColumnShard) {
         TTestEnv env(1, 1);

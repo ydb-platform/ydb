@@ -11,6 +11,8 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
+#include <util/generic/guid.h>
+
 namespace NKikimr::NReplication::NController {
 
 using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
@@ -222,6 +224,11 @@ TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConf
     }
 }
 
+TString TTargetTransfer::BuildStreamConsumerName() const {
+    const auto& target = GetReplication()->GetConfig().GetTransferSpecific().GetTarget();
+    return target.HasConsumerName() ? target.GetConsumerName() : CreateGuidAsString();
+}
+
 void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig& cfg) {
     Config = std::make_shared<TTargetTransfer::TTransferConfig>(
         GetConfig()->GetSrcPath(),
@@ -269,7 +276,7 @@ void TTargetTransfer::Shutdown(const TActorContext& ctx) {
     TTargetWithStream::Shutdown(ctx);
 }
 
-TString TTargetTransfer::GetStreamPath() const {
+TString TTargetTransfer::BuildStreamPath() const {
     return CanonizePath(GetSrcPath());
 }
 

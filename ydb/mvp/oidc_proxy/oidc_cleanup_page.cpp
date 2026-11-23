@@ -41,6 +41,11 @@ TCleanupPageHandler::TCleanupPageHandler(const NActors::TActorId& httpProxyId, c
 {}
 
 void TCleanupPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
+    const auto& request = event->Get()->Request;
+    if (request->Method == "OPTIONS") {
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateOptionsResponse(request)));
+        return;
+    }
     Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings, CreateNameSessionCookie(Settings.ClientId)));
 }
 

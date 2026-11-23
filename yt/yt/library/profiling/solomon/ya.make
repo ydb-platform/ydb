@@ -26,6 +26,7 @@ PEERDIR(
     yt/yt/core/http
 
     library/cpp/cgiparam
+    library/cpp/containers/absl
     library/cpp/monlib/metrics
     library/cpp/monlib/encode/prometheus
     library/cpp/monlib/encode/spack

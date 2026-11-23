@@ -94,7 +94,7 @@ public:
         if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
             if (info->State != EVolatileTxState::Aborting) {
                 VolatileVersion = Max(VolatileVersion, info->Version);
-                Self.SysLocksTable().AddVolatileDependency(txId);
+                Self.SysLocksTable().AddVolatileDependency(info->TxId);
             }
         } else if (txId != LockId) {
             ReadConflicts.push_back(txId);

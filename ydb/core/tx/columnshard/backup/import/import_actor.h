@@ -3,7 +3,7 @@
 #include "import_counters.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/tx/columnshard/backup/import/session.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
@@ -19,7 +19,7 @@
 namespace NKikimr::NOlap::NImport {
 
 class TImportActor: public NBackground::TSessionActor {
-private:
+public:
     enum class EStage {
         Initialization,
         WaitData,
@@ -28,6 +28,7 @@ private:
         Finished
     };
 
+private:
     using TBase = NBackground::TSessionActor;
 
     EStage Stage = EStage::Initialization;
@@ -45,13 +46,11 @@ private:
     TInstant SaveProgressStartTime;
     TInstant StageStartTime;
 
-    static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
     static constexpr TDuration WarningInterval = TDuration::Seconds(60);
     static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
     static constexpr ui64 WriteRetryTag = 1;
 
     void SwitchStage(const EStage from, const EStage to);
-    static TString StageToString(EStage stage);
 
     void ScheduleTimeoutCheck();
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
@@ -88,7 +87,7 @@ public:
                     TBase::StateInProgress(ev);
             }
         } catch (...) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     }
 };

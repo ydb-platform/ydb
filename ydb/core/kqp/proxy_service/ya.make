@@ -15,17 +15,19 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/common/warmup
     ydb/core/kqp/compile_service
     ydb/core/kqp/counters
     ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration
+    ydb/core/kqp/federated_query/streaming
     ydb/core/kqp/gateway/behaviour/streaming_query
     ydb/core/kqp/script_executions/finalization
     ydb/core/kqp/script_executions/table_queries
     ydb/core/kqp/tracing
-    ydb/services/workload_manager/service
     ydb/core/mind
     ydb/core/mon
     ydb/core/protos
@@ -47,6 +49,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/services/workload_manager
     ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
+    ydb/services/workload_manager/service
     yql/essentials/providers/common/proto
     yql/essentials/public/issue
 )

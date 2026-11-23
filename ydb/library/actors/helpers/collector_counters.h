@@ -13,17 +13,7 @@ namespace NActors {
 struct TExecutorThreadStats;
 struct TExecutorPoolStats;
 struct THarmonizerStats;
-struct TLogHistogram;
 struct TAllocationCacheFamilyStats;
-
-struct THistogramCounters {
-    void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, ui64 maxVal);
-    void Set(const TLogHistogram& data);
-    void Set(const TLogHistogram& data, double factor);
-
-private:
-    TVector<NMonitoring::TDynamicCounters::TCounterPtr> Buckets;
-};
 
 struct TActivityStats {
     void Init(NMonitoring::TDynamicCounterPtr group);
@@ -87,13 +77,9 @@ struct TExecutorPoolCounters {
     NMonitoring::TDynamicCounters::TCounterPtr SpinThresholdUs;
 
 
-    THistogramCounters LegacyActivationTimeHistogram;
     NMonitoring::THistogramPtr ActivationTimeHistogram;
-    THistogramCounters LegacyEventDeliveryTimeHistogram;
     NMonitoring::THistogramPtr EventDeliveryTimeHistogram;
-    THistogramCounters LegacyEventProcessingCountHistogram;
     NMonitoring::THistogramPtr EventProcessingCountHistogram;
-    THistogramCounters LegacyEventProcessingTimeHistogram;
     NMonitoring::THistogramPtr EventProcessingTimeHistogram;
 
     TActivityStats ActivityStats;

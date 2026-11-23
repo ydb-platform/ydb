@@ -1,0 +1,199 @@
+self_check_result: EMERGENCY
+issue_log {
+  id: "issue1"
+  status: RED
+  message: "System tablet is unresponsive"
+  location {
+    compute {
+      tablet {
+        type: "Hive"
+        id: "72057594037968897"
+      }
+    }
+    database {
+      name: "/Root"
+    }
+  }
+  type: "SYSTEM_TABLET"
+  level: 3
+}
+issue_log {
+  id: "issue2"
+  status: RED
+  message: "System tablet is unresponsive"
+  location {
+    compute {
+      tablet {
+        type: "BSController"
+        id: "72057594037932033"
+      }
+    }
+    database {
+      name: "/Root"
+    }
+  }
+  type: "SYSTEM_TABLET"
+  level: 3
+}
+issue_log {
+  id: "issue3"
+  status: RED
+  message: "Compute has issues with system tablets"
+  location {
+    database {
+      name: "/Root"
+    }
+  }
+  reason: "issue2"
+  reason: "issue1"
+  type: "COMPUTE"
+  level: 2
+}
+issue_log {
+  id: "issue4"
+  status: RED
+  message: "Pool failed in pile a"
+  location {
+    storage {
+      pool {
+        name: "static"
+        group {
+          pile {
+            name: "a"
+          }
+        }
+      }
+    }
+    database {
+      name: "/Root"
+    }
+  }
+  reason: "issue5"
+  type: "STORAGE_POOL"
+  level: 3
+}
+issue_log {
+  id: "issue5"
+  status: RED
+  message: "VDisk state is PDiskError in pile a"
+  location {
+    storage {
+      pool {
+        name: "static"
+        group {
+          id: "1"
+          pile {
+            name: "a"
+          }
+        }
+      }
+    }
+    database {
+      name: "/Root"
+    }
+  }
+  reason: "issue6"
+  type: "STORAGE_GROUP"
+  level: 4
+}
+issue_log {
+  id: "issue6"
+  status: RED
+  message: "VDisk state is PDiskError"
+  location {
+    storage {
+      node {
+        id: 1
+      }
+      pool {
+        name: "static"
+        group {
+          vdisk {
+            id: "1-1-0-0-0"
+          }
+          pile {
+            name: "a"
+          }
+        }
+      }
+    }
+    database {
+      name: "/Root"
+    }
+  }
+  reason: "issue9"
+  type: "VDISK"
+  level: 5
+}
+issue_log {
+  id: "issue7"
+  status: RED
+  message: "Storage failed"
+  location {
+    database {
+      name: "/Root"
+    }
+  }
+  reason: "issue4"
+  type: "STORAGE"
+  level: 2
+}
+issue_log {
+  id: "issue8"
+  status: RED
+  message: "System tablet BSC didn\'t provide information"
+  location {
+    database {
+      name: "/Root"
+    }
+  }
+  type: "STORAGE"
+  level: 2
+}
+issue_log {
+  id: "issue9"
+  status: RED
+  message: "PDisk state is DeviceIoError"
+  location {
+    storage {
+      node {
+        id: 1
+      }
+      pool {
+        group {
+          vdisk {
+            pdisk {
+              id: "1-1"
+            }
+          }
+          pile {
+            name: "a"
+          }
+        }
+      }
+    }
+  }
+  type: "PDISK"
+  level: 6
+}
+issue_log {
+  id: "issue10"
+  status: RED
+  message: "Database has multiple issues"
+  location {
+    database {
+      name: "/Root"
+    }
+  }
+  reason: "issue7"
+  reason: "issue3"
+  reason: "issue8"
+  type: "DATABASE"
+  level: 1
+}
+location {
+  id: 2
+  pile {
+    name: "b"
+  }
+}

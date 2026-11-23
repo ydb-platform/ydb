@@ -9,9 +9,10 @@ import grpc
 import pytest
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-from ydb.tests.library.clients.kikimr_http_client import DEFAULT_HIVE_ID, SwaggerClient
+from ydb.tests.library.clients.kikimr_http_client import DEFAULT_HIVE_ID
 from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
 from ydb.tests.library.common.delayed import wait_tablets_state_by_id
+from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.types import TabletStates
 from ydb.tests.library.compatibility.fixtures import (
     MixedClusterFixture,
@@ -20,7 +21,6 @@ from ydb.tests.library.compatibility.fixtures import (
     inter_stable_binary_path,
     inter_stable_version,
 )
-from ydb.tests.library.kv.helpers import get_kv_tablet_ids
 
 
 REQUESTS_IN_FLIGHT_CONTROL = "KeyValueVolumeControls.RequestsInFlightLimit"
@@ -103,10 +103,11 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
         response = client.create_tablets(1, self.volume_path)
         assert response.operation.status == StatusIds.SUCCESS, response
 
-        swagger = SwaggerClient(current_node.host, current_node.mon_port)
-        tablet_ids = get_kv_tablet_ids(swagger)
-        assert len(tablet_ids) == 1
-        tablet_id = tablet_ids[0]
+        description = self.cluster.client.describe(self.volume_path, token="")
+        assert description.Status == MessageBusStatus.MSTATUS_OK, description
+        partitions = description.PathDescription.SolomonDescription.Partitions
+        assert len(partitions) == 1, description
+        tablet_id = partitions[0].TabletId
         wait_tablets_state_by_id(
             self.cluster.client,
             TabletStates.Active,
@@ -143,7 +144,12 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
 
         expected_statuses = {StatusIds.SUCCESS}
         if self.limit_enabled:
-            expected_statuses.add(StatusIds.UNAVAILABLE)
+            # The OVERLOADED mapping and the ICB control were backported together.
+            with urlopen("http://{}:{}/actors/icb".format(old_node.host, old_node.mon_port), timeout=120) as response:
+                controls = response.read()
+            assert b"KeyValueVolumeControls.ReadRequestsInFlightLimit" in controls
+            supports_limit = REQUESTS_IN_FLIGHT_CONTROL.encode("ascii") in controls
+            expected_statuses.add(StatusIds.OVERLOADED if supports_limit else StatusIds.UNAVAILABLE)
         assert set(statuses) == expected_statuses, statuses
 
         response = old_client.kv_write(self.volume_path, 0, "after_burst", b"ok")

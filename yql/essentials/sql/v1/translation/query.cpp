@@ -109,7 +109,6 @@ public:
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
             Service_ != KikimrProviderName &&
-            Service_ != RtmrProviderName &&
             Service_ != YdbProviderName) {
             key = Y("MrTableConcat", key);
         }
@@ -473,6 +472,26 @@ INode::TPtr CreateGeneratedValue(const TGeneratedColumn& generated, TPosition po
     auto contextText = BuildQuotedAtom(pos, generated.ContextPrefix, flags);
     auto exprText = BuildQuotedAtom(pos, generated.ExprBody, flags);
     return node.Q(node.Y(contextText, exprText, node.Q(generated.Stored ? "stored" : "virtual")));
+}
+
+std::pair<INode::TPtr, INode::TPtr> BuildDefaultExpressionSource(
+    const TDefaultExpression& defaultExpr,
+    TPosition pos)
+{
+    const ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
+    auto contextText = BuildQuotedAtom(pos, defaultExpr.ContextPrefix, flags);
+    auto exprText = BuildQuotedAtom(pos, defaultExpr.ExprText, flags);
+    return {std::move(contextText), std::move(exprText)};
+}
+
+INode::TPtr CreateSetDefaultValueConstraint(const TDefaultExpression& defaultExpr, TPosition pos, const INode& node) {
+    auto [contextText, exprText] = BuildDefaultExpressionSource(defaultExpr, pos);
+    return node.Q(node.Y(node.Q("setDefaultValue"), defaultExpr.Expr, contextText, exprText));
+}
+
+INode::TPtr CreateDefaultSourceConstraint(const TDefaultExpression& defaultExpr, TPosition pos, const INode& node) {
+    auto [contextText, exprText] = BuildDefaultExpressionSource(defaultExpr, pos);
+    return node.Q(node.Y(node.Q("defaultSource"), node.Q(node.Y(contextText, exprText))));
 }
 
 } // namespace
@@ -997,25 +1016,28 @@ TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAt
 
 class TInputOptions final: public TAstListNode {
 public:
-    TInputOptions(TPosition pos, TTableHints hints)
+    TInputOptions(TPosition pos, TTableHints hints, TMap<TString, TPosition> hintPositions)
         : TAstListNode(pos)
         , Hints_(std::move(hints))
+        , HintPositions_(std::move(hintPositions))
     {
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         for (auto& hint : Hints_) {
             TString hintName = hint.first;
-            TMaybe<TIssue> normalizeError = NormalizeName(Pos_, hintName);
+            const auto position = HintPositions_.find(hintName);
+            const auto& pos = position != HintPositions_.end() ? position->second : Pos_;
+            TMaybe<TIssue> normalizeError = NormalizeName(pos, hintName);
             if (!normalizeError.Empty()) {
-                ctx.Error() << normalizeError->GetMessage();
+                ctx.Error(pos) << normalizeError->GetMessage();
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
 
             if ("watermark" == hintName) {
-                TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
-                auto anyColumnSrc = BuildAnyColumnSource(Pos_);
+                TNodePtr option = Y(BuildQuotedAtom(pos, hintName));
+                auto anyColumnSrc = BuildAnyColumnSource(pos);
                 for (auto& x : hint.second) {
                     if (!x->Init(ctx, anyColumnSrc.Get())) {
                         return false;
@@ -1026,7 +1048,7 @@ public:
                 continue;
             }
 
-            TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
+            TNodePtr option = Y(BuildQuotedAtom(pos, hintName));
             for (auto& x : hint.second) {
                 if (!x->Init(ctx, src)) {
                     return false;
@@ -1046,14 +1068,15 @@ public:
 
 private:
     TTableHints Hints_;
+    TMap<TString, TPosition> HintPositions_;
 };
 
-TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints) {
+TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints, const TMap<TString, TPosition>& hintPositions) {
     if (hints.empty()) {
         return nullptr;
     }
 
-    return new TInputOptions(pos, hints);
+    return new TInputOptions(pos, hints, hintPositions);
 }
 
 class TIntoTableOptions: public TAstListNode {
@@ -1354,12 +1377,14 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
                 }
 
-                if (col.DefaultExpr) {
-                    if (!col.DefaultExpr->Init(ctx, src)) {
+                if (col.Default && col.Default->Expr) {
+                    const auto& defaultExpr = *col.Default;
+                    if (!defaultExpr.Expr->Init(ctx, src)) {
                         return false;
                     }
 
-                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), defaultExpr.Expr)));
+                    columnConstraints = L(columnConstraints, CreateDefaultSourceConstraint(defaultExpr, Pos_, *this));
                 }
 
                 if (col.Generated) {
@@ -1404,14 +1429,14 @@ public:
             opts = L(opts, Q(Y(Q("columnsDefaultValues"), Q(columnsDefaultValueSettings))));
         }
 
-        if (Table_.Service == YtProviderName || Table_.Service == RtmrProviderName) {
+        if (Table_.Service == YtProviderName) {
             if (!Params_.PkColumns.empty() && !Params_.PartitionByColumns.empty()) {
                 ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
                 return false;
             }
         } else {
             if (!Params_.OrderByColumns.empty()) {
-                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " or " << RtmrProviderName << " provider.";
+                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " provider.";
                 return false;
             }
         }
@@ -1723,12 +1748,14 @@ public:
                     columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
                 }
 
-                if (col.DefaultExpr) {
-                    if (!col.DefaultExpr->Init(ctx, src)) {
+                if (col.Default && col.Default->Expr) {
+                    const auto& defaultExpr = *col.Default;
+                    if (!defaultExpr.Expr->Init(ctx, src)) {
                         return false;
                     }
 
-                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), defaultExpr.Expr)));
+                    columnConstraints = L(columnConstraints, CreateDefaultSourceConstraint(defaultExpr, Pos_, *this));
                 }
 
                 if (col.Generated) {
@@ -1823,12 +1850,15 @@ public:
                         auto columnDesc = Y();
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
-                        YQL_ENSURE(col.DefaultExpr);
-                        if (!col.DefaultExpr->Init(ctx, src)) {
+                        YQL_ENSURE(col.Default);
+                        YQL_ENSURE(col.Default->Expr);
+
+                        const auto& defaultExpr = *col.Default;
+                        if (!defaultExpr.Expr->Init(ctx, src)) {
                             return false;
                         }
 
-                        columnDesc = L(columnDesc, Q(Y(Q("setDefaultValue"), col.DefaultExpr)));
+                        columnDesc = L(columnDesc, CreateSetDefaultValueConstraint(defaultExpr, Pos_, *this));
                         columns = L(columns, Q(columnDesc));
 
                         break;
@@ -2321,8 +2351,8 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
+    explicit TDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, mode, context)
     {
     }
 
@@ -2333,8 +2363,8 @@ protected:
 
 }; // TDropAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, cascade, context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, mode, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {
@@ -2739,12 +2769,7 @@ public:
                 }
 
                 if (ctx.DqEngineEnable) {
-                    TString mode = "auto";
-                    if (ctx.PqReadByRtmrCluster && ctx.PqReadByRtmrCluster != "dq") {
-                        mode = "disable";
-                    } else if (ctx.DqEngineForce) {
-                        mode = "force";
-                    }
+                    const TString mode = ctx.DqEngineForce ? "force" : "auto";
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                                            BuildQuotedAtom(Pos_, "DqEngine"), BuildQuotedAtom(Pos_, mode))));
                 }
@@ -2783,21 +2808,11 @@ public:
                                                            BuildQuotedAtom(Pos_, "DeriveColumnOrder"))));
                 }
 
-                if (ctx.PqReadByRtmrCluster) {
+                if (ctx.PqReadByDq) {
                     auto pqSourceAll = Y("DataSource", BuildQuotedAtom(Pos_, TString(PqProviderName)), BuildQuotedAtom(Pos_, "$all"));
+                    // Preserve the legacy PQ attribute used to select the DQ reader.
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", pqSourceAll,
-                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster))));
-
-                    auto rtmrSourceAll = Y("DataSource", BuildQuotedAtom(Pos_, TString(RtmrProviderName)), BuildQuotedAtom(Pos_, "$all"));
-                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSourceAll,
-                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster))));
-
-                    if (ctx.PqReadByRtmrCluster != "dq") {
-                        // set any dynamic settings for particular RTMR cluster for CommitAll!
-                        auto rtmrSource = Y("DataSource", BuildQuotedAtom(Pos_, TString(RtmrProviderName)), BuildQuotedAtom(Pos_, ctx.PqReadByRtmrCluster));
-                        currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSource,
-                                                               BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "Dummy_"), BuildQuotedAtom(Pos_, "1"))));
-                    }
+                                                           BuildQuotedAtom(Pos_, "Attr"), BuildQuotedAtom(Pos_, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos_, "dq"))));
                 }
 
                 if (ctx.YsonCastToString.Defined()) {

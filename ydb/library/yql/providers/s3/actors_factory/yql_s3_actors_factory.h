@@ -25,6 +25,8 @@ struct TS3ReadActorFactoryConfig {
     ui64 BlockFileSizeLimit = 50_GB;
     std::unordered_map<std::string, ui64> FormatSizeLimits;
     bool EnableScheduling = false;
+    bool BatchedRowGroupDecode = true;
+    ui64 BatchDecodeTargetBytes = 16_MB;
 };
 
 class IS3ActorsFactory {
@@ -40,7 +42,8 @@ public:
 
     virtual void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const TS3ReadActorFactoryConfig& cfg = {},
-        ::NMonitoring::TDynamicCounterPtr counters = nullptr, bool allowLocalFiles = false) = 0;
+        ::NMonitoring::TDynamicCounterPtr counters = nullptr, bool allowLocalFiles = false,
+        ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr) = 0;
 };
 
 std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();

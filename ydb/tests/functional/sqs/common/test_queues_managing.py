@@ -4,8 +4,9 @@ import time
 import logging
 
 import pytest
-from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
+from hamcrest import assert_that, equal_to, not_none, has_item, has_items, raises, empty, instance_of
 
+from ydb.tests.library.common.wait_for import wait_for_and_assert
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
@@ -73,29 +74,6 @@ class QueuesManagingTest(KikimrSqsTestBase):
         )
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_create_queue_generates_event(self, tables_format):
-        self._init_with_params(tables_format=tables_format)
-        pytest.skip("Outdated")
-        self._create_queue_and_assert(self.queue_name, is_fifo=False)
-        table_path = '{}/.Queues'.format(self.sqs_root)
-        assert_that(self._get_table_lines_count(table_path), equal_to(1))
-
-        table_path = '{}/.Events'.format(self.sqs_root)
-        assert_that(self._get_table_lines_count(table_path), equal_to(1))
-
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_remove_queue_generates_event(self, tables_format):
-        self._init_with_params(tables_format=tables_format)
-        pytest.skip("Outdated")
-        queue_url = self._create_queue_and_assert(self.queue_name)
-        table_path = '{}/.Events'.format(self.sqs_root)
-        lines_count = self._get_table_lines_count(table_path)
-        assert_that(lines_count, greater_than(0))
-
-        self._sqs_api.delete_queue(queue_url)
-        assert_that(self._get_table_lines_count(table_path), greater_than(lines_count))
-
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_create_queue_with_invalid_name(self, tables_format):
         self._init_with_params(tables_format=tables_format)
 
@@ -156,10 +134,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
             "Deleted queue appears in list_queues()"
         )
 
-        time.sleep(2)
-        counters = self._get_sqs_counters()
-        sends = self._get_counter_value(counters, send_message_labels)
-        assert_that(sends, none())
+        self._wait_for_counter_value(send_message_labels, None)
 
         def describe_queue_path():
             self._driver.scheme_client.describe_path('{}/{}/{}'.format(self.sqs_root, self._username, self.queue_name))
@@ -373,13 +348,11 @@ class QueuesManagingTest(KikimrSqsTestBase):
         q_url = self._create_queue_and_assert('new_q')
         self._create_queue_and_assert('new_q_2')
 
-        time.sleep(2.1)
-        assert_that(self._sqs_api.private_count_queues(), equal_to('2'))
+        wait_for_and_assert(self._sqs_api.private_count_queues, equal_to('2'))
 
         self._sqs_api.delete_queue(q_url)
 
-        time.sleep(2.1)
-        assert_that(self._sqs_api.private_count_queues(), equal_to('1'))
+        wait_for_and_assert(self._sqs_api.private_count_queues, equal_to('1'))
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_queues_count_over_limit(self, tables_format):

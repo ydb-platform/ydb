@@ -186,6 +186,7 @@ public:
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     const ESourcesSorting SourcesSorting;
 
+public:
     bool NeedDuplicateFiltering() const {
         return DuplicateFilteringNeeded;
     }

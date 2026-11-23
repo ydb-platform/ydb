@@ -426,7 +426,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                              "` = $binding_id;\n"
                              "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME
                              "` FROM $selected;\n"
-                             "SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "
+                             "SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
                              "` FROM $selected;\n"
                              "SELECT `" VISIBILITY_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
                              "`\n"

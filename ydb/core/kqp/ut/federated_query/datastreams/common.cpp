@@ -363,10 +363,16 @@ std::shared_ptr<NYdb::NTopic::TTopicClient> TStreamingTestFixture::GetTopicClien
         LocalTopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(*GetInternalDriver(), TopicClientSettings);
     }
 
+<<<<<<< HEAD
     if (!TopicClient) {
         TopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(*GetExternalDriver(), NYdb::NTopic::TTopicClientSettings()
             .DiscoveryEndpoint(YDB_ENDPOINT)
             .Database(YDB_DATABASE));
+=======
+    if (!local && !TopicClient) {
+        TopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(
+            *GetExternalDriver(), NYdb::NTopic::TTopicClientSettings().DiscoveryEndpoint(YDB_ENDPOINT).Database(YDB_DATABASE));
+>>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
     }
 
     return local ? LocalTopicClient : TopicClient;

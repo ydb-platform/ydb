@@ -90,9 +90,8 @@ namespace NActors {
         // In most cases we will have one wr per cred
         std::unique_ptr<IIbVerbsBuilder> verbsBuilder = CreateIbVerbsBuilder(creds.CredsSize());
 
-        ui32 mrOffset = 0;
-
-        auto curMemReg = pendingEvent.RdmaBuffers.front();
+        // Resume writing at the offset saved when credentials for this payload were split across RDMA_READ commands.
+        ui32 mrOffset = pendingEvent.RdmaBufferOffset;
 
         TMonotonic curTime = TMonotonic::Now();
         auto reply = [notify, channel, curTime](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
@@ -105,12 +104,20 @@ namespace NActors {
             return TRdmaReadReqOk{};
         }
 
+        if (pendingEvent.RdmaBuffers.empty()) {
+            return TRdmaReadReqFormatError{};
+        }
+
+        auto curMemReg = pendingEvent.RdmaBuffers.front();
+
         for (const auto& cred : creds.GetCreds()) {
 
             ui32 credOffset = 0;
             NActorsInterconnect::TRdmaCred credCopy = cred;
             do {
-                Y_DEBUG_ABORT_UNLESS(!pendingEvent.RdmaBuffers.empty());
+                if (pendingEvent.RdmaBuffers.empty() || mrOffset >= curMemReg.GetSize()) {
+                    return TRdmaReadReqFormatError{};
+                }
 
                 credCopy.SetAddress(cred.GetAddress() + credOffset);
                 credCopy.SetSize(std::min(cred.GetSize() - credOffset, (ui64)curMemReg.GetSize() - mrOffset));
@@ -156,6 +163,8 @@ namespace NActors {
                 }
             } while (credOffset < cred.GetSize());
         }
+
+        pendingEvent.RdmaBufferOffset = mrOffset;
 
         auto err = cq->DoWrBatchAsync(pendingEvent.RdmaReadContext->Qp, std::move(verbsBuilder));
         if (err) {
@@ -962,7 +971,10 @@ namespace NActors {
 
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
-                    if (std::holds_alternative<ICq::TBusy>(err)) {
+                    if (std::holds_alternative<TReceiveContext::TPerChannelContext::TRdmaReadReqFormatError>(err)) {
+                        LOG_CRIT_IC_SESSION("ICIS22", "RDMA_READ error: invalid receive buffer state");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    } else if (std::holds_alternative<ICq::TBusy>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     } else if (std::holds_alternative<ICq::TErr>(err)) {

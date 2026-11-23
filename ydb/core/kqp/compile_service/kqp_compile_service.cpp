@@ -851,6 +851,7 @@ private:
     void PerformRequest(TEvKqp::TEvCompileInvalidateRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         const auto& request = *ev->Get();
+        Y_ENSURE(request.CompileResult, "Compile invalidation requires a compiled plan");
 
         YDB_LOG_DEBUG_CTX(ctx, "Received invalidate request",
             {"sender", ev->Sender},

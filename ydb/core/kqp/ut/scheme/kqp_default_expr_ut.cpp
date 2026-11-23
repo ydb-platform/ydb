@@ -2932,26 +2932,33 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST(BulkUpsert) {
         TTestFixture fixture;
-        fixture.Exec(ValueTableDDL());
+        fixture.Exec(DefaultExprDDL("v Uint64"));
 
         auto tableClient = fixture.Runner().GetTableClient();
-
-        {
-            // The DEFAULT column is absent from the request: bulk upsert cannot evaluate it
+        const auto upsertKeyOnly = [&](i32 key) {
             NYdb::TValueBuilder rows;
             rows.BeginList()
-                .AddListItem().BeginStruct().AddMember("k").Int32(1).EndStruct()
+                .AddListItem().BeginStruct()
+                    .AddMember("k").Int32(key)
+                    .AddMember("other").OptionalInt32(key * 10)
+                .EndStruct()
                 .EndList();
-            auto result = tableClient.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), "expected bulk upsert to be rejected");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: v");
-        }
+            return tableClient.BulkUpsert("/Root/TestTable", rows.Build()).ExtractValueSync();
+        };
+
+        auto result = upsertKeyOnly(1);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        result = upsertKeyOnly(2);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: v");
 
         {
             NYdb::TValueBuilder rows;
             rows.BeginList()
                 .AddListItem().BeginStruct()
-                    .AddMember("k").Int32(1)
+                    .AddMember("k").Int32(2)
                     .AddMember("v").OptionalUint64(7)
                 .EndStruct()
                 .EndList();
@@ -2959,7 +2966,12 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[7u]]]");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+        for (i32 key : {2, 3}) {
+            result = upsertKeyOnly(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[10];#];[2;[20];[7u]];[3;[30];#]]");
     }
 
     Y_UNIT_TEST(BulkUpsertWithMixedExpressionAndLiteralDefaults) {
@@ -2981,7 +2993,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 .AddListItem().BeginStruct().AddMember("k").Int32(1).EndStruct()
                 .EndList();
             auto result = tableClient.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), "expected both missing DEFAULT columns to be rejected");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "expr");
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "literal");
         }
@@ -2994,7 +3006,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 .EndStruct()
                 .EndList();
             auto result = tableClient.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), "expected the missing literal DEFAULT to be rejected");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: literal");
         }
         {
@@ -3006,7 +3018,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 .EndStruct()
                 .EndList();
             auto result = tableClient.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), "expected the missing expression DEFAULT to be rejected");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: expr");
         }
         {

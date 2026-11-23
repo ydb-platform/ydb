@@ -85,7 +85,13 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         expression.SetWritable(true);
 
         const auto scheme = BuildInternalAlter(request);
-        const auto& result = scheme.GetAlterTable().GetColumns(0).GetDefaultFromExpression();
+        const auto& columns = scheme.GetAlterTable().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+        const auto& altered = columns[0];
+        UNIT_ASSERT_VALUES_EQUAL(altered.GetName(), "value");
+        UNIT_ASSERT_C(!altered.HasType() && !altered.HasNotNull(), altered.DebugString());
+        UNIT_ASSERT(altered.HasDefaultFromExpression());
+        const auto& result = altered.GetDefaultFromExpression();
         UNIT_ASSERT_VALUES_EQUAL(result.GetExprText(), "RandomNumber(1)");
         UNIT_ASSERT(result.GetStored());
         UNIT_ASSERT(result.GetWritable());

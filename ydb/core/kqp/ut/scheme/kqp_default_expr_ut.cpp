@@ -2817,11 +2817,31 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                     Uuid("550e8400-e29b-41d4-a716-446655440000"), Uuid("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")),
                 n DyNumber NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, DyNumber("15.15"), DyNumber("60.5")),
                 j JsonDocument NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, JsonDocument("[14]"), JsonDocument("[]")),
+                i8 Int8 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Int8("-100"), Int8("0")),
+                i16 Int16 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Int16("-200"), Int16("0")),
+                i32 Int32 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, -300, 0),
+                i64 Int64 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Int64("-400"), Int64("0")),
+                u8 Uint8 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Uint8("10"), Uint8("0")),
+                u16 Uint16 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Uint16("20"), Uint16("0")),
+                u32 Uint32 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 30u, 0u),
+                f Float NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 1.5f, 0.0f),
+                dbl Double NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 2.5, 0.0),
+                dt32 Date32 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                    Date32("2021-01-01"), Date32("2020-01-01")),
+                ts64 Datetime64 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                    Datetime64("2021-01-01T00:00:00Z"), Datetime64("2020-01-01T00:00:00Z")),
+                stamp64 Timestamp64 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                    Timestamp64("2021-01-01T00:00:00.000000Z"), Timestamp64("2020-01-01T00:00:00.000000Z")),
+                span64 Interval64 NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Interval64("P1D"), Interval64("PT1H")),
+                json_text Json NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Json("[0]"), Json("[]")),
+                yson_text Yson NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Yson("[1]"), Yson("[]")),
                 PRIMARY KEY (k)
             );
         )");
         fixture.RestartSchemeShard("/Root/TestTable");
-        for (TStringBuf name : {"d", "s", "u", "dt", "ts", "stamp", "span", "id", "n", "j"}) {
+        for (TStringBuf name : {"d", "s", "u", "dt", "ts", "stamp", "span", "id", "n", "j",
+                "i8", "i16", "i32", "i64", "u8", "u16", "u32", "f", "dbl",
+                "dt32", "ts64", "stamp64", "span64", "json_text", "yson_text"}) {
             const auto column = fixture.ColumnDesc("/Root/TestTable", TString(name));
             UNIT_ASSERT_C(column.HasDefaultFromExpression(), column.ShortDebugString());
             UNIT_ASSERT(column.GetDefaultFromExpression().GetStored());
@@ -2831,6 +2851,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT d, s, u, dt, ts, stamp, span FROM TestTable;",
             R"([["12.34";"bytes";"mixed";18628u;1609462923u;1609462923123456u;7200000000]])");
+        fixture.Check("SELECT i8, i16, i32, i64, u8, u16, u32, f, dbl FROM TestTable;",
+            "[[-100;-200;-300;-400;10u;20u;30u;1.5;2.5]]");
+        fixture.Check("SELECT dt32, ts64, stamp64, span64, json_text, yson_text FROM TestTable;",
+            R"([[18628;1609459200;1609459200000000;86400000000;"[0]";"[1]"]])");
         auto result = fixture.QuerySession().ExecuteQuery("SELECT id, n, j FROM TestTable;",
             TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

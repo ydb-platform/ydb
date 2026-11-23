@@ -41,7 +41,7 @@ void AssertWriteRejected(NActors::TTestActorRuntime& runtime, const TString& top
     const auto deadline = TInstant::Now() + TDuration::Seconds(30);
     while (true) {
         auto response = WriteOne(runtime, topic);
-        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
         if (response->Status != Ydb::StatusIds::SUCCESS) {
             UNIT_ASSERT_VALUES_EQUAL(response->Status, mode.Status);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, mode.Message);

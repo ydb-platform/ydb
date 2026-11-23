@@ -60,6 +60,9 @@ struct TUserInfoBase {
     ui32 Generation = 0;
     ui32 Step = 0;
     i64 Offset = 0;
+    // True if the consumer has committed past GetStartOffset() (a real position in the
+    // live data range). False if still at/before the retention boundary. Exposed to
+    // proxies as ClientHasAnyCommits; used for first-commit distributed commits on splits.
     bool AnyCommits = false;
 
     bool Important = false;
@@ -68,6 +71,7 @@ struct TUserInfoBase {
 
     ui64 PartitionSessionId = 0;
     TActorId PipeClient;
+    TActorId ReadSessionActor;
 
     std::optional<TString> CommittedMetadata = std::nullopt;
 };
@@ -116,6 +120,8 @@ private:
     void SetImportant(bool important, TDuration availabilityPeriod);
 
 public:
+
+    NKikimrPQ::TPQTabletConfig::EConsumerType Type = NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING;
 
     bool ActualTimestamps = false;
     // WriteTimestamp of the last committed message

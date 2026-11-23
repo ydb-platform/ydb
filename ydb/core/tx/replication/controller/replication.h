@@ -38,6 +38,7 @@ public:
         Table,
         IndexTable,
         Transfer,
+        Topic,
     };
 
     enum class EDstState: ui8 {
@@ -99,6 +100,7 @@ public:
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
+        virtual TString BuildStreamConsumerName() const = 0;
         virtual const TString& GetStreamConsumerName() const = 0;
         virtual void SetStreamConsumerName(const TString& value) = 0;
         virtual TString GetStreamPath() const = 0;

@@ -56,7 +56,8 @@ namespace NDq {
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& cfg = {},
             ::NMonitoring::TDynamicCounterPtr counters = nullptr,
-            bool allowLocalFiles = false) = 0;
+            bool allowLocalFiles = false,
+            ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr) = 0;
     };
 
     std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();

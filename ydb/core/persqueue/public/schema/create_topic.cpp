@@ -186,6 +186,10 @@ TResult ApplyChangesInt(
         return {errorCode, std::move(error)};
     }
 
+    if (auto result = ApplyReplicationConsumerAttribute(request.attributes(), *pqTabletConfig); !result) {
+        return result;
+    }
+
     if (request.has_metrics_level()) {
         pqTabletConfig->SetMetricsLevel(request.metrics_level());
     }

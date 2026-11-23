@@ -954,7 +954,7 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
                     Reader.SetMaxId((ui64)std::numeric_limits<TDocId>::max());
                     Started = true;
                     Reader.Start();
-                    if (Reader.Read(CurDocId, CurFreq)) {
+                    if (Reader.ReadPositive(CurDocId, CurFreq)) {
                         TotalFreq++;
                         break;
                     }
@@ -975,7 +975,7 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
                 Reader.SetMaxId((ui64)maxId);
                 Started = true;
                 Reader.Start();
-                if (!Reader.Read(CurDocId, CurFreq)) {
+                if (!Reader.ReadPositive(CurDocId, CurFreq)) {
                     // Segment may be logically empty, then we have to switch to the next one
                     FreeReader();
                 } else {
@@ -1056,7 +1056,7 @@ public:
         if (!Started) {
             return StartReader();
         }
-        if (!Reader.Read(CurDocId, CurFreq)) {
+        if (!Reader.ReadPositive(CurDocId, CurFreq)) {
             FreeReader();
             return StartReader();
         }

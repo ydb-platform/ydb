@@ -13,10 +13,6 @@ namespace NACLib {
     class TUserContext;
 }
 
-namespace NKikimr::NFulltext {
-    class IDeltaReader;
-};
-
 namespace NKikimr::NMiniKQL {
     struct TEngineHostCounters;
 }

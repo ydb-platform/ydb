@@ -331,6 +331,7 @@ private:
 
 
     void UpdateFirstUncommittedOffset();
+    void RebuildFastZoneCursors();
 
     TInstant GetMessageLockingTime(const TMessage& message) const;
     void SetMessageLockingTime(TMessage& message, const TInstant& lockingTime, const TInstant& baseDeadline) const;

@@ -1,5 +1,6 @@
 #include "controller_impl.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "target_transfer.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -111,6 +112,9 @@ class TController::TTxInit: public TTxBase {
                 break;
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
+                break;
+            case TReplication::ETargetKind::Topic:
+                config = std::make_shared<TTargetTopic::TTopicConfig>(srcPath, dstPath);
                 break;
             }
 

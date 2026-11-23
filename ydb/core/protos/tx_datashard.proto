@@ -914,7 +914,7 @@ message TSplitMergeDescription {
 
     message TCdcProducer {
         optional NKikimrProto.TPathID StreamPathId = 1;
-        optional string ReplicationConsumer = 2;
+        optional string SourceIdPrefix = 2;
     }
     // Producer namespace at split admission, including the empty namespace of ordinary feeds.
     repeated TCdcProducer CdcProducers = 3;

@@ -99,6 +99,7 @@ bool FillRowTableIndexesForRestore(
     }
 
     const bool named = AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject();
+    const auto& anonymousPrefixes = metadata.GetAnonymousBloomPrefixes();
     Ydb::Table::CreateTableRequest globalIndexes;
     THashMap<TStringBuf, ui32> nameCounts;
     THashSet<TStringBuf> schemeObjectNames;
@@ -106,6 +107,13 @@ bool FillRowTableIndexesForRestore(
         ++nameCounts[index.name()];
         if (!index.has_local_bloom_filter_index()) {
             schemeObjectNames.insert(index.name());
+        }
+    }
+    if (named && !anonymousPrefixes) {
+        for (const auto& column : scheme.columns()) {
+            if (column.has_from_sequence()) {
+                ++nameCounts[column.from_sequence().name()];
+            }
         }
     }
     THashSet<ui32> bloomPrefixes;
@@ -143,11 +151,9 @@ bool FillRowTableIndexesForRestore(
                 return false;
             }
 
-            // In a legacy backup, a synthesized name can coincide with a real index.
-            // Two actual scheme objects could never share this name on the source.
-            const auto& anonymous = metadata.GetAnonymousBloomPrefixes();
-            const bool anonymousFilter = anonymous
-                ? anonymous->contains(length)
+            // A legacy anonymous filter's synthesized name can also name a real index or sequence.
+            const bool anonymousFilter = anonymousPrefixes
+                ? anonymousPrefixes->contains(length)
                 : nameCounts.at(index.name()) > 1 && index.name() == (TStringBuilder() << "idx_bloom_" << length);
             if (anonymousFilter) {
                 continue;

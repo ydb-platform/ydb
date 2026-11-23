@@ -8341,6 +8341,29 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(named.KeyColumnNamesSize(), 2);
     }
 
+    Y_UNIT_TEST(RestoresLegacyBloomAliasMatchingSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        const TString scheme = R"(
+            columns { name: "id" type { optional_type { item { type_id: INT64 } } }
+                      from_sequence { name: "idx_bloom_1" start_value: 42 } }
+            primary_key: "id"
+            indexes { name: "idx_bloom_1" index_columns: "id" local_bloom_filter_index {} }
+        )";
+        Run(runtime, env, ConvertTestData(GenerateTestData(scheme, {{"", 0}})), ImportTableRequest());
+
+        const auto result = DescribePath(runtime, "/MyRoot/Table", TDescribeOptionsBuilder().SetReturnPartitionConfig(true));
+        const auto& table = result.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 0);
+        const auto& prefixes = table.GetPartitionConfig().GetByKeyFilterPrefixes();
+        UNIT_ASSERT_VALUES_EQUAL(prefixes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(prefixes.Get(0).GetPrefixLength(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.ColumnsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(0).GetDefaultFromSequence(), "idx_bloom_1");
+        UNIT_ASSERT_VALUES_EQUAL(DoNextVal(runtime, "/MyRoot/Table/idx_bloom_1"), 42);
+    }
+
     Y_UNIT_TEST_FLAG(ShouldSucceedImportTableWithUniqueIndex, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -1,11 +1,14 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -27,6 +30,55 @@
 
 namespace NKikimr {
 namespace NKqp {
+
+void RestartSchemeShardAndSyncCache(TTestActorRuntime& runtime, const TString& tablePath) {
+    const auto sender = runtime.AllocateEdgeActor();
+    NTabletPipe::TClientConfig pipeConfig;
+    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+
+    auto connect = [&](TDuration timeout) {
+        const auto pipe = runtime.Register(
+            NTabletPipe::CreateClient(sender, Tests::SchemeRoot, pipeConfig));
+        auto connected = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(
+            sender, timeout);
+        UNIT_ASSERT_C(connected, "timed out connecting to SchemeShard");
+        UNIT_ASSERT_VALUES_EQUAL(connected->Get()->TabletId, Tests::SchemeRoot);
+        UNIT_ASSERT_VALUES_EQUAL(connected->Get()->ClientId, pipe);
+        UNIT_ASSERT_VALUES_EQUAL(connected->Get()->Status, NKikimrProto::OK);
+        return std::pair(pipe, connected->Get()->Generation);
+    };
+
+    const auto [oldPipe, oldGeneration] = connect(TDuration::Seconds(30));
+    runtime.Send(MakePipePerNodeCacheID(false), sender,
+        new TEvPipeCache::TEvForward(
+            new TEvents::TEvPoisonPill(), Tests::SchemeRoot, false));
+
+    auto destroyed = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(
+        sender, TDuration::Seconds(30));
+    UNIT_ASSERT_C(destroyed, "timed out waiting for SchemeShard shutdown");
+    UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->TabletId, Tests::SchemeRoot);
+    UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->ClientId, oldPipe);
+
+    const auto [newPipe, newGeneration] = connect(TDuration::Seconds(30));
+    UNIT_ASSERT_C(newGeneration > oldGeneration,
+        "SchemeShard generation did not change after restart: " << oldGeneration);
+    runtime.Send(new IEventHandle(newPipe, sender, new TEvents::TEvPoisonPill()));
+
+    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto& entry = request->ResultSet.emplace_back();
+    entry.Path = SplitPath(TString(tablePath));
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+    entry.SyncVersion = true;
+    runtime.Send(MakeSchemeCacheID(), sender,
+        new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+
+    auto response = runtime.GrabEdgeEventRethrow<
+        TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender, TDuration::Seconds(30));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.front().Status,
+        NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+}
 
 struct TCapturedLog::TState {
     explicit TState(bool appendNewline)

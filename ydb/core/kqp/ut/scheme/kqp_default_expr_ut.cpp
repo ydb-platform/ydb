@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -9,6 +10,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <library/cpp/random_provider/random_provider.h>
+
+#include <atomic>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -16,17 +21,19 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-NKikimrConfig::TAppConfig DefaultExprAppConfig(
-    bool enabled = true,
-    bool indexStreamWrite = true,
-    bool generatedStored = false,
-    bool compileTimeDefaults = true)
-{
+struct TFixtureOptions {
+    bool FeatureFlagEnabled = true;
+    bool IndexStreamWrite = true;
+    bool GeneratedStored = false;
+    bool CompileTimeDefaults = true;
+};
+
+NKikimrConfig::TAppConfig DefaultExprAppConfig(const TFixtureOptions& options = {}) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(enabled);
-    appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(generatedStored);
-    appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(compileTimeDefaults);
-    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(indexStreamWrite);
+    appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(options.FeatureFlagEnabled);
+    appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(options.GeneratedStored);
+    appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(options.CompileTimeDefaults);
+    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(options.IndexStreamWrite);
     return appConfig;
 }
 
@@ -34,15 +41,50 @@ NKikimrConfig::TAppConfig DefaultExprAppConfig(
 // keeps the value predictable so the tests can assert exact rows
 constexpr const char* DefaultExpr = "RandomNumber(1) * 0ul + 42ul";
 
+// Distinct ranges make a draw from an earlier execution detectable without probabilities.
+class TScopedEpochRandomProvider {
+    class TProvider final : public IRandomProvider {
+    public:
+        explicit TProvider(TIntrusivePtr<IRandomProvider> original)
+            : Original(std::move(original))
+        {}
+
+        TGUID GenGuid() noexcept override { return Original->GenGuid(); }
+        TGUID GenUuid4() noexcept override { return Original->GenUuid4(); }
+        ui64 GenRand() noexcept override {
+            return (Epoch.load() << 60) | (Counter.fetch_add(1) & ((ui64(1) << 60) - 1));
+        }
+
+        std::atomic<ui64> Epoch{0};
+
+    private:
+        TIntrusivePtr<IRandomProvider> Original;
+        std::atomic<ui64> Counter{0};
+    };
+
+public:
+    TScopedEpochRandomProvider()
+        : Original(TAppData::RandomProvider)
+        , Provider(MakeIntrusive<TProvider>(Original))
+    {
+        TAppData::RandomProvider = Provider;
+    }
+
+    ~TScopedEpochRandomProvider() {
+        TAppData::RandomProvider = Original;
+    }
+
+    void SetEpoch(ui64 epoch) { Provider->Epoch.store(epoch); }
+
+private:
+    TIntrusivePtr<IRandomProvider> Original;
+    TIntrusivePtr<TProvider> Provider;
+};
+
 class TTestFixture {
 public:
-    explicit TTestFixture(
-        bool featureFlagEnabled = true,
-        bool indexStreamWrite = true,
-        bool generatedStored = false,
-        bool compileTimeDefaults = true)
-        : TTestFixture(TKikimrSettings(DefaultExprAppConfig(featureFlagEnabled, indexStreamWrite, generatedStored, compileTimeDefaults))
-              .SetWithSampleTables(false))
+    explicit TTestFixture(const TFixtureOptions& options = {})
+        : TTestFixture(TKikimrSettings(DefaultExprAppConfig(options)).SetWithSampleTables(false))
     {
     }
 
@@ -155,53 +197,16 @@ public:
     }
 
     void RestartSchemeShard(const std::string& tablePath) {
+        RestartSchemeShardAndSyncCache(*Kikimr.GetTestServer().GetRuntime(), TString(tablePath));
+    }
+
+    void DisableExpressionDefaults(const std::string& tablePath) {
         auto& runtime = *Kikimr.GetTestServer().GetRuntime();
-        const auto sender = runtime.AllocateEdgeActor();
-        NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-
-        auto connect = [&](TDuration timeout) {
-            const auto pipe = runtime.Register(
-                NTabletPipe::CreateClient(sender, Tests::SchemeRoot, pipeConfig));
-            auto connected = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(
-                sender, timeout);
-            UNIT_ASSERT_C(connected, "timed out connecting to SchemeShard");
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->TabletId, Tests::SchemeRoot);
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->ClientId, pipe);
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->Status, NKikimrProto::OK);
-            return std::pair(pipe, connected->Get()->Generation);
-        };
-
-        const auto [oldPipe, oldGeneration] = connect(TDuration::Seconds(30));
-        runtime.Send(MakePipePerNodeCacheID(false), sender,
-            new TEvPipeCache::TEvForward(
-                new TEvents::TEvPoisonPill(), Tests::SchemeRoot, false));
-
-        auto destroyed = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(
-            sender, TDuration::Seconds(30));
-        UNIT_ASSERT_C(destroyed, "timed out waiting for SchemeShard shutdown");
-        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->TabletId, Tests::SchemeRoot);
-        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->ClientId, oldPipe);
-
-        const auto [newPipe, newGeneration] = connect(TDuration::Seconds(30));
-        UNIT_ASSERT_C(newGeneration > oldGeneration,
-            "SchemeShard generation did not change after restart: " << oldGeneration);
-        runtime.Send(new IEventHandle(newPipe, sender, new TEvents::TEvPoisonPill()));
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = SplitPath(TString(tablePath));
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.SyncVersion = true;
-        runtime.Send(MakeSchemeCacheID(), sender,
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
-
-        auto response = runtime.GrabEdgeEventRethrow<
-            TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender, TDuration::Seconds(30));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.front().Status,
-            NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableDefaultFromExpression(false);
+        }
+        RestartSchemeShard(tablePath);
+        Session = Db.GetSession().GetValueSync().GetSession();
     }
 
     TKikimrRunner& Runner() {
@@ -279,9 +284,7 @@ void ExecuteDml(TTestFixture& fixture, const TString& query, const TString& expe
 }
 
 void RunDmlMatrix(ESecondaryIndexKind indexKind, bool withReturning, bool enableIndexStreamWrite = true) {
-    TTestFixture fixture(
-        /* featureFlagEnabled */ true,
-        /* indexStreamWrite */ enableIndexStreamWrite);
+    TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = enableIndexStreamWrite});
     fixture.Exec(DmlMatrixDDL(indexKind));
 
     ExecuteDml(fixture, "INSERT INTO TestTable (k, other) VALUES (1, 10)", "[[1;[10];[42u]]]", withReturning);
@@ -586,7 +589,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(LiteralDefaultPreservesMetadata, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         fixture.Exec(DefaultExprDDL("v Uint32 DEFAULT 5"));
 
         const auto col = fixture.ColumnDesc("/Root/TestTable", "v");
@@ -615,7 +618,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(ConstantDefaultPreservesMetadata, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         fixture.Exec(DefaultExprDDL("v Int32 DEFAULT (1 + 2) * 3"));
         const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
         UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
@@ -626,7 +629,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(CoercedConstantDefaultPreservesMetadata, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         fixture.Exec(DefaultExprDDL("v Int64 DEFAULT CAST(7 AS Int64) + 2l"));
         const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
         UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
@@ -636,7 +639,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(CoercedDefaultPreservesMetadata, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         for (const auto& [expression, expected] : {
             std::pair{"Abs(-5)", 5},
             std::pair{"ListSum(ListMap(AsList(2, 3), ($x) -> { RETURN $x; }))", 5},
@@ -717,7 +720,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(AddCoercedDefaultPreservesMetadata, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         fixture.Exec(DefaultExprDDL("v Int64"));
         fixture.Exec("ALTER TABLE TestTable ADD COLUMN added Int64 DEFAULT Abs(-5);");
         const auto column = fixture.ColumnDesc("/Root/TestTable", "added");
@@ -728,7 +731,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(SetCoercedDefaultPreservesMetadata, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         fixture.Exec(DefaultExprDDL("v Int64"));
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT Abs(-5);");
         const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
@@ -739,7 +742,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(LegacyDefaultConstructorsPreserveLiteralMetadata, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -771,25 +774,67 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(NullDefault, Enabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ Enabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = Enabled});
         fixture.Exec(DefaultExprDDL("v Int32 DEFAULT NULL"));
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
     }
 
     Y_UNIT_TEST(FeatureFlagDisabled) {
-        TTestFixture fixture(/* featureFlagEnabled */ false);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = false});
         fixture.Rejects(ValueTableDDL(), "DEFAULT expressions are disabled");
     }
 
     Y_UNIT_TEST(CoercibleSourceRequiresFeatureFlag) {
-        TTestFixture fixture(/* featureFlagEnabled */ false);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = false});
         fixture.Rejects(DefaultExprDDL(TStringBuilder() << "v Int64 DEFAULT " << DefaultExpr),
             "DEFAULT expressions are disabled");
     }
 
+    Y_UNIT_TEST(PersistedDefaultWorksAfterFeatureDisabled) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << DefaultExpr));
+        fixture.DisableExpressionDefaults("/Root/TestTable");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 7ul);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[7u]]]");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(2);",
+            "DEFAULT expressions are disabled");
+    }
+
+    Y_UNIT_TEST_TWIN(AnsiDefaultPreservesValueAfterReload, Alter) {
+        TTestFixture fixture;
+        const std::string expression = R"sql(CAST(RandomNumber(1) * 0ul AS String) || '\n' || 'it''s@@')sql";
+        if (Alter) {
+            fixture.Exec(DefaultExprDDL("v String"));
+            fixture.Exec("--!ansi_lexer\nALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " + expression
+                + "; INSERT INTO TestTable (k) VALUES (1);");
+        } else {
+            fixture.Exec(DefaultExprDDL("v String DEFAULT " + expression, "--!ansi_lexer\n")
+                + "INSERT INTO TestTable (k) VALUES (1);");
+        }
+        fixture.RestartSchemeShard("/Root/TestTable");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        fixture.Check(R"sql(SELECT k, v = "0\\nit's@@" FROM TestTable ORDER BY k;)sql",
+            "[[1;[%true]];[2;[%true]]]");
+    }
+
+    Y_UNIT_TEST(PgDefaultCoercionMatchesAfterReload) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(DefaultExprDDL(
+            "v pgint8 DEFAULT CAST(CAST(RandomNumber(1) * 0ul + 42ul AS Int32) AS pgint4)")
+            + "INSERT INTO TestTable (k) VALUES (1);");
+        UNIT_ASSERT(fixture.ColumnDesc("/Root/TestTable", "v").HasDefaultFromExpression());
+        fixture.RestartSchemeShard("/Root/TestTable");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        fixture.Check("SELECT k, CAST(v AS Int64) FROM TestTable ORDER BY k;", "[[1;[42]];[2;[42]]]");
+    }
+
     Y_UNIT_TEST(FeatureFlagDisabledPreservesLiteralDefaultsAndWrites) {
-        TTestFixture fixture(/* featureFlagEnabled */ false);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = false});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -990,10 +1035,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(DefaultAndGeneratedRejected) {
-        TTestFixture fixture(
-            /* featureFlagEnabled */ true,
-            /* indexStreamWrite */ true,
-            /* generatedStored */ true);
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
         fixture.Rejects(DefaultExprDDL(TStringBuilder()
                 << "v Uint64 DEFAULT " << DefaultExpr << " GENERATED ALWAYS AS (CAST(k AS Uint64)) STORED"),
             "same time");
@@ -1088,11 +1130,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(ExpressionSequenceAndLiteralDefaultCombinations, CompileTimeDefaults) {
-        TTestFixture fixture(
-            /* featureFlagEnabled */ true,
-            /* indexStreamWrite */ true,
-            /* generatedStored */ false,
-            /* compileTimeDefaults */ CompileTimeDefaults);
+        TTestFixture fixture(TFixtureOptions{.CompileTimeDefaults = CompileTimeDefaults});
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 id Serial,
@@ -1144,9 +1182,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookupPlanMatrix, WithReturning) {
-        TTestFixture fixture(
-            /* featureFlagEnabled */ true,
-            /* indexStreamWrite */ false);
+        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = false});
         fixture.Exec(ValueTableDDL());
 
         const auto query = [=](const TString& write) {
@@ -1192,10 +1228,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(ExpressionLiteralAndGeneratedDefaultsStayConsistent) {
-        TTestFixture fixture(
-            /* featureFlagEnabled */ true,
-            /* indexStreamWrite */ true,
-            /* generatedStored */ true);
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
         fixture.Exec(TStringBuilder() << R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -1230,10 +1263,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(UpsertNotNullGeneratedDependsOnNotNullExpressionDefault) {
-        TTestFixture fixture(
-            /* featureFlagEnabled */ true,
-            /* indexStreamWrite */ true,
-            /* generatedStored */ true);
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 id Int32 NOT NULL,
@@ -1393,7 +1423,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST_TWIN(RandomDefaultConsistentWithReturningAndIndex, StreamWrite) {
         // GENERATED columns require the stream writer; legacy still uses actual random values.
-        TTestFixture fixture(/* featureFlagEnabled */ true, StreamWrite, /* generatedStored */ StreamWrite);
+        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite, .GeneratedStored = StreamWrite});
         const TString generatedColumn = StreamWrite ? "g Uint64 GENERATED ALWAYS AS (v) STORED," : "";
         const TString generatedCover = StreamWrite ? ", g" : "";
         const TString columns = TStringBuilder() << "k, a, v" << generatedCover;
@@ -1432,7 +1462,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(RandomDefaultKeyConsistentWithReturningAndIndex, StreamWrite) {
-        TTestFixture fixture(/* featureFlagEnabled */ true, StreamWrite);
+        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Uint64 NOT NULL DEFAULT RandomNumber(1),
@@ -1450,6 +1480,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(CachedRandomDefaultConsistentWithReturningAndIndex) {
+        TScopedEpochRandomProvider random;
         TTestFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE TestTable (
@@ -1476,6 +1507,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         settings.KeepInQueryCache(true).CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
 
         for (i32 key : {1, 3}) {
+            const ui64 epoch = key == 1 ? 1 : 2;
+            random.SetEpoch(epoch);
             auto params = prepared.GetParamsBuilder().AddParam("$k").Int32(key).Build().Build();
             auto result = prepared.Execute(
                 NYdb::NTable::TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
@@ -1486,10 +1519,13 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             }
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 2u);
+            TResultSetParser draws(result.GetResultSet(0));
+            while (draws.TryNextRow()) {
+                UNIT_ASSERT_VALUES_EQUAL(draws.ColumnParser("v").GetUint64() >> 60, epoch);
+            }
             const TString returned = FormatResultSetYson(result.GetResultSet(0));
             const TString predicate = TStringBuilder() << "k IN (" << key << ", " << key + 1 << ")";
             // Each execution's actual draws must reach every consumer unchanged.
-            // No equality or distinctness is required across rows or executions.
             CompareYsonUnordered(returned, fixture.QueryYson(
                 TStringBuilder() << "SELECT k, a, v FROM TestTable WHERE " << predicate << ";"));
             CompareYsonUnordered(returned, fixture.QueryYson(
@@ -1501,7 +1537,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(ExplicitNullBypassesFailingDefault, StreamWrite) {
-        TTestFixture fixture(/* featureFlagEnabled */ true, StreamWrite);
+        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -1566,7 +1602,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST_TWIN(SetCoercedDefaultExpr, FeatureEnabled) {
-        TTestFixture fixture(FeatureEnabled);
+        TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = FeatureEnabled});
         fixture.Exec(DefaultExprDDL("v Int64"));
 
         const TString query = TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";";
@@ -1782,10 +1818,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     Y_UNIT_TEST(AlterOnGeneratedColumnRejected) {
-        TTestFixture fixture(
-            /* featureFlagEnabled */ true,
-            /* indexStreamWrite */ true,
-            /* generatedStored */ true);
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,

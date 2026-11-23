@@ -382,53 +382,7 @@ public:
     }
 
     void RestartSchemeShard(const std::string& tablePath) {
-        auto& runtime = *Kikimr.GetTestServer().GetRuntime();
-        const auto sender = runtime.AllocateEdgeActor();
-        NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-
-        auto connect = [&](TDuration timeout) {
-            const auto pipe = runtime.Register(
-                NTabletPipe::CreateClient(sender, Tests::SchemeRoot, pipeConfig));
-            auto connected = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(
-                sender, timeout);
-            UNIT_ASSERT_C(connected, "timed out connecting to SchemeShard");
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->TabletId, Tests::SchemeRoot);
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->ClientId, pipe);
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->Status, NKikimrProto::OK);
-            return std::pair(pipe, connected->Get()->Generation);
-        };
-
-        const auto [oldPipe, oldGeneration] = connect(TDuration::Seconds(30));
-        runtime.Send(MakePipePerNodeCacheID(false), sender,
-            new TEvPipeCache::TEvForward(
-                new TEvents::TEvPoisonPill(), Tests::SchemeRoot, false));
-
-        auto destroyed = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(
-            sender, TDuration::Seconds(30));
-        UNIT_ASSERT_C(destroyed, "timed out waiting for SchemeShard shutdown");
-        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->TabletId, Tests::SchemeRoot);
-        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->ClientId, oldPipe);
-
-        const auto [newPipe, newGeneration] = connect(TDuration::Seconds(30));
-        UNIT_ASSERT_C(newGeneration > oldGeneration,
-            "SchemeShard generation did not change after restart: " << oldGeneration);
-        runtime.Send(new IEventHandle(newPipe, sender, new TEvents::TEvPoisonPill()));
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = SplitPath(TString(tablePath));
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.SyncVersion = true;
-        runtime.Send(MakeSchemeCacheID(), sender,
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
-
-        auto response = runtime.GrabEdgeEventRethrow<
-            TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender, TDuration::Seconds(30));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.front().Status,
-            NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+        RestartSchemeShardAndSyncCache(*Kikimr.GetTestServer().GetRuntime(), TString(tablePath));
     }
 
     std::string ShowCreateTable(const std::string& tablePath) {

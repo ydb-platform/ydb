@@ -465,6 +465,9 @@ int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const
 
 void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected);
 
+// Restarts SchemeShard, waits for a new generation and synchronizes the table cache.
+void RestartSchemeShardAndSyncCache(TTestActorRuntime& runtime, const TString& tablePath);
+
 void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);

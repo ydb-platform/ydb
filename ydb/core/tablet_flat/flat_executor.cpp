@@ -4183,8 +4183,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
-            FollowerId));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);

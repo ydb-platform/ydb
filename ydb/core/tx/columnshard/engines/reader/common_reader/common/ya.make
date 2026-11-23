@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(columns_set.h)
+
 SRCS(
     accessor_callback.cpp
     script.cpp

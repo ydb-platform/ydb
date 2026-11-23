@@ -1,4 +1,6 @@
 #include "fetch_steps.h"
+
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set_serialized.h>
 #include "source.h"
 
 #include <ydb/core/formats/arrow/container/container.h>
@@ -127,17 +129,7 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
 NColumnShard::TStepDetails TAllocateMemoryStep::BuildStatisticsDetails(const TSpecialReadContext*) const {
     NColumnShard::TReserveMemoryStepDetails::TStage stage{static_cast<ui32>(StageIndex), {}};
     for (const auto& pack : Packs) {
-        switch (pack.GetMemType()) {
-            case EMemType::Blob:
-                stage.MemoryTypes.emplace_back("Blob");
-                break;
-            case EMemType::Raw:
-                stage.MemoryTypes.emplace_back("Raw");
-                break;
-            case EMemType::RawSequential:
-                stage.MemoryTypes.emplace_back("RawSequential");
-                break;
-        }
+        stage.MemoryTypes.push_back(::ToString(pack.GetMemType()));
     }
     return NColumnShard::TReserveMemoryStepDetails{.Stages = {std::move(stage)}};
 }

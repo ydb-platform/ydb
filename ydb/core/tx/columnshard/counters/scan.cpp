@@ -213,6 +213,9 @@ void TReserveMemoryStepDetails::Merge(const TReserveMemoryStepDetails& other) {
         auto& target = stage == Stages.end() ? Stages.emplace_back(TStage{source.Stage, {}}) : *stage;
         AppendUnique(target.MemoryTypes, source.MemoryTypes);
     }
+    if (other.RequestedBytes) {
+        RequestedBytes = RequestedBytes.value_or(0) + *other.RequestedBytes;
+    }
 }
 
 void TFetchColumnsStepDetails::Merge(const TFetchColumnsStepDetails& other) {

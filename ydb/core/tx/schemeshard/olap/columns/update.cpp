@@ -25,6 +25,30 @@ bool IsValidColumnNameForColumnTable(const TString& name) {
             [](char c) { return std::isalnum(c) || c == '_' || c == '-' || c == '@'; });
 }
 
+TConclusion<NOlap::TColumnDefaultScalarValue> ParseDefaultScalar(
+    const NKikimrColumnShardColumnDefaults::TColumnDefault& proto, const NScheme::TTypeInfo& type, const TString& typeName) {
+    NOlap::TColumnDefaultScalarValue result;
+    if (const auto conclusion = result.DeserializeFromProto(proto); conclusion.IsFail()) {
+        return conclusion;
+    }
+    if (!result.GetValue()) {
+        return TConclusionStatus::Fail("Default value is not supported for type " + typeName + " in column tables");
+    }
+    const auto arrowType = NArrow::GetArrowType(type);
+    if (!arrowType.ok()) {
+        return TConclusionStatus::Fail(arrowType.status().ToString());
+    }
+    result.AlignToColumnType(*arrowType);
+    if (!result.IsCompatibleType(*arrowType)) {
+        return TConclusionStatus::Fail("Default value of type " + result.GetValue()->type->ToString() + " does not match column type " +
+                                       typeName + " (" + (*arrowType)->ToString() + ")");
+    }
+    if (const auto validated = result.ValidateForType(type); validated.IsFail()) {
+        return validated;
+    }
+    return result;
+}
+
 }
 
 bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
@@ -172,7 +196,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     }
 
     if (columnSchema.HasCreatedDefaultValue()) {
-        errors.AddError("CreatedDefaultValue is set internally");
+        errors.AddError("CreatedDefaultValue is not allowed to be set externally");
         return false;
     }
     if (columnSchema.HasDefaultValue()) {
@@ -180,25 +204,12 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
             errors.AddError("Default values for column tables are disabled");
             return false;
         }
-        auto conclusion = DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue());
-        if (conclusion.IsFail()) {
-            errors.AddError(conclusion.GetErrorMessage());
+        auto parsed = ParseDefaultScalar(columnSchema.GetDefaultValue(), Type, TypeName);
+        if (parsed.IsFail()) {
+            errors.AddError(parsed.GetErrorMessage());
             return false;
         }
-        if (!DefaultValue.GetValue()) {
-            errors.AddError("Default value is not supported for type " + TypeName + " in column tables");
-            return false;
-        }
-        DefaultValue.AlignToColumnType(*arrowTypeResult);
-        if (!DefaultValue.IsCompatibleType(*arrowTypeResult)) {
-            errors.AddError(
-                "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + (*arrowTypeResult)->ToString());
-            return false;
-        }
-        if (const auto validated = DefaultValue.ValidateForType(Type); validated.IsFail()) {
-            errors.AddError(validated.GetErrorMessage());
-            return false;
-        }
+        DefaultValue = parsed.DetachResult();
         CreatedDefaultValue = DefaultValue;
     } else {
         CreatedDefaultValue = NOlap::TColumnDefaultScalarValue();
@@ -309,7 +320,7 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         return false;
     }
     if (diffColumn.GetDefaultValue() && !AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-        errors.AddError("schema update error: sparsed columns are disabled");
+        errors.AddError("DEFAULT_VALUE in ALTER OBJECT requires sparsed columns, but sparsed columns are disabled");
         return false;
     }
     if (sqlDefaultChange && !AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
@@ -323,23 +334,12 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         DefaultValue = NOlap::TColumnDefaultScalarValue();
     }
     if (diffColumn.GetDefaultScalar()) {
-        auto conclusion = DefaultValue.DeserializeFromProto(diffColumn.GetDefaultScalar()->SerializeToProto());
-        if (conclusion.IsFail() || !DefaultValue.GetValue()) {
-            errors.AddError(conclusion.IsFail() ? conclusion.GetErrorMessage()
-                                                : "Default value is not supported for type " + TypeName + " in column tables");
+        auto parsed = ParseDefaultScalar(diffColumn.GetDefaultScalar()->SerializeToProto(), Type, TypeName);
+        if (parsed.IsFail()) {
+            errors.AddError(parsed.GetErrorMessage());
             return false;
         }
-        const auto columnArrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
-        DefaultValue.AlignToColumnType(columnArrowType);
-        if (!DefaultValue.IsCompatibleType(columnArrowType)) {
-            errors.AddError(
-                "incompatible types for default write: def" + DefaultValue.DebugString() + ", col:" + columnArrowType->ToString());
-            return false;
-        }
-        if (const auto validated = DefaultValue.ValidateForType(Type); validated.IsFail()) {
-            errors.AddError(validated.GetErrorMessage());
-            return false;
-        }
+        DefaultValue = parsed.DetachResult();
     }
     if (diffColumn.GetDefaultValue()) {
         auto conclusion = DefaultValue.ParseFromString(*diffColumn.GetDefaultValue(), Type);

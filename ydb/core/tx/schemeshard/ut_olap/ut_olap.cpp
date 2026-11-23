@@ -692,6 +692,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "ColumnTable"
             AlterSchema { AddColumns { Name: "day" Type: "Date" DefaultValue { Scalar { Uint16: 65000 } } } }
         )", {{NKikimrScheme::StatusSchemeError, "Invalid Date default"}});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "id" Type: "Uuid" DefaultValue { Scalar { Bytes: "abc" } } } }
+        )", {{NKikimrScheme::StatusSchemeError, "does not match column type Uuid"}});
     }
 
     Y_UNIT_TEST(TtlOnDefaultColumnRejected) {

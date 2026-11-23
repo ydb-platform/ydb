@@ -41,7 +41,7 @@ public:
     void AlignToColumnType(const std::shared_ptr<arrow::DataType>& columnType);
     TConclusionStatus ParseFromString(const TString& value, const NScheme::TTypeInfo& type);
     TConclusionStatus ParseFromTypedValue(const Ydb::TypedValue& value, const NScheme::TTypeInfo& type);
-    TConclusion<Ydb::TypedValue> SerializeToTypedValue(const NScheme::TTypeInfo& type = {}) const;
+    TConclusion<Ydb::TypedValue> SerializeToTypedValue(const NScheme::TTypeInfo& type) const;
     TConclusionStatus ValidateForType(const NScheme::TTypeInfo& type) const;
 };
 

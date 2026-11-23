@@ -539,6 +539,18 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         UNIT_ASSERT(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
             value.set_uint32_value(NYql::NUdf::MAX_DATE - 1);
         }).IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATE, NScheme::NTypeIds::Date, [](Ydb::Value& value) {
+            value.set_uint32_value(Max<ui16>() + 2);
+        }).GetErrorMessage(), "Invalid Date");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATE32, NScheme::NTypeIds::Date32, [](Ydb::Value& value) {
+            value.set_int32_value(NYql::NUdf::MAX_DATE32 + 1);
+        }).GetErrorMessage(), "Invalid Date32");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATETIME64, NScheme::NTypeIds::Datetime64, [](Ydb::Value& value) {
+            value.set_int64_value(NYql::NUdf::MIN_DATETIME64 - 1);
+        }).GetErrorMessage(), "Invalid Datetime64");
+        UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::TIMESTAMP64, NScheme::NTypeIds::Timestamp64, [](Ydb::Value& value) {
+            value.set_int64_value(NYql::NUdf::MAX_TIMESTAMP64 + 1);
+        }).GetErrorMessage(), "Invalid Timestamp64");
         UNIT_ASSERT_STRING_CONTAINS(parse(Ydb::Type::DATETIME, NScheme::NTypeIds::Datetime, [](Ydb::Value& value) {
             value.set_uint32_value(NYql::NUdf::MAX_DATETIME);
         }).GetErrorMessage(), "Invalid Datetime");
@@ -565,6 +577,23 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         };
         UNIT_ASSERT_STRING_CONTAINS(parse(123, 1, 0).GetErrorMessage(), "Invalid Decimal");
         UNIT_ASSERT(parse(9, 1, 0).IsSuccess());
+    }
+
+    Y_UNIT_TEST(DefaultRequiresColumnType) {
+        Ydb::TypedValue typed;
+        typed.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        typed.mutable_value()->set_uint32_value(5);
+        TColumnDefaultScalarValue parsed;
+        UNIT_ASSERT_STRING_CONTAINS(parsed.ParseFromTypedValue(typed, NScheme::TTypeInfo()).GetErrorMessage(), "Column type is required");
+
+        const TColumnDefaultScalarValue scalar(std::make_shared<arrow::UInt32Scalar>(5));
+        UNIT_ASSERT_STRING_CONTAINS(scalar.SerializeToTypedValue(NScheme::TTypeInfo()).GetErrorMessage(), "Column type is required");
+        UNIT_ASSERT_STRING_CONTAINS(
+            scalar.SerializeToTypedValue(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).GetErrorMessage(), "does not match column type");
+        const auto datetime = scalar.SerializeToTypedValue(NScheme::TTypeInfo(NScheme::NTypeIds::Datetime));
+        UNIT_ASSERT_C(datetime.IsSuccess(), datetime.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(datetime->type().type_id()), static_cast<int>(Ydb::Type::DATETIME));
+        UNIT_ASSERT_VALUES_EQUAL(datetime->value().uint32_value(), 5u);
     }
 }
 

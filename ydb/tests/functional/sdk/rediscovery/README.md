@@ -38,7 +38,7 @@ python3 run_eds_probe.py --database /Root/tenant \
   --replica localhost:3136 http://localhost:9765 -- /tmp/ydb-eds-go-probe/probe
 ```
 
-The runner requires Python 3.11+, grpcio and two isolated plaintext YDB tenants with the same path and EDS support. It runs the supplied Scheme probe in both directions, compares each server's ListDirectory counters and checks whether the bootstrap TCP peer stays the same. On Linux it also samples established sockets to the three test listeners. Concurrent workloads on those tenants affect the counters.
+The runner requires Python 3.11+, grpcio and two isolated plaintext YDB tenants with the same path and EDS support. It runs the supplied Scheme probe in both directions, compares each server's ListDirectory counters and checks whether the bootstrap TCP peer stays the same. On Linux it verifies that an established source-node socket existed before cutover and that every such socket closes after recovery. It also samples the total number of established sockets to the three test listeners. Concurrent workloads on those tenants affect the counters.
 
 ## Transport-disconnect experiment
 

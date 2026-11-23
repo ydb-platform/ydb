@@ -1,16 +1,17 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index 55fa4dfc9f724c2be17b006f71cd1f0c73c15637..22c0073b005fe85b292a7a118cb9aac20c0f34c8 100644
+index 55fa4dfc9f724c2be17b006f71cd1f0c73c15637..6ea5ebf05eed9944f4de31d695f2867091f930e1 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -3942,6 +3942,7 @@ dependencies = [
+@@ -3942,6 +3942,8 @@ dependencies = [
   "flate2",
   "futures-util",
   "http 1.3.1",
 + "http-body 1.0.1",
++ "hyper 1.7.0",
   "itertools 0.10.5",
   "jsonwebtoken",
   "lazy_static",
-@@ -3970,6 +3971,7 @@ dependencies = [
+@@ -3970,6 +3972,7 @@ dependencies = [
   "tokio-stream",
   "tokio-util",
   "tonic 0.14.2",
@@ -19,18 +20,19 @@ index 55fa4dfc9f724c2be17b006f71cd1f0c73c15637..22c0073b005fe85b292a7a118cb9aac2
   "tracing",
   "tracing-opentelemetry",
 diff --git a/ydb/Cargo.toml b/ydb/Cargo.toml
-index 21e35ae4bd0341d5cfc3b7015296f368037a4a31..11f9c6074de534af8fcc4c15cc474aad3418e4f6 100644
+index 21e35ae4bd0341d5cfc3b7015296f368037a4a31..d8a9f532834dc682d345777325d15f81c4ffb9b2 100644
 --- a/ydb/Cargo.toml
 +++ b/ydb/Cargo.toml
-@@ -34,6 +34,7 @@ bon = "3"
+@@ -34,6 +34,8 @@ bon = "3"
  derive_builder = "0.12.0"
  futures-util = "0.3"
  http = "1.1.0"
 +http-body = "1"
++hyper = "1"
  itertools = "0.10"
  jsonwebtoken = "9.3"
  time = "0.3"
-@@ -58,6 +59,7 @@ tokio-util = "0.7.8"
+@@ -58,6 +60,7 @@ tokio-util = "0.7.8"
  tracing = "0.1"
  tracing-subscriber = { version = "0.3", features = ["env-filter"] }
  tonic = { workspace = true }
@@ -554,10 +556,10 @@ index 0000000000000000000000000000000000000000..e175e7ded8c906a1aeab340a9f928232
 +}
 diff --git a/ydb/src/grpc_wrapper/eds/mod.rs b/ydb/src/grpc_wrapper/eds/mod.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..e07ec258738cd0db26d38c44193443f4e97cb5c4
+index 0000000000000000000000000000000000000000..b4d19bd60e18ba773f79e466e806b49487ec07b4
 --- /dev/null
 +++ b/ydb/src/grpc_wrapper/eds/mod.rs
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,353 @@
 +pub(crate) mod routes;
 +
 +#[path = "ydb.xds.rs"]
@@ -857,6 +859,44 @@ index 0000000000000000000000000000000000000000..e07ec258738cd0db26d38c44193443f4
 +        assert!(original.cancelled.is_cancelled());
 +    }
 +
++    #[tokio::test]
++    async fn removing_an_endpoint_closes_tcp_with_a_retained_channel() {
++        use tokio::io::AsyncReadExt;
++        use tokio::net::TcpListener;
++        use tokio::time::{Duration, timeout};
++        use tonic::body::Body;
++        use tower::Service;
++
++        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let uri = format!("http://{}/", listener.local_addr().unwrap())
++            .parse::<Uri>()
++            .unwrap();
++        let routes = EndpointRoutes::default();
++        routes.install(&[NodeInfo::new(uri.clone(), String::new())]);
++        let (mut channel, _) = routes.connection(&uri, &Default::default()).await.unwrap();
++        std::future::poll_fn(|cx| channel.poll_ready(cx))
++            .await
++            .unwrap();
++        let pending = channel.call(http::Request::new(Body::empty()));
++
++        timeout(Duration::from_secs(3), async {
++            let (mut peer, _) = listener.accept().await.unwrap();
++            let mut preface = [0; 24];
++            peer.read_exact(&mut preface).await.unwrap();
++            assert_eq!(&preface, b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
++            routes.install(&[]);
++            peer.read_to_end(&mut Vec::new()).await.unwrap();
++            assert!(pending.await.is_err());
++            assert!(
++                std::future::poll_fn(|cx| channel.poll_ready(cx))
++                    .await
++                    .is_err()
++            );
++        })
++        .await
++        .expect("the retired TCP transport stayed open");
++    }
++
 +    #[test]
 +    fn stale_or_missing_generation_after_a_cut_is_rejected() {
 +        let mut route = Route::default();
@@ -875,13 +915,13 @@ index 0000000000000000000000000000000000000000..e07ec258738cd0db26d38c44193443f4
 +}
 diff --git a/ydb/src/grpc_wrapper/eds/routes.rs b/ydb/src/grpc_wrapper/eds/routes.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a345f3543
+index 0000000000000000000000000000000000000000..171729c9f07f66dc8137e4e9837e66da90381c52
 --- /dev/null
 +++ b/ydb/src/grpc_wrapper/eds/routes.rs
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,122 @@
 +//! Each admitted authority owns one data channel and cancellation token. A cut
 +//! retires these together. Cached service handles keep their original token.
-+use crate::connection_pool::{Connection, Simple};
++use crate::connection_pool::{endpoint, normalize_uri_scheme};
 +use crate::discovery::NodeInfo;
 +use crate::{GrpcOptions, YdbResult};
 +use http::Uri;
@@ -896,7 +936,7 @@ index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a
 +#[derive(Debug, Default)]
 +pub(crate) struct RouteEndpoint {
 +    pub(super) cancelled: CancellationToken,
-+    channel: OnceCell<Simple>,
++    channel: OnceCell<Channel>,
 +}
 +
 +#[derive(Clone, Debug)]
@@ -935,14 +975,35 @@ index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a
 +        uri: &Uri,
 +        opts: &GrpcOptions,
 +    ) -> YdbResult<(Channel, CancellationToken)> {
-+        let endpoint = self.endpoint(uri)?;
-+        let channel = endpoint
++        let route = self.endpoint(uri)?;
++        let channel = route
 +            .channel
-+            .get_or_try_init(|| Simple::init(uri.clone(), opts))
-+            .await?
-+            .channel()
++            .get_or_try_init(|| async {
++                Ok::<_, crate::YdbError>(
++                    endpoint(normalize_uri_scheme(uri.clone())?, None, opts)?
++                        .executor(RouteExecutor(route.cancelled.clone()))
++                        .connect_lazy(),
++                )
++            })
 +            .await?;
-+        Ok((channel, endpoint.cancelled.clone()))
++        Ok((channel.clone(), route.cancelled.clone()))
++    }
++}
++
++// Tonic runs both its request queue and HTTP/2 I/O on the endpoint executor.
++// Dropping those tasks closes the socket even when a client still owns a Channel.
++struct RouteExecutor(CancellationToken);
++
++impl<F: Future<Output = ()> + Send + 'static> hyper::rt::Executor<F> for RouteExecutor {
++    fn execute(&self, task: F) {
++        let cancelled = self.0.clone();
++        tokio::spawn(async move {
++            tokio::select! {
++                biased;
++                _ = cancelled.cancelled() => (),
++                _ = task => (),
++            }
++        });
 +    }
 +}
 +

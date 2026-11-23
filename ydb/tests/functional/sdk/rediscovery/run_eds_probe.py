@@ -1,9 +1,12 @@
 """Exercise one SDK's Scheme probe against two isolated, healthy YDB replicas."""
 import argparse
 import asyncio
+import ipaddress
 import json
 import os
 from pathlib import Path
+import socket
+import struct
 import time
 from urllib.request import urlopen
 
@@ -23,7 +26,13 @@ def requests_completed(monitor, database):
     )
 
 
-def established_sockets(pid, ports):
+def tcp_peers(address):
+    host, port = address.rsplit(":", 1)
+    return {(ipaddress.ip_address(addr[0]), addr[1]) for _, _, _, _, addr in
+            socket.getaddrinfo(host.strip("[]"), int(port), type=socket.SOCK_STREAM)}
+
+
+def established_sockets(pid, peers):
     """Count this probe's Linux TCP sockets to the three test listeners."""
     root = Path("/proc") / str(pid)
     if not (root / "net/tcp").exists():
@@ -43,7 +52,12 @@ def established_sockets(pid, ports):
             if path.exists():
                 for line in path.read_text().splitlines()[1:]:
                     fields = line.split()
-                    if fields[3] == "01" and fields[9] in sockets and int(fields[2].rsplit(":", 1)[1], 16) in ports:
+                    if fields[3] != "01" or fields[9] not in sockets:
+                        continue
+                    host, port = fields[2].split(":")
+                    packed = b"".join(struct.pack("=I", int(host[i:i + 8], 16)) for i in range(0, len(host), 8))
+                    ip = ipaddress.ip_address(packed)
+                    if (getattr(ip, "ipv4_mapped", None) or ip, int(port, 16)) in peers:
                         count += 1
         return count
     except (FileNotFoundError, PermissionError):
@@ -76,12 +90,16 @@ async def run_direction(database, source, destination, command, timeout, balance
                     await successes(process, 3)
                     old_count = requests_completed(source[1], database)
                     first_count = requests_completed(destination[1], database)
-                    ports = {int(value.rsplit(":", 1)[1]) for value in (address, source[0], destination[0])}
-                    before_sockets = established_sockets(process.pid, ports)
+                    source_peers = tcp_peers(source[0])
+                    peers = tcp_peers(address) | source_peers | tcp_peers(destination[0])
+                    before_sockets = established_sockets(process.pid, peers)
+                    source_before = established_sockets(process.pid, source_peers)
+                    if source_before == 0:
+                        raise AssertionError("Probe did not open a data connection to the advertised source node")
                     samples = []
                     async def sample():
                         while True:
-                            current = established_sockets(process.pid, ports)
+                            current = established_sockets(process.pid, peers)
                             if current is not None:
                                 samples.append(current)
                             await asyncio.sleep(0.025)
@@ -99,7 +117,10 @@ async def run_direction(database, source, destination, command, timeout, balance
                     recovered_count = requests_completed(destination[1], database)
                     while requests_completed(destination[1], database) < recovered_count + 3:
                         await successes(process, 1)
-                    after_sockets = established_sockets(process.pid, ports)
+                    if source_before is not None:
+                        while established_sockets(process.pid, source_peers):
+                            await asyncio.sleep(0.025)
+                    after_sockets = established_sockets(process.pid, peers)
                     final_src = requests_completed(source[1], database)
                     final_dst = requests_completed(destination[1], database)
                     if final_src != after_cutover or final_dst <= first_count:
@@ -110,6 +131,7 @@ async def run_direction(database, source, destination, command, timeout, balance
                                           old_calls_during_cutover=after_cutover - old_count,
                                           old_calls_after_recovery=final_src - after_cutover,
                                           destination_calls=final_dst - first_count, bootstrap_peer=peer,
+                                          source_sockets_before=source_before, source_sockets_after=established_sockets(process.pid, source_peers),
                                           sockets_before=before_sockets, sockets_after=after_sockets,
                                           sockets_sampled_peak=max(samples, default=None))), flush=True)
             finally:

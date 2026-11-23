@@ -465,7 +465,7 @@ index c8673f7e0a95dcd49d41d5e7b6e7ce7a75f37b5c..9429cc257bcf0c2d2450982c23e1d5aa
              currentSchedule = scheduler.schedule(this::tick, DISCOVERY_PERIOD_MIN_SECONDS, TimeUnit.SECONDS);
          }
 diff --git a/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java b/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
-index dd6410b6f752cafb5d9bb02c16df96230ec82c76..ff0141ecd6d6fca0bb003b3020d7171127a2d1be 100644
+index dd6410b6f752cafb5d9bb02c16df96230ec82c76..4ce179b9c89d7eef7c087be512602b2d7828f014 100644
 --- a/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
 +++ b/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
 @@ -39,6 +39,8 @@ public class YdbTransportImpl extends BaseGrpcTransport {
@@ -567,7 +567,7 @@ index dd6410b6f752cafb5d9bb02c16df96230ec82c76..ff0141ecd6d6fca0bb003b3020d71711
 -            return channelPool.removeChannels(removed);
 +            synchronized (routeLock) {
 +                List<EndpointRecord> removed = endpointPool.setNewState(selfLoc, piles, endpoints);
-+                if (watch != null && endpoints.isEmpty()) {
++                if (watch != null) {
 +                    channelPool.retireChannels(removed);
 +                    return CompletableFuture.completedFuture(true);
 +                }
@@ -655,14 +655,16 @@ index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..24a1b84b5b8f0b6b5986cc40eab89aa4
              return CompletableFuture.completedFuture(Boolean.TRUE);
 diff --git a/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f91d2c45aa5a7e15cd8809327b99c12d42bef71b
+index 0000000000000000000000000000000000000000..93d337f2dce7d3bc1e7b1eebe83464072430ef94
 --- /dev/null
 +++ b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,140 @@
 +package tech.ydb.core.impl;
 +
 +import java.time.Duration;
 +import java.time.ZoneOffset;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.CountDownLatch;
 +import java.util.concurrent.TimeUnit;
 +
 +import com.google.protobuf.Any;
@@ -670,7 +672,9 @@ index 0000000000000000000000000000000000000000..f91d2c45aa5a7e15cd8809327b99c12d
 +import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 +import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 +import io.envoyproxy.envoy.service.endpoint.v3.EndpointDiscoveryServiceGrpc;
++import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 +import io.grpc.CallOptions;
++import io.grpc.ClientCall;
 +import io.grpc.ManagedChannel;
 +import io.grpc.Metadata;
 +import io.grpc.Status;
@@ -679,6 +683,9 @@ index 0000000000000000000000000000000000000000..f91d2c45aa5a7e15cd8809327b99c12d
 +import org.mockito.ArgumentCaptor;
 +import org.mockito.Mockito;
 +
++import tech.ydb.core.grpc.GrpcRequestSettings;
++import tech.ydb.core.grpc.GrpcTransport;
++import tech.ydb.core.grpc.GrpcTransportBuilder;
 +import tech.ydb.core.impl.auth.AuthCallOptions;
 +import tech.ydb.core.impl.pool.EndpointRecord;
 +
@@ -725,6 +732,49 @@ index 0000000000000000000000000000000000000000..f91d2c45aa5a7e15cd8809327b99c12d
 +                options.capture());
 +        Assert.assertNull(options.getValue().getDeadline());
 +        scheduler.hasTasksCount(1); // The first response still has a timeout.
++    }
++
++    @Test
++    public void newAssignmentImmediatelyClosesRemovedChannel() throws Exception {
++        ManagedChannel bootstrap = Mockito.mock(ManagedChannel.class);
++        ManagedChannel node = Mockito.mock(ManagedChannel.class);
++        CountDownLatch releaseStream = new CountDownLatch(1);
++        Mockito.when(node.awaitTermination(Mockito.anyLong(), Mockito.any())).thenAnswer(call ->
++                releaseStream.await(5, TimeUnit.SECONDS));
++        CompletableFuture<ClientCall.Listener<DiscoveryResponse>> listener = new CompletableFuture<>();
++        Mockito.when(bootstrap.newCall(Mockito.eq(EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod()), Mockito.any()))
++                .thenReturn(new MockedCall<DiscoveryRequest, DiscoveryResponse>(Runnable::run) {
++                    @Override
++                    protected void complete(Listener<DiscoveryResponse> watch) {
++                        listener.complete(watch);
++                    }
++                });
++        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://bootstrap:2135/test")
++                .withInitMode(GrpcTransportBuilder.InitMode.ASYNC)
++                .withEdsDiscovery()
++                .withChannelFactoryBuilder(builder -> (host, port, authority) ->
++                        "bootstrap".equals(host) ? bootstrap : node)
++                .build()) {
++            ClientCall.Listener<DiscoveryResponse> watch = listener.get(5, TimeUnit.SECONDS);
++            watch.onHeaders(new Metadata());
++            watch.onMessage(assignment("source"));
++            ((YdbTransportImpl) transport).getChannel(GrpcRequestSettings.newBuilder().build());
++            watch.onMessage(assignment("target"));
++            Mockito.verify(node).shutdownNow();
++            Mockito.verify(bootstrap, Mockito.never()).shutdownNow();
++        } finally {
++            releaseStream.countDown();
++        }
++    }
++
++    private static DiscoveryResponse assignment(String host) {
++        ClusterLoadAssignment.Builder assignment = ClusterLoadAssignment.newBuilder().setClusterName("/test");
++        LocalityLbEndpoints.Builder group = assignment.addEndpointsBuilder();
++        group.getMetadataBuilder().putTypedFilterMetadata("ydb.discovery", Any.pack(ListEndpointsResult.newBuilder()
++                .addEndpoints(EndpointInfo.newBuilder().setAddress(host).setPort(2135).setNodeId(1)).build()));
++        group.addLbEndpointsBuilder().getEndpointBuilder().getAddressBuilder().getSocketAddressBuilder()
++                .setAddress(host).setPortValue(2135);
++        return response(assignment).toBuilder().setNonce(host).setVersionInfo(host).build();
 +    }
 +
 +    @Test

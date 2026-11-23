@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/persqueue)
 
-LDFLAGS(-Wl,--strip-debug)
-
 ADDINCL(
     ydb/public/sdk/cpp
 )

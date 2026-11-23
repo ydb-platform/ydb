@@ -345,17 +345,17 @@ Y_UNIT_TEST_SUITE(TTopicWriteMode) {
 
             auto checkRead = [&](const TString& mode) {
                 auto reader = env.Client.CreateReadSession(TReadSessionSettings().ConsumerName(CONSUMER)
-                    .AppendTopics(TTopicReadSettings(TOPIC)).RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
+                    .AppendTopics(TTopicReadSettings(TOPIC)).RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
                 const auto deadline = TInstant::Now() + TDuration::Seconds(30);
                 while (TInstant::Now() < deadline) {
                     UNIT_ASSERT_C(reader->WaitEvent().Wait(deadline - TInstant::Now()), "Read session did not respond");
                     auto event = reader->GetEvent(false);
                     UNIT_ASSERT(event);
-                    if (auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                         start->Confirm();
-                    } else if (auto* stop = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
                         stop->Confirm();
-                    } else if (auto* received = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    } else if (auto* received = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                         UNIT_ASSERT_VALUES_EQUAL(mode, AVAILABLE);
                         UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().size(), 1);
                         UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().front().GetOffset(), 0);

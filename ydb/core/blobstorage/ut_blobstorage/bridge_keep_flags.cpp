@@ -54,18 +54,6 @@ namespace {
         };
     }
 
-    void PutToPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId, const TLogoBlobID& id, const TString& data,
-            bool issueKeepFlag = false) {
-        auto res = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroupId, nodeId,
-            new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
-                .BlobId = id,
-                .Buffer = TRope(data),
-                .Deadline = TInstant::Max(),
-                .IssueKeepFlag = issueKeepFlag,
-            }));
-        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
-    }
-
     // VDisks apply the barrier once they know their quorum has it; the unkept blob behind it vanishes then
     void WaitForBarrierInEffect(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId, const TLogoBlobID& probe,
             const TString& data) {

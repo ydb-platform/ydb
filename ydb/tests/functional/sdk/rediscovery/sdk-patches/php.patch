@@ -1,8 +1,8 @@
 diff --git a/README.md b/README.md
-index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..8dde1003624a50fdfc7780978a73ea7a5d6a70bc 100644
+index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..63bfd4fe4951841bd10882c42b2c62172964d74c 100644
 --- a/README.md
 +++ b/README.md
-@@ -651,3 +651,32 @@ $config = [
+@@ -651,3 +651,34 @@ $config = [
  ];
  $ydb = new \YdbPlatform\Ydb\Ydb($config);
  ```
@@ -21,12 +21,14 @@ index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..8dde1003624a50fdfc7780978a73ea7a
 +RPC deadline arrives. During that pause the old socket stays open. On return the SDK checks for an
 +available discovery response before yielding data. Once a response has started
 +it waits for its generation trailers within the discovery timeout.
-+Table session IDs are scoped to the driver and route that created them. After a
-+switch, acquire a fresh session with `Table::session()`. A retained session
-+raises `BadSessionException`. File pools use a separate database and endpoint
-+namespace and reuse only IDs issued by the running driver. When an opaque custom
-+pool is shared or returns an unrecognized ID, the driver uses its own memory
-+pool for subsequent sessions.
++After a switch, acquire a fresh session with `Table::session()`. A retained
++session raises `BadSessionException`. A file pool can reuse idle sessions after
++restart when the bootstrap, database, selected endpoint and managed generation
++match. Concurrent processes use independent sessions while one process holds the
++cache file. An opt-in driver with an unstamped server keeps its sessions in
++memory. Ordinary discovery keeps its existing file format. When an opaque
++custom pool is shared or returns an unrecognized ID, the driver uses its own
++memory pool for subsequent sessions.
 +
 +Legacy servers use the configured discovery interval. The opt-in requires a
 +host:port endpoint, HTTP/2 support in libcurl, and default gRPC channel options.
@@ -436,10 +438,18 @@ index ac63399cd2e7ab3a7351fddd3bfe90c47da2bb90..05beea6cd9d0d1baeeca665d118ffc87
       * @return bool
       */
 diff --git a/src/Sessions/FileSessionPool.php b/src/Sessions/FileSessionPool.php
-index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871a9fbb6c8 100644
+index 33fc786404eb48417c67c85de437dc151d75dba3..103de5f322803f23200a569a5c5391035fe71738 100644
 --- a/src/Sessions/FileSessionPool.php
 +++ b/src/Sessions/FileSessionPool.php
-@@ -27,16 +27,40 @@ class FileSessionPool implements SessionPoolContract
+@@ -4,6 +4,7 @@ namespace YdbPlatform\Ydb\Sessions;
+ 
+ use YdbPlatform\Ydb\Retry\Retry;
+ use YdbPlatform\Ydb\Session;
++use YdbPlatform\Ydb\Table;
+ use YdbPlatform\Ydb\Contracts\SessionPoolContract;
+ 
+ class FileSessionPool implements SessionPoolContract
+@@ -27,16 +28,98 @@ class FileSessionPool implements SessionPoolContract
       */
      protected static $retry;
  
@@ -448,6 +458,9 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
 +    private $file;
 +    private $poolRetry;
 +    private $managed;
++    private $baseFile;
++    private $routeFile;
++    private $routeEpoch;
 +
      /**
       * @param array $config
@@ -466,7 +479,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
 +            $this->poolRetry =& static::$retry;
 +        }
 +        $this->owner = $config['table'];
-+        $this->file = $config['filepath'];
++        $this->baseFile = $this->file = $config['filepath'];
 +        $this->poolRetry = $retry;
 +        if ($this->managed) {
 +            $namespace = [$this->owner->path(), $this->owner->ydb()->endpoint()];
@@ -477,6 +490,61 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
 +    }
  
 -        $this->load();
++    /** @internal Only the bound Table may import sessions from this pool. */
++    public function belongsTo(Table $table): bool
++    {
++        return $this->owner === $table;
++    }
++
++    /** @internal Bind this pool to the assignment already checked for the next request. */
++    public function selectRoute(int $epoch)
++    {
++        if ($this->routeEpoch === $epoch) {
++            return;
++        }
++        $this->retireRoute();
++        $this->routeEpoch = $epoch;
++        $partition = $this->owner->ydb()->fileSessionPartition();
++        if ($partition === null) {
++            return;
++        }
++
++        // Keep the sidecar exclusively while this process can issue requests with its IDs.
++        // A concurrent driver can still create sessions in its own memory.
++        $file = fopen($this->baseFile . '.route-' . $partition, 'c+b');
++        if (!$file) {
++            return;
++        }
++        if (!flock($file, LOCK_EX | LOCK_NB)) {
++            fclose($file);
++            return;
++        }
++        $this->routeFile = $file;
++        $records = json_decode(stream_get_contents($file));
++        foreach (is_array($records) ? $records : [] as $record) {
++            if (isset($record->id, $record->taken) && is_string($record->id) && $record->taken === false) {
++                $this->entries[$record->id] = new Session($this->owner, $record->id, $epoch);
++            }
++        }
++    }
++
++    /** @internal Retained handles stay bound to the outgoing epoch. */
++    public function retireRoute()
++    {
++        $this->entries = [];
++        $this->routeEpoch = null;
++        if ($this->routeFile) {
++            fclose($this->routeFile);
++            $this->routeFile = null;
++        }
++    }
++
++    /** @internal A late callback may carry an old handle with a reused ID. */
++    public function ownsSession(Session $session): bool
++    {
++        return ($this->entries[$session->id()] ?? null) === $session;
++    }
++
 +    /** @internal The same backing file may be configured on different pool objects. */
 +    public function cacheKey(): string
 +    {
@@ -484,7 +552,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
      }
  
      /**
-@@ -44,8 +68,10 @@ class FileSessionPool implements SessionPoolContract
+@@ -44,8 +127,10 @@ class FileSessionPool implements SessionPoolContract
       */
      public function __destruct()
      {
@@ -497,7 +565,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
      }
  
      /**
-@@ -53,18 +79,18 @@ class FileSessionPool implements SessionPoolContract
+@@ -53,18 +138,18 @@ class FileSessionPool implements SessionPoolContract
       */
      protected function load()
      {
@@ -520,9 +588,13 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
              }
          }
      }
-@@ -75,26 +101,32 @@ class FileSessionPool implements SessionPoolContract
+@@ -74,15 +159,26 @@ class FileSessionPool implements SessionPoolContract
+      */
      protected function save()
      {
++        if ($this->routeEpoch !== null && !$this->routeFile) {
++            return;
++        }
          $sessions = [];
 -        foreach (static::$sessions as $session_id => $session)
 +        foreach ($this->entries as $session_id => $session)
@@ -533,23 +605,34 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
              ];
          }
 -        file_put_contents(static::$filepath, json_encode($sessions));
-+        file_put_contents($this->file, json_encode($sessions));
++        $data = json_encode($sessions);
++        if ($this->routeFile) {
++            if (!rewind($this->routeFile) || !ftruncate($this->routeFile, 0)
++                || fwrite($this->routeFile, $data) !== strlen($data) || !fflush($this->routeFile)) {
++                throw new \RuntimeException('Unable to update the Table session cache');
++            }
++            return;
++        }
++        file_put_contents($this->file, $data);
      }
  
      /**
-      * @return Session|null
+@@ -90,11 +186,19 @@ class FileSessionPool implements SessionPoolContract
       */
      public function getIdleSession()
-+    {
+     {
+-        $this->load();
 +        return $this->getMatchingIdleSession();
 +    }
-+
-+    /** @internal Skip persisted IDs that the current driver has not acquired. */
-+    public function getMatchingIdleSession(?callable $accept = null)
-     {
-         $this->load();
  
 -        foreach (static::$sessions as $session_id => $session)
++    /** @internal Skip persisted IDs that the current driver has not acquired. */
++    public function getMatchingIdleSession(?callable $accept = null)
++    {
++        if ($this->routeEpoch === null) {
++            $this->load();
++        }
++
 +        foreach ($this->entries as $session_id => $session)
          {
 -            if ($session->isIdle())
@@ -557,7 +640,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
              {
                  $this->syncSession($session_id);
                  return $session;
-@@ -110,7 +142,7 @@ class FileSessionPool implements SessionPoolContract
+@@ -110,7 +214,7 @@ class FileSessionPool implements SessionPoolContract
       */
      public function addSession(Session $session)
      {
@@ -566,7 +649,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
  
          $this->save();
      }
-@@ -121,22 +153,22 @@ class FileSessionPool implements SessionPoolContract
+@@ -121,22 +225,27 @@ class FileSessionPool implements SessionPoolContract
       */
      public function dropSession($session_id)
      {
@@ -575,6 +658,11 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
  
          if ($session)
          {
++            if ($this->routeEpoch !== null) {
++                // A failed DeleteSession must not leave a reusable ID in durable storage.
++                unset($this->entries[$session_id]);
++                $this->save();
++            }
              if ($session->isAlive())
              {
 -                if (static::$retry==null){
@@ -594,7 +682,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
              }
  
              $this->save();
-@@ -149,12 +181,12 @@ class FileSessionPool implements SessionPoolContract
+@@ -149,12 +258,12 @@ class FileSessionPool implements SessionPoolContract
       */
      public function syncSession($session_id)
      {
@@ -610,7 +698,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
  
              $this->save();
          }
-@@ -166,6 +198,14 @@ class FileSessionPool implements SessionPoolContract
+@@ -166,6 +275,14 @@ class FileSessionPool implements SessionPoolContract
       */
      public function sessionTaken(Session $session)
      {
@@ -625,7 +713,7 @@ index 33fc786404eb48417c67c85de437dc151d75dba3..68cbbef6e10dce219baf927bfe886871
          $this->save();
      }
  
-@@ -175,6 +215,6 @@ class FileSessionPool implements SessionPoolContract
+@@ -175,6 +292,6 @@ class FileSessionPool implements SessionPoolContract
       */
      public function sessionReleased(Session $session)
      {
@@ -725,15 +813,16 @@ index f59612ae14b9bf87d74d7177a425c3db7e232a2c..e06852d6c2b7c29ef374c2c9c52041c4
      }
  
 diff --git a/src/Table.php b/src/Table.php
-index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250426d18d6 100644
+index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..26fb5d55c30567055d151a83f8ef99265e6bbe7b 100644
 --- a/src/Table.php
 +++ b/src/Table.php
-@@ -47,6 +47,14 @@ class  Table
+@@ -47,6 +47,15 @@ class  Table
       * @var SessionPoolContract
       */
      protected static $session_pool;
 +    private $pool;
 +    private $routePool;
++    private $filePool;
 +    private $customPoolKey;
 +    private $configuredPool;
 +    private static $customPoolOwners = [];
@@ -743,7 +832,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
  
      /**
       * @var LoggerInterface
-@@ -75,7 +83,7 @@ class  Table
+@@ -75,7 +84,7 @@ class  Table
      {
          $this->ydb = $ydb;
  
@@ -752,7 +841,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
  
          $this->meta = $ydb->meta();
  
-@@ -87,9 +95,14 @@ class  Table
+@@ -87,9 +96,14 @@ class  Table
  
          $this->retry = $retry;
  
@@ -770,15 +859,25 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
          }
      }
  
-@@ -98,7 +111,33 @@ class  Table
+@@ -98,7 +112,43 @@ class  Table
       */
      public function sessionPool(SessionPoolContract $manager)
      {
 -        static::$session_pool = $manager;
++        $this->filePool = null;
 +        if ($this->routePool !== null) {
 +            // Dropping the last reference to a custom pool can delete all of its sessions.
 +            $this->configuredPool = $manager;
 +            $this->releaseCustomPool();
++            if (get_class($manager) === Sessions\FileSessionPool::class) {
++                if ($manager->belongsTo($this)) {
++                    $this->pool = $this->filePool = $manager;
++                    $manager->selectRoute($this->poolEpoch);
++                } else {
++                    $this->pool = $this->routePool;
++                }
++                return;
++            }
 +            $key = $manager instanceof Sessions\FileSessionPool ? $manager->cacheKey() : spl_object_hash($manager);
 +            // Pool contracts expose raw IDs; two drivers must not write the same cache.
 +            if (get_class($manager) === Sessions\MemorySessionPool::class || $manager === static::$session_pool || isset(self::$customPoolOwners[$key])) {
@@ -805,27 +904,21 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
      }
  
      /**
-@@ -161,14 +200,41 @@ class  Table
+@@ -161,14 +211,45 @@ class  Table
       */
      public function takeSession()
      {
 -        $session = static::$session_pool->getIdleSession();
--
--        if ($session)
--        {
--            return $session->take();
 +        $epoch = $this->ydb->refreshLongPoll();
 +        $this->updatePoolEpoch($epoch);
 +        if ($epoch === null) {
 +            $session = $this->pool->getIdleSession();
 +            return $session && !$session->isRouteBound() ? $session->take() : null;
 +        }
-+        if ($this->pool === $this->routePool) {
++        if ($this->filePool || $this->pool === $this->routePool) {
 +            $session = $this->pool->getIdleSession();
 +        } else {
-+            $candidate = get_class($this->pool) === Sessions\FileSessionPool::class
-+                ? $this->pool->getMatchingIdleSession(function ($entry) { return isset($this->routeSessions[$entry->id()]); })
-+                : $this->pool->getIdleSession();
++            $candidate = $this->pool->getIdleSession();
 +            $session = $candidate ? ($this->routeSessions[$candidate->id()] ?? null) : null;
 +            if ($candidate && (!$candidate->belongsTo($this) || !$session)) {
 +                // Opaque custom pools cannot skip foreign or retired IDs. Preserve their entries.
@@ -833,14 +926,20 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
 +                $this->pool = $this->routePool;
 +                $session = $this->pool->getIdleSession();
 +            }
-         }
++        }
 +        return $session && $session->isAlive() && $session->isIdle() ? $session->take() : null;
 +    }
-+
+ 
+-        if ($session)
+-        {
+-            return $session->take();
 +    /** @internal Forget local IDs without sending DeleteSession to the replacement replica. */
 +    public function retireSessions()
 +    {
 +        $this->routeSessions = [];
++        if ($this->filePool) {
++            $this->filePool->retireRoute();
+         }
 +    }
  
 -        return null;
@@ -850,10 +949,13 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
 +            $this->retireSessions();
 +            $this->poolEpoch = $epoch;
 +        }
++        if ($this->filePool) {
++            $this->filePool->selectRoute($epoch);
++        }
      }
  
      /**
-@@ -180,8 +246,12 @@ class  Table
+@@ -180,8 +261,12 @@ class  Table
          $session_id = $result->getSessionId();
          $this->logger()->info('YDB: New session created [...' . substr($session_id, -6) . '].');
  
@@ -861,19 +963,19 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
 -        static::$session_pool->addSession($session);
 +        $this->updatePoolEpoch($this->routeEpoch);
 +        $session = new Session($this, $session_id, $this->routeEpoch);
-+        if ($this->routeEpoch !== null) {
++        if ($this->routeEpoch !== null && !$this->filePool) {
 +            $this->routeSessions[$session_id] = $session;
 +        }
 +        $this->pool->addSession($session);
          return $session->take();
      }
  
-@@ -191,7 +261,12 @@ class  Table
+@@ -191,7 +276,12 @@ class  Table
       */
      public function dropSession($session_id)
      {
 -        static::$session_pool->dropSession($session_id);
-+        if ($this->poolEpoch === null) {
++        if ($this->poolEpoch === null || $this->filePool) {
 +            $this->pool->dropSession($session_id);
 +            return;
 +        }
@@ -882,12 +984,12 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
      }
  
      /**
-@@ -200,7 +275,11 @@ class  Table
+@@ -200,7 +290,11 @@ class  Table
       */
      public function syncSession($session_id)
      {
 -        static::$session_pool->syncSession($session_id);
-+        if ($this->routePool) {
++        if ($this->routePool && !$this->filePool) {
 +            $this->routePool->syncSession($session_id);
 +        } else {
 +            $this->pool->syncSession($session_id);
@@ -895,7 +997,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
      }
  
      /**
-@@ -209,7 +288,9 @@ class  Table
+@@ -209,7 +303,9 @@ class  Table
       */
      public function sessionTaken($session)
      {
@@ -906,7 +1008,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
      }
  
      /**
-@@ -218,7 +299,14 @@ class  Table
+@@ -218,7 +314,17 @@ class  Table
       */
      public function sessionReleased($session)
      {
@@ -918,11 +1020,14 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..39eb22584f68a08250d89dafc8fd0250
 +
 +    private function ownsSession(Session $session): bool
 +    {
++        if ($this->filePool) {
++            return $this->filePool->ownsSession($session);
++        }
 +        return $this->routePool === null || ($this->routeSessions[$session->id()] ?? null) === $session;
      }
  
      /**
-@@ -479,7 +567,7 @@ class  Table
+@@ -479,7 +585,7 @@ class  Table
                  $session = $this->session();
                  return $userFunc($session);
              } catch (Exception $exception){
@@ -1043,14 +1148,15 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..0ba63c037fcf789387aa8266dc680e11
          $interval = $this->ydb->discoveryInterval();
  
 diff --git a/src/Ydb.php b/src/Ydb.php
-index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..ae052972cb012c49e657cb526050debb11bb120a 100644
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b384e335fd 100644
 --- a/src/Ydb.php
 +++ b/src/Ydb.php
-@@ -115,6 +115,14 @@ class Ydb
+@@ -115,6 +115,15 @@ class Ydb
       * @var \YdbPlatform\Ydb\Internal\Discovery
       */
      protected $internalDiscovery;
 +    private $longPoll;
++    private $bootstrapEndpoint;
 +    private $routeEpoch = 0;
 +    private $routeSnapshot;
 +    private $pollTimeoutMs;
@@ -1061,7 +1167,16 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..ae052972cb012c49e657cb526050debb
  
      /**
       * @param array $config
-@@ -165,7 +173,17 @@ class Ydb
+@@ -123,7 +132,7 @@ class Ydb
+      */
+     public function __construct($config = [], LoggerInterface $logger = null)
+     {
+-        $this->endpoint = $config['endpoint'] ?? null;
++        $this->bootstrapEndpoint = $this->endpoint = $config['endpoint'] ?? null;
+         $this->database = $config['database'] ?? null;
+         $this->iam_config = $config['iam_config'] ?? [];
+         $this->grpc_config = (array) ($config['grpc'] ?? []);
+@@ -165,7 +174,17 @@ class Ydb
                  $this->discoveryInterval = $config['discoveryInterval'];
              }
  
@@ -1080,7 +1195,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..ae052972cb012c49e657cb526050debb
          }
  
          $this->logger()->info('YDB: Initialized');
-@@ -233,7 +251,132 @@ class Ydb
+@@ -233,7 +252,143 @@ class Ydb
       */
      public function discover()
      {
@@ -1124,6 +1239,17 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..ae052972cb012c49e657cb526050debb
 +    public function currentRouteEpoch()
 +    {
 +        return $this->longPoll ? $this->routeEpoch : null;
++    }
++
++    /** @internal An unstamped discovery result cannot identify a replica across process restarts. */
++    public function fileSessionPartition(): ?string
++    {
++        $generation = $this->routeSnapshot[0] ?? null;
++        if ($generation === null) {
++            return null;
++        }
++        return hash('sha256', serialize([$this->bootstrapEndpoint, (bool)$this->iam()->config('insecure'),
++            $this->database, $generation, $this->endpoint]));
 +    }
 +
 +    /** @internal Share the current route's data transport between service stubs. */
@@ -1216,10 +1342,10 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..ae052972cb012c49e657cb526050debb
      /**
 diff --git a/tests/Internal/LongPollTest.php b/tests/Internal/LongPollTest.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..1540c21c09b0a28c9597db9546b0e7083f1e7c53
+index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18d6eaf877
 --- /dev/null
 +++ b/tests/Internal/LongPollTest.php
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,328 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Test\Internal;
@@ -1356,6 +1482,56 @@ index 0000000000000000000000000000000000000000..1540c21c09b0a28c9597db9546b0e708
 +            $second->retireSessions();
 +            foreach (glob($file . '*') as $path) {
 +                unlink($path);
++            }
++        }
++    }
++
++    public function testFilePoolRestoresOnlyIdleSessionsFromTheSameConfirmedRoute()
++    {
++        $base = tempnam(sys_get_temp_dir(), 'ydb-qualified-session');
++        file_put_contents($base, '[{"id":"legacy","taken":false}]');
++        $open = function ($generation) use ($base) {
++            $driver = new class(['database' => '/one', 'endpoint' => 'localhost:1',
++                'iam_config' => ['anonymous' => true, 'insecure' => true]]) extends \YdbPlatform\Ydb\Ydb {
++                public function currentRouteEpoch() { return 1; }
++                public function refreshLongPoll(?int $timeoutMs = null) { return 1; }
++                public function needDiscovery(): bool { return true; }
++            };
++            $snapshot = new \ReflectionProperty(\YdbPlatform\Ydb\Ydb::class, 'routeSnapshot');
++            $snapshot->setAccessible(true);
++            $snapshot->setValue($driver, [$generation, []]);
++            $retry = new \YdbPlatform\Ydb\Retry\Retry($driver->getLogger());
++            $table = new class($driver, $driver->getLogger(), $retry) extends \YdbPlatform\Ydb\Table {
++                protected function request($method, array $data = []) {
++                    $this->checkDiscovery();
++                    return new \Ydb\Table\CreateSessionResult(['session_id' => uniqid('issued-')]);
++                }
++            };
++            $table->sessionPool(new \YdbPlatform\Ydb\Sessions\FileSessionPool(['table' => $table, 'filepath' => $base], $retry));
++            return $table;
++        };
++        try {
++            $first = $open('1');
++            $idle = $first->session()->release()->id();
++            self::assertNotSame('legacy', $idle);
++            unset($first);
++            gc_collect_cycles();
++            $again = $open('1');
++            self::assertSame($idle, $again->session()->release()->id());
++            $concurrent = $open('1');
++            self::assertNotSame($idle, $concurrent->session()->id());
++            unset($concurrent);
++            gc_collect_cycles();
++            unset($again);
++            gc_collect_cycles();
++            $after = $open('2');
++            self::assertNotSame($idle, $after->session()->release()->id());
++            self::assertSame('[{"id":"legacy","taken":false}]', file_get_contents($base));
++        } finally {
++            unset($first, $again, $after);
++            gc_collect_cycles();
++            foreach (glob($base . '*') as $file) {
++                unlink($file);
 +            }
 +        }
 +    }

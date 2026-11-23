@@ -23,45 +23,43 @@ struct TGrpcAuditContext {
     TString Status;
     TString DetailedStatus;
 
-    // Keep repeated values from the append-only request audit context.
-    TVector<TString> RemoteAddress;
-    TVector<TString> Subject;
-    TVector<TString> SanitizedToken;
-    TVector<TString> Database;
-    TVector<TString> Operation;
-    TVector<TString> GrpcMethod;
-    TVector<TString> StartTime;
-    TVector<TString> EndTime;
-    TVector<TString> CloudId;
-    TVector<TString> FolderId;
-    TVector<TString> ResourceId;
-    TVector<TString> Reason;
-    TVector<TString> QueryText;
-    TVector<TString> PreparedQueryId;
-    TVector<TString> TxId;
-    TVector<TString> BeginTx;
-    TVector<TString> CommitTx;
-    TVector<TString> Table;
-    TVector<TString> RowCount;
-    TVector<TString> TabletId;
-    TVector<TString> ProgramText;
-    TVector<TString> SchemaChanges;
-    TVector<TString> StoragePool;
-    TVector<TString> Group;
-    TVector<TString> HiveId;
-    TVector<TString> HiveGeneration;
-    TVector<TString> ReassignId;
-    TVector<TString> Request;
+    TString RemoteAddress;
+    TString Subject;
+    TString SanitizedToken;
+    TString Database;
+    TString Operation;
+    TString GrpcMethod;
+    TString StartTime;
+    TString EndTime;
+    TString CloudId;
+    TString FolderId;
+    TString ResourceId;
+    TString Reason;
+    TString QueryText;
+    TString PreparedQueryId;
+    TString TxId;
+    TString BeginTx;
+    TString CommitTx;
+    TString Table;
+    TString RowCount;
+    TString TabletId;
+    TString ProgramText;
+    TString SchemaChanges;
+    TString StoragePool;
+    TString Group;
+    TString HiveId;
+    TString HiveGeneration;
+    TString ReassignId;
+    TString Request;
 };
 
-TVector<TString> GetOperationField(const TAuditLogParts& parts, TStringBuf name) {
-    TVector<TString> values;
+TString GetOperationField(const TAuditLogParts& parts, TStringBuf name) {
     for (const auto& [partName, value] : parts) {
         if (partName == name) {
-            values.push_back(value.empty() ? EmptyValue : value);
+            return value.empty() ? EmptyValue : value;
         }
     }
-    return values;
+    return {};
 }
 
 TGrpcAuditContext MakeOperationContext(std::optional<ui32> status, const TAuditLogParts& parts) {
@@ -110,74 +108,36 @@ TGrpcAuditContext MakeConnectionContext(const IRequestProxyCtx* request,
         const TString& database, const TString& userSID, const TString& sanitizedToken) {
     TGrpcAuditContext context;
     context.Component = "grpc-conn";
-    context.RemoteAddress.push_back(NAddressClassifier::ExtractAddress(request->GetPeerName()));
-    context.Subject.push_back(userSID);
-    context.SanitizedToken.push_back(sanitizedToken.empty() ? EmptyValue : sanitizedToken);
-    context.Database.push_back(database);
-    context.Operation.push_back(request->GetRequestName());
+    context.RemoteAddress = NAddressClassifier::ExtractAddress(request->GetPeerName());
+    context.Subject = userSID;
+    context.SanitizedToken = sanitizedToken.empty() ? EmptyValue : sanitizedToken;
+    context.Database = database;
+    context.Operation = request->GetRequestName();
     return context;
 }
 
 void AuditClusterAdmin(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
-        for (const auto& value : context.TabletId) {
-            AUDIT_PART("tablet_id", value)
-        }
-        for (const auto& value : context.ProgramText) {
-            AUDIT_PART("program_text", value)
-        }
-        for (const auto& value : context.SchemaChanges) {
-            AUDIT_PART("schema_changes", value)
-        }
-        for (const auto& value : context.StoragePool) {
-            AUDIT_PART("storage_pool", value)
-        }
-        for (const auto& value : context.Group) {
-            AUDIT_PART("group", value)
-        }
-        for (const auto& value : context.HiveId) {
-            AUDIT_PART("hive_id", value)
-        }
-        for (const auto& value : context.Request) {
-            AUDIT_PART("request", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
+        AUDIT_PART("tablet_id", context.TabletId)
+        AUDIT_PART("program_text", context.ProgramText)
+        AUDIT_PART("schema_changes", context.SchemaChanges)
+        AUDIT_PART("storage_pool", context.StoragePool)
+        AUDIT_PART("group", context.Group)
+        AUDIT_PART("hive_id", context.HiveId)
+        AUDIT_PART("request", context.Request)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -186,42 +146,18 @@ void AuditClusterAdmin(const TGrpcAuditContext& context) {
 void AuditDatabaseAdmin(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -230,42 +166,18 @@ void AuditDatabaseAdmin(const TGrpcAuditContext& context) {
 void AuditLogin(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -274,45 +186,19 @@ void AuditLogin(const TGrpcAuditContext& context) {
 void AuditNodeRegistration(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
-        for (const auto& value : context.Request) {
-            AUDIT_PART("request", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
+        AUDIT_PART("request", context.Request)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -321,42 +207,18 @@ void AuditNodeRegistration(const TGrpcAuditContext& context) {
 void AuditDdl(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -365,66 +227,26 @@ void AuditDdl(const TGrpcAuditContext& context) {
 void AuditDml(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
-        for (const auto& value : context.QueryText) {
-            AUDIT_PART("query_text", value)
-        }
-        for (const auto& value : context.PreparedQueryId) {
-            AUDIT_PART("prepared_query_id", value)
-        }
-        for (const auto& value : context.TxId) {
-            AUDIT_PART("tx_id", value)
-        }
-        for (const auto& value : context.BeginTx) {
-            AUDIT_PART("begin_tx", value)
-        }
-        for (const auto& value : context.CommitTx) {
-            AUDIT_PART("commit_tx", value)
-        }
-        for (const auto& value : context.Table) {
-            AUDIT_PART("table", value)
-        }
-        for (const auto& value : context.RowCount) {
-            AUDIT_PART("row_count", value)
-        }
-        for (const auto& value : context.Request) {
-            AUDIT_PART("request", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
+        AUDIT_PART("query_text", context.QueryText)
+        AUDIT_PART("prepared_query_id", context.PreparedQueryId)
+        AUDIT_PART("tx_id", context.TxId)
+        AUDIT_PART("begin_tx", context.BeginTx)
+        AUDIT_PART("commit_tx", context.CommitTx)
+        AUDIT_PART("table", context.Table)
+        AUDIT_PART("row_count", context.RowCount)
+        AUDIT_PART("request", context.Request)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -433,51 +255,21 @@ void AuditDml(const TGrpcAuditContext& context) {
 void AuditOperations(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
-        for (const auto& value : context.HiveId) {
-            AUDIT_PART("hive_id", value)
-        }
-        for (const auto& value : context.HiveGeneration) {
-            AUDIT_PART("hive_generation", value)
-        }
-        for (const auto& value : context.ReassignId) {
-            AUDIT_PART("reassign_id", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
+        AUDIT_PART("hive_id", context.HiveId)
+        AUDIT_PART("hive_generation", context.HiveGeneration)
+        AUDIT_PART("reassign_id", context.ReassignId)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -486,42 +278,18 @@ void AuditOperations(const TGrpcAuditContext& context) {
 void AuditExportImport(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -530,42 +298,18 @@ void AuditExportImport(const TGrpcAuditContext& context) {
 void AuditAcl(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -574,42 +318,18 @@ void AuditAcl(const TGrpcAuditContext& context) {
 void AuditHeartbeat(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );
@@ -618,42 +338,18 @@ void AuditHeartbeat(const TGrpcAuditContext& context) {
 void AuditDefault(const TGrpcAuditContext& context) {
     AUDIT_LOG(
         AUDIT_PART("component", context.Component)
-        for (const auto& value : context.RemoteAddress) {
-            AUDIT_PART("remote_address", value)
-        }
-        for (const auto& value : context.Subject) {
-            AUDIT_PART("subject", value)
-        }
-        for (const auto& value : context.SanitizedToken) {
-            AUDIT_PART("sanitized_token", value)
-        }
-        for (const auto& value : context.Database) {
-            AUDIT_PART("database", value)
-        }
-        for (const auto& value : context.Operation) {
-            AUDIT_PART("operation", value)
-        }
-        for (const auto& value : context.GrpcMethod) {
-            AUDIT_PART("grpc_method", value)
-        }
-        for (const auto& value : context.StartTime) {
-            AUDIT_PART("start_time", value)
-        }
-        for (const auto& value : context.EndTime) {
-            AUDIT_PART("end_time", value)
-        }
-        for (const auto& value : context.CloudId) {
-            AUDIT_PART("cloud_id", value)
-        }
-        for (const auto& value : context.FolderId) {
-            AUDIT_PART("folder_id", value)
-        }
-        for (const auto& value : context.ResourceId) {
-            AUDIT_PART("resource_id", value)
-        }
-        for (const auto& value : context.Reason) {
-            AUDIT_PART("reason", value)
-        }
+        AUDIT_PART("remote_address", context.RemoteAddress)
+        AUDIT_PART("subject", context.Subject)
+        AUDIT_PART("sanitized_token", context.SanitizedToken)
+        AUDIT_PART("database", context.Database)
+        AUDIT_PART("operation", context.Operation)
+        AUDIT_PART("grpc_method", context.GrpcMethod)
+        AUDIT_PART("start_time", context.StartTime)
+        AUDIT_PART("end_time", context.EndTime)
+        AUDIT_PART("cloud_id", context.CloudId)
+        AUDIT_PART("folder_id", context.FolderId)
+        AUDIT_PART("resource_id", context.ResourceId)
+        AUDIT_PART("reason", context.Reason)
         AUDIT_PART("status", context.Status)
         AUDIT_PART("detailed_status", context.DetailedStatus)
     );

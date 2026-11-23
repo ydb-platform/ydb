@@ -1,6 +1,8 @@
 
 * Replaced `TAlterDatabaseSettings::Freeze(bool)` with independent `FreezeSchema(bool)` and `FreezeDataShards(bool)`, including data-only freeze. Added the desired targets and latest operation to `TGetDatabaseStatusResult::GetFreezeStatus()`; pending/failed targets do not prove application. `OperationTimeout` still limits waiting without cancelling the accepted operation.
 
+* Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
+
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 
 * Added `TOperation::HasMetadata()` to check whether operation metadata is available.

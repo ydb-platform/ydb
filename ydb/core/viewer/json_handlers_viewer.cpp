@@ -32,6 +32,7 @@
 #include "viewer_query.h"
 #include "viewer_render.h"
 #include "viewer_storage.h"
+#include "viewer_storage_nbs.h"
 #include "viewer_storage_usage.h"
 #include "viewer_tabletcounters.h"
 #include "viewer_tenantinfo.h"
@@ -241,6 +242,18 @@ void InitViewerStorageUsageJsonHandler(TJsonHandlers &handlers) {
     handlers.AddHandler("/viewer/storage_usage", new TJsonHandler<TJsonStorageUsage>(TJsonStorageUsage::GetSwagger()));
 }
 
+void InitViewerNbsDiscoveryJsonHandler(TJsonHandlers& jsonHandlers) {
+    TSimpleYamlBuilder yaml({
+        .Method = "get",
+        .Tag = "storage",
+        .Summary = "NBS storage discovery",
+        .Description = "Configured is true when the cluster has a DDisk pool, false when there are none, "
+            "and null when an older controller does not report this information. "
+            "A controller request timeout returns HTTP 504.",
+    });
+    jsonHandlers.AddHandler("/storage/nbs", new THttpHandler<TStorageNbsDiscovery>(yaml));
+}
+
 void InitViewerClusterJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/cluster", new THttpHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 11);
 }
@@ -284,6 +297,7 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/nodes", new THttpHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 22);
     handlers.Capabilities["/viewer/nodes/alive"] = 1;
+    handlers.Capabilities["/viewer/nodes/ddisks"] = 1;
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -362,6 +376,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerTabletCountersJsonHandler(jsonHandlers);
     InitViewerStorageJsonHandler(jsonHandlers);
     InitViewerStorageUsageJsonHandler(jsonHandlers);
+    InitViewerNbsDiscoveryJsonHandler(jsonHandlers);
     InitViewerClusterJsonHandler(jsonHandlers);
     InitViewerLabeledCountersJsonHandler(jsonHandlers);
     InitViewerTenantsJsonHandler(jsonHandlers);

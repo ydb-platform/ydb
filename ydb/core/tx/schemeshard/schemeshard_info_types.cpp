@@ -602,6 +602,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             ui32 colId = colName2Id[colName];
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
+            if (featureFlags.DisablePgCompatibility && sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
+                    && (col.HasDefaultFromSequence() || col.HasDefaultFromLiteral())) {
+                errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.c_str());
+                return nullptr;
+            }
+
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
                 if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
@@ -755,6 +761,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 break;
             }
             case NScheme::NTypeIds::Pg:
+                if (featureFlags.DisablePgCompatibility) {
+                    errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.c_str());
+                    return nullptr;
+                }
                 if (!featureFlags.EnableTablePgTypes) {
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
@@ -898,7 +908,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         const auto& ttl = op.GetTTLSettings();
 
-        if (!ValidateTtlSettings(ttl, source ? source->Columns : TMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
+        if (!ValidateTtlSettings(ttl, source ? source->Columns : TMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, featureFlags.DisablePgCompatibility, errStr)) {
             return nullptr;
         }
 
@@ -3643,6 +3653,10 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
         auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {
             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
+            return std::nullopt;
+        }
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility()) {
+            errStr = Sprintf("PostgreSQL compatibility is disabled for sequence '%s'", sequenceName.c_str());
             return std::nullopt;
         }
         if (!pgTypesEnabled) {

@@ -2301,7 +2301,7 @@ value {
 
     Y_UNIT_TEST_FLAG(ExportImportPg, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 

@@ -237,7 +237,7 @@ message TFeatureFlags {
     optional bool EnableTinyDisks = 207 [default = true];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = true];
-    optional bool EnableSecureScriptExecutions = 210 [default = false];
+    optional bool EnableSecureScriptExecutions = 210 [default = true];
     optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = true];
     optional bool EnableOlapRejectProbability = 213 [default = true];
@@ -499,4 +499,8 @@ message TFeatureFlags {
     optional bool EnableTopicReplication = 396 [default = false];
     optional bool EnableRebuildIndex = 397 [default = false];
     optional bool EnableDefaultFromExpression = 398 [default = false];
+    optional bool ShareShardedMkqlProgram = 399 [default = false];
+    // Disables client access to built-in PostgreSQL compatibility in YDB.
+    optional bool DisablePgCompatibility = 400 [default = false];
+    optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
 }

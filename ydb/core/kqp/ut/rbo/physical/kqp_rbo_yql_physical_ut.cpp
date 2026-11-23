@@ -1466,7 +1466,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"select a, a + 1 as c from `/Root/olap` limit 3 offset 2", 3, "5"},
             // An inner offset is not moved past by an outer limit.
             {"select * from (select a from `/Root/olap` limit 5 offset 1) limit 2", 2, "6"},
-            {"select a from `/Root/row` limit 3 offset 2", 3, ""},
+            // A row table read takes the limit with the offset too.
+            {"select a from `/Root/row` limit 3 offset 2", 3, "5"},
+            {"select a from `/Root/row` limit 3 offset 8", 2, "11"},
         };
 
         for (const auto& testCase : unsortedCases) {

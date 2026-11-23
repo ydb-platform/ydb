@@ -39,6 +39,9 @@
     "name": "yt.BufferRowCount"
   },
   {
+    "name": "yt.BypassIdentityMapWithSysColumns"
+  },
+  {
     "name": "yt.BypassMergeWithInputSettings"
   },
   {

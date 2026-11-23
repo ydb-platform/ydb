@@ -221,6 +221,7 @@ class TClusters: public IClusters {
     const ui32 Dimensions = 0;
     const ui32 MaxRounds = 0;
     const ui8 FormatByte = 0;
+    const EClustersMode Mode;
 
     TVector<TString> Clusters;
     TVector<ui64> ClusterSizes;
@@ -230,10 +231,11 @@ class TClusters: public IClusters {
     ui32 Round = 0;
 
 public:
-    TClusters(ui32 dimensions, ui32 maxRounds, ui8 formatByte)
+    TClusters(ui32 dimensions, ui32 maxRounds, ui8 formatByte, EClustersMode mode)
         : Dimensions(dimensions)
         , MaxRounds(maxRounds)
         , FormatByte(formatByte)
+        , Mode(mode)
     {
     }
 
@@ -286,16 +288,19 @@ public:
         ClusterSizes.clear();
         ClusterSizes.resize(Clusters.size());
         NextClusterSizes.clear();
-        NextClusterSizes.resize(Clusters.size());
         NextClusters.clear();
-        NextClusters.resize(Clusters.size());
-        for (auto& aggregate : NextClusters) {
-            aggregate.resize(Dimensions, 0);
+        if (Mode == EClustersMode::Accumulate) {
+            NextClusterSizes.resize(Clusters.size());
+            NextClusters.resize(Clusters.size());
+            for (auto& aggregate : NextClusters) {
+                aggregate.resize(Dimensions, 0);
+            }
         }
         return true;
     }
 
     bool RecomputeClusters() override {
+        Y_ENSURE(Mode == EClustersMode::Accumulate, "Assignment-only clusters cannot accumulate vectors");
         ui64 vectorCount = 0;
         ui64 reassignedCount = 0;
         for (size_t i = 0; auto& aggregate : NextClusters) {
@@ -430,6 +435,7 @@ public:
     }
 
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {
+        Y_ENSURE(Mode == EClustersMode::Accumulate, "Assignment-only clusters cannot accumulate vectors");
         auto& aggregate = NextClusters.at(pos);
         auto* coords = aggregate.data();
         Y_ENSURE(IsExpectedFormat(embedding));
@@ -669,7 +675,7 @@ private:
     }
 };
 
-std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error) {
+std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error, EClustersMode mode) {
     if (!ValidateSettings(settings, error)) {
         return nullptr;
     }
@@ -680,16 +686,16 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         constexpr ui8 formatByte = Format<T>;
         switch (settings.metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, formatByte, mode);
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, formatByte, mode);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte, mode);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, formatByte, mode);
             default:
                 error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
                 return nullptr;

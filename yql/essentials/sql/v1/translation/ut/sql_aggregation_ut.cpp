@@ -113,7 +113,7 @@ Y_UNIT_TEST(SessionWindowInPq) {
         "SELECT * FROM plato.Input GROUP BY SessionWindow(ts, 10);",
         10, TString(NYql::PqProviderName));
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:54: Error: Streaming group by query must have a hopping window specification.\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: Streaming group by query must have a hopping window specification.\n");
 
     res = SqlToYql(R"(
             SELECT key, SUM(value) AS value FROM plato.Input

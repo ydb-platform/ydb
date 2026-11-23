@@ -175,7 +175,7 @@ public:
         });
     }
 
-    TRope SerializeItem(NKikimr::NMiniKQL::TProgramBuilder& builder, const TMaybe<TMessage>& item) const {
+    TRope SerializeItems(NKikimr::NMiniKQL::TProgramBuilder& builder, const std::vector<TMessage>& items) const {
         NKikimr::NMiniKQL::TType* typeMkql =
             builder.NewMultiType({ NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; Uint64]"), builder, Cerr),
                 NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; String]"), builder, Cerr) });
@@ -184,15 +184,36 @@ public:
         NKikimr::NMiniKQL::TValuePackerTransport<true> packer(
             typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
 
-        if (item) {
+        for (const auto& item : items) {
             auto values = TVector<NUdf::TUnboxedValue>{
-                NUdf::TUnboxedValuePod(item->first),
-                NKikimr::NMiniKQL::MakeString(item->second),
+                NUdf::TUnboxedValuePod(item.first),
+                NKikimr::NMiniKQL::MakeString(item.second),
             };
             packer.AddWideItem(values.data(), values.size());
         }
 
         return NYql::MakeReadOnlyRope(packer.Finish());
+    }
+
+    TRope SerializeItem(NKikimr::NMiniKQL::TProgramBuilder& builder, const TMaybe<TMessage>& item) const {
+        return SerializeItems(builder, item ? std::vector<TMessage>{ *item } : std::vector<TMessage>{});
+    }
+
+    // Model RD output for one topic message: one payload with all rows sharing its offset.
+    void MockMultipartMessageBatch(
+        ui64 offset, const std::vector<TMessage>& rows, NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId) const {
+        UNIT_ASSERT(!rows.empty());
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
+            auto* message = event->Record.AddMessages();
+            message->SetPayloadId(event->AddPayload(SerializeItems(actor.ProgramBuilder, rows)));
+            for (size_t i = 0; i < rows.size(); ++i) {
+                message->AddOffsets(offset);
+            }
+            event->Record.SetPartitionId(partitionId);
+            event->Record.SetNextMessageOffset(offset + 1);
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
+        });
     }
 
     // Supported schema (Uint64, String)
@@ -718,6 +739,92 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ReadMessages(expected);
 
         UNIT_ASSERT_VALUES_EQUAL(0, (SourceRead<TMessage>(UVPairParser, 0).size()));
+    }
+
+    Y_UNIT_TEST_TWIN(MultipartMessageCheckpointWithSmallFreeSpace, ReadBeforeCheckpoint) {
+        constexpr ui64 offset = 42;
+        const std::vector<TMessage> rows = { Message2, Message3, Message4 };
+        const std::vector<TWatermarkOr<TMessage>> expectedRows = { Message2, Message3, Message4 };
+        const ui64 checkpointOffset = offset + (ReadBeforeCheckpoint ? 1 : 0);
+        TSourceState state;
+
+        {
+            TFixture f;
+            f.Settings.SetFormat("json_each_row");
+            f.StartSession(f.Settings);
+            f.WriteMessages(offset - 1, std::vector{ Message1 }, f.RowDispatcherId1, 1, PartitionId1);
+            f.ReadMessages({ Message1 });
+            f.AssertCheckpointOffsets({ { PartitionId1, offset } });
+
+            f.MockMultipartMessageBatch(offset, rows, f.RowDispatcherId1, 1, PartitionId1);
+            // Zero capacity must leave the complete message buffered and its offset uncommitted.
+            UNIT_ASSERT(f.SourceRead<TMessage>(UVPairParser, 0).empty());
+            f.AssertCheckpointOffsets({ { PartitionId1, offset } });
+            if (ReadBeforeCheckpoint) {
+                // A single call must return every row even though one byte cannot fit the payload.
+                f.AssertDataWithWatermarks(expectedRows, f.SourceRead<TMessage>(UVPairParser, 1));
+                UNIT_ASSERT(f.SourceRead<TMessage>(UVPairParser, 1).empty());
+            }
+            f.AssertCheckpointOffsets({ { PartitionId1, checkpointOffset } });
+            f.SaveSourceState(CreateCheckpoint(), state);
+        }
+
+        {
+            TFixture f;
+            f.Settings.SetFormat("json_each_row");
+            f.InitRdSource(f.Settings);
+            f.CaSetup->LoadSource(state);
+            UNIT_ASSERT(f.SourceRead<TMessage>(UVPairParser, 1).empty());
+            f.ExpectCoordinatorChangesSubscribe();
+            f.MockCoordinatorChanged(f.CoordinatorId1);
+            const auto request = f.ExpectCoordinatorRequest(f.CoordinatorId1);
+            f.MockCoordinatorResult(f.CoordinatorId1, { { f.RowDispatcherId1, PartitionId1 } }, request->Cookie);
+            f.ExpectStartSession({ { PartitionId1, checkpointOffset } }, f.RowDispatcherId1, 1);
+            f.MockAck(f.RowDispatcherId1, 1, PartitionId1);
+
+            if (!ReadBeforeCheckpoint) {
+                // An unread message must be replayed from its beginning, including every sub-row.
+                f.MockMultipartMessageBatch(offset, rows, f.RowDispatcherId1, 1, PartitionId1);
+                f.AssertDataWithWatermarks(expectedRows, f.SourceRead<TMessage>(UVPairParser, 1));
+            }
+            f.AssertCheckpointOffsets({ { PartitionId1, offset + 1 } });
+
+            f.WriteMessages(offset + 1, std::vector{ Message5 }, f.RowDispatcherId1, 1, PartitionId1);
+            f.AssertDataWithWatermarks({ Message5 }, f.SourceRead<TMessage>(UVPairParser, 1));
+            UNIT_ASSERT(f.SourceRead<TMessage>(UVPairParser, 1).empty());
+            f.AssertCheckpointOffsets({ { PartitionId1, offset + 2 } });
+        }
+    }
+
+    Y_UNIT_TEST_F(SmallFreeSpaceStopsBetweenMultipartBatches, TFixture) {
+        Settings.SetFormat("json_each_row");
+        InitRdSource(Settings, 1_MB, PartitionId2 + 1);
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(CoordinatorId1);
+        const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, { { RowDispatcherId1, PartitionId1 }, { RowDispatcherId2, PartitionId2 } }, request->Cookie);
+        ExpectStartSession({}, RowDispatcherId1, 1);
+        ExpectStartSession({}, RowDispatcherId2, 2);
+        MockAck(RowDispatcherId1, 1, PartitionId1);
+        MockAck(RowDispatcherId2, 2, PartitionId2);
+
+        MockStatistics(RowDispatcherId1, 42, 1, PartitionId1);
+        MockStatistics(RowDispatcherId2, 100, 2, PartitionId2);
+        AssertCheckpointOffsets({ { PartitionId1, 42 }, { PartitionId2, 100 } });
+
+        // Different partitions keep these messages in separate ready batches without watermarks.
+        MockMultipartMessageBatch(42, { Message1, Message2, Message3 }, RowDispatcherId1, 1, PartitionId1);
+        MockMultipartMessageBatch(100, { Message4, Message5, Message6 }, RowDispatcherId2, 2, PartitionId2);
+        UNIT_ASSERT(SourceRead<TMessage>(UVPairParser, 0).empty());
+        AssertCheckpointOffsets({ { PartitionId1, 42 }, { PartitionId2, 100 } });
+
+        AssertDataWithWatermarks({ Message1, Message2, Message3 }, SourceRead<TMessage>(UVPairParser, 1));
+        // Only the fully delivered message may advance its checkpoint offset.
+        AssertCheckpointOffsets({ { PartitionId1, 43 }, { PartitionId2, 100 } });
+        AssertDataWithWatermarks({ Message4, Message5, Message6 }, SourceRead<TMessage>(UVPairParser, 1));
+        AssertCheckpointOffsets({ { PartitionId1, 43 }, { PartitionId2, 101 } });
+        UNIT_ASSERT(SourceRead<TMessage>(UVPairParser, 1).empty());
     }
 
     Y_UNIT_TEST(TestSaveLoadPqRdRead) {

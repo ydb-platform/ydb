@@ -1016,25 +1016,28 @@ TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAt
 
 class TInputOptions final: public TAstListNode {
 public:
-    TInputOptions(TPosition pos, TTableHints hints)
+    TInputOptions(TPosition pos, TTableHints hints, TMap<TString, TPosition> hintPositions)
         : TAstListNode(pos)
         , Hints_(std::move(hints))
+        , HintPositions_(std::move(hintPositions))
     {
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         for (auto& hint : Hints_) {
             TString hintName = hint.first;
-            TMaybe<TIssue> normalizeError = NormalizeName(Pos_, hintName);
+            const auto position = HintPositions_.find(hintName);
+            const auto& pos = position != HintPositions_.end() ? position->second : Pos_;
+            TMaybe<TIssue> normalizeError = NormalizeName(pos, hintName);
             if (!normalizeError.Empty()) {
-                ctx.Error() << normalizeError->GetMessage();
+                ctx.Error(pos) << normalizeError->GetMessage();
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
 
             if ("watermark" == hintName) {
-                TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
-                auto anyColumnSrc = BuildAnyColumnSource(Pos_);
+                TNodePtr option = Y(BuildQuotedAtom(pos, hintName));
+                auto anyColumnSrc = BuildAnyColumnSource(pos);
                 for (auto& x : hint.second) {
                     if (!x->Init(ctx, anyColumnSrc.Get())) {
                         return false;
@@ -1045,7 +1048,7 @@ public:
                 continue;
             }
 
-            TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
+            TNodePtr option = Y(BuildQuotedAtom(pos, hintName));
             for (auto& x : hint.second) {
                 if (!x->Init(ctx, src)) {
                     return false;
@@ -1065,14 +1068,15 @@ public:
 
 private:
     TTableHints Hints_;
+    TMap<TString, TPosition> HintPositions_;
 };
 
-TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints) {
+TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints, const TMap<TString, TPosition>& hintPositions) {
     if (hints.empty()) {
         return nullptr;
     }
 
-    return new TInputOptions(pos, hints);
+    return new TInputOptions(pos, hints, hintPositions);
 }
 
 class TIntoTableOptions: public TAstListNode {

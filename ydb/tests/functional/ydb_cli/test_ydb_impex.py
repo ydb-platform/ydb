@@ -63,8 +63,7 @@ DATA_ARRAY["csv"] = ["""key,id,value
 7777,7777,"seven"
 """]
 
-DATA_ARRAY_BAD_HEADER["csv"] = DATA_ARRAY["csv"]
-DATA_ARRAY_BAD_HEADER["csv"][0].replace("key,id,value", 'a,b,c')
+DATA_ARRAY_BAD_HEADER["csv"] = [data.replace("key,id,value", "a,b,c", 1) for data in DATA_ARRAY["csv"]]
 
 DATA_END_LINES["csv"] = DATA["csv"].replace("\n", ",\n")
 
@@ -72,8 +71,7 @@ DATA["tsv"] = DATA["csv"].replace(',', '\t')
 DATA_EXCESS["tsv"] = DATA_EXCESS["csv"].replace(',', '\t')
 
 DATA_ARRAY["tsv"] = list(map(lambda s: s.replace(',', '\t'), DATA_ARRAY["csv"]))
-DATA_ARRAY_BAD_HEADER["tsv"] = DATA_ARRAY["tsv"]
-DATA_ARRAY_BAD_HEADER["tsv"][0].replace("key\tid\tvalue", 'a\tb\tc')
+DATA_ARRAY_BAD_HEADER["tsv"] = [data.replace("key\tid\tvalue", "a\tb\tc", 1) for data in DATA_ARRAY["tsv"]]
 
 DATA_END_LINES["tsv"] = DATA["tsv"].replace('\n', '\t\n')
 
@@ -242,7 +240,11 @@ class TestImpex(BaseCliTestWithDatabase):
             format = "json-unicode"
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
         output_file_name = str(self.tmp_path / "result.output")
-        self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan", "--format", format], stdout=output_file_name)
+        with open(os.devnull, "rb") as stdin:
+            self.execute_ydb_cli_command(
+                ["table", "query", "execute", "-q", query, "-t", "scan", "--format", format],
+                stdin=stdin, stdout=output_file_name,
+            )
         return yatest.common.canonical_file(output_file_name, local=True, universal_lines=True)
 
     def validate_gen_data(self):
@@ -306,22 +308,38 @@ class TestImpex(BaseCliTestWithDatabase):
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
     def test_multiple_files(self, tmp_path, request, table_type, ftype, additional_args):
         self.init_test(tmp_path, table_type, request.node.name)
-        self.write_array_to_files(DATA_ARRAY[ftype], ftype)
-        self.run_import_multiple_files(ftype, len(DATA_ARRAY[ftype]), additional_args)
+        batch = tmp_path / "batch"
+        for index, contents in enumerate(DATA_ARRAY[ftype]):
+            path = batch / f"day-{index // 2}" / f"part-{index}.{ftype.upper()}"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(contents)
+        # An export directory may also contain metadata and unpublished parts.
+        unpublished = self.get_header(ftype) + self.get_row_in_format(ftype, 999, 9999, "unpublished")
+        (batch / "manifest.txt").write_text(unpublished)
+        (batch / f".partial.{ftype}").write_text(unpublished)
+        (batch / ".staging").mkdir()
+        (batch / ".staging" / f"unpublished.{ftype}").write_text(unpublished)
+        self.execute_ydb_cli_command([
+            "import", "file", ftype, "-p", self.table_path, "--threads", "2",
+        ] + self.get_header_flag(ftype) + additional_args + [str(batch)])
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
     def test_multiple_files_and_stdin(self, tmp_path, request, table_type, ftype, additional_args):
         self.init_test(tmp_path, table_type, request.node.name)
         self.write_array_to_files(DATA_ARRAY[ftype], ftype)
-        self.run_import_multiple_files(ftype, len(DATA_ARRAY[ftype]), additional_args)
+        # Send each JSON record as its own batch, alongside the file inputs.
+        args = additional_args + (["--batch-bytes", "1"] if ftype == "json" else [])
+        self.run_import_multiple_files_and_stdin(ftype, len(DATA_ARRAY[ftype]), args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ONLY_CSV_TSV_PARAMS)
     def test_multiple_files_and_columns_opt(self, tmp_path, request, table_type, ftype, additional_args):
         self.init_test(tmp_path, table_type, request.node.name)
         self.write_array_to_files(DATA_ARRAY_BAD_HEADER[ftype], ftype)
-        self.run_import_multiple_files(ftype, len(DATA_ARRAY_BAD_HEADER[ftype]), ["--columns", self.get_header(ftype)] + additional_args)
+        # Override the source headers with a mapping copied from a CRLF file.
+        column_names = self.get_header(ftype).rstrip("\n") + "\r\n"
+        self.run_import_multiple_files(ftype, len(DATA_ARRAY_BAD_HEADER[ftype]), ["--columns", column_names] + additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
@@ -422,13 +440,47 @@ class TestImpex(BaseCliTestWithDatabase):
         # Use only the header and first 5 rows from DATA[ftype]
         data_lines = DATA[ftype].splitlines(keepends=True)
         data = ''.join(data_lines[:6])
-        self.run_import(
-            ftype,
-            data,
-            additional_args=["--max-in-flight", "1", "--batch-bytes", "1"],
-            threads=1,
-        )
+        args = ["--max-in-flight", "1", "--batch-bytes", "1"]
+        if table_type == "column":
+            args += ["--send-format", "arrow"]
+        self.run_import(ftype, data, additional_args=args, threads=1)
         return self.run_export(ftype)
+
+    def test_import_resumes_after_missing_file(self, tmp_path, request, table_type):
+        self.init_test(tmp_path, table_type, request.node.name)
+        complete = tmp_path / "available.csv"
+        missing = tmp_path / "delayed.csv"
+        complete.write_text("key,id,value\n1,1111,original\n")
+        cli_home = tmp_path / "home"
+        cli_home.mkdir()
+        env = dict(os.environ, HOME=str(cli_home))
+        args = [
+            "import", "file", "csv", "-p", self.table_path, "--header",
+            "--threads", "2", str(complete), str(missing),
+        ]
+        result = self.execute_ydb_cli_command(args, env=env, check_exit_code=False)
+        assert result.exit_code != 0, result.stdout
+        assert f"File does not exist: {missing}" in result.stderr
+        assert self._read_imported_rows() == [{"key": 1, "id": 1111, "value": "original"}]
+
+        # The first part landed before the second became available. Keep a later
+        # correction to that row when the operator reruns the same import.
+        self.execute_ydb_cli_command([
+            "sql", "-s", f'UPSERT INTO `{self.table_path}` (key, id, value) VALUES (1u, 1111ul, "corrected"u);',
+        ])
+        missing.write_text("key,id,value\n2,2222,delayed\n")
+        result = self.execute_ydb_cli_command(args, env=env)
+        assert "Skipping 1 file(s) that were fully imported" in result.stderr
+        assert self._read_imported_rows() == [
+            {"key": 1, "id": 1111, "value": "corrected"},
+            {"key": 2, "id": 2222, "value": "delayed"},
+        ]
+        assert not list((cli_home / ".config" / "ydb" / "import_progress").iterdir())
+
+    def _read_imported_rows(self):
+        query = f"SELECT `key`, `id`, `value` FROM `{self.table_path}` ORDER BY `key`"
+        result = self.execute_ydb_cli_command(["sql", "-s", query, "--format", "json-unicode-array"])
+        return json.loads(result.stdout)
 
     def _prepare_infer_input(self, tmp_path, request):
         self.tmp_path = tmp_path
@@ -443,33 +495,46 @@ class TestImpex(BaseCliTestWithDatabase):
 
     def test_tools_infer_csv_execute(self, tmp_path, request, table_type):
         csv_path = self._prepare_infer_input(tmp_path, request)
+        import_args = ["import", "file", "csv", "-p", self.table_path, "--header", "--threads", "2", str(csv_path)]
+        missing_table = self.execute_ydb_cli_command(import_args, check_exit_code=False)
+        assert missing_table.exit_code != 0, missing_table.stdout
+        assert "Couldn't find a table by specified path" in missing_table.stderr
+        assert f"ydb tools infer csv {csv_path} --path {self.table_path} --execute" in missing_table.stderr
+
         result = self.execute_ydb_cli_command([
-            "tools", "infer", "csv",
+            "-v", "tools", "infer", "csv",
             "-p", self.table_path,
             "--execute",
-            "--header",
             str(csv_path),
         ])
-        assert "CREATE TABLE" in result.stderr
-        assert "PRIMARY KEY" in result.stderr
-        assert "key" in result.stderr
-        assert "id" in result.stderr
-        assert "value" in result.stderr
-        self._verify_table_exists(self.table_path)
+        assert "key Int64 NOT NULL" in result.stderr
+        assert "id Int64" in result.stderr
+        assert "value Text" in result.stderr
+        assert "PRIMARY KEY (`key`)" in result.stderr
+        self.execute_ydb_cli_command(import_args)
+        assert self._read_imported_rows() == [
+            {"key": 1, "id": 1111, "value": "one"},
+            {"key": 2, "id": 2222, "value": "two"},
+            {"key": 3, "id": 3333, "value": "three"},
+            {"key": 5, "id": 5555, "value": "five"},
+            {"key": 7, "id": 7777, "value": "seven"},
+        ]
 
     def test_tools_infer_csv_no_execute(self, tmp_path, request, table_type):
         csv_path = self._prepare_infer_input(tmp_path, request)
+        # The first row contains valid identifiers, but fits the inferred
+        # string columns just like the later rows. It must stay data.
+        csv_path.write_text("alpha,beta\nnorth,closed\nsouth,active\n")
         result = self.execute_ydb_cli_command([
-            "tools", "infer", "csv",
+            "-v", "tools", "infer", "csv",
             "-p", self.table_path,
-            "--header",
             str(csv_path),
         ])
         assert "CREATE TABLE" in result.stdout
-        assert "PRIMARY KEY" in result.stdout
-        assert "key" in result.stdout
-        assert "id" in result.stdout
-        assert "value" in result.stdout
+        assert "column0 Text NOT NULL" in result.stdout
+        assert "column1 Text" in result.stdout
+        assert "PRIMARY KEY (`column0`)" in result.stdout
+        assert "alpha Text" not in result.stdout
 
     def test_tools_infer_csv_execute_with_profile(self, tmp_path, request, table_type):
         csv_path = self._prepare_infer_input(tmp_path, request)

@@ -1,12 +1,12 @@
 #pragma once
 
-#include "common.h"
+#include "static.h"
 
 #include <library/cpp/time_provider/monotonic.h>
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
-    struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT> {
+    struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT>, public TStaticAttributes {
         ui64 CpuFairShare = 0;
 
         std::atomic<ui64> CpuMaxDemand = 0;
@@ -21,7 +21,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         ui64 MemoryDemand = 0;
         ui64 MemoryUsage = 0;
 
-        explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
+        explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {})
+            : TTreeElementBase(id), TStaticAttributes(attrs) {}
+
+        ui64 GetChildrenCpuGuarantee() const;
 
         TPool* GetParent() const;
 
@@ -56,7 +59,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::SNAPSHOT> {
     public:
-        TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs = {});
+        TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool = {});
+
+        const TStaticAttributes& GetConfiguredAttributes() const {
+            static const TStaticAttributes defaults;
+            return StaticPool ? static_cast<const TStaticAttributes&>(*StaticPool) : defaults;
+        }
+
+        const NStatic::TPoolPtr StaticPool;
 
         void AccountSnapshotDuration(TDuration period) override;
     };
@@ -64,17 +74,17 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
     // The memory of the default pool is not limited by the pool itself. Always a child of its database.
     class TDefaultPool : public TPool {
     public:
-        TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs = {});
+        TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const NStatic::TPoolPtr& pool = {});
     };
 
     class TDatabase : public TPool {
     public:
-        explicit TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs = {});
+        explicit TDatabase(const TDatabaseId& id, const NStatic::TPoolPtr& pool = {});
     };
 
     class TRoot : public TPool {
     public:
-        TRoot();
+        explicit TRoot(const NStatic::TRootPtr& tree);
 
         bool IsRoot() const final {
             return true;
@@ -89,6 +99,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     public:
         const TMonotonic Timestamp = TMonotonic::Now();
+        const NStatic::TRootPtr StaticTree;
         ui64 TotalCpuLimit = Infinity();
         ui64 TotalMemoryLimit = Infinity();
     };

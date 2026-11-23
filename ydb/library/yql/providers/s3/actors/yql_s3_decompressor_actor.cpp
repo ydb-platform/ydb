@@ -1,3 +1,5 @@
+#include "yql_s3_decompressor_actor.h"
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/hfunc.h>

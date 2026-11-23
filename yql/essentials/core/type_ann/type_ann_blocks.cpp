@@ -1589,8 +1589,12 @@ IGraphTransformer::TStatus BlockExtendWrapper(const TExprNode::TPtr& input, TExp
     TTypeAnnotationNode::TListType commonItemTypes;
     for (size_t idx = 0; idx < input->ChildrenSize(); ++idx) {
         auto child = input->Child(idx);
+        if (const auto type = child->GetTypeAnn(); type && type->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(type);
+            return IGraphTransformer::TStatus::Ok;
+        }
         TTypeAnnotationNode::TListType currentItemTypes;
-        if (!EnsureWideFlowBlockType(*child, idx ? currentItemTypes : commonItemTypes, ctx.Expr)) {
+        if (!EnsureWideStreamBlockType(*child, idx ? currentItemTypes : commonItemTypes, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1620,7 +1624,7 @@ IGraphTransformer::TStatus BlockExtendWrapper(const TExprNode::TPtr& input, TExp
         bool isScalar = (i + 1 == commonItemTypes.size());
         resultItemTypes.emplace_back(MakeBlockOrScalarType(commonItemTypes[i], isScalar, ctx.Expr));
     }
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TMultiExprType>(std::move(resultItemTypes))));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(ctx.Expr.MakeType<TMultiExprType>(std::move(resultItemTypes))));
     return IGraphTransformer::TStatus::Ok;
 }
 

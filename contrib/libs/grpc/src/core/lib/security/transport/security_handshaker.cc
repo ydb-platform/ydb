@@ -28,6 +28,7 @@
 #include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
+#include <utility>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/status/status.h"
@@ -586,25 +587,25 @@ void SecurityHandshaker::DoHandshake(grpc_tcp_server_acceptor* /*acceptor*/,
 
 class FailHandshaker : public Handshaker {
  public:
+  explicit FailHandshaker(y_absl::Status status) : status_(std::move(status)) {}
   const char* name() const override { return "security_fail"; }
   void Shutdown(grpc_error_handle /*why*/) override {}
   void DoHandshake(grpc_tcp_server_acceptor* /*acceptor*/,
                    grpc_closure* on_handshake_done,
                    HandshakerArgs* args) override {
-    grpc_error_handle error =
-        GRPC_ERROR_CREATE("Failed to create security handshaker");
-    grpc_endpoint_shutdown(args->endpoint, error);
+    grpc_endpoint_shutdown(args->endpoint, status_);
     grpc_endpoint_destroy(args->endpoint);
     args->endpoint = nullptr;
     args->args = ChannelArgs();
     grpc_slice_buffer_destroy(args->read_buffer);
     gpr_free(args->read_buffer);
     args->read_buffer = nullptr;
-    ExecCtx::Run(DEBUG_LOCATION, on_handshake_done, error);
+    ExecCtx::Run(DEBUG_LOCATION, on_handshake_done, status_);
   }
 
  private:
   ~FailHandshaker() override = default;
+  y_absl::Status status_;
 };
 
 //
@@ -653,14 +654,22 @@ class ServerSecurityHandshakerFactory : public HandshakerFactory {
 //
 
 RefCountedPtr<Handshaker> SecurityHandshakerCreate(
-    tsi_handshaker* handshaker, grpc_security_connector* connector,
-    const ChannelArgs& args) {
+    y_absl::StatusOr<tsi_handshaker*> handshaker,
+    grpc_security_connector* connector, const ChannelArgs& args) {
   // If no TSI handshaker was created, return a handshaker that always fails.
   // Otherwise, return a real security handshaker.
-  if (handshaker == nullptr) {
-    return MakeRefCounted<FailHandshaker>();
+  if (!handshaker.ok()) {
+    return MakeRefCounted<FailHandshaker>(
+        y_absl::Status(handshaker.status().code(),
+                     y_absl::StrCat("Failed to create security handshaker: ",
+                                  handshaker.status().message())));
+  } else if (*handshaker == nullptr) {
+    // TODO(gtcooke94) Once all TSI impls are updated to pass StatusOr<> instead
+    // of null, we should change this to use y_absl::InternalError().
+    return MakeRefCounted<FailHandshaker>(
+        y_absl::UnknownError("Failed to create security handshaker."));
   } else {
-    return MakeRefCounted<SecurityHandshaker>(handshaker, connector, args);
+    return MakeRefCounted<SecurityHandshaker>(*handshaker, connector, args);
   }
 }
 
@@ -672,11 +681,3 @@ void SecurityRegisterHandshakerFactories(CoreConfiguration::Builder* builder) {
 }
 
 }  // namespace grpc_core
-
-grpc_handshaker* grpc_security_handshaker_create(
-    tsi_handshaker* handshaker, grpc_security_connector* connector,
-    const grpc_channel_args* args) {
-  return SecurityHandshakerCreate(handshaker, connector,
-                                  grpc_core::ChannelArgs::FromC(args))
-      .release();
-}

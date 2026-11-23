@@ -4,8 +4,8 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 NJson::TJsonValue TGeneralIterator::GetValue() const {
-    AFL_VERIFY(IsValidFlag);
-    AFL_VERIFY(CurrentValue);
+    YDB_LOG_VERIFY(IsValidFlag);
+    YDB_LOG_VERIFY(CurrentValue);
     return CurrentValue->ToJsonValue();
 }
 

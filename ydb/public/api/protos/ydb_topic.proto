@@ -595,6 +595,16 @@ message StreamReadMessage {
     // This command is a hint to the client to commit offsets, after which the child partitions will be balanced independently in different reading sessions.
     // Unlike StopPartitionSessionRequest, the client does not have to close the reading session.
     // Client should not send a response to the command.
+    //
+    // The same message is also sent when the client's max_offset window is
+    // read out (read offset reached max_offset + 1). The partition itself is
+    // not finished - it keeps accepting writes. Distinguish the two cases by
+    // child/adjacent ids: they are empty when the window is exhausted. This is
+    // a client-side signal only: the read balancer is not notified, and no
+    // more data, split or merge events are reported for this partition
+    // session. max_offset is a property of this partition session only: a
+    // later session reading the same partition confirms its own bounds. The
+    // "commit offsets" hint above does not apply here.
     message EndPartitionSession {
         // Partition session identifier.
         int64 partition_session_id = 1;
@@ -1002,6 +1012,9 @@ message Consumer {
     // Read quota for this consumer for a single partition, in messages per second.
     // Not set or zero value means no limit.
     optional int64 read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
+
+    // Whether offsets for this consumer are replicated from the source topic. Defaults to true when omitted.
+    optional bool replicate_offsets = 13;
 }
 
 // Consumer alter description.
@@ -1043,6 +1056,9 @@ message AlterConsumer {
     // Set read quota for this consumer for a single partition, in messages per second.
     // Zero value means no limit.
     optional int64 set_read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
+
+    // Set whether offsets for this consumer are replicated from the source topic.
+    optional bool set_replicate_offsets = 13;
 }
 
 enum AutoPartitioningStrategy {

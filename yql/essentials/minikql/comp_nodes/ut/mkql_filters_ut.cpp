@@ -1,6 +1,6 @@
 #include "mkql_computation_node_ut.h"
-#include "mkql_program_builder_test_utils.h"
 
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -15,7 +15,7 @@ Y_UNIT_TEST_LLVM(TestTakeWhileInclusiveEmptyStream) {
     using TRow = std::tuple<TVector<ui64>, ui64>;
     const auto input = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{});
     const auto prefix = pb.TakeWhileInclusive(pb.Iterator(input, {}), [&](TRuntimeNode) {
-        return NTest::ConvertValueToLiteralNode(pb, true);
+        return NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/true);
     });
     // YQL-21833: projecting tuple fields makes a spurious empty-stream item crash.
     const auto projected = pb.Map(prefix, [&](TRuntimeNode row) {

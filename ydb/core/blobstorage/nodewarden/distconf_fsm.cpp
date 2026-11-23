@@ -4,6 +4,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
 #include <ydb/library/actors/retro_tracing/span/retro_span.h>
@@ -23,12 +24,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::UpdateQuorums() {
         // update quorum flags, if something has changed
         if (!std::exchange(QuorumValid, true)) {
-            // create a list of connected nodes
-            std::vector<TNodeIdentifier> connected;
-            connected.reserve(AllBoundNodes.size());
-            for (const auto& [nodeId, node] : AllBoundNodes) {
-                connected.push_back(nodeId);
-            }
+            std::vector<TNodeIdentifier> connected = GetConnectedNodes();
 
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
@@ -50,6 +46,15 @@ namespace NKikimr::NStorage {
         }
     }
 
+    std::vector<TNodeIdentifier> TDistributedConfigKeeper::GetConnectedNodes() const {
+        std::vector<TNodeIdentifier> connected;
+        connected.reserve(AllBoundNodes.size());
+        for (const auto& [nodeId, node] : AllBoundNodes) {
+            connected.push_back(nodeId);
+        }
+        return connected;
+    }
+
     void TDistributedConfigKeeper::FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record) {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
         if (!IsBridged() || !StorageConfig || !Cfg) {
@@ -58,12 +63,10 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        std::vector<TNodeIdentifier> connected;
-        connected.reserve(AllBoundNodes.size());
+        std::vector<TNodeIdentifier> connected = GetConnectedNodes();
         absl::flat_hash_set<ui32> connectedNodeIds;
-        connectedNodeIds.reserve(AllBoundNodes.size());
-        for (const auto& [nodeId, node] : AllBoundNodes) {
-            connected.push_back(nodeId);
+        connectedNodeIds.reserve(connected.size());
+        for (const auto& nodeId : connected) {
             connectedNodeIds.insert(nodeId.NodeId());
         }
 
@@ -177,10 +180,12 @@ namespace NKikimr::NStorage {
         // The previous root may have lost a selfheal actor mid-reconfiguration.
         // Pull fresh statuses even if Sentinel has observed no node changes.
         StartStateStorageSelfHealRefresh();
+        RefreshStaticGroupRepairs();
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
         AbortRootProbe();
+        StopStaticGroupRepairs();
         CancelStateStorageSelfHealRefresh();
         StateStorageSelfHealRefreshStarted = false;
         if (StateStorageSelfHealActor) {
@@ -286,13 +291,10 @@ namespace NKikimr::NStorage {
         SwitchToError("incorrect response from peer");
     }
 
-    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config) const {
-        std::vector<TNodeIdentifier> connected;
-        connected.reserve(AllBoundNodes.size());
-        for (const auto& [nodeId, node] : AllBoundNodes) {
-            connected.push_back(nodeId);
-        }
-        return HasNodeQuorum(config, connected, TBridgePileId(), *Cfg, nullptr, true);
+    bool TDistributedConfigKeeper::HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            TBridgePileId pileId) const {
+        std::vector<TNodeIdentifier> connected = GetConnectedNodes();
+        return HasNodeQuorum(config, connected, pileId, *Cfg, nullptr, true);
     }
 
     bool TDistributedConfigKeeper::RememberAppliedConfig(const TStorageConfigMeta& meta) {
@@ -1470,6 +1472,17 @@ namespace NKikimr::NStorage {
 
             UpdateFingerprint(configToPropose);
         }
+
+#define VALIDATE_SELECTION(NAME) \
+        if (configToPropose->Has##NAME##Config()) { \
+            if (TString error = NConfig::ValidateStateStorageConfigSelection(configToPropose->Get##NAME##Config())) { \
+                return TStringBuilder() << #NAME << ' ' << error; \
+            } \
+        }
+        VALIDATE_SELECTION(StateStorage)
+        VALIDATE_SELECTION(StateStorageBoard)
+        VALIDATE_SELECTION(SchemeBoard)
+#undef VALIDATE_SELECTION
 
         YDB_LOG_INFO("StartProposition",
             {"marker", "NWDC60"},

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "yql_yt_provider.h"
 
 using namespace NThreading;

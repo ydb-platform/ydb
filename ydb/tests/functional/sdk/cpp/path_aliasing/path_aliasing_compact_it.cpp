@@ -169,7 +169,7 @@ namespace NYdb::inline Dev::NPathAliasingTests {
 
             const auto aliasedRelative = Await(alias.MakeDirectory(Name + "/relative"));
             const auto canonicalRelative = Await(canonical.MakeDirectory(Name + "/relative"));
-            EXPECT_FALSE(aliasedRelative.IsSuccess());
+            EXPECT_TRUE(aliasedRelative.IsSuccess());
             EXPECT_EQ(aliasedRelative.GetStatus(), canonicalRelative.GetStatus());
 
             EXPECT_FALSE(Await(alias.DescribePath("/kfrontend/" + Name)).IsSuccess());

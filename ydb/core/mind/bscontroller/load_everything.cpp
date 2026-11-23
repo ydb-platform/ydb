@@ -135,6 +135,7 @@ public:
                 if (state.HaveValue<T::DataCenterStates>()) {
                     auto states = ParseDataCenterStates(state.GetValue<T::DataCenterStates>());
                     Y_VERIFY_S(states.has_value(), states.error());
+                    Self->HasDataCenterPolicy = true;
                     Self->DataCenterStates = std::move(*states);
                 }
             }

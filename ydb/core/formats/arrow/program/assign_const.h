@@ -20,7 +20,7 @@ public:
     TConstProcessor(const std::shared_ptr<arrow::Scalar>& scalar, const ui32 columnId)
         : TBase(std::vector<TColumnChainInfo>(), std::vector<TColumnChainInfo>({ TColumnChainInfo(columnId) }), EProcessorType::Const)
         , ScalarConstant(scalar) {
-        AFL_VERIFY(ScalarConstant);
+        YDB_LOG_VERIFY(ScalarConstant);
     }
 };
 

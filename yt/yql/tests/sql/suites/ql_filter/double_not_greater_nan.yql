@@ -1,0 +1,9 @@
+PRAGMA yt.UseQLFilter;
+
+SELECT
+    x
+FROM
+    plato.Input
+WHERE
+    NOT (x > 1e-2f OR x < -1e-2)
+;

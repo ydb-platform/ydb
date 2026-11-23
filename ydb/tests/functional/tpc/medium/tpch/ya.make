@@ -13,12 +13,10 @@ PY_SRCS(
 INCLUDE(common.inc)
 
 FORK_TEST_FILES()
-FORK_SUBTESTS()
 REQUIREMENTS(cpu:2)
 END()
 
 RECURSE_FOR_TESTS(
     duplicates
-    parallel
     s1
 )

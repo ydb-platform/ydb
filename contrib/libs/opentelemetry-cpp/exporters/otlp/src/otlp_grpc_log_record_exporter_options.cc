@@ -21,12 +21,10 @@ OtlpGrpcLogRecordExporterOptions::OtlpGrpcLogRecordExporterOptions()
   ssl_credentials_cacert_path      = GetOtlpDefaultLogsSslCertificatePath();
   ssl_credentials_cacert_as_string = GetOtlpDefaultLogsSslCertificateString();
 
-#ifdef ENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW
   ssl_client_key_path    = GetOtlpDefaultLogsSslClientKeyPath();
   ssl_client_key_string  = GetOtlpDefaultLogsSslClientKeyString();
   ssl_client_cert_path   = GetOtlpDefaultLogsSslClientCertificatePath();
   ssl_client_cert_string = GetOtlpDefaultLogsSslClientCertificateString();
-#endif
 
   timeout    = GetOtlpDefaultLogsTimeout();
   metadata   = GetOtlpDefaultLogsHeaders();

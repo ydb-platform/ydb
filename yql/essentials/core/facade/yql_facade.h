@@ -96,7 +96,7 @@ private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
-    TLangVersion LangVer_ = UnknownLangVersion;
+    TMaybe<TLangVersion> LangVer_;
     TLangVersion MaxLangVer_ = UnknownLangVersion;
     bool VolatileResults_ = false;
     TUserDataTable UserDataTable_;
@@ -331,10 +331,7 @@ public:
         OperationOptions_.QueryName = name;
     }
 
-    void SetOperationAttrsYson(const TString& attrs) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-        OperationOptions_.AttrsYson = attrs;
-    }
+    void SetOperationAttrsYson(const TString& attrs);
 
     void SetParametersYson(const TString& parameters);
 

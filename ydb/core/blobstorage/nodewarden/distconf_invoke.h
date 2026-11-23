@@ -94,6 +94,7 @@ namespace NKikimr::NStorage {
         // Configuration update
 
         void UpdateConfig(TQuery::TUpdateConfig *request);
+        void CheckStaticGroupStateUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) const;
         void DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,6 +162,10 @@ namespace NKikimr::NStorage {
         bool FullCommitConfirmationNeeded = false;
         static constexpr ui64 ConfigValidationTimeoutCookie = 1;
         static constexpr ui64 VStatusTimeoutCookie = 2;
+        static constexpr ui64 DataCenterRetryCookie = 3;
+        static constexpr ui64 DataCenterTimeoutCookie = 4;
+        TMonotonic DataCenterReconciliationDeadline;
+        bool DataCenterPreflight = false;
         bool WaitingForConfigValidation = false;
 
         TActorId ControllerPipeId;
@@ -232,7 +237,7 @@ namespace NKikimr::NStorage {
         TBridgePileId CheckPileOperation(const TString& pileName, NKikimrBridge::TClusterState::EPileState expectedState,
             bool adding);
         // every node remaining in the cluster has to support pile operations (see RequireBridgeCapability)
-        void RequirePileOperationCapability(TBridgePileId leavingPileId, std::function<void()> callback);
+        void RequireConnectedNodesCapability(ui32 featureLevel, TBridgePileId leavingPileId, std::function<void()> callback);
 
         void AddBridgePile(const TQuery::TAddBridgePile& cmd);
         void AddBridgePileWithBaseConfig();
@@ -248,6 +253,10 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
+        void StartDataCenterReconciliation();
+        void SendDataCenterSnapshot();
+        void ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command);
+        void PromoteStaticGroup(const TPromoteStaticGroup& op);
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
         void StartRecoveryProposition(TProcessCollectConfigsResult& result);

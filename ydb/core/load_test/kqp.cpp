@@ -2,7 +2,8 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/workload/abstract/workload_factory.h>

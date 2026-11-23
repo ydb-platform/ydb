@@ -21,7 +21,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
-    const TSubDomainInfo& subDomain, TString& errStr)
+    const TSubDomainInfo& subDomain, bool disablePgCompatibility, TString& errStr)
 {
     using TTtlProto = NKikimrSchemeOp::TTTLSettings;
 
@@ -48,6 +48,11 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 
         if (IsDropped(*column)) {
             errStr = Sprintf("Cannot enable TTL on dropped column: '%s'", colName.data());
+            return false;
+        }
+
+        if (disablePgCompatibility && GetType(*column).GetTypeId() == NScheme::NTypeIds::Pg) {
+            errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.data());
             return false;
         }
 

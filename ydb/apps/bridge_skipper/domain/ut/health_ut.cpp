@@ -445,16 +445,133 @@ Y_UNIT_TEST_SUITE(BridgeSkipperHealth) {
         }
     }
 
-    Y_UNIT_TEST(FallbackGreyAndFallbackRedAreUnknown) {
+    Y_UNIT_TEST(FallbackGreyIsUnknownAndDecisiveNonHostRedFails) {
         for (const TString name : {"fallback_grey", "fallback_red"}) {
             TScenario s;
             s.Replies.SelfChecks.front().Classification = Classify(name);
             const auto evaluation = s.Evaluate();
             UNIT_ASSERT(!evaluation.BscAvailable);
             AssertVerdict(evaluation, "a", EPileVerdict::Unknown);
-            AssertVerdict(evaluation, "b", EPileVerdict::Unknown);
+            AssertVerdict(evaluation, "b", name == "fallback_red" ? EPileVerdict::Failed : EPileVerdict::Unknown);
+            if (name == "fallback_red") {
+                UNIT_ASSERT(evaluation.Piles.at("b").FailureEvidence == EFailureEvidence::Fallback);
+            }
             UNIT_ASSERT(evaluation.Piles.at("b").FallbackRed);
             UNIT_ASSERT(!evaluation.Piles.at("a").FallbackRed);
+        }
+    }
+
+    Y_UNIT_TEST(NonHostFallbackNeedsCurrentCompleteAttributedEvidence) {
+        for (unsigned invalid = 0; invalid != 14; ++invalid) {
+            auto raw = Fixture("fallback_red");
+            switch (invalid) {
+                case 0:
+                    raw.mutable_issue_log(1)->set_status(Ydb::Monitoring::StatusFlag::GREY);
+                    break;
+                case 1:
+                    raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::GREY);
+                    break;
+                case 2:
+                    raw.mutable_issue_log(1)->set_reason(0, "missing");
+                    break;
+                case 3: {
+                    const auto duplicate = raw.issue_log(2);
+                    *raw.add_issue_log() = duplicate; // Ambiguous VDisk reason ID.
+                    break;
+                }
+                case 4:
+                    raw.mutable_issue_log(1)->clear_reason();
+                    break;
+                case 5:
+                    raw.mutable_issue_log(2)->set_status(Ydb::Monitoring::StatusFlag::BLUE);
+                    raw.mutable_issue_log(2)->set_message("Replication in progress");
+                    break;
+                case 6: {
+                    auto* truncation = raw.add_issue_log();
+                    truncation->set_id("truncated");
+                    truncation->set_type("HEALTHCHECK_STATUS");
+                    truncation->set_status(Ydb::Monitoring::StatusFlag::RED);
+                    break;
+                }
+                case 7:
+                    raw.mutable_issue_log(1)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->clear_pile();
+                    break;
+            }
+            TScenario s;
+            s.Replies.SelfChecks.front().Classification = ClassifySelfCheck(raw);
+            switch (invalid) {
+                case 8: s.Replies.SelfChecks.front().ResponderPile = "c"; break;
+                case 9: s.Replies.SelfChecks.front().ResponderPile.reset(); break;
+                case 10: s.Replies.Endpoints.front().Current = false; break;
+                case 11: s.Replies.Endpoints.front().Identity = EEndpointIdentity::Mismatch; break;
+                case 12: s.Replies.SelfChecks.front().SentAt = s.Now - s.Params.EvidenceTtl; break;
+                case 13: s.Replies.SelfChecks.front().SentAt = TMonotonic::Seconds(99); break;
+            }
+            UNIT_ASSERT_C(s.Evaluate().Piles.at("b").Verdict == EPileVerdict::Unknown, invalid);
+        }
+    }
+
+    Y_UNIT_TEST(NonHostOwnQuorumVetoIncludesPhysicalDiskErrorsAndBindingReports) {
+        for (const TString fixture : {"fallback_red", "real_fallback_primary_pdisk_error"}) {
+            auto raw = Fixture(fixture);
+            if (fixture == "fallback_red") {
+                raw.mutable_issue_log(1)->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name("a");
+            }
+            for (const bool binding : {false, true}) {
+                TScenario s;
+                s.Cluster.Piles = {{"a", EPileState::Synchronized}, {"b", EPileState::Primary}};
+                s.Replies.SelfChecks.clear();
+                s.Replies.Endpoints.clear();
+                s.AddSelfCheck("b", ClassifySelfCheck(raw));
+                TSelfCheckClassification own;
+                own.Mode = ESelfCheckMode::Fallback;
+                s.AddSelfCheck("a", own);
+                s.AddConnectivity("a", true, true);
+                s.AddConnectivity("b", true, true);
+                for (auto& reply : s.Replies.Connectivity) {
+                    reply.Report.BindingInProgress = binding;
+                }
+                const auto evaluation = s.Evaluate();
+                UNIT_ASSERT(!evaluation.BscAvailable);
+                AssertVerdict(evaluation, "a", EPileVerdict::Unknown);
+                UNIT_ASSERT(evaluation.Piles.at("a").SelfQuorum);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NonHostFallbackRequiresKnownParticipationAndRespectsLifecycle) {
+        struct TCase {
+            EPileState State;
+            std::optional<bool> InConfigQuorum;
+            bool Binding;
+            bool Participating;
+            std::optional<EPileVerdict> Verdict;
+        };
+        const TCase cases[] = {
+            {EPileState::Synchronized, {}, true, true, EPileVerdict::Failed},
+            {EPileState::NotSynchronized, true, true, true, EPileVerdict::Failed},
+            {EPileState::NotSynchronized, false, true, true, EPileVerdict::Unknown},
+            {EPileState::NotSynchronized, {}, true, true, EPileVerdict::Unknown},
+            {EPileState::NotSynchronized, false, false, false, {}},
+            {EPileState::Suspended, true, true, false, EPileVerdict::Unknown},
+            {EPileState::Disconnected, true, true, false, {}},
+            {EPileState::Inactive, true, true, false, {}},
+            {EPileState::HotStandby, true, true, false, {}},
+        };
+        for (const auto& test : cases) {
+            TScenario s;
+            s.Cluster.Piles["b"] = test.State;
+            s.Replies.SelfChecks.front().Classification = Classify("fallback_red");
+            if (test.InConfigQuorum) {
+                s.AddConnectivity("a", true, false, *test.InConfigQuorum);
+                s.Replies.Connectivity.front().Report.BindingInProgress = test.Binding;
+            }
+            const auto evaluation = s.Evaluate();
+            UNIT_ASSERT_VALUES_EQUAL(evaluation.Participating.contains("b"), test.Participating);
+            UNIT_ASSERT_VALUES_EQUAL(evaluation.Piles.contains("b"), test.Verdict.has_value());
+            if (test.Verdict) {
+                AssertVerdict(evaluation, "b", *test.Verdict);
+            }
         }
     }
 

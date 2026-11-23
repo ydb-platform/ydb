@@ -108,7 +108,6 @@ Each branch retrieves up to `LIMIT * 10` candidates by default. Use `PRAGMA ydb.
 ## Limitations {#limitations}
 
 * The table must have ready `fulltext_relevance` indexes and `vector_kmeans_tree` indexes over the respective scored columns, with compatible vector metrics; otherwise the query fails.
-* The current implementation supports only tables with a single-column primary key.
 * Prefixed fulltext and vector indexes require equality predicates on every prefix column in `WHERE`; see [index selection and filters](../yql/reference/syntax/select/hybrid_search.md#indexes-and-filters).
 * If more than one eligible fulltext index matches, use an explicit `AS Indexes` override. Vector branches prefer the compatible index with the longest fully bound prefix; equally specific indexes also require `AS Indexes`.
 * `LIMIT` must be a literal, because it sizes the per-branch candidate pools. To use a parameterized `LIMIT`, pass explicit `AS Limits`.

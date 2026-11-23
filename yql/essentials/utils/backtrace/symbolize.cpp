@@ -14,7 +14,7 @@ TString Symbolize(const TString& input, const THashMap<TString, TString>& mappin
     i64 stackSize = -1;
     TVector<TStackFrame> frames;
     TVector<TString> usedFilenames;
-    for (TStringBuf line : StringSplitter(input).SplitByString("\n")) {
+    for (TStringBuf line : StringSplitter(input).Split('\n')) {
         if (line.StartsWith("StackFrames:")) {
             TVector<TString> parts;
             Split(TString(line), " ", parts);

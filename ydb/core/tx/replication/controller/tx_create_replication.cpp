@@ -46,8 +46,7 @@ public:
             {"rid", rid},
             {"pathId", pathId});
 
-        const auto initialState = record.GetConfig().GetInitialScan()
-            ? TReplication::EState::Ready : TReplication::EState::Paused;
+        const auto initialState = InitialReplicationState(record.GetConfig());
 
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::PathOwnerId>(pathId.OwnerId),

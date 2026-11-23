@@ -19,7 +19,7 @@ namespace NKikimr::NOlap {
 ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
     : TablePath(tablePath)
 {
-    AFL_VERIFY(!!TablePath);
+    YDB_LOG_VERIFY(!!TablePath);
 }
 
 std::vector<TNameTypeInfo> ITableMetadataAccessor::GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const {
@@ -38,12 +38,12 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
     : TBase(tableName)
     , PathId(pathId)
 {
-    AFL_VERIFY(pathId.IsValid());
+    YDB_LOG_VERIFY(pathId.IsValid());
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
     const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
-    AFL_VERIFY(readDescription.PKRangesFilter);
+    YDB_LOG_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
         context.GetEngine().Select(PathId.InternalPathId, readDescription, context.GetDataLocksManager());

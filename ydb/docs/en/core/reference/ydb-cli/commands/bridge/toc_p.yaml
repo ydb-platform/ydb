@@ -3,6 +3,8 @@ items:
     href: index.md
   - name: ydb admin cluster bridge convert
     href: convert.md
+  - name: ydb admin cluster bridge rollback
+    href: rollback.md
   - name: ydb admin cluster bridge list
     href: list.md
   - name: ydb admin cluster bridge provision-pile

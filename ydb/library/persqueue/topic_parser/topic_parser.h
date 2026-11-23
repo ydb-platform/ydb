@@ -113,6 +113,10 @@ public:
      */
     const TMaybe<TString>& GetSecondaryPath(const TString& databasePath);
 
+    // Metacache second lookup: LbRoot/account + modern name, including -mirrored-from-<dc>.
+    // Empty when that fallback does not apply.
+    TMaybe<TString> TrySecondaryDiscoveryPath(const TString& lbRoot);
+
     /**
     Only for special cases.
     */
@@ -193,6 +197,7 @@ protected:
                         const TString& ydbDatabaseRootOverride,
                         const TMaybe<TString>& clientsideNameOverride = {});
 public:
+    using TDiscoveryConverter::GetDatabase;
 
     static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);
 

@@ -102,11 +102,10 @@ private:
                     )
                 );
             } else if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
-                if (IsBatch_) {
-                    MLPRequestToReplyIndexMapping_.push_back(requestIndexInBatch);
-                }
+                const NPQ::NMLP::TMessageId messageId(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
+                MLPEntries_.push_back({messageId, requestIndexInBatch});
 
-                MLPRequest_.Messages.emplace_back(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
+                MLPRequest_.Messages.push_back(messageId);
             } else {
                 if (IsBatch_) {
                     ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(requestIndexInBatch),
@@ -216,13 +215,20 @@ private:
     }
 
     void Handle(NPQ::NMLP::TEvChangeResponse::TPtr& ev) {
-        auto& messages = ev->Get()->Messages;
+        // Response messages are grouped by partition, not in request order.
+        TMap<std::pair<ui32, ui64>, NPQ::NMLP::EOperationResult> results;
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            for (const auto& message : ev->Get()->Messages) {
+                results.emplace(std::pair(message.MessageId.PartitionId, message.MessageId.Offset), message.Status);
+            }
+        }
 
-        auto status = [&](const auto& message) {
-            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        auto status = [&](const NPQ::NMLP::TMessageId& messageId) {
+            const auto it = results.find(std::pair(messageId.PartitionId, messageId.Offset));
+            if (it == results.end()) {
                 return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
             }
-            switch (message.Status) {
+            switch (it->second) {
                 case NPQ::NMLP::EOperationResult::Success:
                     return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK;
                 case NPQ::NMLP::EOperationResult::NotFound:
@@ -235,26 +241,17 @@ private:
         };
 
         ui32 deletedCount = 0;
-        if (IsBatch_) {
-            Y_ABORT_UNLESS(messages.size() == MLPRequestToReplyIndexMapping_.size());
-            for (size_t i = 0, size = messages.size(); i < size; ++i) {
-                const size_t entryIndex = MLPRequestToReplyIndexMapping_[i];
-                Y_ABORT_UNLESS(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize());
-
-                const auto messageStatus = status(messages[i]);
-                if (messageStatus == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK) {
-                    ++deletedCount;
-                }
-                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), messageStatus);
-            }
-        } else {
-            Y_ABORT_UNLESS(RequestsToLeader_ == 1);
-            Y_ABORT_UNLESS(ev->Get()->Messages.size() == 1);
-            const auto messageStatus = status(messages[0]);
+        for (const auto& [messageId, entryIndex] : MLPEntries_) {
+            const auto messageStatus = status(messageId);
             if (messageStatus == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK) {
                 ++deletedCount;
             }
-            ProcessAnswer(Response_.MutableDeleteMessage(), messageStatus);
+            if (IsBatch_) {
+                Y_ABORT_UNLESS(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize());
+                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), messageStatus);
+            } else {
+                ProcessAnswer(Response_.MutableDeleteMessage(), messageStatus);
+            }
         }
 
         if (QueueCounters_ && deletedCount > 0 && !ShouldReportTopicActionMetricsToPqrb()) {
@@ -299,7 +296,11 @@ private:
     size_t RequestsToLeader_ = 0;
     std::vector<TShardInfo> ShardInfo_;
     NPQ::NMLP::TCommitterSettings MLPRequest_;
-    std::vector<size_t> MLPRequestToReplyIndexMapping_;
+    struct TMLPEntry {
+        NPQ::NMLP::TMessageId MessageId;
+        size_t EntryIndex;
+    };
+    std::vector<TMLPEntry> MLPEntries_;
 };
 
 IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

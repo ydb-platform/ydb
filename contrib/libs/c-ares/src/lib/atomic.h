@@ -1,6 +1,8 @@
 #ifndef ATOMIC__H
 #define ATOMIC__H
 
+#include <stdint.h>
+
 typedef volatile intptr_t atomic_t;
 
 #ifdef __cplusplus

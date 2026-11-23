@@ -172,23 +172,17 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
         const auto& extend = input.Head();
         // Technically, the code below rewrites the following sequence
         // (WideToBlocks (FromFlow (Extend (<input>))))
-        // into (Extend (WideToBlocks (FromFlow (<input>))), but
+        // into (BlockExtend (WideToBlocks (ToStream (<input>)))), but
         // the logging is left intact, omitting the FromFlow barrier.
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << extend.Content();
         TExprNodeList newChildren;
         newChildren.reserve(extend.ChildrenSize());
         for (const auto& child : extend.ChildrenList()) {
-            // Extend callable can handle any sequential type, so
-            // just wrap all its children with (ToStream (...)).
-            // However, its *block* overload works only with WideFlow,
-            // so the new child is wrapped with ToFlow callable.
             // clang-format off
             const auto newChild = ctx.Builder(node->Pos())
-                .Callable("ToFlow")
-                    .Callable(0, "WideToBlocks")
-                        .Callable(0, "ToStream")
-                            .Add(0, child)
-                        .Seal()
+                .Callable("WideToBlocks")
+                    .Callable(0, "ToStream")
+                        .Add(0, child)
                     .Seal()
                 .Seal()
                 .Build();
@@ -196,13 +190,7 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
             newChildren.emplace_back(newChild);
         }
         const auto newName = extend.IsCallable("Extend") ? "BlockExtend" : "BlockOrderedExtend";
-        // clang-format off
-        return ctx.Builder(node->Pos())
-            .Callable("FromFlow")
-                .Add(0, ctx.NewCallable(input.Pos(), newName, std::move(newChildren)))
-            .Seal()
-            .Build();
-        // clang-format on
+        return ctx.NewCallable(node->Pos(), newName, std::move(newChildren));
     }
 
     return node;
@@ -316,15 +304,9 @@ TExprNode::TPtr OptimizeBlockExtend(const TExprNode::TPtr& node, TExprContext& c
     TExprNodeList inputs = node->ChildrenList();
     bool hasReplicateScalars = false;
     for (auto& input : inputs) {
-        if (input->IsCallable("ToFlow") && input->Head().IsCallable("ReplicateScalars")) {
-            const auto& replicateScalars = input->Head();
+        if (input->IsCallable("ReplicateScalars")) {
             hasReplicateScalars = true;
-            // If tail is FromFlow, its input is WideFlow and can be
-            // used intact; Otherwise the input is WideStream, so the
-            // new input should be converted to WideFlow.
-            const auto tail = replicateScalars.HeadPtr();
-            input = tail->IsCallable("FromFlow") ? tail->HeadPtr()
-                  : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
+            input = input->HeadPtr();
         }
     }
 
@@ -373,37 +355,26 @@ TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx
 
     TExprNodeList newChildren;
     newChildren.reserve(node->ChildrenSize());
-    bool seenScalars = false;
-    for (auto& child : node->ChildrenList()) {
-        const auto& items = child->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    for (const auto& child : node->Children()) {
+        const auto& items = child->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
         const ui32 width = items.size();
         YQL_ENSURE(width > 0);
 
         const bool hasScalars = AnyOf(items.begin(), items.end() - 1, [](const auto& item) { return item->IsScalar(); });
-        seenScalars = seenScalars || hasScalars;
-        TExprNode::TPtr newChild = child;
-        if (hasScalars) {
-            // clang-format off
-            newChild = ctx.Builder(child->Pos())
-                .Callable("ToFlow")
-                    .Callable(0, "ReplicateScalars")
-                        .Callable(0, "FromFlow")
-                            .Add(0, std::move(child))
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-            // clang-format on
-        }
-
-        newChildren.push_back(newChild);
+        auto stream = hasScalars ? ctx.NewCallable(child->Pos(), "ReplicateScalars", { child }) : child;
+        newChildren.push_back(ctx.NewCallable(child->Pos(), "ToFlow", { std::move(stream) }));
     }
 
     const TStringBuf newName = node->IsCallable("BlockExtend") ? "Extend" : "OrderedExtend";
-    if (!seenScalars) {
-        return ctx.RenameNode(*node, newName);
-    }
-    return ctx.NewCallable(node->Pos(), newName, std::move(newChildren));
+    // clang-format off
+    return ctx.Builder(node->Pos())
+        .Callable("FromFlow")
+            .Callable(0, newName)
+                .Add(std::move(newChildren))
+            .Seal()
+        .Seal()
+        .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr ExpandReplicateScalars(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
@@ -3824,14 +3795,29 @@ TExprNode::TPtr MakeWideTableSource(const TExprNode& tableSource, TExprContext& 
         columns.push_back(TString(item->GetName()));
     }
 
-    auto innerFlow = ctx.NewCallable(tableSource.Pos(), "ToFlow", { tableSource.HeadPtr() });
-    auto expandMap = MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx);
-    auto source = ctx.NewCallable(tableSource.Pos(), "WideTableSource", { expandMap });
+    // clang-format off
+    const auto innerFlow = ctx.Builder(tableSource.Pos())
+        .Callable("ToFlow")
+            .Add(0, tableSource.HeadPtr())
+        .Seal()
+        .Build();
+
+    auto wideFlow = ctx.Builder(tableSource.Pos())
+        .Callable("ToFlow")
+            .Callable(0, "WideTableSource")
+                .Callable(0, "FromFlow")
+                    .Add(0, MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+    // clang-format on
+
     if (narrowMapColumns) {
         *narrowMapColumns = columns;
-        return source;
+        return wideFlow;
     } else {
-        return MakeNarrowMap(tableSource.Pos(), columns, source, ctx);
+        return MakeNarrowMap(tableSource.Pos(), columns, wideFlow, ctx);
     }
 }
 
@@ -8546,8 +8532,9 @@ TExprNode::TPtr SqlCompareVariants(const TExprNode& node, TExprContext& ctx) {
             const auto& lItems = lTuple->GetItems();
             const auto& rItems = rTuple->GetItems();
             for (ui32 i = 0U; i < tupleType->GetSize(); ++i) {
+                const auto comparison = CanCompare<true>(lItems[i], rItems[i]);
                 variants.emplace_back(ctx.NewAtom(node.Pos(), i),
-                    !IsDistinct && ECompareOptions::Optional == CanCompare<true>(lItems[i], rItems[i]));
+                                      !IsDistinct && (comparison == ECompareOptions::Optional || comparison == ECompareOptions::Null));
             }
 
             break;
@@ -8839,6 +8826,49 @@ TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     return node;
+}
+
+template <bool Equals>
+TExprNode::TPtr ExpandOptAggrEquals(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto callable = Equals ? "AggrEquals" : "AggrNotEquals";
+    if (input->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
+        return ctx.RenameNode(*input, callable);
+    }
+    // clang-format off
+    return ctx.Builder(input->Pos())
+        .Callable("FlatMap")
+            .Add(0, input->HeadPtr())
+            .Lambda(1)
+                .Param("left")
+                .Callable("FlatMap")
+                    .Add(0, input->TailPtr())
+                    .Lambda(1)
+                        .Param("right")
+                        .Callable("Just")
+                            .Callable(0, callable)
+                                .Arg(0, "left")
+                                .Arg(1, "right")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr ExpandJoinEquals(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto type = input->Head().GetTypeAnn();
+    if (!type->HasYqlNaN()) {
+        return ctx.RenameNode(*input, "==");
+    }
+    if (!type->HasOptionalOrNull()) {
+        return ctx.RenameNode(*input, "AggrEquals");
+    }
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        return ReduceBothArgs<true>(*input, ctx);
+    }
+    return ExpandSqlEqual<true, false>(input, ctx);
 }
 
 template<bool Asc, bool Equals>
@@ -9294,6 +9324,9 @@ struct TPeepHoleRules {
         {"<=", &ExpandSqlCompare<true, true>},
         {">=", &ExpandSqlCompare<false, true>},
         {"AggrEquals", &ExpandAggrEqual<true>},
+        {"JoinEquals", &ExpandJoinEquals},
+        {"OptAggrEquals", &ExpandOptAggrEquals<true>},
+        {"OptAggrNotEquals", &ExpandOptAggrEquals<false>},
         {"AggrNotEquals", &ExpandAggrEqual<false>},
         {"AggrLess", &ExpandAggrCompare<true, false>},
         {"AggrGreater", &ExpandAggrCompare<false, false>},

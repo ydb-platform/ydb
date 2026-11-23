@@ -10,6 +10,7 @@
 #include "util.h"
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
@@ -501,6 +502,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     if (Loaded) {
         ApplyStorageConfig();
+        ReconcileDataCenterStates();
     }
 
     ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
@@ -728,6 +730,30 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
     }
 
     return nullptr;
+}
+
+void TBlobStorageController::RetryDataCenterStates() {
+    DataCenterRetryScheduled = false;
+    ReconcileDataCenterStates();
+}
+
+void TBlobStorageController::ReconcileDataCenterStates() {
+    if (!SelfManagementEnabled || !StorageConfig || !StorageConfig->HasDataCenterStates()) {
+        return;
+    }
+    std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(StorageConfig->GetDataCenterStates());
+    if (!desired || (HasDataCenterPolicy && *desired == DataCenterStates)) {
+        return;
+    }
+    auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
+    command->MutableDataCenter()->CopyFrom(StorageConfig->GetDataCenterStates().GetDataCenter());
+    Send(SelfId(), request.release());
+    if (!DataCenterRetryScheduled) {
+        DataCenterRetryScheduled = true;
+        TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvReconcileDataCenterStates,
+            0, SelfId(), {}, nullptr, 0));
+    }
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
@@ -1020,6 +1046,13 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     if (std::exchange(HostRecords, std::move(hostRecords))) {
         // we already had some host records, so this isn't the first time this function called
         Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+        if (GroupStateActorId && !DataCenterStates.empty()) {
+            for (const auto& [groupId, group] : GroupMap) {
+                if (group->ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                    UpdateGroupStateActor(groupId);
+                }
+            }
+        }
         return;
     }
 
@@ -1157,6 +1190,7 @@ STFUNC(TBlobStorageController::StateWork) {
         fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
+        fFunc(NGroupSyncer::TEvGroupState::EvPropose, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
         fFunc(NSysView::TEvSysView::EvGetPDisksRequest, ForwardToSystemViewsCollector);
         fFunc(NSysView::TEvSysView::EvGetVSlotsRequest, ForwardToSystemViewsCollector);
@@ -1199,6 +1233,7 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvRetryBridgeGroupModes, HandleRetryBridgeGroupModes);
         cFunc(TEvPrivate::EvCheckBridgeGroupModes, HandleCheckBridgeGroupModes);
         cFunc(TEvPrivate::EvRetrySyncers, HandleRetrySyncers);
+        cFunc(TEvPrivate::EvReconcileDataCenterStates, RetryDataCenterStates);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
@@ -1319,6 +1354,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerScrubReportQuantumInProgress: return 2;
         case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2;
         case TEvBlobStorage::EvControllerShredRequest:                 return 2;
+        case NGroupSyncer::TEvGroupState::EvPropose:                   return 2;
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;

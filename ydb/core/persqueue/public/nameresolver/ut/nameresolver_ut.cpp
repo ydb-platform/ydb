@@ -1,6 +1,7 @@
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
@@ -63,6 +64,45 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TNameResolverTest) {
+
+Y_UNIT_TEST_F(AbsolutePathsWithDatabasePrefixAreCounted, TNameResolverFixture) {
+    ActorSystemStub.AppData.Counters = new NMonitoring::TDynamicCounters();
+    auto counter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution", false)
+        ->GetSubgroup("database", TString{Database})
+        ->GetCounter("AbsolutePathWithDatabasePrefix", true);
+
+    for (const TStringBuf name : {"topic", "/Root/Db/topic", "//Root//Db//topic", "/Root/Db"}) {
+        Ok(ResolveName(Database, name));
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("", "/topic")), "/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic")), "/Root/Db/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/Root/Db2/topic")), "/Root/Db/Root/Db2/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 2);
+
+    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic", {}, {}, true)), "/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic")), "/Root/Db/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 3);
+
+    SetFcc(false);
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/topic")), "/Root/Db/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
+
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("/Root/OtherDb", "/topic")), "/Root/OtherDb/topic");
+    auto otherCounter = GetServiceCounters(ActorSystemStub.AppData.Counters, "pqproxy|pathResolution", false)
+        ->GetSubgroup("database", "/Root/OtherDb")
+        ->GetCounter("AbsolutePathWithDatabasePrefix", true);
+    UNIT_ASSERT_VALUES_EQUAL(otherCounter->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
+
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName("Root/Db/", "/topic")), "/Root/Db/topic");
+    UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 5);
+}
 
 Y_UNIT_TEST_F(FederationRootDbConvertsLegacyRt3, TNameResolverFixture) {
     SetFcc(false);
@@ -498,6 +538,29 @@ Y_UNIT_TEST_F(FederationExplicitLegacyWithEmptyPqRoot, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root", "topic1", "", "")),
         "/Root/topic1");
+}
+
+Y_UNIT_TEST_F(ResolveSchemePathKeepsLegacyPrimary, TNameResolverFixture) {
+    SetFcc(false);
+    const auto legacy = ResolveSchemePath("/Root", "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(legacy.Path, "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(legacy.NavigateDatabase, "/Root");
+
+    const auto modern = ResolveSchemePath("/Root", "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+    UNIT_ASSERT_VALUES_EQUAL(modern.Path, "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+    UNIT_ASSERT_VALUES_EQUAL(modern.NavigateDatabase, "/Root/LbCommunal/account");
+
+    SetLbRoot("");
+    const auto withoutLb = ResolveSchemePath("/Root", "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(withoutLb.Path, "/Root/PQ/rt3.dc2--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(withoutLb.NavigateDatabase, "/Root");
+}
+
+Y_UNIT_TEST_F(ResolveSchemePathKeepsRequestDatabaseInFcc, TNameResolverFixture) {
+    SetFcc(true);
+    const auto resolved = ResolveSchemePath("/Root/Db", "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
 }
 
 Y_UNIT_TEST_F(TryFederationAccountTarget, TNameResolverFixture) {

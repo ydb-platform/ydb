@@ -2,6 +2,7 @@
 #include "distconf_quorum.h"
 
 #include <ydb/core/audit/audit_log.h>
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/util/address_classifier.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -160,6 +161,9 @@ namespace NKikimr::NStorage {
                     {"selfId", SelfId()},
                     {"command", op.Command});
                 switch (op.Command.GetRequestCase()) {
+                    case TQuery::kApplyDataCenterStates:
+                        return ApplyDataCenterStates(op.Command.GetApplyDataCenterStates());
+
                     case TQuery::kUpdateConfig:
                         return UpdateConfig(op.Command.MutableUpdateConfig());
 
@@ -287,6 +291,9 @@ namespace NKikimr::NStorage {
             },
             [&](TProposeConfig& op) {
                 StartProposition(&op.Config);
+            },
+            [&](const TPromoteStaticGroup& op) {
+                PromoteStaticGroup(op);
             }
         }, Query);
     }
@@ -322,6 +329,15 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
+        const NKikimrBlobStorage::TStorageConfig& current = *Self->StorageConfig;
+        const NKikimrBlobStorage::TStorageConfig& proposed = request->GetConfig();
+        std::expected<TDataCenterStates, TString> before = ParseDataCenterStates(current.GetDataCenterStates());
+        std::expected<TDataCenterStates, TString> after = ParseDataCenterStates(proposed.GetDataCenterStates());
+        if (current.HasDataCenterStates() != proposed.HasDataCenterStates()
+                || !before || !after || *before != *after) {
+            throw TExError() << "Use ApplyDataCenterStates to change DC availability";
+        }
+        CheckStaticGroupStateUpdate(proposed);
         StartProposition(request->MutableConfig());
     }
 
@@ -604,6 +620,8 @@ namespace NKikimr::NStorage {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
+        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && op->Command.HasApplyDataCenterStates()) {
+            StartDataCenterReconciliation();
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                    op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
                    && Self->SelfManagementEnabled) {
@@ -703,6 +721,13 @@ namespace NKikimr::NStorage {
                     // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
+                }
+            },
+            [&](const TPromoteStaticGroup& op) {
+                if (op.Sender == Self->StaticGroupStateActor) {
+                    // The coordinator fences proposal acknowledgements by owner and cookie.
+                    TActivationContext::Send(new IEventHandle(op.Sender, Self->SelfId(),
+                        new NGroupSyncer::TEvGroupState::TEvProposalResult, 0, op.Cookie));
                 }
             }
         }, Query);

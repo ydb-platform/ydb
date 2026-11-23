@@ -1188,19 +1188,34 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     if (readOffset >= static_cast<i64>(GetEndOffset())) {
         result.LastReadMessage.CreateTimestamp = now;
         result.LastReadMessage.WriteTimestamp = now;
-    } else if (userInfo.ReadOffset == -1) {
-        result.LastReadMessage = result.LastCommittedMessage;
-    } else if (userInfo.ReadWriteTimestamp) {
-        result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
-        result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
-    } else {
-        auto timestamp = GetWriteTimeEstimate(readOffset);
+    } else if (userInfo.ReadOffset == -1 || !userInfo.ReadWriteTimestamp) {
+        // No read since restart, or no cached read timestamps: readOffset is
+        // the first UNREAD message, estimate by its own write time.
+        auto timestamp = GetWriteTimeEstimate(readOffset, /*firstUnreadMessage=*/true);
+        if (timestamp == TInstant::Zero()) {
+            // No record for this offset (keyless gap): fall back to the
+            // committed message estimate, as callers expect a real write time.
+            timestamp = result.LastCommittedMessage.WriteTimestamp;
+            if (timestamp == TInstant::Zero()) {
+                // The committed estimate is unknown too (e.g. emptied
+                // partition): report "now" so the unsigned ReadLag below
+                // does not wrap to an epoch-scale value.
+                timestamp = now;
+            }
+        }
         result.LastReadMessage.CreateTimestamp = timestamp;
         result.LastReadMessage.WriteTimestamp = timestamp;
+    } else {
+        result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
+        result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
     }
 
     if (readOffset < (i64)GetEndOffset()) {
-        result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
+        // The first unread message may be written after the last read
+        // activity: clamp so the unsigned lag does not wrap around.
+        result.ReadLag = result.LastReadTimestamp > result.LastReadMessage.WriteTimestamp
+            ? result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp
+            : TDuration::Zero();
     }
     result.CommitedLag = now - result.LastCommittedMessage.WriteTimestamp;
     result.TotalLag = TDuration::MilliSeconds(userInfo.GetWriteLagMs()) + result.ReadLag + (now - result.LastReadTimestamp);
@@ -1564,7 +1579,7 @@ const std::deque<TDataKey>& GetContainer(const TPartitionBlobEncoder& zone, ui64
 }
 
 //zero means no such record
-TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
+TInstant TPartition::GetWriteTimeEstimate(ui64 offset, bool firstUnreadMessage) const {
     if (offset < GetStartOffset()) {
         offset = GetStartOffset();
     }
@@ -1609,9 +1624,12 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
                    offset < it->Key.GetOffset() ||
                    it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
 
-    --it;
-    if (it != container.begin())
+    // Step back to the requested key: 2 steps for the next-to-commit offset
+    // (last committed message), 1 step for the first unread offset.
+    const ui64 stepsBack = firstUnreadMessage ? 1 : 2;
+    for (ui64 i = 0; i < stepsBack && it != container.begin(); ++i) {
         --it;
+    }
 
     return it->Timestamp;
 }
@@ -1730,6 +1748,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
 
     PQ_ENSURE(IsSupportive());
 
+    StopCompaction = true;
     ev->Get()->OriginalPartition = ev->Sender;
     AddPendingEvent(ev);
 }
@@ -4273,6 +4292,14 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 {
     bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
 
+    TVector<TString> consumersToResendOffsets;
+    for (const auto& consumer : config.GetConsumers()) {
+        const auto* previous = GetConsumer(Config, consumer.GetName());
+        if (previous && !previous->GetReplicateOffsets() && consumer.GetReplicateOffsets()) {
+            consumersToResendOffsets.push_back(consumer.GetName());
+        }
+    }
+
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
@@ -4316,8 +4343,9 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
-                                                                          Config));
+            auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, Config);
+            event->ConsumersToResendOffsets = std::move(consumersToResendOffsets);
+            ctx.Send(Mirrorer->Actor, event.Release());
         } else {
             ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
             CreateMirrorerActor();

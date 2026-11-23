@@ -5,6 +5,8 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/public/lib/ydb_cli/dump/dump.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -75,6 +77,36 @@ Y_UNIT_TEST(NotNullTypeDump) {
     UNIT_ASSERT_VALUES_EQUAL(column_flags[1].IsOptionalType, false);
     UNIT_ASSERT_VALUES_EQUAL(column_flags[2].HasNullFlag,    false);
     UNIT_ASSERT_VALUES_EQUAL(column_flags[2].IsOptionalType, true);
+
+    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetYdbEndpoint()).SetDatabase(GetYdbDatabase()));
+    NYdb::NDump::TClient client(driver);
+    UNIT_ASSERT_VALUES_EQUAL(client.Dump("/", (GetOutputPath() / "outside").GetPath(),
+        NYdb::NDump::TDumpSettings().Database(GetYdbDatabase())).GetStatus(), NYdb::EStatus::INTERNAL_ERROR);
+    RunYdb({"yql", "-s", Sprintf("UPSERT INTO `%s` (k, v, ov) VALUES (1u, 'value', NULL);", tableName)}, {});
+    const auto expected = RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM `%s`;", tableName)}, {});
+    for (const bool absolute : {false, true}) {
+        const TString name = absolute ? "DumpAbsolute" : "DumpRelative";
+        const auto tableDumpPath = GetOutputPath() / name;
+        const TString source = absolute ? GetYdbDatabase() + "/" + tableName : TString(tableName);
+        auto dumpResult = client.Dump(source, tableDumpPath.GetPath(),
+            NYdb::NDump::TDumpSettings().Database(GetYdbDatabase()));
+        UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
+        const TString destination = name + "Restored";
+        NYdb::TDriver restoreDriver(NYdb::TDriverConfig().SetEndpoint(GetYdbEndpoint())
+            .SetDatabase(absolute ? GetYdbDatabase() : TString{}));
+        NYdb::NDump::TClient restoreClient(restoreDriver);
+        auto restoreResult = restoreClient.Restore(tableDumpPath.GetPath(), destination);
+        UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
+        auto schemaResult = restoreClient.Restore(tableDumpPath.GetPath(), destination, NYdb::NDump::TRestoreSettings().DryRun(true));
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM `%s/%s/%s`;",
+                GetYdbDatabase().c_str(), destination.c_str(), name.c_str())}, {}),
+            expected);
+    }
+    for (const TString destination : {"", "/"}) {
+        UNIT_ASSERT_VALUES_EQUAL(client.Restore(dumpPath.GetPath(), destination).GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    }
 }
 
 }

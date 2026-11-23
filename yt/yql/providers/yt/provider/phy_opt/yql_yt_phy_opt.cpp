@@ -71,11 +71,12 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(NonOptimalTableContent));
 
+    const auto fuseOperationsStage = State_->Configuration->LateFuseOperations.Get().GetOrElse(DEFAULT_LATE_FUSE_OPERATIONS) ? 2 : 1;
     if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
-        AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
-        AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
+        AddHandler(fuseOperationsStage, &TYtMap::Match, HNDL(FuseInnerMap));
+        AddHandler(fuseOperationsStage, &TYtMap::Match, HNDL(FuseOuterMap));
         if (State_->Configuration->FuseMapToMapReduce.Get().GetOrElse(DEFAULT_FUSE_MAP_TO_MAPREDUCE) == EFuseMapToMapReduceMode::Normal) {
-            AddHandler(1, &TYtMapReduce::Match, HNDL(FuseMapToMapReduce));
+            AddHandler(fuseOperationsStage, &TYtMapReduce::Match, HNDL(FuseMapToMapReduce));
         }
     }
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(MapFieldsSubset));
@@ -84,6 +85,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(1, Names({TYtMapReduce::CallableName(), TYtReduce::CallableName()}), HNDL(MultiReduceFieldsSubset));
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(WeakFields));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(BypassMerge));
+    if (State_->Configuration->BypassIdentityMapWithSysColumns.Get().GetOrElse(DEFAULT_BYPASS_IDENTITY_MAP_WITH_SYS_COLUMNS)) {
+        AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName(), TYtReduce::CallableName(), TYtEquiJoin::CallableName()}), HNDL(BypassIdentityMapWithSysColumns));
+    }
     AddHandler(1, &TYtPublish::Match, HNDL(BypassMergeBeforePublish));
     AddHandler(1, &TYtPublish::Match, HNDL(BypassPersistBeforePublish));
     AddHandler(1, &TCoRight::Match, HNDL(ReadWithSettings));
@@ -92,23 +96,25 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(1, &TYtSort::Match, HNDL(TopSort));
     AddHandler(1, &TYtWithUserJobsOpBase::Match, HNDL(EmbedLimit));
     AddHandler(1, &TYtMerge::Match, HNDL(PushMergeLimitToInput));
+
     if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
-        AddHandler(1, &TYtReduce::Match, HNDL(FuseReduce));
-        AddHandler(1, &TYtReduce::Match, HNDL(FuseReduceWithTrivialMap));
+        AddHandler(fuseOperationsStage, &TYtReduce::Match, HNDL(FuseReduce));
+        AddHandler(fuseOperationsStage, &TYtReduce::Match, HNDL(FuseReduceWithTrivialMap));
     }
 
+    const auto finalStage = fuseOperationsStage + 1;
     if (State_->Configuration->UseQLFilter.Get().GetOrElse(DEFAULT_USE_QL_FILTER)) {
         // best to run after Fuse*Map and before MapToMerge
-        AddHandler(2, Names({TYtMap::CallableName()}), HNDL(ExtractQLFilters));
-        AddHandler(2, Names({TYtQLFilter::CallableName()}), HNDL(OptimizeQLFilterType));
+        AddHandler(finalStage, Names({TYtMap::CallableName()}), HNDL(ExtractQLFilters));
+        AddHandler(finalStage, Names({TYtQLFilter::CallableName()}), HNDL(OptimizeQLFilterType));
     }
-    AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
-    AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
-    AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
-    AddHandler(2, &TYtMap::Match, HNDL(PushDownYtMapOverSortedMerge));
-    AddHandler(2, &TYtMerge::Match, HNDL(ForceTransform));
-    AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
-    AddHandler(2, &TYtMap::Match, HNDL(UnessentialFilter));
+    AddHandler(finalStage, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
+    AddHandler(finalStage, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
+    AddHandler(finalStage, &TYtMap::Match, HNDL(MapToMerge));
+    AddHandler(finalStage, &TYtMap::Match, HNDL(PushDownYtMapOverSortedMerge));
+    AddHandler(finalStage, &TYtMerge::Match, HNDL(ForceTransform));
+    AddHandler(finalStage, &TYtMerge::Match, HNDL(MergeToCopy));
+    AddHandler(finalStage, &TYtMap::Match, HNDL(UnessentialFilter));
 #undef HNDL
 }
 

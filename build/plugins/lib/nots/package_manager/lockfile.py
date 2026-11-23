@@ -3,8 +3,6 @@ import os
 import io
 import re
 
-from urllib import parse as urlparse
-
 from .common_config import load_tier0_settings
 from .platform import package_supports_platform
 
@@ -21,72 +19,20 @@ class LockfilePackageMetaInvalidError(RuntimeError):
     pass
 
 
-def is_tarball_url_valid(tarball_url):
-    if not tarball_url.startswith("https://") and not tarball_url.startswith("http://"):
-        return True
+class LockfilePackageMeta:
+    """A registry archive derived from a package key and integrity."""
 
-    return tarball_url.startswith("https://npm.yandex-team.ru/") or tarball_url.startswith("http://npm.yandex-team.ru/")
+    __slots__ = ("key", "tarball_url", "integrity", "integrity_algorithm", "tarball_path")
 
-
-class LockfilePackageMeta(object):
-    """
-    Basic struct representing package meta from lockfile.
-    """
-
-    __slots__ = ("key", "tarball_url", "sky_id", "integrity", "integrity_algorithm", "tarball_path")
-
-    @staticmethod
-    def from_str(s):
-        return LockfilePackageMeta(*s.strip().split(" "))
-
-    def __init__(self, key, tarball_url, sky_id, integrity, integrity_algorithm):
-        if not is_tarball_url_valid(tarball_url):
-            raise LockfilePackageMetaInvalidError(
-                "tarball can only point to npm.yandex-team.ru, got {}".format(tarball_url)
-            )
-
+    def __init__(self, key, tarball_url, tarball_path, integrity, integrity_algorithm):
         self.key = key
         self.tarball_url = tarball_url
-        self.sky_id = sky_id
+        self.tarball_path = tarball_path
         self.integrity = integrity
         self.integrity_algorithm = integrity_algorithm
-        self.tarball_path = _tarball_path_from_url(tarball_url)
-
-    def to_str(self):
-        return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
 
     def to_uri(self):
-        tarball_url = _normalize_tarball_url(self.tarball_url)
-        if not tarball_url.startswith("https://") and not tarball_url.startswith("http://"):
-            tarball_url = "https://npm.yandex-team.ru/" + tarball_url
-        pkg_uri = f"{tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
-        return pkg_uri
-
-
-def _normalize_tarball_url(tarball_url):
-    parsed_url = urlparse.urlparse(tarball_url)
-    package_path, separator, filename = parsed_url.path.rpartition("/-/")
-
-    if separator and "/" in filename:
-        normalized_path = "{}/-/{}".format(package_path, filename.rsplit("/", 1)[-1])
-        return urlparse.urlunparse(parsed_url._replace(path=normalized_path))
-
-    return tarball_url
-
-
-def _tarball_path_from_url(tarball_url):
-    path = urlparse.unquote(urlparse.urlparse(tarball_url).path)
-    package_path, separator, filename = path.rpartition("/-/")
-
-    if separator:
-        package_parts = package_path.rstrip("/").split("/")
-        package_name = package_parts[-1]
-        if len(package_parts) > 1 and package_parts[-2].startswith("@"):
-            package_name = "/".join(package_parts[-2:])
-        return "{}/-/{}".format(package_name, filename.rsplit("/", 1)[-1])
-
-    # Keep supporting non-standard tarball values that do not use the npm /-/ layout.
-    return "/".join(path.split("/")[-3:])
+        return f"{self.tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
 
 
 class PnpmLockfileHelper:
@@ -210,7 +156,7 @@ class Lockfile(object):
         :rtype: list of LockfilePackageMeta
         """
         selected = self._select_packages_for_platform(platform, supported_architectures)
-        mapped = map(lambda x: _parse_package_meta(*x), selected)
+        mapped = (_parse_package_meta(key, meta) for key, meta in selected)
         return filter(lambda x: x is not None, mapped)
 
     def _select_packages_for_platform(self, platform, supported_architectures):
@@ -236,20 +182,6 @@ class Lockfile(object):
                 and package_supports_platform(metadata, platform, supported_architectures)
             )
         )
-
-    def update_tarball_resolutions(self, fn):
-        """
-        :param fn: maps `LockfilePackageMeta` instance to new `resolution.tarball` value
-        :type fn: lambda
-        """
-        packages = self.data.get("packages", {})
-
-        for key, meta in packages.items():
-            parsed_meta = _parse_package_meta(key, meta, allow_file_protocol=True)
-            if not parsed_meta:
-                continue
-            meta["resolution"]["tarball"] = fn(parsed_meta)
-            packages[key] = meta
 
     def get_importers(self):
         """Returns the v9 importers section without converting legacy root dependencies."""
@@ -278,7 +210,7 @@ class Lockfile(object):
             raise Exception(f"Invalid importers in lockfile: {", ".join(problem_importers)}")
 
 
-def _parse_package_meta(key, meta, allow_file_protocol=False):
+def _parse_package_meta(key, meta):
     """
     :param key: uniq package key from lockfile
     :type key: string
@@ -288,23 +220,21 @@ def _parse_package_meta(key, meta, allow_file_protocol=False):
     """
     try:
         # inject-workspace-packages case
-        if meta["resolution"].get("type") == "directory":
+        resolution = meta["resolution"]
+        if resolution.get("type") == "directory":
             return None
 
-        resolution = meta["resolution"]
-        tarball = resolution["tarball"] if "tarball" in resolution else _tarball_url_from_package_key(key)
-        tarball_url = _parse_tarball_url(tarball, allow_file_protocol)
-        sky_id = _parse_sky_id_from_tarball_url(tarball)
-        integrity_algorithm, integrity = _parse_package_integrity(meta["resolution"]["integrity"])
+        tarball_url, tarball_path = _registry_tarball_from_package_key(key)
+        integrity_algorithm, integrity = _parse_package_integrity(resolution["integrity"])
     except KeyError as e:
         raise TypeError(f"Invalid package meta for '{key}', missing {e} key")
     except LockfilePackageMetaInvalidError as e:
         raise TypeError(f"Invalid package meta for '{key}', parse error: {e}")
 
-    return LockfilePackageMeta(key, tarball_url, sky_id, integrity, integrity_algorithm)
+    return LockfilePackageMeta(key, tarball_url, tarball_path, integrity, integrity_algorithm)
 
 
-def _tarball_url_from_package_key(key):
+def _registry_tarball_from_package_key(key):
     package_id = PnpmLockfileHelper.package_id_from_snapshot_id(key)
     name, separator, version = package_id.rpartition("@")
     if (
@@ -324,31 +254,7 @@ def _tarball_url_from_package_key(key):
     package_path = name.replace("/", "%2f")
     filename = f"{name.rsplit('/', 1)[-1]}-{version}.tgz"
     registry = load_tier0_settings()["pnpm"]["defaults"]["registry"].rstrip("/")
-    return f"{registry}/{package_path}/-/{filename}"
-
-
-def _parse_tarball_url(tarball_url, allow_file_protocol):
-    if tarball_url.startswith("file:") and not allow_file_protocol:
-        raise LockfilePackageMetaInvalidError(f"tarball cannot point to a file, got '{tarball_url}'")
-
-    return tarball_url.split("?")[0]
-
-
-def _parse_sky_id_from_tarball_url(tarball_url):
-    """
-    :param tarball_url: tarball url
-    :type tarball_url: string
-    :rtype: string
-    """
-    if tarball_url.startswith("file:"):
-        return ""
-
-    rbtorrent_param = urlparse.parse_qs(urlparse.urlparse(tarball_url).query).get("rbtorrent")
-
-    if rbtorrent_param is None:
-        return ""
-
-    return f"rbtorrent:{rbtorrent_param[0]}"
+    return f"{registry}/{package_path}/-/{filename}", f"{name}/-/{filename}"
 
 
 def _parse_package_integrity(integrity):

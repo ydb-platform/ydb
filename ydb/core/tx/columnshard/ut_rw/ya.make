@@ -13,6 +13,9 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    library/cpp/json
+    library/cpp/logger
+    library/cpp/string_utils/base64
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
@@ -26,6 +29,7 @@ PEERDIR(
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
     ydb/services/metadata
+    yql/essentials/ast
 )
 
 YQL_LAST_ABI_VERSION()
@@ -33,12 +37,14 @@ YQL_LAST_ABI_VERSION()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 SRCS(
+    ut_columnshard_index_portions_by_last_key.cpp
     ut_columnshard_loaded_key_ranges.cpp
     ut_columnshard_read_write.cpp
     ut_not_proposed_transactions.cpp
     ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
     ut_leaked_operations_normalizer.cpp
+    ut_stale_backup_transactions_normalizer.cpp
     ut_backup.cpp
     ut_flow_control_manager.cpp
     ut_blob_cache.cpp

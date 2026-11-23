@@ -54,8 +54,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             CreateSampleTableWithData(t, runtime, activeZone);
 
-            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -94,8 +93,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             CreateSampleTableWithData(t, runtime, activeZone);
 
-            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -137,8 +135,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             CreateSampleTableWithData(t, runtime, activeZone);
 
-            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);

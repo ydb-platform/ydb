@@ -535,7 +535,6 @@ message TPQTabletConfig {
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
 
-<<<<<<< HEAD
     enum EWriteMode {
         WRITE_AVAILABLE = 0;
         WRITE_UNAVAILABLE = 1;
@@ -543,13 +542,6 @@ message TPQTabletConfig {
     };
 
     optional EWriteMode WriteMode = 51 [default = WRITE_AVAILABLE];
-<<<<<<< HEAD
-=======
-    // Disable monitoring metrics exported by PQRB, keeping internal topic statistics.
-    optional bool MetricsDisabled = 52 [default = false];
->>>>>>> fcbf0d66d1b (LOGBROKER-10828 Fix)
-=======
->>>>>>> cfc693434de (LOGBROKER-10828 Better)
 }
 
 message THeartbeat {

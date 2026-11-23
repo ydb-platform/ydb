@@ -13,7 +13,7 @@ TProcess::TProcess(const ui64 processId, const std::shared_ptr<TProcessScope>& s
     , Scope(scope)
     , SchedulerQueryIdentity(schedulerQueryIdentity)
     , WaitingTasksCount(waitingTasksCount) {
-    AFL_VERIFY(WaitingTasksCount);
+    YDB_LOG_VERIFY(WaitingTasksCount);
     CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
 }
 

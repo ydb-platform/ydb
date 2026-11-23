@@ -107,7 +107,8 @@ const TCdcStreamChangeCollector::TValueSchema& TCdcStreamChangeCollector::GetVal
         schema.Tags.reserve(valueCount);
         schema.Types.reserve(valueCount);
         for (const auto& [tag, column] : table->Columns) {
-            if (!column.IsKey) {
+            schema.HasBuildInProgressColumns |= column.IsBuildInProgress;
+            if (!column.IsKey && !column.IsBuildInProgress) {
                 schema.Tags.push_back(tag);
                 schema.Types.push_back(column.Type);
             }
@@ -382,7 +383,16 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
         TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     NKikimrChangeExchange::TDataChange body;
-    Serialize(body, rop, key, keyTags, updates);
+    const auto table = Self->GetUserTables().at(tableId.PathId.LocalPathId);
+
+    if (!updates.empty() && GetValueSchema(table).HasBuildInProgressColumns) {
+        SerializeUpdates(body, rop, key, keyTags, updates, [&](TTag tag) {
+            return !table->Columns.at(tag).IsBuildInProgress;
+        });
+    } else {
+        SerializeUpdates(body, rop, key, keyTags, updates);
+    }
+
     Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userCtx);
 }
 
@@ -392,7 +402,7 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
         TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     NKikimrChangeExchange::TDataChange body;
-    Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
+    SerializeImages(body, rop, key, keyTags, oldState, newState, valueTags);
     Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userCtx);
 }
 

@@ -197,6 +197,9 @@ public:
             ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig, NWilson::TTraceId(ev->TraceId));
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+        if (const auto policy = QueryState->RequestEv->DisablePgCompatibility) {
+            Config->FeatureFlags.SetDisablePgCompatibility(*policy);
+        }
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
             QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,

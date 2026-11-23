@@ -108,7 +108,8 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         }
 
         if (AppData()->FeatureFlags.GetDisablePgCompatibility() && typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-            errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s' (DisablePgCompatibility feature flag is on)", colName.c_str());
+            errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s' of type '%s' (DisablePgCompatibility feature flag is on)",
+                             colName.c_str(), NScheme::TypeName(typeInfo).c_str());
             return std::make_pair(nullptr, errStr);
         }
 

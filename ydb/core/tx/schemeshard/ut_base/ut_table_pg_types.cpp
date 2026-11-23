@@ -2,6 +2,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <util/generic/algorithm.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -178,10 +180,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
             SourceType: "General"
             DataSourcePath: "/MyRoot/ExternalDataSource"
             Location: "/"
+            Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "value" Type: "pgint4" }
         )";
         const TVector<TExpectedResult> rejected{{NKikimrScheme::StatusSchemeError,
-            "PostgreSQL compatibility is disabled for column 'value' (DisablePgCompatibility feature flag is on)"}};
+            "PostgreSQL compatibility is disabled for column 'value' of type 'pgint4' (DisablePgCompatibility feature flag is on)"}};
 
         updatePgCompatibility(true);
         TestCreateExternalTable(runtime, ++txId, "/MyRoot", table, rejected);
@@ -193,14 +196,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         const auto original = DescribePath(runtime, "/MyRoot/ExternalTable");
         TestDescribeResult(original, {NLs::Finished, NLs::IsExternalTable});
         const auto& description = original.GetPathDescription().GetExternalTableDescription();
-        UNIT_ASSERT_VALUES_EQUAL(description.ColumnsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(description.GetColumns(0).GetTypeId(), NScheme::NTypeIds::Pg);
+        UNIT_ASSERT_VALUES_EQUAL(description.ColumnsSize(), 2);
+        UNIT_ASSERT(AnyOf(description.GetColumns(), [](const auto& column) {
+            return column.GetName() == "value" && column.GetTypeId() == NScheme::NTypeIds::Pg;
+        }));
 
         updatePgCompatibility(true);
         TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", table, rejected);
         const auto after = DescribePath(runtime, "/MyRoot/ExternalTable");
         TestDescribeResult(after, {NLs::Finished, NLs::IsExternalTable});
         UNIT_ASSERT_VALUES_EQUAL(after.GetPathDescription().GetExternalTableDescription().DebugString(), description.DebugString());
+
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalTable"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/ExternalDataSource"
+            Location: "/"
+            Columns { Name: "key" Type: "Uint64" }
+        )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+        const auto migrated = DescribePath(runtime, "/MyRoot/ExternalTable");
+        TestDescribeResult(migrated, {NLs::Finished, NLs::IsExternalTable});
+        const auto& migratedDescription = migrated.GetPathDescription().GetExternalTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(migratedDescription.ColumnsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(migratedDescription.GetColumns(0).GetName(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(migratedDescription.GetColumns(0).GetTypeId(), NScheme::NTypeIds::Uint64);
 
         const auto nativeTable = [](const char* location) {
             return Sprintf(R"(

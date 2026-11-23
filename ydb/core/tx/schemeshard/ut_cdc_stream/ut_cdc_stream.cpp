@@ -715,7 +715,24 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    NKikimrSchemeOp::TCreateCdcStream ReplicationStream(bool supportsTopicAutopartitioning, bool supportsKeyRangeAutopartitioning = false) {
+    NKikimrSchemeOp::TCreateCdcStream ReplicationStream(bool supportsTopicAutopartitioning) {
+        NJson::TJsonValue attrs;
+        attrs["id"] = "1";
+        attrs["path"] = "/Root/replica";
+        attrs["supports_topic_autopartitioning"] = supportsTopicAutopartitioning;
+
+        NKikimrSchemeOp::TCreateCdcStream op;
+        auto& descr = *op.MutableStreamDescription();
+        descr.SetName("Stream");
+        descr.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        descr.SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+        auto* attr = descr.AddUserAttributes();
+        attr->SetKey("__async_replication");
+        attr->SetValue(NJson::WriteJson(attrs, false));
+        return op;
+    }
+
+    NKikimrSchemeOp::TCreateCdcStream GlobalReplicationStream(bool supportsTopicAutopartitioning, bool supportsKeyRangeAutopartitioning) {
         NJson::TJsonValue attrs;
         attrs["id"] = "1";
         attrs["path"] = "/Root/replica";
@@ -812,10 +829,23 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenKeyRangeHeartbeats) {
         // given
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
-        const auto stream = ReplicationStream(true, true);
+        const auto stream = GlobalReplicationStream(true, true);
 
         // when
         const auto params = NCdc::MakeCdcPqPartParams(stream, 50'000, maxShardsInPath, true);
+
+        // then
+        UNIT_ASSERT(!params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
+    }
+
+    Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenStreamSendsPeriodicResolvedHeartbeats) {
+        // given
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto stream = GlobalReplicationStream(true, true);
+
+        // when
+        const auto params = NCdc::MakeCdcPqPartParams(stream, 50'000, maxShardsInPath, false);
 
         // then
         UNIT_ASSERT(!params.ReplicationAutoPartitioning);
@@ -1919,7 +1949,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -1939,7 +1969,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(true, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(true, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -1960,7 +1990,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // when
@@ -1980,7 +2010,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -1999,7 +2029,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, false).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, false).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -2016,7 +2046,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        auto stream = ReplicationStream(false, true);
+        auto stream = GlobalReplicationStream(false, true);
         stream.MutableStreamDescription()->ClearResolvedTimestampsIntervalMs();
 
         // when
@@ -2040,12 +2070,32 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+            NLs::StreamHasAggregatorTabletId(false),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldNotAggregateHeartbeatsWhenReplicationSupportsKeyRangeAndFlagDisabled) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+        CreateSourceTable(runtime, env, txId);
+
+        // when
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
             NLs::StreamHasAggregatorTabletId(false),
         });
     }
@@ -2058,7 +2108,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        auto stream = ReplicationStream(false, true);
+        auto stream = GlobalReplicationStream(false, true);
         if (topicAutoPartitioning) {
             stream.SetTopicAutoPartitioning(true);
             stream.SetMaxPartitionCount(10);
@@ -2074,7 +2124,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
     }
 
-    Y_UNIT_TEST(ShouldUseKeyRangeHeartbeatsWhenRotatedStreamSupportsKeyRange) {
+    Y_UNIT_TEST(ShouldKeepDirectHeartbeatsWhenRotatedStreamSupportsKeyRange) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2082,9 +2132,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, false).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, false).DebugString());
         env.TestWaitNotification(runtime, txId);
-        auto rotatedStream = ReplicationStream(false, true);
+        auto rotatedStream = GlobalReplicationStream(false, true);
         rotatedStream.MutableStreamDescription()->SetName("RotatedStream");
 
         // when
@@ -2095,7 +2145,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
         });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream"), {
-            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
         });
     }
 

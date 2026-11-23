@@ -6,6 +6,22 @@ namespace NKikimr::NDataShard {
 
 using namespace NTable;
 
+void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
+        TArrayRef<const TRawTypeValue> in, TArrayRef<const TTag> tags)
+{
+    Y_ENSURE(in.size() == tags.size(), "Count doesn't match"
+        << ": in# " << in.size()
+        << ", tags# " << tags.size());
+
+    TVector<TCell> cells(Reserve(in.size()));
+    for (size_t i = 0; i < in.size(); ++i) {
+        out.AddTags(tags.at(i));
+        cells.emplace_back(in.at(i).AsRef());
+    }
+
+    out.SetData(TSerializedCellVec::Serialize(cells));
+}
+
 void TChangeRecordBodySerializer::SerializeCells(TDataChange& out, ERowOp rop,
         TArrayRef<const TUpdateOp> updates, TFunctionRef<bool(TTag)> includeColumn)
 {
@@ -42,22 +58,6 @@ void TChangeRecordBodySerializer::SerializeCells(TDataChange& out, ERowOp rop,
     if (!cells.empty()) {
         values->SetData(TSerializedCellVec::Serialize(cells));
     }
-}
-
-void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
-        TArrayRef<const TRawTypeValue> in, TArrayRef<const TTag> tags)
-{
-    Y_ENSURE(in.size() == tags.size(), "Count doesn't match"
-        << ": in# " << in.size()
-        << ", tags# " << tags.size());
-
-    TVector<TCell> cells(Reserve(in.size()));
-    for (size_t i = 0; i < in.size(); ++i) {
-        out.AddTags(tags.at(i));
-        cells.emplace_back(in.at(i).AsRef());
-    }
-
-    out.SetData(TSerializedCellVec::Serialize(cells));
 }
 
 void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,

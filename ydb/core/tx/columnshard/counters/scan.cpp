@@ -208,9 +208,10 @@ void AppendUnique(std::vector<T>& target, const std::vector<T>& source) {
 
 void TReserveMemoryStepDetails::Merge(const TReserveMemoryStepDetails& other) {
     for (const auto& source : other.Stages) {
-        const auto stage = std::find_if(Stages.begin(), Stages.end(),
-            [&source](const TStage& current) { return source.Stage == current.Stage; });
-        auto& target = stage == Stages.end() ? Stages.emplace_back(TStage{source.Stage, {}}) : *stage;
+        const auto stage = std::find_if(Stages.begin(), Stages.end(), [&source](const TStage& current) {
+            return source.Stage == current.Stage;
+        });
+        auto& target = stage == Stages.end() ? Stages.emplace_back(TStage{ source.Stage, {} }) : *stage;
         AppendUnique(target.MemoryTypes, source.MemoryTypes);
     }
     if (other.RequestedBytes) {
@@ -261,21 +262,18 @@ void TBuildResultStepDetails::Merge(const TBuildResultStepDetails& other) {
     }
 }
 
-std::vector<TConcreteScanCounters::TStepHandle> TConcreteScanCounters::RegisterSteps(
-    const std::vector<TStepDescription>& descriptions) const {
+std::vector<TConcreteScanCounters::TStepHandle> TConcreteScanCounters::RegisterSteps(const std::vector<TStepDescription>& descriptions) const {
     auto lock = FetchingStepCounters->WriteGuard();
     auto& steps = lock.Value;
     const auto mergeDetails = [](TStepDetails& target, const TStepDetails& source) {
-        std::visit(
-            [&target](const auto& details) {
-                using TDetails = std::decay_t<decltype(details)>;
-                if constexpr (!std::is_same_v<TDetails, std::monostate>) {
-                    auto* current = std::get_if<TDetails>(&target);
-                    auto& targetDetails = current ? *current : target.emplace<TDetails>();
-                    targetDetails.Merge(details);
-                }
-            },
-            source);
+        std::visit([&target](const auto& details) {
+            using TDetails = std::decay_t<decltype(details)>;
+            if constexpr (!std::is_same_v<TDetails, std::monostate>) {
+                auto* current = std::get_if<TDetails>(&target);
+                auto& targetDetails = current ? *current : target.emplace<TDetails>();
+                targetDetails.Merge(details);
+            }
+        }, source);
     };
     std::vector<TStepList::iterator> existing;
     existing.reserve(steps.size());
@@ -301,8 +299,8 @@ std::vector<TConcreteScanCounters::TStepHandle> TConcreteScanCounters::RegisterS
     size_t j = 0;
     while (i < descriptions.size()) {
         if (j < existing.size() && descriptions[i].Name == existing[j]->Name) {
-            Y_ABORT_UNLESS(descriptions[i].Details.index() == existing[j]->Details.index(),
-                "Inconsistent details type for step %s", descriptions[i].Name.c_str());
+            Y_ABORT_UNLESS(descriptions[i].Details.index() == existing[j]->Details.index(), "Inconsistent details type for step %s",
+                descriptions[i].Name.c_str());
             mergeDetails(existing[j]->Details, descriptions[i].Details);
             handles.push_back(TStepHandle(existing[j]));
             ++i;
@@ -312,7 +310,7 @@ std::vector<TConcreteScanCounters::TStepHandle> TConcreteScanCounters::RegisterS
         } else {
             // On a tie, keep the earlier existing position available for a later match.
             const auto next = j < existing.size() ? existing[j] : steps.end();
-            TStepCounters step{descriptions[i].Name, {}, {}};
+            TStepCounters step{ descriptions[i].Name, {}, {} };
             mergeDetails(step.Details, descriptions[i].Details);
             handles.push_back(TStepHandle(steps.insert(next, std::move(step))));
             ++i;

@@ -1,7 +1,6 @@
 #include "script_cursor.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
-
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
@@ -35,7 +34,7 @@ std::optional<ui64> GetStepRows(const IDataSource& source) {
     return std::nullopt;
 }
 
-} // namespace
+}   // namespace
 
 void TFetchingScriptCursor::RecordReadBytes(const IDataSource& source, const NBlobOperations::NRead::TCompositeReadBlobs& blobs) const {
     if (const auto& step = Script->GetStep(CurrentStepIdx)->GetStepStatsHandle()) {

@@ -183,6 +183,7 @@ public:
     }
 
     YDB_READONLY(NYql::NDqProto::EDqStatsMode, StatsMode, NYql::NDqProto::DQ_STATS_MODE_NONE);
+
 public:
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     const ESourcesSorting SourcesSorting;

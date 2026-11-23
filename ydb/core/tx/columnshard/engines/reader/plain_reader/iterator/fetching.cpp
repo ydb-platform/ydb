@@ -27,7 +27,7 @@ NColumnShard::TStepDetails TSnapshotFilter::BuildStatisticsDetails(const NCommon
     NColumnShard::TSnapshotFilterStepDetails details;
     if (context) {
         const auto& snapshot = context->GetReadMetadata()->GetRequestSnapshot();
-        details.Snapshots.push_back({snapshot.GetPlanStep(), snapshot.GetTxId()});
+        details.Snapshots.push_back({ snapshot.GetPlanStep(), snapshot.GetTxId() });
     }
     return details;
 }

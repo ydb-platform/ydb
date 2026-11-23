@@ -47,7 +47,7 @@ public:
 
 class TDetectInMemStep: public IFetchingStep {
     NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext* context) const override {
-        return NColumnShard::TFetchColumnsStepDetails{.Columns = NCommon::ResolveStatisticsColumns(Columns.GetColumnIds(), context)};
+        return NColumnShard::TFetchColumnsStepDetails{ .Columns = NCommon::ResolveStatisticsColumns(Columns.GetColumnIds(), context) };
     }
 
 private:
@@ -93,7 +93,7 @@ public:
 class TFilterCutLimit: public IFetchingStep {
 public:
     NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext*) const override {
-        return NColumnShard::TLimitStepDetails{.Limits = {{Limit, Reverse}}};
+        return NColumnShard::TLimitStepDetails{ .Limits = { { Limit, Reverse } } };
     }
 
 private:
@@ -163,8 +163,8 @@ public:
 
 class TDeletionFilter: public IFetchingStep {
     NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext* context) const override {
-        return NColumnShard::TDeletionFilterStepDetails{
-            .Columns = NCommon::ResolveStatisticsColumns({static_cast<ui32>(IIndexInfo::ESpecialColumn::DELETE_FLAG)}, context)};
+        return NColumnShard::TDeletionFilterStepDetails{ .Columns = NCommon::ResolveStatisticsColumns(
+                                                             { static_cast<ui32>(IIndexInfo::ESpecialColumn::DELETE_FLAG) }, context) };
     }
 
 private:

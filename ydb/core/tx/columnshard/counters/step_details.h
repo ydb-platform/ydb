@@ -104,9 +104,9 @@ struct TBuildResultStepDetails {
     void Merge(const TBuildResultStepDetails& other);
 };
 
-using TStepDetails = std::variant<std::monostate, TReserveMemoryStepDetails, TFetchColumnsStepDetails, TAssembleStepDetails,
-    TPKFilterDetails, TShardingFilterStepDetails, TDeletionFilterStepDetails, TSnapshotFilterStepDetails, TLimitStepDetails,
-    TPrepareResultStepDetails, TBuildResultStepDetails>;
+using TStepDetails = std::variant<std::monostate, TReserveMemoryStepDetails, TFetchColumnsStepDetails, TAssembleStepDetails, TPKFilterDetails,
+    TShardingFilterStepDetails, TDeletionFilterStepDetails, TSnapshotFilterStepDetails, TLimitStepDetails, TPrepareResultStepDetails,
+    TBuildResultStepDetails>;
 
 struct TStepDescription {
     TString Name;

@@ -463,8 +463,8 @@ public:
     };
 
     std::vector<TStepHandle> RegisterSteps(const std::vector<TStepDescription>& descriptions) const;
-    void RecordStepExecution(TStepHandle handle, TDuration activeTime, std::optional<ui64> inputRows = {},
-        std::optional<ui64> outputRows = {}, std::optional<ui64> inputBytes = {}, std::optional<ui64> outputBytes = {}) const;
+    void RecordStepExecution(TStepHandle handle, TDuration activeTime, std::optional<ui64> inputRows = {}, std::optional<ui64> outputRows = {},
+        std::optional<ui64> inputBytes = {}, std::optional<ui64> outputBytes = {}) const;
     void AddStepWait(TStepHandle handle, TDuration waitTime) const;
     void AddStepReadBytes(TStepHandle handle, ui64 readBytes) const;
     std::vector<TStepCounters> GetStepStats() const;
@@ -474,6 +474,7 @@ public:
         auto lock = FetchingStepCounters->WriteGuard();
         callback(std::get<TDetails>(handle.Position->Details));
     }
+
 public:
     struct TPerStepAtomicCounters {
         std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds =

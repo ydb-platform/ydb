@@ -2,7 +2,6 @@
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <reader/common_reader/iterator/fetch_steps.h>
 #include <reader/common_reader/iterator/fetching.h>
 #include <reader/simple_reader/iterator/fetching.h>
@@ -260,7 +259,7 @@ Y_UNIT_TEST_SUITE(TestScriptStats) {
         const auto record = [&](const auto& scanCounters, bool& consistent) {
             start.arrive_and_wait();
             for (size_t i = 0; i < iterations; ++i) {
-        const auto handles = scanCounters.RegisterSteps({ { "DELETION" } });
+                const auto handles = scanCounters.RegisterSteps({ { "DELETION" } });
                 if (handles.size() != 1) {
                     consistent = false;
                     return;
@@ -275,7 +274,9 @@ Y_UNIT_TEST_SUITE(TestScriptStats) {
         };
         bool firstConsistent = true;
         bool secondConsistent = true;
-        std::thread worker([&] { record(copy, secondConsistent); });
+        std::thread worker([&] {
+            record(copy, secondConsistent);
+        });
         record(counters, firstConsistent);
         worker.join();
         UNIT_ASSERT(firstConsistent);

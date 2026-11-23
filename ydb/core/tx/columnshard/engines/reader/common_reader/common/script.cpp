@@ -1,10 +1,9 @@
 #include "script.h"
 
-#include <util/string/escape.h>
-
 #include <ydb/core/base/appdata.h>
-
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
+
+#include <util/string/escape.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -30,7 +29,7 @@ TFetchingScript::TFetchingScript(const TString& branchName, std::vector<std::sha
         std::vector<NColumnShard::TStepDescription> descriptions;
         descriptions.reserve(Steps.size());
         for (const auto& step : Steps) {
-            descriptions.push_back({step->GetName(), step->BuildStatisticsDetails(context)});
+            descriptions.push_back({ step->GetName(), step->BuildStatisticsDetails(context) });
         }
         const auto handles = counters->RegisterSteps(descriptions);
         for (size_t i = 0; i < Steps.size(); ++i) {
@@ -45,7 +44,7 @@ std::vector<NColumnShard::TStepColumn> ResolveStatisticsColumns(const std::set<u
     std::vector<NColumnShard::TStepColumn> columns;
     columns.reserve(ids.size());
     for (const auto id : ids) {
-        columns.push_back({id, resolver ? resolver->GetColumnName(id, false) : TString()});
+        columns.push_back({ id, resolver ? resolver->GetColumnName(id, false) : TString() });
     }
     return columns;
 }
@@ -82,11 +81,10 @@ TString FormatPKBound(const TPredicateContainer& bound, char comparison) {
                 break;
         }
     }
-    return TStringBuilder() << "KEY(" << JoinSeq(", ", columns) << ") "
-                            << comparison << (bound.IsInclude() ? "=" : "") << " (" << values << ')';
+    return TStringBuilder() << "KEY(" << JoinSeq(", ", columns) << ") " << comparison << (bound.IsInclude() ? "=" : "") << " (" << values << ')';
 }
 
-}
+}   // namespace
 
 NColumnShard::TStepDetails BuildPKFilterStatistics(const TSpecialReadContext* context) {
     NColumnShard::TPKFilterDetails details;
@@ -186,8 +184,8 @@ TString IFetchingStep::DebugString(const bool stats) const {
 TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& context)
     : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns())
 {
-    if (HasAppData() && AppData()->FeatureFlags.GetEnableColumnShardStats()
-        && context.GetReadMetadata()->GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+    if (HasAppData() && AppData()->FeatureFlags.GetEnableColumnShardStats() &&
+        context.GetReadMetadata()->GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
         Counters = &context.GetCommonContext()->GetCounters();
         StatisticsContext = &context;
     }

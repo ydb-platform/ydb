@@ -1,12 +1,11 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/counters/step_details.h>
-
-#include <ydb/core/tx/columnshard/counters/scan.h>
 #include "columns_set.h"
 #include "script_counters.h"
 
 #include <ydb/core/formats/arrow/program/abstract.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
+#include <ydb/core/tx/columnshard/counters/step_details.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
@@ -197,6 +196,7 @@ public:
 
 class TFetchingScriptBuilder {
     const NColumnShard::TConcreteScanCounters* Counters = nullptr;
+
 private:
     std::shared_ptr<TColumnsSetIds> GuaranteeNotOptional;
     ISnapshotSchema::TPtr FullSchema;

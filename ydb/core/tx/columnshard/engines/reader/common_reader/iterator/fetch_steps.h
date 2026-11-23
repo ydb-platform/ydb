@@ -118,7 +118,7 @@ public:
 
 class TAssemblerStep: public IFetchingStep {
     NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext* context) const override {
-        return NColumnShard::TAssembleStepDetails{.Columns = ResolveStatisticsColumns(Columns->GetColumnIds(), context)};
+        return NColumnShard::TAssembleStepDetails{ .Columns = ResolveStatisticsColumns(Columns->GetColumnIds(), context) };
     }
 
 private:
@@ -160,7 +160,7 @@ public:
 
 class TOptionalAssemblerStep: public IFetchingStep {
     NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext* context) const override {
-        return NColumnShard::TAssembleStepDetails{.Columns = ResolveStatisticsColumns(Columns->GetColumnIds(), context)};
+        return NColumnShard::TAssembleStepDetails{ .Columns = ResolveStatisticsColumns(Columns->GetColumnIds(), context) };
     }
 
 private:
@@ -187,7 +187,7 @@ public:
 
 class TColumnBlobsFetchingStep: public IFetchingStep {
     NColumnShard::TStepDetails BuildStatisticsDetails(const NCommon::TSpecialReadContext* context) const override {
-        return NColumnShard::TFetchColumnsStepDetails{.Columns = ResolveStatisticsColumns(Columns.GetColumnIds(), context)};
+        return NColumnShard::TFetchColumnsStepDetails{ .Columns = ResolveStatisticsColumns(Columns.GetColumnIds(), context) };
     }
 
 private:

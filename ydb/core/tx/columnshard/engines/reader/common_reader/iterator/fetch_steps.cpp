@@ -1,5 +1,4 @@
 #include "fetch_steps.h"
-
 #include "source.h"
 
 #include <ydb/core/formats/arrow/container/container.h>
@@ -126,11 +125,11 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
 }
 
 NColumnShard::TStepDetails TAllocateMemoryStep::BuildStatisticsDetails(const TSpecialReadContext*) const {
-    NColumnShard::TReserveMemoryStepDetails::TStage stage{static_cast<ui32>(StageIndex), {}};
+    NColumnShard::TReserveMemoryStepDetails::TStage stage{ static_cast<ui32>(StageIndex), {} };
     for (const auto& pack : Packs) {
         stage.MemoryTypes.push_back(::ToString(pack.GetMemType()));
     }
-    return NColumnShard::TReserveMemoryStepDetails{.Stages = {std::move(stage)}};
+    return NColumnShard::TReserveMemoryStepDetails{ .Stages = { std::move(stage) } };
 }
 
 void TAllocateMemoryStep::ReportTracing(

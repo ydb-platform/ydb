@@ -159,26 +159,26 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
                 UNIT_ASSERT_VALUES_EQUAL(bool(elector.GetEndpoint(TEndpointKey())), endpointCount != 0);
                 for (ui64 nodeId = 1; nodeId <= endpointCount; ++nodeId) {
                     const auto& endpoint = endpoints[2 * (nodeId - 1)].Endpoint;
-                    if (byNode) {
-                        elector.PessimizeNode(nodeId);
-                        elector.PessimizeEndpoint(endpoint);
-                    } else {
-                        elector.PessimizeEndpoint(endpoint);
-                        elector.PessimizeNode(nodeId);
+                    for (const bool pessimizeByNode : {byNode, !byNode}) {
+                        if (pessimizeByNode) {
+                            elector.PessimizeNode(nodeId);
+                        } else {
+                            elector.PessimizeEndpoint(endpoint);
+                        }
+                        elector.PessimizeEndpoint("unknown");
+                        elector.PessimizeNode(endpointCount + 1);
+                        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), nodeId * 100 / endpointCount);
+                        UNIT_ASSERT_VALUES_EQUAL(count.Get(), endpointCount);
+                        UNIT_ASSERT_VALUES_EQUAL(ratio.Get(), elector.GetPessimizationRatio());
+                        UNIT_ASSERT_VALUES_EQUAL(active.Get(), endpointCount - nodeId);
+                        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey(nodeId), true).Priority,
+                                                 std::numeric_limits<std::int32_t>::max());
+                        ui64 healthy = 0;
+                        elector.ForEachEndpoint([&](ui64, const IObjRegistryHandle&) { ++healthy; }, 0, 0, nullptr);
+                        UNIT_ASSERT_VALUES_EQUAL(healthy, endpointCount - nodeId);
+                        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey()).Priority,
+                                                 nodeId == endpointCount ? std::numeric_limits<std::int32_t>::max() : 0);
                     }
-                    elector.PessimizeEndpoint("unknown");
-                    elector.PessimizeNode(endpointCount + 1);
-                    UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), nodeId * 100 / endpointCount);
-                    UNIT_ASSERT_VALUES_EQUAL(count.Get(), endpointCount);
-                    UNIT_ASSERT_VALUES_EQUAL(ratio.Get(), elector.GetPessimizationRatio());
-                    UNIT_ASSERT_VALUES_EQUAL(active.Get(), endpointCount - nodeId);
-                    UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey(nodeId), true).Priority,
-                                             std::numeric_limits<std::int32_t>::max());
-                    ui64 healthy = 0;
-                    elector.ForEachEndpoint([&](ui64, const IObjRegistryHandle&) { ++healthy; }, 0, 0, nullptr);
-                    UNIT_ASSERT_VALUES_EQUAL(healthy, endpointCount - nodeId);
-                    UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey()).Priority,
-                                             nodeId == endpointCount ? std::numeric_limits<std::int32_t>::max() : 0);
                 }
             }
         }

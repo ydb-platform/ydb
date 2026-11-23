@@ -1,5 +1,33 @@
+diff --git a/packages/core/ARCHITECTURE.md b/packages/core/ARCHITECTURE.md
+index 22bf723a5511d5bc11b566c15665a232ecf1d8ec..4630a6063301ba7ae3ae1cdd20e73abe343a7deb 100644
+--- a/packages/core/ARCHITECTURE.md
++++ b/packages/core/ARCHITECTURE.md
+@@ -49,6 +49,8 @@ Global guard: `endpoints.close` from any non-terminal state → `closed` (immedi
+ | discovering    | timer.discovery_backoff                          | discovering      | run round                                                       |
+ | discovering    | close                                            | closed           | immediate shutdown                                              |
+ | ready/degraded | round_succeeded                                  | ready / degraded | apply round (revive/add/retire + blanket un-ban)                |
++| ready/degraded | round_succeeded (managed generation)             | ready / degraded | close withdrawn discovered channels and keep direct pins        |
++| any open state | discovery.watch_lost                             | discovering      | close discovered and pinned channels and clear routing          |
+ | ready/degraded | round_succeeded (0 endpoints)                    | —                | rejected — keep last snapshot/registry, arm backoff             |
+ | ready/degraded | round_failed                                     | ready/degraded   | background failure is **never** terminal; arm backoff           |
+ | ready/degraded | discovery.force / timer.interval / timer.backoff | —                | single-flight (dropped while a round is in flight)              |
+@@ -114,8 +116,12 @@ hard-pin, and the pile-relaxed last-resort tiers still route if every pile is un
+ 
+ ### Retired-connection lifecycle (churn-avoidance)
+ 
+-A connection dropped from discovery is **not** torn down while it works: live streams
+-drain on it and a brief flap does not close it. New RPCs are simply not routed there.
++With periodic discovery, including fallback to a server without route generations,
++a withdrawn node drains its existing streams. New RPCs use the updated list.
++
++Within a managed route generation, removing a discovered endpoint closes its
++channel immediately. Direct pins to the current replica survive that update.
++Changing or losing the managed assignment closes both discovered and pinned channels.
+ The `idle_sweep` effect keeps retired connections while they are ready or have calls in flight, removes closed connections immediately, and reaps other states after `retiredGraceMs` from retirement. A returning node reuses the same connection; another retirement starts a new grace interval. Still-discovered connections are never proactively closed. The transport retires HTTP/2 sessions after GOAWAY while allowing accepted calls to finish.
+ 
+ ### Direct topic IO
 diff --git a/packages/core/README.md b/packages/core/README.md
-index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..a847de0c0a4c694fd915240ca96e7090dcc27037 100644
+index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..5de2a602530301291d13a21d6f3433814908f670 100644
 --- a/packages/core/README.md
 +++ b/packages/core/README.md
 @@ -55,6 +55,10 @@ console.log(endpoints)
@@ -13,11 +41,20 @@ index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..a847de0c0a4c694fd915240ca96e7090
  ### Closing the driver
  
  `using driver = new Driver(...)` and `driver.close()` immediately cancel active RPCs and close all connections, with or without discovery. The driver has no asynchronous disposal or shutdown grace period.
+@@ -190,7 +194,7 @@ All connection-pool channels carry `{ driver: DriverIdentity, nodeId: bigint, ad
+ | `ydb:driver.connection.pessimized`   | publish | (none) — pessimization has no fixed timer                         |
+ | `ydb:driver.connection.unpessimized` | publish | `duration: number` — ms the connection actually stayed pessimized |
+ | `ydb:driver.connection.retired`      | publish | `reason: 'stale_active' \| 'stale_pessimized'`                    |
+-| `ydb:driver.connection.removed`      | publish | `reason: 'idle' \| 'pool_close'`                                  |
++| `ydb:driver.connection.removed`      | publish | `reason: 'idle' \| 'pool_close' \| 'discovery'`                                  |
+ 
+ The pool exposes two distinct teardown events for connections:
+ 
 diff --git a/packages/core/src/driver.discovery.test.ts b/packages/core/src/driver.discovery.test.ts
-index d87f684b3ae110ec4994068e76412bf7f45fc1b7..8d825a7f450377f486cdbed3f8df668593c8d379 100644
+index d87f684b3ae110ec4994068e76412bf7f45fc1b7..1eed71c39fa1ac40cb27dda2a11d62256bf5678b 100644
 --- a/packages/core/src/driver.discovery.test.ts
 +++ b/packages/core/src/driver.discovery.test.ts
-@@ -5,16 +5,18 @@ import {
+@@ -5,21 +5,27 @@ import {
  	WhoAmIResponseSchema,
  } from '@ydbjs/api/discovery'
  import { channel } from 'node:diagnostics_channel'
@@ -36,9 +73,29 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..8d825a7f450377f486cdbed3f8df6685
  import { Driver } from './driver.ts'
 -
  // Controlled discovery can remove a node while its real RPC remains live.
- test.for([false, true])(
- 	'rediscovery preserves the active call and reroutes new calls (GOAWAY: %s)',
-@@ -111,3 +113,198 @@ test.for([false, true])(
+-test.for([false, true])(
+-	'rediscovery preserves the active call and reroutes new calls (GOAWAY: %s)',
++test.for([
++	{ goaway: false, longPoll: false },
++	{ goaway: true, longPoll: false },
++	{ goaway: false, longPoll: true },
++])(
++	'legacy discovery preserves active calls (GOAWAY: $goaway, long polling: $longPoll)',
+ 	{ timeout: 10_000 },
+-	async (goaway, tc) => {
++	async ({ goaway, longPoll }, tc) => {
+ 		let entered = Promise.withResolvers<void>()
+ 		let release = Promise.withResolvers<void>()
+ 		await using servers = {
+@@ -62,6 +68,7 @@ test.for([false, true])(
+ 		let secondPort = await servers.second.listen('127.0.0.1:0')
+ 		endpoints = [{ nodeId: 1, address: '127.0.0.1', port: firstPort }]
+ 		using driver = new Driver(`grpc://127.0.0.1:${firstPort}/local`, {
++			'ydb.sdk.enable_long_poll': longPoll,
+ 			'ydb.sdk.discovery_interval_ms': 200,
+ 			'ydb.sdk.discovery_timeout_ms': 100,
+ 			'ydb.sdk.connection_idle_interval_ms': 10,
+@@ -111,3 +118,198 @@ test.for([false, true])(
  		await shutdown
  	}
  )
@@ -316,10 +373,18 @@ index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..814e126d4fd99231e1a173a47a3f3b52
  		assert.ok(response.operation, new DriverResponseError('Missing operation data.'))
  
 diff --git a/packages/core/src/endpoints/endpoints-runtime.ts b/packages/core/src/endpoints/endpoints-runtime.ts
-index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..b225ef3f0b6fc96906fccb3da2bcfc0089990212 100644
+index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..191e5c5e63c02031c9b801d3841a5c7b4296e84f 100644
 --- a/packages/core/src/endpoints/endpoints-runtime.ts
 +++ b/packages/core/src/endpoints/endpoints-runtime.ts
-@@ -62,6 +62,8 @@ export type DiscoveryResult = {
+@@ -55,6 +55,7 @@ let discoveryCh = tracingChannel<{ driver: DriverIdentity }>('tracing:ydb:driver
+ // this shape directly. Keeping the seam DTO-shaped is what makes the module
+ // Driver-independent.
+ export type DiscoveryResult = {
++	authoritative?: true
+ 	endpoints: DiscoveredEndpoint[]
+ 	selfLocation: string
+ 	pileStates: PileState[]
+@@ -62,6 +63,8 @@ export type DiscoveryResult = {
  
  // The single injectable discovery dependency (idempotent, one round per call —
  // retry/backoff is the FSM's job, not this seam's).
@@ -328,7 +393,14 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..b225ef3f0b6fc96906fccb3da2bcfc00
  export type ListEndpoints = (signal: AbortSignal) => Promise<DiscoveryResult>
  
  // The injectable channel seam (default = GrpcConnection). This is what makes the
-@@ -84,6 +86,8 @@ type EndpointsEnv = {
+@@ -78,12 +81,14 @@ export const DEFAULT_RETIRED_GRACE_MS = 300_000
+ export const DEFAULT_BACKOFF_BASE_MS = 50
+ export const DEFAULT_BACKOFF_MAX_MS = 30_000
+ 
+-type RemovedReason = 'idle' | 'pool_close'
++type RemovedReason = 'idle' | 'pool_close' | 'discovery'
+ 
+ type EndpointsEnv = {
  	identity: DriverIdentity
  	hooks: DriverHooks | undefined
  	listEndpoints: ListEndpoints
@@ -337,7 +409,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..b225ef3f0b6fc96906fccb3da2bcfc00
  	connectionFactory: ConnectionFactory
  
  	// I/O-owned channel state — NEVER touched by the transition.
-@@ -270,23 +274,43 @@ let effects = {
+@@ -270,23 +275,42 @@ let effects = {
  	// them to the discovery span — the async #consume loop has no active span, so
  	// publishing them there would silently drop them from traces.
  	'endpoints.effect.run_discovery_round': (ctx: FullCtx, _effect, runtime) => {
@@ -376,7 +448,6 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..b225ef3f0b6fc96906fccb3da2bcfc00
 +							runtime.dispatch({
 +								type: 'endpoints.discovery.round_succeeded',
 +								...update,
-+								authoritative: true,
 +							})
 +						} else {
 +							runtime.dispatch({ type: 'endpoints.discovery.watch_lost' })
@@ -444,10 +515,10 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..b225ef3f0b6fc96906fccb3da2bcfc00
  		channels: new Map(),
  		pinnedChannels: new Map(),
 diff --git a/packages/core/src/endpoints/endpoints-state.test.ts b/packages/core/src/endpoints/endpoints-state.test.ts
-index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..09ac9c488e2f7c93eaf706c01d09b27a8d2db6d9 100644
+index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..fa5a0dbc5aa56fa7deca737d98f8dcce0b4677cf 100644
 --- a/packages/core/src/endpoints/endpoints-state.test.ts
 +++ b/packages/core/src/endpoints/endpoints-state.test.ts
-@@ -170,6 +170,47 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
+@@ -170,6 +170,48 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
  	expect(h.ctx.byNodeId.get(2n)!.subState).toBe('retired')
  })
  
@@ -461,6 +532,7 @@ index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..09ac9c488e2f7c93eaf706c01d09b27a
 +		authoritative: true,
 +	})
 +	expect(h.ctx.byNodeId.has(1n)).toBe(false)
++	expect(outputs(h, 'endpoints.removed')).toMatchObject([{ nodeId: 1n, reason: 'discovery' }])
 +	expect(h.effects.filter((effect) => effect.type === 'endpoints.effect.close_channel')).toEqual([
 +		{ type: 'endpoints.effect.close_channel', nodeId: 1n, store: 'discovered' },
 +	])
@@ -496,7 +568,7 @@ index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..09ac9c488e2f7c93eaf706c01d09b27a
  	let h = toReady([ep(1), ep(2)])
  	step(h, round([ep(1)])) // node 2 retired
 diff --git a/packages/core/src/endpoints/endpoints-state.ts b/packages/core/src/endpoints/endpoints-state.ts
-index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802ca8ecb3c 100644
+index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..a7237bc482eae9ac0f68e9948b83e723aed03d3b 100644
 --- a/packages/core/src/endpoints/endpoints-state.ts
 +++ b/packages/core/src/endpoints/endpoints-state.ts
 @@ -154,8 +154,10 @@ export type TimerRef = { which: TimerName }
@@ -510,6 +582,15 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802
  			endpoints: DiscoveredEndpoint[]
  			selfLocation: string
  			pileStates: PileState[]
+@@ -244,7 +246,7 @@ export type EndpointsOutput =
+ 			address: string
+ 			location: string
+ 			pile: string
+-			reason: 'idle' | 'pool_close'
++			reason: 'idle' | 'pool_close' | 'discovery'
+ 	  }
+ 	| { type: 'endpoints.failed'; error: unknown }
+ 	| { type: 'endpoints.closed'; reason?: unknown }
 @@ -384,9 +386,12 @@ let rejectEmptyRound = function rejectEmptyRound(
  // from `computeRoundDiff`; the loop below only mutates the registry.
  let applyRound = function applyRound(
@@ -548,7 +629,26 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802
  	}
  
  	// Emit the add/retire outputs from the single-sourced diff.
-@@ -614,6 +627,18 @@ export let endpointsTransition = function endpointsTransition(
+@@ -458,14 +471,10 @@ let applyRound = function applyRound(
+ 		})
+ 	}
+ 	for (let r of retired) {
+-		runtime.emit({
+-			type: 'endpoints.retired',
+-			nodeId: r.nodeId,
+-			address: r.address,
+-			location: r.location,
+-			pile: r.pile,
+-			reason: r.reason,
+-		})
++		runtime.emit({ type: 'endpoints.retired', ...r })
++		if (authoritative) {
++			runtime.emit({ ...r, type: 'endpoints.removed', reason: 'discovery' })
++		}
+ 	}
+ 
+ 	ctx.selfLocation = selfLocation
+@@ -614,6 +623,18 @@ export let endpointsTransition = function endpointsTransition(
  		return terminate(ctx, new Error('Endpoints closed'), runtime)
  	}
  
@@ -567,7 +667,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802
  	if (state !== 'closed' && event.type === 'endpoints.invalidate') {
  		return applyInvalidate(ctx, event.nodeId, runtime)
  	}
-@@ -637,13 +662,7 @@ export let endpointsTransition = function endpointsTransition(
+@@ -637,13 +658,7 @@ export let endpointsTransition = function endpointsTransition(
  			switch (event.type) {
  				case 'endpoints.discovery.round_succeeded': {
  					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
@@ -582,7 +682,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802
  					effects.push({
  						type: 'endpoints.effect.timer.schedule',
  						which: 'discovery_interval',
-@@ -687,13 +706,7 @@ export let endpointsTransition = function endpointsTransition(
+@@ -687,13 +702,7 @@ export let endpointsTransition = function endpointsTransition(
  					// would retire every node and black-hole balanced RPCs until the
  					// next interval while the state still reads 'ready'.
  					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
@@ -599,7 +699,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802
  						which: 'discovery_interval',
 diff --git a/packages/core/src/endpoints/long-poll.ts b/packages/core/src/endpoints/long-poll.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..69878cdbda483cee562fc4eec55e33fdc544f1b5
+index 0000000000000000000000000000000000000000..e1121bfea107ebd3f70a309ab3998de11cf84045
 --- /dev/null
 +++ b/packages/core/src/endpoints/long-poll.ts
 @@ -0,0 +1,77 @@
@@ -676,7 +776,7 @@ index 0000000000000000000000000000000000000000..69878cdbda483cee562fc4eec55e33fd
 +				yield { endpoints: [], selfLocation: '', pileStates: [] }
 +			}
 +			this.#since = next
-+			yield result
++			yield { ...result, authoritative: true }
 +		}
 +	}
 +}

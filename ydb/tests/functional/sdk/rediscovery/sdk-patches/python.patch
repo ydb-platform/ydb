@@ -145,7 +145,7 @@ index 74e9bca7fddc0bb7c471106a260856a937e7d871..f056bb42f2a4082d0e76d83fa409cf9f
              return self._first_error.result()
          return None
 diff --git a/ydb/aio/connection.py b/ydb/aio/connection.py
-index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..7b86963af216ee50e2a1747983d7f499f2585710 100644
+index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..91dbbc6d56213c7fe97a6454f8eb05781099f25d 100644
 --- a/ydb/aio/connection.py
 +++ b/ydb/aio/connection.py
 @@ -2,6 +2,7 @@ from __future__ import annotations
@@ -319,19 +319,15 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..7b86963af216ee50e2a1747983d7f499
      async def destroy(self, grace: float = 0) -> None:
          """
          Destroys the underlying gRPC channel
-@@ -293,10 +358,12 @@ class Connection:
-         for callback in self._cleanup_callbacks:
-             callback(self)
+@@ -295,8 +360,10 @@ class Connection:
  
--        if self.calls:
--            await asyncio.wait(self.calls.values(), timeout=grace)
+         if self.calls:
+             await asyncio.wait(self.calls.values(), timeout=grace)
 -
 -        await self.destroy()
 +        if self._managed_streams is not None:
 +            await self.retire()
 +        else:
-+            if self.calls:
-+                await asyncio.wait(self.calls.values(), timeout=grace)
 +            await self.destroy()
  
      async def __aenter__(self):
@@ -363,7 +359,7 @@ index e5875f2dbc002b13cab509926005a0d604d17bec..a75233cc2cc21745627c0f5075934162
      async def _dispatch_loop(self, stream):
          while not self._closed and self._stream is stream:
 diff --git a/ydb/aio/pool.py b/ydb/aio/pool.py
-index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5e2624fc9 100644
+index 150274368d9238a9969df34306c6142c6b40f4e4..b965eb7d6a7cdb51da9e4791063c492775ca84dc 100644
 --- a/ydb/aio/pool.py
 +++ b/ydb/aio/pool.py
 @@ -81,7 +81,10 @@ class ConnectionsCache(_ConnectionsCache):
@@ -395,7 +391,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5
          self._wake_up_event.set()
  
      def _emergency_retry_interval(self) -> float:
-@@ -137,6 +143,9 @@ class Discovery:
+@@ -137,14 +143,21 @@ class Discovery:
          if resolve_details is None:
              return False
  
@@ -405,20 +401,22 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5
          resolved_endpoints = set(
              endpoint
              for resolved_endpoint in resolve_details.endpoints
-@@ -144,7 +153,11 @@ class Discovery:
+             for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
          )
-         for cached_endpoint in self._cache.values():
-             if cached_endpoint.endpoint not in resolved_endpoints:
+-        for cached_endpoint in self._cache.values():
+-            if cached_endpoint.endpoint not in resolved_endpoints:
 -                self._cache.make_outdated(cached_endpoint)
-+                if self._watch:
-+                    self._cache.remove(cached_endpoint)
-+                    await cached_endpoint.retire()
-+                else:
++        if self._watch:
++            for connection in self._cache.detach_routes(resolved_endpoints):
++                await connection.retire()
++        else:
++            for cached_endpoint in self._cache.values():
++                if cached_endpoint.endpoint not in resolved_endpoints:
 +                    self._cache.make_outdated(cached_endpoint)
  
          local_dc = resolve_details.self_location
  
-@@ -213,9 +226,53 @@ class Discovery:
+@@ -213,9 +226,51 @@ class Discovery:
  
      def stop(self) -> None:
          self._should_stop = True
@@ -428,9 +426,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5
  
 +    async def _retire_discovery_route(self):
 +        self._cache.route_epoch += 1
-+        retired = self._cache.values()
-+        for conn in retired:
-+            self._cache.remove(conn)
++        retired = self._cache.detach_routes()
 +        await asyncio.gather(*(conn.retire() for conn in retired))
 +
 +    async def _run_long_poll(self):
@@ -463,7 +459,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5
 +                    pass
 +                self._wake_up_event.clear()
 +        await self._watch.bootstrap.close()
-+        await self._cache.cleanup()
++        await asyncio.gather(*(conn.retire() for conn in self._cache.detach_routes()))
 +
      async def run(self) -> None:
 +        if self._watch:
@@ -472,7 +468,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5
          while True:
              try:
                  successful = await self.execute_discovery()
-@@ -284,13 +341,18 @@ class ConnectionPool(IConnectionPool):
+@@ -284,13 +339,18 @@ class ConnectionPool(IConnectionPool):
          else:
              # Start discovery as usual
              self._discovery = Discovery(self._store, self._driver_config)
@@ -492,16 +488,16 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5
          try:
              await asyncio.wait_for(self._discovery_task, timeout=timeout)
          except asyncio.TimeoutError:
-@@ -305,6 +367,8 @@ class ConnectionPool(IConnectionPool):
+@@ -305,6 +365,8 @@ class ConnectionPool(IConnectionPool):
  
      def _on_disconnected(self, connection: Connection) -> Callable[[], Any]:
          async def __wrapper__() -> None:
-+            if self._driver_config.use_long_poll and connection not in self._store.values():
++            if self._driver_config.use_long_poll and not self._store.start_draining(connection):
 +                return
              await connection.close()
              if self._discovery:
                  self._discovery.notify_disconnected()
-@@ -352,7 +416,7 @@ class ConnectionPool(IConnectionPool):
+@@ -352,7 +414,7 @@ class ConnectionPool(IConnectionPool):
          try:
              connection = await self._store.get(preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout)
          except BaseException:
@@ -511,7 +507,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5
              raise
  
 diff --git a/ydb/connection.py b/ydb/connection.py
-index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..b44c57d41d83e11fc1e095623546d07f1f621b68 100644
+index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e531e6941 100644
 --- a/ydb/connection.py
 +++ b/ydb/connection.py
 @@ -5,6 +5,7 @@ from concurrent import futures
@@ -586,7 +582,21 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..b44c57d41d83e11fc1e095623546d07f
              self.calls += 1
              self._call_states[rpc_state.request_id] = rpc_state
          # Call successfully prepared and registered
-@@ -555,6 +568,12 @@ class Connection(object):
+@@ -475,10 +488,9 @@ class Connection(object):
+         with self.lock:
+             self.calls -= 1
+             self._call_states.pop(call_state.request_id, None)
+-            # Call successfully finished
+-            if self.closing and self.calls == 0:
+-                # Channel is closing and we have to destroy channel
+-                self.destroy()
++            finished = self.closing and self.calls == 0
++        if finished:
++            self.destroy()
+ 
+     def future(
+         self,
+@@ -555,6 +567,12 @@ class Connection(object):
              if hasattr(response, "__iter__"):
                  # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
                  response = _SafeSyncIterator(response, rpc_state, on_disconnected)
@@ -599,17 +609,15 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..b44c57d41d83e11fc1e095623546d07f
  
              return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
          except grpc.RpcError as rpc_error:
-@@ -596,21 +615,27 @@ class Connection(object):
+@@ -596,21 +614,25 @@ class Connection(object):
              for callback in self._cleanup_callbacks:
                  callback(self)
  
 -            # potentially we should cancel in-flight calls here but currently
 -            # it is not required since gRPC can successfully cancel these calls manually.
-+            if self._managed_streams is None:
-+                if self.calls == 0:
-+                    self.destroy()
-+                return
-+        self.retire()
++            finished = self.calls == 0
++        if finished:
++            self.destroy()
  
 -            if self.calls == 0:
 -                # everything is cancelled/completed and channel can be destroyed
@@ -617,9 +625,6 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..b44c57d41d83e11fc1e095623546d07f
 +    def retire(self):
 +        with self.lock:
 +            self.closing = True
-+            streams = list(self._managed_streams)
-+        for stream in streams:
-+            stream.retire()
 +        self.destroy()
  
      def destroy(self):
@@ -627,6 +632,9 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..b44c57d41d83e11fc1e095623546d07f
 +        with self.lock:
 +            channel, self._channel = self._channel, None
 +            self._stub_instances.clear()
++            streams = list(self._managed_streams or ())
++        for stream in streams:
++            stream.retire()
          if channel is not None and hasattr(channel, "close"):
              channel.close()
  
@@ -676,10 +684,10 @@ index 988649804fa1645dc459c7d450c0a7728a4c26d6..3e3b31fc3c98453c3de795f4c1b2c7e6
      def set_database(self, database: str) -> "DriverConfig":
 diff --git a/ydb/long_poll_test.py b/ydb/long_poll_test.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..82de6728a7807038872965e793d18235b2262010
+index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41cc66f617
 --- /dev/null
 +++ b/ydb/long_poll_test.py
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,327 @@
 +import asyncio
 +from concurrent.futures import ThreadPoolExecutor
 +from contextlib import contextmanager
@@ -702,6 +710,7 @@ index 0000000000000000000000000000000000000000..82de6728a7807038872965e793d18235
 +        self.cut = threading.Event()
 +        self.requests = []
 +        self.unary_started = threading.Event()
++        self.unary_finish = threading.Event()
 +
 +    def ListEndpoints(self, request, context):
 +        headers = dict(context.invocation_metadata())
@@ -734,17 +743,20 @@ index 0000000000000000000000000000000000000000..82de6728a7807038872965e793d18235
 +            threading.Event().wait(0.01)
 +
 +    def create(request, context):
-+        done = threading.Event()
-+        context.add_callback(done.set)
++        context.add_callback(replicas.unary_finish.set)
 +        replicas.unary_started.set()
-+        done.wait(5)
++        replicas.unary_finish.wait(5)
 +        return _apis.ydb_query.CreateSessionResponse(status=400000, session_id="old").SerializeToString()
++
++    def unavailable(request, context):
++        context.abort(grpc.StatusCode.UNAVAILABLE, "temporary transport failure")
 +
 +    query = grpc.method_handlers_generic_handler(
 +        "Ydb.Query.V1.QueryService",
 +        {
 +            "AttachSession": grpc.unary_stream_rpc_method_handler(attach),
 +            "CreateSession": grpc.unary_unary_rpc_method_handler(create),
++            "BeginTransaction": grpc.unary_unary_rpc_method_handler(unavailable),
 +        },
 +    )
 +    for node in servers[1:]:
@@ -853,6 +865,54 @@ index 0000000000000000000000000000000000000000..82de6728a7807038872965e793d18235
 +    asyncio.run(run())
 +
 +
++@pytest.mark.parametrize("async_driver", [False, True])
++@pytest.mark.parametrize("action", ["finish", "cutover", "stop"])
++def test_rpc_failure_allows_concurrent_call_until_route_retirement(async_driver, action):
++    async def run():
++        async def call(fn, *args):
++            return await fn(*args) if async_driver else await asyncio.to_thread(fn, *args)
++
++        with services(False) as (replicas, endpoint):
++            config = ydb.DriverConfig(endpoint, "/database", use_long_poll=True, credentials=ydb.AnonymousCredentials())
++            driver = (ydb.aio.Driver if async_driver else ydb.Driver)(config)
++            try:
++                await call(driver.wait, 5)
++                (source,) = driver._store.values()
++                healthy = asyncio.create_task(
++                    call(driver, _apis.ydb_query.CreateSessionRequest(), _apis.QueryService.Stub, "CreateSession")
++                )
++                assert await asyncio.to_thread(replicas.unary_started.wait, 3)
++                failing = asyncio.create_task(
++                    call(driver, _apis.ydb_query.BeginTransactionRequest(), _apis.QueryService.Stub, "BeginTransaction")
++                )
++                try:
++                    for _ in range(100):
++                        if source.closing:
++                            break
++                        await asyncio.sleep(0.01)
++                    assert source.closing
++                    if action == "finish":
++                        replicas.unary_finish.set()
++                        assert (await healthy).session_id == "old"
++                    else:
++                        if action == "cutover":
++                            replicas.cut.set()
++                        else:
++                            await call(driver.stop)
++                        with pytest.raises(ydb.Error):
++                            await asyncio.wait_for(healthy, 3)
++                        await assert_socket_closed(replicas.ports[0])
++                    with pytest.raises(ydb.Error):
++                        await asyncio.wait_for(failing, 3)
++                finally:
++                    replicas.unary_finish.set()
++                    await asyncio.gather(healthy, failing, return_exceptions=True)
++            finally:
++                await call(driver.stop)
++
++    asyncio.run(run())
++
++
 +@pytest.mark.parametrize("values", [[], ["9"], ["-1"], ["2.5"], ["10", "10"], ["18446744073709551616"]])
 +def test_rejects_missing_or_invalid_managed_generation(values):
 +    channel = grpc.insecure_channel("localhost:1")
@@ -956,18 +1016,51 @@ index 0000000000000000000000000000000000000000..82de6728a7807038872965e793d18235
 +        for server in servers:
 +            server.stop(0).wait()
 diff --git a/ydb/pool.py b/ydb/pool.py
-index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c95470912efa1b8 100644
+index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..ec58aeec38b25e830f1ea1b60b59eb76cac8d1df 100644
 --- a/ydb/pool.py
 +++ b/ydb/pool.py
-@@ -34,6 +34,7 @@ class ConnectionsCache:
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ 
+ import abc
+ import threading
++from weakref import WeakSet
+ import logging
+ from concurrent import futures
+ import collections
+@@ -34,6 +35,8 @@ class ConnectionsCache:
          self.subscriptions: Set["futures.Future[None]"] = set()
          self.preferred: collections.OrderedDict[str, Connection] = collections.OrderedDict()
          self.logger = logging.getLogger(__name__)
 +        self.route_epoch = 0
++        self._draining: WeakSet[Connection] = WeakSet()
          self.use_all_nodes = use_all_nodes
          self.conn_lst_order = (self.connections,) if self.use_all_nodes else (self.preferred, self.connections)
          self.fast_fail_subscriptions: Set["futures.Future[None]"] = set()
-@@ -155,7 +156,10 @@ class ConnectionsCache:
+@@ -85,6 +88,23 @@ class ConnectionsCache:
+         with self.lock:
+             return list(self.connections.values())
+ 
++    def start_draining(self, connection) -> bool:
++        with self.lock:
++            if self.connections.get(connection.endpoint) is not connection:
++                return False
++            self._draining.add(connection)
++            self.remove(connection)
++            return True
++
++    def detach_routes(self, retained=()):
++        with self.lock:
++            # Calls can still own a transport after it leaves the routing cache.
++            removed = [conn for conn in (*self.connections.values(), *self._draining) if conn.endpoint not in retained]
++            for conn in removed:
++                self.remove(conn)
++                self._draining.discard(conn)
++            return removed
++
+     def make_outdated(self, connection: Connection) -> "ConnectionsCache":
+         with self.lock:
+             self.outdated[connection.endpoint] = connection
+@@ -155,7 +175,10 @@ class ConnectionsCache:
  
      def remove(self, connection: Connection) -> None:
          with self.lock:
@@ -979,7 +1072,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
              self.preferred.pop(connection.endpoint, None)
              self.connections.pop(connection.endpoint, None)
              self.outdated.pop(connection.endpoint, None)
-@@ -179,6 +183,7 @@ class Discovery(threading.Thread):
+@@ -179,6 +202,7 @@ class Discovery(threading.Thread):
          self._cache = store
          self._driver_config = driver_config
          self._resolver = resolver.DiscoveryEndpointsResolver(self._driver_config)
@@ -987,7 +1080,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
          self._base_discovery_interval = 60
          self._ready_timeout = 4
          self._discovery_request_timeout = 2
-@@ -199,6 +204,8 @@ class Discovery(threading.Thread):
+@@ -199,6 +223,8 @@ class Discovery(threading.Thread):
          return (1 + random.random()) * self._base_discovery_interval
  
      def notify_disconnected(self) -> None:
@@ -996,7 +1089,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
          self._send_wake_up()
  
      def _send_wake_up(self) -> None:
-@@ -228,79 +235,86 @@ class Discovery(threading.Thread):
+@@ -228,79 +254,86 @@ class Discovery(threading.Thread):
              if resolve_details is None:
                  return False
  
@@ -1005,8 +1098,6 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
 -                for resolved_endpoint in resolve_details.endpoints
 -                for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
 -            )
--            for cached_endpoint in self._cache.values():
--                if cached_endpoint.endpoint not in resolved_endpoints:
 +            return self._apply_endpoints(resolve_details)
 +
 +    def _apply_endpoints(self, resolve_details) -> bool:
@@ -1015,12 +1106,12 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
 +            for resolved_endpoint in resolve_details.endpoints
 +            for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
 +        )
-+        for cached_endpoint in self._cache.values():
-+            if cached_endpoint.endpoint not in resolved_endpoints:
-+                if self._watch:
-+                    self._cache.remove(cached_endpoint)
-+                    cached_endpoint.retire()
-+                else:
++        if self._watch:
++            for connection in self._cache.detach_routes(resolved_endpoints):
++                connection.retire()
++        else:
+             for cached_endpoint in self._cache.values():
+                 if cached_endpoint.endpoint not in resolved_endpoints:
                      self._cache.make_outdated(cached_endpoint)
  
 -            local_dc = resolve_details.self_location
@@ -1108,18 +1199,18 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
 -                    continue
 +            if not self._ssl_required and resolved_endpoint.ssl:
 +                continue
- 
--                preferred = local_dc == resolved_endpoint.location
++
 +            preferred = local_dc == resolved_endpoint.location
  
--                for (
+-                preferred = local_dc == resolved_endpoint.location
 +            for (
 +                endpoint,
 +                endpoint_options,
 +            ) in resolved_endpoint.endpoints_with_options():
 +                if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
 +                    continue
-+
+ 
+-                for (
 +                ready_connection = connection_impl.Connection.ready_factory(
                      endpoint,
 -                    endpoint_options,
@@ -1142,7 +1233,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
  
          self._cache.cleanup_outdated()
  
-@@ -308,9 +322,50 @@ class Discovery(threading.Thread):
+@@ -308,9 +341,49 @@ class Discovery(threading.Thread):
  
      def stop(self) -> None:
          self._should_stop.set()
@@ -1153,9 +1244,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
 +    def _retire_discovery_route(self):
 +        with self._cache.lock:
 +            self._cache.route_epoch += 1
-+            retired = self._cache.values()
-+            for conn in retired:
-+                self._cache.remove(conn)
++            retired = self._cache.detach_routes()
 +        for conn in retired:
 +            conn.retire()
 +
@@ -1184,7 +1273,8 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
 +                failures += 1
 +            self._should_stop.wait(delay)
 +        self._watch.bootstrap.close()
-+        self._cache.cleanup()
++        for conn in self._cache.detach_routes():
++            conn.retire()
 +
      def run(self) -> None:
 +        if self._watch:
@@ -1193,7 +1283,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
          with self.condition:
              while True:
                  if self._should_stop.is_set():
-@@ -425,6 +480,10 @@ class ConnectionPool(IConnectionPool):
+@@ -425,6 +498,10 @@ class ConnectionPool(IConnectionPool):
          else:
              # Start discovery thread as usual
              self._discovery_thread = Discovery(self._store, self._driver_config)
@@ -1204,7 +1294,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
              self._discovery_thread.start()
  
      def _init_connection(self) -> None:
-@@ -456,7 +515,8 @@ class ConnectionPool(IConnectionPool):
+@@ -456,7 +533,8 @@ class ConnectionPool(IConnectionPool):
              self._stop_event.set()
              if self._discovery_thread:
                  self._discovery_thread.stop()
@@ -1214,16 +1304,16 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
          if self._discovery_thread:
              self._discovery_thread.join(timeout)
          if self._init_thread:
-@@ -494,6 +554,8 @@ class ConnectionPool(IConnectionPool):
+@@ -494,6 +572,8 @@ class ConnectionPool(IConnectionPool):
          :param connection: A disconnected connection
          :return: None
          """
-+        if self._driver_config.use_long_poll and connection not in self._store.values():
++        if self._driver_config.use_long_poll and not self._store.start_draining(connection):
 +            return
          connection.close()
          if self._discovery_thread:
              self._discovery_thread.notify_disconnected()
-@@ -547,7 +609,7 @@ class ConnectionPool(IConnectionPool):
+@@ -547,7 +627,7 @@ class ConnectionPool(IConnectionPool):
          try:
              connection = self._store.get(preferred_endpoint)
          except Exception:
@@ -1232,7 +1322,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c954709
                  self._discovery_thread.notify_disconnected()
              raise
  
-@@ -592,7 +654,7 @@ class ConnectionPool(IConnectionPool):
+@@ -592,7 +672,7 @@ class ConnectionPool(IConnectionPool):
          try:
              connection = self._store.get(preferred_endpoint)
          except Exception:

@@ -16,6 +16,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <format>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -733,9 +735,15 @@ public:
 
         const bool trimRequested = alter.HasTrimCdcReplicationTxId();
         const auto& previousCdc = tabletConfig.GetCdcReplication();
-        const bool willMirror = newTabletConfig.GetPartitionConfig().HasMirrorFrom();
-        const bool stopped = !tabletConfig.GetPartitionConfig().HasMirrorFrom() && !willMirror;
-        if (managedCdcTopic && previousCdc.HasTrimTxId() && willMirror) {
+        const auto& oldPartition = tabletConfig.GetPartitionConfig();
+        const auto& newPartition = newTabletConfig.GetPartitionConfig();
+        const bool stopped = !oldPartition.HasMirrorFrom() && !newPartition.HasMirrorFrom();
+        const bool configureManagedMirror = managedCdcTopic && !stopped
+            && (Transaction.HasExpectedReplicationOwnerPathId()
+                || oldPartition.HasMirrorFrom() != newPartition.HasMirrorFrom()
+                || !google::protobuf::util::MessageDifferencer::Equals(oldPartition.GetMirrorFrom(), newPartition.GetMirrorFrom()));
+
+        if (managedCdcTopic && previousCdc.HasTrimTxId() && newPartition.HasMirrorFrom()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot restart CDC mirroring after trim");
             return result;
         }
@@ -747,7 +755,7 @@ public:
             return result;
         }
 
-        if (attachCdcTopic || trimRequested || (managedCdcTopic && willMirror)) {
+        if (attachCdcTopic || trimRequested || configureManagedMirror) {
             const auto tablePath = streamPath.Parent();
             const auto checks = tablePath.Check();
             checks.NotEmpty().IsResolved().IsAtLocalSchemeShard().NotDeleted().IsTable().NotUnderOperation();

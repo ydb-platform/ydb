@@ -1,4 +1,5 @@
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -724,7 +725,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
-    struct TCdcSplitFixture {
+    struct TCdcAttachmentFixture {
         TTestBasicRuntime Runtime;
         TTestEnv Env{Runtime, TTestEnvOptions().InitYdbDriver(true).EnableProtoSourceIdInfo(true)};
         const ui64 SchemeShard = TTestTxConfig::SchemeShard;
@@ -733,7 +734,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         NKikimrSchemeOp::TPathDescription Topic;
         const TString Consumer = "source-consumer";
 
-        TCdcSplitFixture() {
+        TCdcAttachmentFixture() {
             using NKikimr::TPathId;
             using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
             TestCreateReplication(Runtime, ++TxId, "/MyRoot", DefaultScheme("Owner"));
@@ -761,16 +762,42 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             Topic = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
         }
 
-        void Attach(NKikimrScheme::EStatus expected) {
-            auto* request = InternalTransaction(AlterPQGroupRequest(++TxId, "/MyRoot/Table/Feed", R"(Name: "streamImpl")"));
+        void AlterTopic(const auto& edit, const NKikimr::TPathId* owner, NKikimrScheme::EStatus expected) {
+            const auto desc = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
+            auto* request = AlterPQGroupRequest(++TxId, "/MyRoot/Table/Feed", R"(Name: "streamImpl")");
             auto& tx = *request->Record.MutableTransaction(0);
-            Owner.ToProto(tx.MutableExpectedReplicationOwnerPathId());
+            tx.SetAllowAccessToPrivatePaths(true);
+            if (owner) {
+                InternalTransaction(request);
+                owner->ToProto(tx.MutableExpectedReplicationOwnerPathId());
+            }
+
             auto& config = *tx.MutableAlterPersQueueGroup()->MutablePQTabletConfig();
-            config = Topic.GetPersQueueGroup().GetPQTabletConfig();
+            config = desc.GetPersQueueGroup().GetPQTabletConfig();
             config.ClearPartitionKeySchema();
-            config.SetReplicationSourceConsumer(Consumer);
+            edit(config);
+
             AsyncSend(Runtime, SchemeShard, request);
             TestModificationResult(Runtime, TxId, expected);
+        }
+
+        void Attach(NKikimrScheme::EStatus expected) {
+            AlterTopic([&](auto& config) { config.SetReplicationSourceConsumer(Consumer); }, &Owner, expected);
+        }
+
+        void StartMirroring() {
+            Attach(NKikimrScheme::StatusAccepted);
+            Env.TestWaitNotification(Runtime, TxId);
+
+            AlterTopic([&](auto& config) {
+                auto* mirror = config.MutablePartitionConfig()->MutableMirrorFrom();
+                mirror->SetEndpoint("localhost");
+                mirror->SetEndpointPort(2135);
+                mirror->SetDatabase("/MyRoot");
+                mirror->SetTopic("/MyRoot/source");
+                mirror->SetConsumer(Consumer);
+            }, &Owner, NKikimrScheme::StatusAccepted);
+            Env.TestWaitNotification(Runtime, TxId);
         }
 
         void Split(ui64 boundary, NKikimrScheme::EStatus expected) {
@@ -820,7 +847,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
     Y_UNIT_TEST(CdcTopicAttachmentSerializesWithTableSplits) {
         using namespace NKikimr;
-        TCdcSplitFixture test;
+        TCdcAttachmentFixture test;
         NActors::TBlockEvents<TEvDataShard::TEvSplit> splitting(test.Runtime);
         test.Split(100, NKikimrScheme::StatusAccepted);
         const ui64 firstSplit = test.TxId;
@@ -838,6 +865,23 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         test.Env.TestWaitNotification(test.Runtime, attachId);
 
         test.CheckSplitWithStaleTopic();
+    }
+
+    Y_UNIT_TEST(ConsumerAlterOnRunningCdcMirror) {
+        TCdcAttachmentFixture test;
+        // Exercise SchemeShard while the topic is configured to mirror, without connecting to a source.
+        NActors::TBlockEvents<NKikimr::TEvPQ::TEvInitCredentials> blockMirrorReader(test.Runtime);
+        test.StartMirroring();
+
+        test.AlterTopic([](auto& config) { config.AddConsumers()->SetName("reader"); }, nullptr, NKikimrScheme::StatusAccepted);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+
+        const NKikimr::TPathId staleOwner(test.Owner.OwnerId, test.Owner.LocalPathId + 1);
+        test.AlterTopic([](auto&) {}, &staleOwner, NKikimrScheme::StatusPreconditionFailed);
+        test.AlterTopic([](auto& config) { config.MutablePartitionConfig()->MutableMirrorFrom()->SetConsumer("other"); },
+            nullptr, NKikimrScheme::StatusPreconditionFailed);
+        test.AlterTopic([](auto& config) { config.MutablePartitionConfig()->ClearMirrorFrom(); },
+            nullptr, NKikimrScheme::StatusPreconditionFailed);
     }
 
     Y_UNIT_TEST(CreateReplicatedTable) {

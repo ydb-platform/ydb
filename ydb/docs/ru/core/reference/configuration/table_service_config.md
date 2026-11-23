@@ -290,3 +290,36 @@ table_service_config:
 - [Конфигурация контроллера памяти](memory_controller_config.md)
 - [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)
 - [Диагностика производительности](../../troubleshooting/performance/index.md)
+
+## Прогрев кеша компиляции {#compile-cache-warmup}
+
+При запуске узел использует тексты запросов из кешей других узлов той же базы данных для [прогрева кеша компиляции](../../concepts/query_execution/compile-cache-warmup.md). Настройки применяются при запуске узла. В примере приведены значения по умолчанию.
+
+```yaml
+table_service_config:
+  enable_compile_cache_warmup: true
+  compile_cache_warmup_config:
+    soft_deadline_seconds: 10
+    hard_deadline_seconds: 20
+    max_concurrent_compilations: 5
+    max_queries_to_load: 1000
+    max_nodes_to_request: 5
+```
+
+### enable_compile_cache_warmup
+
+**Тип:** `bool`
+
+**По умолчанию:** `true`
+
+**Описание:** Включает прогрев кеша компиляции на узлах базы данных. Для получения запросов требуется системное представление [`.sys/compile_cache_queries`](../../dev/system-views.md#compile-cache-queries). Оно доступно, если `feature_flags.enable_compile_cache_view` имеет значение `true` (по умолчанию).
+
+### compile_cache_warmup_config
+
+| Параметр | Тип | По умолчанию | Описание |
+| --- | --- | --- | --- |
+| `soft_deadline_seconds` | `uint32` | `10` | Мягкий лимит времени для получения запросов и компиляции, в секундах. После его истечения узел прекращает запускать новые компиляции и ждёт завершения уже начатых в пределах жёсткого лимита. |
+| `hard_deadline_seconds` | `uint32` | `20` | Предельное время прогрева с момента запуска, в секундах. Значение меньше `soft_deadline_seconds` трактуется как равное ему. При достижении лимита прогрев завершается, и узел может начать обслуживать клиентов. |
+| `max_concurrent_compilations` | `uint32` | `5` | Максимальное количество одновременно выполняющихся компиляций при прогреве. Значение `0` трактуется как `1`. |
+| `max_queries_to_load` | `uint32` | `1000` | Максимальное количество запросов, выбираемых для прогрева. Дополнительно ограничивается размером кеша `compile_query_cache_size`, если он больше нуля. Значение `0` задаёт выборку не более одного запроса. |
+| `max_nodes_to_request` | `uint32` | `5` | Максимальное количество узлов, из кешей которых выбираются запросы. Значение `0` снимает ограничение по количеству узлов. |

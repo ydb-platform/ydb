@@ -423,7 +423,6 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                                 const TActorContext& ctx)
 {
     Config = newConfig;
-    Executor()->SetCountersPublishingEnabled(!Config.GetMetricsDisabled());
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Apply new config",
         {"logPrefix", LogPrefix()},
@@ -847,8 +846,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         return;
     }
 
-    Executor()->SetCountersPublishingEnabled(!Config.GetMetricsDisabled());
-
     TxWrites.clear();
 
     const auto txs = CollectTransactions(readRanges);
@@ -1226,6 +1223,20 @@ void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
     if (Config.GetMetricsDisabled()) {
+        auto it = CounterEventsInflight.find(group);
+        if (it != CounterEventsInflight.end() && it->second.RefCount() <= 1) {
+            // Drop previously published labeled counters once, without touching tablet counters.
+            auto counters = MakeHolder<TTabletLabeledCountersBase>();
+            counters->SetGroup(group);
+            counters->SetDrop();
+            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                counters->SetDatabasePath(Config.GetYdbDatabasePath());
+            }
+            ctx.Send(MakeTabletCountersAggregatorID(ctx.SelfID.NodeId()),
+                new TEvTabletCounters::TEvTabletAddLabeledCounters(
+                    it->second, TabletID(), TTabletTypes::PersQueue, counters.Release()));
+            CounterEventsInflight.erase(it);
+        }
         return;
     }
 
@@ -3335,13 +3346,6 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();
-}
-
-void TPersQueue::OnActivateExecutor(const TActorContext& ctx)
-{
-    // Wait for the persisted topic config before publishing any tablet counters.
-    Executor()->SetCountersPublishingEnabled(false);
-    NKeyValue::TKeyValueFlat::OnActivateExecutor(ctx);
 }
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)
